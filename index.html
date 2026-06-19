@@ -488,10 +488,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           // Login/Auth SEMPRE usa o app "default" conectado ao projeto ADLV —
           // é onde fica o cadastro mestre de usuários, independente de qual
           // módulo (ADLV ou FAST) a pessoa for usar depois de logar
-          if(!firebase.apps.length) try{firebase.initializeApp(FIREBASE_CONFIG_ADLV);}catch(e){}
+          ensureDefaultApp();
           errEl.style.display='none';
         }
-        if(!firebase.apps.length) try{firebase.initializeApp(FIREBASE_CONFIG_ADLV);}catch(e){}
+        ensureDefaultApp();
         console.log('LOGIN: tentando com',email);
         var result=await firebase.auth().signInWithEmailAndPassword(email,senha);
         console.log('LOGIN OK:',result.user.email);
@@ -499,7 +499,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         fecharOverlay();
         // Forçar inicialização do Firestore imediatamente após login
         try{
-          if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG_ADLV);
+          ensureDefaultApp();
           if(typeof firebase.firestore === 'function' && !window._db){
             window._db = firebase.firestore();
             console.log('✓ Firestore inicializado após login');
@@ -4464,6 +4464,21 @@ function getFirebaseConfigAtivo(){
 // (uma para ADLV, outra para FAST), sem uma sobrescrever a outra.
 function getFirebaseAppName(){
   return _moduloAtivo === 'fast' ? 'fastApp' : 'adlvApp';
+}
+
+// CORREÇÃO BUG CRÍTICO (19/06): com módulos ADLV/FAST, o Firestore usa apps
+// NOMEADOS ('adlvApp'/'fastApp'), mas o Auth precisa do app '[DEFAULT]'
+// (sem nome). O checking antigo era `if(!firebase.apps.length)`, que falha
+// assim que QUALQUER app nomeado já existe (ex: cache do Firestore rodando
+// antes do login) — o app default nunca era criado e firebase.auth()
+// quebrava com "No Firebase App '[DEFAULT]' has been created".
+// Esta função checa especificamente pelo app '[DEFAULT]'.
+function ensureDefaultApp(){
+  try{
+    if(typeof firebase==='undefined') return;
+    const temDefault = firebase.apps.some(a => a.name === '[DEFAULT]');
+    if(!temDefault) firebase.initializeApp(FIREBASE_CONFIG_ADLV);
+  }catch(e){ console.warn('ensureDefaultApp:', e); }
 }
 
 let _db = null;
@@ -18367,7 +18382,7 @@ async function authInit(){
   try{
     const ok = await loadFirebaseSDK();
     if(!ok){ console.warn('Auth: Firebase SDK não carregado'); return; }
-    if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG_ADLV);
+    ensureDefaultApp();
     const auth = firebase.auth();
     auth.onAuthStateChanged(async user => {
       if(user){
@@ -18554,7 +18569,7 @@ async function authFazerLogin(){
     if(!ok) throw new Error('SDK não carregado');
 
     // Garantir app inicializado
-    if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG_ADLV);
+    ensureDefaultApp();
 
     // Garantir auth disponível
     if(typeof firebase.auth !== 'function'){
@@ -18600,7 +18615,7 @@ async function authEsqueciSenha(){
   try{
     const ok = await loadFirebaseSDK();
     if(!ok) throw new Error('SDK não carregado');
-    if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG_ADLV);
+    ensureDefaultApp();
     await firebase.auth().sendPasswordResetEmail(email);
     okEl.textContent = '✓ E-mail de recuperação enviado para ' + email + '. Verifique sua caixa de entrada.';
     okEl.style.display = 'block';
@@ -18669,7 +18684,7 @@ async function usrCadastrar(){
 
   // Garantir Firebase carregado
   await loadFirebaseSDK();
-  if(!firebase.apps.length) try{ firebase.initializeApp(FIREBASE_CONFIG_ADLV); }catch(e){}
+  ensureDefaultApp();
   let db = window._db || getDB();
   if(!db){
     for(let i=0;i<10;i++){
