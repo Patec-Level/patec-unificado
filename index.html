@@ -426,6 +426,37 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 #patec-login-overlay .login-loading{
   font-size:12px;color:#5A6A7E;margin-top:8px;display:none;
 }
+/* ── Tela de seleção de módulo/projeto (ADLV / FAST) — pós-login ── */
+#patec-modulo-overlay{
+  position:fixed;inset:0;z-index:9998;display:none;
+  background:linear-gradient(135deg,#0D2347 0%,#1A4A8A 60%,#0E9E6A 100%);
+  align-items:center;justify-content:center;
+  font-family:'DM Sans',Arial,sans-serif;
+}
+#patec-modulo-overlay .modulo-box{
+  background:#fff;border-radius:18px;padding:2.5rem 2rem;
+  width:100%;max-width:460px;box-shadow:0 20px 60px rgba(0,0,0,.3);
+  text-align:center;margin:1rem;
+}
+#patec-modulo-overlay h2{font-size:18px;font-weight:700;color:#0D2347;margin:0 0 4px}
+#patec-modulo-overlay p{font-size:12px;color:#5A6A7E;margin:0 0 1.5rem}
+#patec-modulo-overlay .modulo-cards{display:flex;gap:12px}
+#patec-modulo-overlay .modulo-card{
+  flex:1;border:1.5px solid #DDE3EE;border-radius:12px;padding:1.25rem 1rem;
+  cursor:pointer;transition:all .15s;text-align:center;background:#F7F9FC;
+}
+#patec-modulo-overlay .modulo-card:hover{border-color:#1A4A8A;background:#EEF3FB;transform:translateY(-2px)}
+#patec-modulo-overlay .modulo-card .ico{font-size:26px;margin-bottom:8px}
+#patec-modulo-overlay .modulo-card .nome{font-size:15px;font-weight:700;color:#0D2347;margin-bottom:2px}
+#patec-modulo-overlay .modulo-card .desc{font-size:11px;color:#5A6A7E}
+/* Badge do módulo ativo na topbar */
+#topbar-modulo-badge{
+  font-size:9px;font-weight:700;letter-spacing:.5px;color:rgba(255,255,255,.7);
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);
+  border-radius:20px;padding:3px 9px;cursor:pointer;margin-right:4px;
+  white-space:nowrap;
+}
+#topbar-modulo-badge:hover{background:rgba(255,255,255,.22)}
 /* Chip home/presencial na topbar */
 .chip-modalidade{
   font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;
@@ -517,38 +548,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         window._authUser=result.user; window._authPerfil=perfil;
         window.colabLogado=perfil.colabNome;
         if(typeof authSetPerfil==='function') authSetPerfil(result.user,perfil);
-        // Fechar overlay e abrir app
+        // Fechar overlay de login. O carregamento do app (e o gate de
+        // seleção de módulo ADLV/FAST) é feito pelo listener
+        // onAuthStateChanged em authInit(), que dispara assim que este
+        // login é concluído — evita duplicar o carregamento de dados aqui.
         document.getElementById('patec-login-overlay').style.display='none';
-        setTimeout(function(){
-          var badge=document.getElementById('topbar-user-badge');
-          if(badge){
-            badge.style.display='flex';
-            var av=document.getElementById('topbar-user-avatar');
-            var nm=document.getElementById('topbar-user-nome');
-            if(av) av.textContent=perfil.nome[0].toUpperCase();
-            if(nm) nm.textContent=perfil.nome;
-          }
-          if(typeof colabLogado!=='undefined') colabLogado=perfil.colabNome;
-          if(typeof authMontarSidebar==='function') authMontarSidebar(perfil.email);
-          if(typeof rtIniciarListener==='function') rtIniciarListener();
-          if(!window._fbCarregadoUmaVez){
-            window._fbCarregadoUmaVez=true;
-            if(typeof paEntradaCarregarFirebase==='function') paEntradaCarregarFirebase();
-            if(typeof paHistoricoCarregarFirebase==='function') paHistoricoCarregarFirebase().then(()=>{ try{ renderCascata(); }catch(e){} });
-            if(typeof govCarregarFirebase==='function') govCarregarFirebase();
-            if(typeof xglCarregarFirebase==='function') xglCarregarFirebase();
-            if(typeof aaPublicoCarregar==='function') aaPublicoCarregar();
-            if(typeof initMetaGap==='function') initMetaGap();
-            if(typeof fbCarregarTudo==='function') fbCarregarTudo().then(function(){
-              if(typeof initMetaGap==='function') initMetaGap();
-              if(typeof aaCarregarResultadoFirebase==='function') aaCarregarResultadoFirebase();
-              if(typeof cicloCarregarAtivo==='function') cicloCarregarAtivo().then(function(){ if(typeof renderPainelEstrategico==='function') renderPainelEstrategico(); });
-              setTimeout(function(){ if(typeof alertasDisparar==='function') alertasDisparar('auto-load'); },4000);
-            }).catch(function(e){ console.warn('fbCarregarTudo:',e); });
-          }
-          if(perfil.colabNome && typeof prodCarregarHoje==='function')
-            prodCarregarHoje(perfil.colabNome).then(function(){ if(typeof prodRenderizarPaineis==='function') prodRenderizarPaineis(perfil.colabNome); }).catch(function(){});
-        }, 100);
       }catch(e){
         console.error('LOGIN ERRO:',e.code,e.message);
         loadEl.style.display='none';
@@ -563,6 +567,28 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
   </div>
 </div>
 <!-- ══ fim LOGIN GLOBAL ══ -->
+
+<!-- ══ TELA DE SELEÇÃO DE MÓDULO/PROJETO (ADLV / FAST) ══ -->
+<div id="patec-modulo-overlay">
+  <div class="modulo-box">
+    <h2>Qual projeto você quer abrir?</h2>
+    <p>Escolha o módulo para continuar</p>
+    <div class="modulo-cards">
+      <div class="modulo-card" onclick="selecionarModulo('adlv')">
+        <div class="ico">🏢</div>
+        <div class="nome">ADLV</div>
+        <div class="desc">Sistema original</div>
+      </div>
+      <div class="modulo-card" onclick="selecionarModulo('fast')">
+        <div class="ico">⚡</div>
+        <div class="nome">FAST</div>
+        <div class="desc">Novo módulo</div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- ══ fim SELEÇÃO DE MÓDULO ══ -->
+
 <button id="hbg" onclick="document.getElementById('sb').classList.toggle('mob-open')">☰</button>
 <nav id="sb">
   <div class="sb-logo"><h1>PATEC</h1><p>Sistema de Gestão de Compras</p></div>
@@ -619,6 +645,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
   <!-- ── DIREITA: 2 cards (Meta do Projeto + Gap do Projeto) + badge usuário ── -->
   <div style="display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0;position:relative;z-index:2">
+    <!-- badge módulo ativo (ADLV/FAST) -->
+    <span id="topbar-modulo-badge" style="display:none" onclick="trocarModulo()" title="Clique para trocar de projeto">—</span>
     <!-- badge usuário logado -->
     <div id="topbar-user-badge" style="display:none;align-items:center;gap:7px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:20px;padding:4px 12px 4px 6px;margin-right:4px">
       <div id="topbar-user-avatar" style="width:24px;height:24px;border-radius:50%;background:rgba(14,158,106,.35);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">—</div>
@@ -4575,14 +4603,26 @@ function getDBModulo(mod){
   if(_dbPorModulo[mod]) return _dbPorModulo[mod];
   try{
     if(typeof firebase === 'undefined') return null;
-    const appName = mod === 'fast' ? 'fastApp' : 'adlvApp';
-    const config = mod === 'fast' ? FIREBASE_CONFIG_FAST : FIREBASE_CONFIG_ADLV;
     let appInstance;
-    const existente = firebase.apps.find(a => a.name === appName);
-    if(existente){
-      appInstance = existente;
+    // CORREÇÃO BUG CRÍTICO (19/06): ADLV é o MESMO projeto Firebase usado no
+    // login (FIREBASE_CONFIG_ADLV === config do app '[DEFAULT]'). Antes, este
+    // código criava um app NOMEADO separado ('adlvApp') para o ADLV — que,
+    // apesar de apontar pro mesmo projeto, é uma instância isolada sem
+    // ninguém autenticado nela (cada app do SDK tem seu próprio estado de
+    // Auth). Resultado: toda leitura/escrita via getDBModulo('adlv') saía
+    // sem token de autenticação e as regras do Firestore rejeitavam com
+    // "Missing or insufficient permissions" — mesmo com o usuário logado.
+    // Solução: para 'adlv', reaproveitar o app '[DEFAULT]' (já autenticado
+    // pelo login). Só 'fast' (projeto Firebase diferente, patec-fast)
+    // continua precisando de um app nomeado separado.
+    if(mod === 'fast'){
+      const config = FIREBASE_CONFIG_FAST;
+      const existente = firebase.apps.find(a => a.name === 'fastApp');
+      appInstance = existente || firebase.initializeApp(config, 'fastApp');
     } else {
-      appInstance = firebase.initializeApp(config, appName);
+      ensureDefaultApp();
+      appInstance = firebase.apps.find(a => a.name === '[DEFAULT]');
+      if(!appInstance) return null;
     }
     if(typeof firebase.firestore !== 'function') return null;
     const dbInstance = appInstance.firestore();
@@ -4591,7 +4631,8 @@ function getDBModulo(mod){
       _db = dbInstance;
       window._db = dbInstance;
     }
-    console.log('✓ Firebase conectado [' + mod.toUpperCase() + ']:', config.projectId);
+    const projectId = mod === 'fast' ? FIREBASE_CONFIG_FAST.projectId : FIREBASE_CONFIG_ADLV.projectId;
+    console.log('✓ Firebase conectado [' + mod.toUpperCase() + ']:', projectId);
   } catch(e){ console.error('Firebase erro:',e.message); }
   return _dbPorModulo[mod];
 }
@@ -18329,6 +18370,50 @@ window._authMostrarAppReal = function(){
   if(window.colabLogado && !colabLogado)  colabLogado = window.colabLogado;
 
   document.getElementById('patec-login-overlay').style.display = 'none';
+  _gateModuloELogin();
+};
+
+// ════════════════════════════════════════════
+// SELEÇÃO DE MÓDULO/PROJETO (ADLV / FAST) — pós-login
+// ════════════════════════════════════════════
+// O login é sempre feito contra o projeto ADLV (cadastro central de
+// usuários), mas os DADOS do app podem vir de dois projetos Firebase
+// diferentes (ADLV ou FAST). Por isso, depois do login, perguntamos qual
+// projeto a pessoa quer abrir ANTES de montar o sidebar/carregar dados.
+// A escolha fica salva em localStorage e é lembrada nos próximos logins —
+// para trocar de projeto, usa o badge na topbar (trocarModulo()).
+function _gateModuloELogin(){
+  const jaEscolhido = localStorage.getItem('patec_modulo_ativo');
+  if(jaEscolhido === 'adlv' || jaEscolhido === 'fast'){
+    _moduloAtivo = jaEscolhido;
+    _entrarNoApp();
+  } else {
+    document.getElementById('patec-modulo-overlay').style.display = 'flex';
+  }
+}
+
+function selecionarModulo(mod){
+  _moduloAtivo = (mod === 'fast') ? 'fast' : 'adlv';
+  localStorage.setItem('patec_modulo_ativo', _moduloAtivo);
+  document.getElementById('patec-modulo-overlay').style.display = 'none';
+  _entrarNoApp();
+}
+
+// Permite trocar de projeto sem precisar deslogar. Como dezenas de telas
+// guardam dados já carregados em memória (arrays/caches do módulo anterior),
+// o jeito seguro de trocar é recarregar a página — o login fica salvo
+// (sessão do Firebase Auth persiste), só a escolha de módulo é resetada.
+function trocarModulo(){
+  if(!confirm('Trocar de projeto (ADLV ⇄ FAST)? A página será recarregada.')) return;
+  localStorage.removeItem('patec_modulo_ativo');
+  location.reload();
+}
+
+// Monta o app (sidebar, badge, listeners, carregamento de dados) — só roda
+// depois que o módulo (ADLV/FAST) já está definido.
+function _entrarNoApp(){
+  document.getElementById('patec-login-overlay').style.display = 'none';
+  document.getElementById('patec-modulo-overlay').style.display = 'none';
   authMontarSidebar();
 
   // Badge
@@ -18340,6 +18425,12 @@ window._authMostrarAppReal = function(){
     const nm = document.getElementById('topbar-user-nome');
     if(av) av.textContent = nome[0].toUpperCase();
     if(nm) nm.textContent = nome;
+  }
+  // Badge do módulo ativo
+  const modBadge = document.getElementById('topbar-modulo-badge');
+  if(modBadge){
+    modBadge.style.display = 'inline-block';
+    modBadge.textContent = (_moduloAtivo === 'fast' ? '⚡ FAST' : '🏢 ADLV');
   }
 
   rtIniciarListener();
@@ -18372,7 +18463,7 @@ window._authMostrarAppReal = function(){
     window.colabLogado = colab;
     prodCarregarHoje(colab).then(()=>prodRenderizarPaineis(colab)).catch(()=>{});
   }
-};
+}
 let _prodChartGov = null;
 let _prodChartPc  = null;
 let _fdiaChart    = null;
