@@ -4497,10 +4497,17 @@ const FIREBASE_CONFIG_FAST = {
   appId: "1:535679472240:web:396f65269e2d8ab0005ab5"
 };
 
-// Módulo ativo nesta sessão: 'adlv' ou 'fast'. Persiste no localStorage para
-// sobreviver a recarregamentos de página, mas sempre pode ser trocado via
-// a tela de seleção de módulo (selecionarModulo()).
-let _moduloAtivo = localStorage.getItem('patec_modulo_ativo') || null;
+// Módulo ativo nesta sessão: 'adlv' ou 'fast'.
+// CORREÇÃO BUG (20/06): antes começava lendo o último módulo escolhido do
+// localStorage — mas como a tela de seleção SEMPRE aparece de novo a cada
+// login (nunca pula), esse valor "grudado" de uma sessão anterior só servia
+// pra confundir: qualquer código que rodasse cedo demais (antes da pessoa
+// confirmar a escolha NESTA sessão) acabava conectando no banco errado por
+// engano — viu isso no console: "Firebase conectado [FAST]" aparecendo
+// ainda na tela de login, antes de qualquer escolha real. Agora sempre
+// começa null, e só vira 'adlv'/'fast' quando a pessoa realmente escolhe
+// (selecionarModulo()) — assim nada roda cedo demais com valor errado.
+let _moduloAtivo = null;
 
 // CORREÇÃO BUG CRÍTICO (20/06): esta função precisa existir bem no INÍCIO do
 // arquivo. Várias variáveis globais (ciclos_historico, _paHistorico,
