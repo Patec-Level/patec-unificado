@@ -538,6 +538,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         ensureDefaultApp();
         console.log('LOGIN: tentando com',email);
         var result=await firebase.auth().signInWithEmailAndPassword(email,senha);
+        window._loginSenhaTemp = senha; // só em memória — usado pra autenticar no FAST se a pessoa escolher esse módulo
         console.log('LOGIN OK:',result.user.email);
         loadEl.style.display='none';
         fecharOverlay();
@@ -18503,11 +18504,60 @@ function mostrarSeletorModulo(){
   document.getElementById('patec-modulo-overlay').style.display = 'flex';
 }
 
-function selecionarModulo(mod){
+// LOGIN DUPLO DO FAST (20/06): o Firestore do FAST é um projeto Firebase
+// separado do ADLV, com seu próprio sistema de autenticação interno. O login
+// do app sempre acontece contra o ADLV — então, pra que as regras de
+// segurança do Firestore do FAST possam exigir um usuário autenticado de
+// verdade (em vez de ficar abertas pra qualquer um), a pessoa também precisa
+// estar logada DENTRO do projeto FAST. Esta função faz esse segundo login,
+// reaproveitando a senha digitada na tela principal (guardada só em memória,
+// nunca salva em lugar nenhum) — ou, se não tiver mais disponível (ex: depois
+// de um F5), pede a senha de novo numa caixinha simples.
+// AUTO-CRIAÇÃO: se for a primeira vez que essa pessoa entra no FAST (conta
+// ainda não existe lá), cria a conta automaticamente com a MESMA senha que
+// ela acabou de usar pra logar — assim ninguém (nem o André) precisa de uma
+// senha separada só pro FAST, e não existe passo manual de "criar acesso".
+async function _autenticarFast(senhaOverride){
+  const email = _authUser?.email || window._authUser?.email;
+  const senha = senhaOverride || window._loginSenhaTemp;
+  if(!email || !senha) return { ok:false, motivo:'sem_senha' };
+  try{
+    await loadFirebaseSDK();
+    const fastApp = firebase.apps.find(a => a.name === 'fastApp') || firebase.initializeApp(FIREBASE_CONFIG_FAST, 'fastApp');
+    try{
+      await fastApp.auth().signInWithEmailAndPassword(email, senha);
+    } catch(eLogin){
+      if(eLogin.code === 'auth/user-not-found'){
+        // Primeira vez dessa pessoa no FAST — cria a conta agora, com a mesma senha
+        await fastApp.auth().createUserWithEmailAndPassword(email, senha);
+      } else {
+        throw eLogin;
+      }
+    }
+    window._loginSenhaTemp = null; // não manter a senha em memória além do necessário
+    return { ok:true };
+  } catch(e){
+    return { ok:false, motivo:e.code || e.message };
+  }
+}
+
+async function selecionarModulo(mod){
   const permitidos = _modulosPermitidos();
   if(!permitidos.includes(mod)){
     alert('Você não tem acesso a este módulo. Fale com o administrador para liberar.');
     return;
+  }
+  if(mod === 'fast'){
+    let r = await _autenticarFast();
+    if(!r.ok){
+      const senhaConfirm = prompt('Confirme sua senha para acessar o FAST:');
+      if(!senhaConfirm) return;
+      r = await _autenticarFast(senhaConfirm);
+      if(!r.ok){
+        alert('Não foi possível autenticar no FAST (senha incorreta ou acesso ainda não configurado nesse módulo). Fale com o administrador.');
+        return;
+      }
+    }
   }
   _moduloAtivo = (mod === 'fast') ? 'fast' : 'adlv';
   localStorage.setItem('patec_modulo_ativo', _moduloAtivo);
@@ -18826,6 +18876,7 @@ async function authFazerLogin(){
       setTimeout(()=>rej({code:'timeout',message:'Tempo esgotado. Use o acesso de emergência (senha 2105).'}), 15000)
     );
     const result = await Promise.race([loginPromise, timeoutPromise]);
+    window._loginSenhaTemp = senha; // só em memória — usado pra autenticar no FAST se a pessoa escolher esse módulo
     console.log('Login OK:', result?.user?.email);
   } catch(e){
     console.error('Login erro:', e.code, e.message);
@@ -18990,6 +19041,26 @@ async function usrCadastrar(){
       criadoEm: new Date().toISOString(), criadoPor: window._authUser?.email||'adm'
     });
 
+    // Se a pessoa tem acesso ao FAST, criar a MESMA conta (mesmo e-mail/senha)
+    // também dentro da Authentication do projeto FAST — é o que permite o
+    // login duplo (necessário pras regras do Firestore do FAST exigirem
+    // usuário autenticado de verdade).
+    if(modulos.includes('fast')){
+      try{
+        await loadFirebaseSDK();
+        const apiKeyFast = FIREBASE_CONFIG_FAST.apiKey;
+        const respFast = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKeyFast}`, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ email, password: senha, displayName: nome, returnSecureToken: true })
+        });
+        const dataFast = await respFast.json();
+        if(dataFast.error && dataFast.error.message !== 'EMAIL_EXISTS'){
+          console.warn('Conta FAST não criada:', dataFast.error.message);
+        }
+      } catch(e){ console.warn('Erro ao criar conta FAST:', e.message); }
+    }
+
     okEl.textContent = `✓ Usuário ${nome} cadastrado com sucesso!`;
     okEl.style.display = 'inline';
     document.getElementById('usr-novo-nome').value = '';
@@ -19078,8 +19149,9 @@ function usrEditarPerms(uid, nome, permsAtual, modulosAtual, perfilAtual){
   window._usrEditarPermsReal = usrEditarPerms;
   modulosAtual = modulosAtual || ['adlv'];
   const isAdmFastAtual = perfilAtual === 'adm_fast';
+  const jaTinhaFast = modulosAtual.includes('fast');
   const mhtml = `
-  <div id="usr-perms-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:5000;display:flex;align-items:center;justify-content:center">
+  <div id="usr-perms-modal" data-ja-tinha-fast="${jaTinhaFast}" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:5000;display:flex;align-items:center;justify-content:center">
     <div style="background:#fff;border-radius:14px;padding:1.5rem;max-width:480px;width:95%;max-height:80vh;overflow-y:auto">
       <div style="font-size:14px;font-weight:700;color:var(--az);margin-bottom:1rem">✏️ Permissões — ${nome}</div>
       <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:6px">Módulos com acesso</div>
@@ -19088,8 +19160,13 @@ function usrEditarPerms(uid, nome, permsAtual, modulosAtual, perfilAtual){
           <input type="checkbox" id="usr-perms-mod-adlv" value="adlv" ${modulosAtual.includes('adlv')?'checked':''} ${isAdmFastAtual?'disabled':''}> 🏢 ADLV
         </label>
         <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:var(--cin);padding:6px 12px;border-radius:6px;border:1px solid var(--brd)">
-          <input type="checkbox" id="usr-perms-mod-fast" value="fast" ${modulosAtual.includes('fast')?'checked':''} ${isAdmFastAtual?'disabled':''}> ⚡ FAST
+          <input type="checkbox" id="usr-perms-mod-fast" value="fast" onchange="usrAtualizarSenhaFastVisivel()" ${modulosAtual.includes('fast')?'checked':''} ${isAdmFastAtual?'disabled':''}> ⚡ FAST
         </label>
+      </div>
+      <div id="usr-perms-senha-fast-box" style="display:none;margin-bottom:8px;background:var(--amc);border:1px solid var(--am);border-radius:8px;padding:8px 10px">
+        <div style="font-size:10px;color:var(--am);font-weight:600;margin-bottom:4px">🔑 Senha de acesso ao FAST (opcional)</div>
+        <div style="font-size:10px;color:var(--tx2);margin-bottom:4px">Se deixar em branco, a conta do FAST é criada sozinha na primeira vez que essa pessoa escolher o módulo FAST, usando a mesma senha que ela usa hoje no ADLV.</div>
+        <input type="password" id="usr-perms-senha-fast" placeholder="Deixe em branco para usar a senha do ADLV" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--brd);font-size:12px">
       </div>
       <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;background:var(--amc);padding:6px 10px;border-radius:6px;border:1px solid var(--am);margin-bottom:1.25rem;width:fit-content">
         <input type="checkbox" id="usr-perms-admfast" onchange="usrToggleAdmFastEdit()" ${isAdmFastAtual?'checked':''}> 🛠️ Admin do FAST (acesso total ao ADM do FAST, exceto Usuários — não dá acesso ao ADLV)
@@ -19103,12 +19180,25 @@ function usrEditarPerms(uid, nome, permsAtual, modulosAtual, perfilAtual){
         `).join('')}
       </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-p" onclick="usrSalvarPerms('${uid}')">✓ Salvar</button>
+        <button class="btn btn-p" onclick="usrSalvarPerms('${uid}','${(nome||'').replace(/'/g,"\\'")}')">✓ Salvar</button>
         <button class="btn btn-s" onclick="document.getElementById('usr-perms-modal').remove()">Cancelar</button>
       </div>
     </div>
   </div>`;
   document.body.insertAdjacentHTML('beforeend', mhtml);
+  usrAtualizarSenhaFastVisivel();
+}
+
+// Mostra/esconde o campo de senha do FAST: só aparece quando FAST está
+// marcado E a pessoa ainda não tinha acesso a ele antes (senão já existe
+// conta lá e não precisamos de senha nova).
+function usrAtualizarSenhaFastVisivel(){
+  const modal = document.getElementById('usr-perms-modal');
+  if(!modal) return;
+  const jaTinhaFast = modal.dataset.jaTinhaFast === 'true';
+  const fastMarcado = document.getElementById('usr-perms-mod-fast')?.checked;
+  const box = document.getElementById('usr-perms-senha-fast-box');
+  if(box) box.style.display = (fastMarcado && !jaTinhaFast) ? 'block' : 'none';
 }
 
 // Mesma lógica do cadastro: marcar Admin do FAST trava FAST=sim/ADLV=não.
@@ -19123,9 +19213,10 @@ function usrToggleAdmFastEdit(){
     cbAdlv.disabled = false;
     cbFast.disabled = false;
   }
+  usrAtualizarSenhaFastVisivel();
 }
 
-async function usrSalvarPerms(uid){
+async function usrSalvarPerms(uid, nome){
   const modal = document.getElementById('usr-perms-modal');
   const isAdmFast = document.getElementById('usr-perms-admfast')?.checked || false;
   const checksModulos = modal.querySelectorAll('#usr-perms-modulos input[type=checkbox]:checked');
@@ -19133,6 +19224,13 @@ async function usrSalvarPerms(uid){
   if(isAdmFast) modulos = ['fast']; // garante que Admin do FAST nunca grava ADLV
   const checksPaginas = modal.querySelectorAll('#usr-perms-paginas input[type=checkbox]:checked');
   const perms = Array.from(checksPaginas).map(c=>c.value);
+  const jaTinhaFast = modal.dataset.jaTinhaFast === 'true';
+  const ganhandoFastAgora = modulos.includes('fast') && !jaTinhaFast;
+  const senhaFast = document.getElementById('usr-perms-senha-fast')?.value || '';
+  if(ganhandoFastAgora && senhaFast.length > 0 && senhaFast.length < 6){
+    alert('A senha do FAST precisa ter ao menos 6 caracteres (ou deixe em branco).');
+    return;
+  }
   try{
     // Cadastro de usuários é sempre no ADLV, independente do módulo ativo
     const db = getDBUsuarios(); if(!db) return;
@@ -19140,10 +19238,32 @@ async function usrSalvarPerms(uid){
     // Só ajusta o perfil se a pessoa não for o ADM geral (nunca rebaixar André)
     const docAtual = await db.collection('usuarios').doc(uid).get();
     const perfilAtual = docAtual.exists ? docAtual.data().perfil : 'colaborador';
+    const emailPessoa = docAtual.exists ? docAtual.data().email : '';
     if(perfilAtual !== 'adm'){
       update.perfil = isAdmFast ? 'adm_fast' : 'colaborador';
     }
     await db.collection('usuarios').doc(uid).update(update);
+
+    // Ganhando acesso ao FAST agora pela primeira vez e uma senha foi definida
+    // → cria a conta dela já na Authentication do projeto FAST. Se não
+    // preencher a senha, a conta é criada sozinha no primeiro login dela no
+    // FAST (usando a senha que ela digitar lá), então não há problema pular.
+    if(ganhandoFastAgora && emailPessoa && senhaFast.length >= 6){
+      try{
+        await loadFirebaseSDK();
+        const apiKeyFast = FIREBASE_CONFIG_FAST.apiKey;
+        const respFast = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKeyFast}`, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ email: emailPessoa, password: senhaFast, displayName: nome||'', returnSecureToken: true })
+        });
+        const dataFast = await respFast.json();
+        if(dataFast.error && dataFast.error.message !== 'EMAIL_EXISTS'){
+          alert('Permissões salvas, mas houve um erro ao criar o acesso ao FAST: ' + dataFast.error.message);
+        }
+      } catch(e){ alert('Permissões salvas, mas houve um erro ao criar o acesso ao FAST: ' + e.message); }
+    }
+
     modal.remove();
     usrCarregarLista();
   } catch(e){ alert('Erro: ' + e.message); }
