@@ -18564,11 +18564,20 @@ async function _autenticarFast(senhaOverride){
     try{
       await fastApp.auth().signInWithEmailAndPassword(email, senha);
     } catch(eLogin){
-      if(eLogin.code === 'auth/user-not-found'){
-        // Primeira vez dessa pessoa no FAST — cria a conta agora, com a mesma senha
+      // Por proteção contra "adivinhação" de e-mail, o Firebase às vezes
+      // devolve um erro genérico (ex: auth/invalid-credential) tanto pra
+      // "conta não existe" quanto pra "senha errada" — não dá pra confiar
+      // só no código do erro pra saber qual é o caso. Então, em qualquer
+      // falha de login, tenta CRIAR a conta; se a conta já existir de
+      // verdade, a criação falha com 'auth/email-already-in-use' — só aí
+      // sabemos com certeza que era senha errada mesmo.
+      try{
         await fastApp.auth().createUserWithEmailAndPassword(email, senha);
-      } else {
-        throw eLogin;
+      } catch(eCreate){
+        if(eCreate.code === 'auth/email-already-in-use'){
+          throw eLogin; // conta já existe de verdade — a senha estava errada
+        }
+        throw eCreate;
       }
     }
     window._loginSenhaTemp = null; // não manter a senha em memória além do necessário
@@ -18591,7 +18600,7 @@ async function selecionarModulo(mod){
       if(!senhaConfirm) return;
       r = await _autenticarFast(senhaConfirm);
       if(!r.ok){
-        alert('Não foi possível autenticar no FAST (senha incorreta ou acesso ainda não configurado nesse módulo). Fale com o administrador.');
+        alert('Não foi possível autenticar no FAST (' + (r.motivo||'erro desconhecido') + '). Se isso persistir, anota essa mensagem e avisa quem administra o sistema.');
         return;
       }
     }
