@@ -15,7 +15,7 @@ function authEsqueciSenha(){ if(typeof window._authEsqueciSenhaReal==='function'
 function authLogout(){ if(typeof window._authLogoutReal==='function') window._authLogoutReal(); }
 function usrCarregarLista(){ if(typeof window._usrCarregarListaReal==='function') window._usrCarregarListaReal(); else setTimeout(usrCarregarLista, 300); }
 function usrCadastrar(){ if(typeof window._usrCadastrarReal==='function') window._usrCadastrarReal(); else setTimeout(usrCadastrar, 300); }
-function usrResetarSenha(e,n){ if(typeof window._usrResetarSenhaReal==='function') window._usrResetarSenhaReal(e,n); }
+function usrResetarSenha(e,n,m){ if(typeof window._usrResetarSenhaReal==='function') window._usrResetarSenhaReal(e,n,m); }
 function usrRemover(u,n){ if(typeof window._usrRemoverReal==='function') window._usrRemoverReal(u,n); }
 function usrEditarPerms(u,n,p,m,pf){ if(typeof window._usrEditarPermsReal==='function') window._usrEditarPermsReal(u,n,p,m,pf); }
 
@@ -19392,7 +19392,7 @@ async function usrCarregarLista(){
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn btn-s" style="font-size:10px;padding:4px 10px" onclick="usrEditarPerms('${u.uid}','${u.nome}',${JSON.stringify(u.permissoes||[]).replace(/"/g,"'")},${JSON.stringify(u.modulos||['adlv']).replace(/"/g,"'")},'${u.perfil||'colaborador'}')">✏️ Permissões</button>
-          <button class="btn btn-s" style="font-size:10px;padding:4px 10px;background:var(--amc);color:var(--am)" onclick="usrResetarSenha('${u.email}','${u.nome}')">🔑 Resetar Senha</button>
+          <button class="btn btn-s" style="font-size:10px;padding:4px 10px;background:var(--amc);color:var(--am)" onclick="usrResetarSenha('${u.email}','${u.nome}',${JSON.stringify(u.modulos||['adlv']).replace(/"/g,"'")})">🔑 Resetar Senha</button>
           <button class="btn btn-r" style="font-size:10px;padding:4px 10px" onclick="usrRemover('${u.uid}','${u.nome}')">🗑</button>
         </div>
       </div>
@@ -19404,11 +19404,32 @@ async function usrCarregarLista(){
   }
 }
 
-async function usrResetarSenha(email, nome){
+async function usrResetarSenha(email, nome, modulos){
   window._usrResetarSenhaReal = usrResetarSenha;
+  modulos = modulos || ['adlv'];
   try{
     await firebase.auth().sendPasswordResetEmail(email);
-    alert(`✓ E-mail de redefinição enviado para ${nome} (${email}).`);
+    let msg = `✓ E-mail de redefinição enviado para ${nome} (${email}) — ADLV.`;
+    // CORREÇÃO BUG (20/06): essa pessoa pode ter uma conta separada também
+    // no projeto FAST (criada automaticamente na primeira vez que ela
+    // escolheu esse módulo). Se a senha do ADLV for resetada mas a do FAST
+    // não, as duas contas ficam com senhas diferentes — e a pessoa não
+    // consegue mais entrar no FAST (auth/invalid-credential). Reseta as
+    // duas juntas quando aplicável.
+    if(modulos.includes('fast')){
+      try{
+        await loadFirebaseSDK();
+        const fastApp = firebase.apps.find(a => a.name === 'fastApp') || firebase.initializeApp(FIREBASE_CONFIG_FAST, 'fastApp');
+        await fastApp.auth().sendPasswordResetEmail(email);
+        msg += `\n✓ Também enviado para o FAST — ${nome} vai receber 2 e-mails de redefinição (um pra cada projeto). Ela precisa redefinir os dois.`;
+      } catch(eFast){
+        // Conta do FAST ainda não existe (nunca logou lá) — não tem o que resetar
+        if(eFast.code !== 'auth/user-not-found'){
+          msg += `\n⚠️ Não foi possível resetar a senha do FAST: ${eFast.message}`;
+        }
+      }
+    }
+    alert(msg);
   } catch(e){ alert('Erro ao enviar e-mail: ' + e.message); }
 }
 
