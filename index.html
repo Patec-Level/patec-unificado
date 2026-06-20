@@ -5914,15 +5914,11 @@ function renderCardsDia(){
       ${cardHTML({label:'Total Abrir PATEC',        val:totAbrir, ant:totAbrirAnt, cor:'var(--am)', bg:'var(--amc)'})}
     </div>`;
 
-  // ── Sincronizar PATEC FINALIZADO (ESQ 2) da topbar/sidebar com o valor do Painel Estratégico ──
-  // Só sincroniza quando o dia selecionado for o dia atual (hoje)
-  const dtHoje = HOJE.toISOString().split('T')[0];
-  if(dt === dtHoje && l3 > 0){
-    const dtFmt = fmtDt(dtHoje); // ex: "14/06/2026"
-    localStorage.setItem('patec_patec_val', String(l3));
-    localStorage.setItem('patec_patec_sub', dtFmt);
-    if(typeof initMetaGap === 'function') initMetaGap();
-  }
+  // OBS (20/06): PATEC FINALIZADO (ESQ 2 da topbar/sidebar) NÃO sincroniza mais
+  // a partir daqui. A fonte de verdade passou a ser a planilha de upload do
+  // Radar Estratégico (ver syncPatecFinalizadoRadar(), chamada em
+  // fbCarregarRadar()) — esse valor do Mapa Diário (l3) ficava desatualizado
+  // sempre que o Mapa não era reenviado no mesmo dia do upload do Radar.
 }
 function estPcpHoje(){
   const sel=document.getElementById('est-pcp-dt');
@@ -9479,6 +9475,22 @@ let _radarFiltroGrupo  = ''; // filtro de grupo/visão
 
 
 // ── Carregar do Firebase ao iniciar ──
+// ── PATEC FINALIZADO (ESQ2 topbar/sidebar) — fonte de verdade: Radar Estratégico ──
+// Conta os itens do Radar com analista_auto === 'Analisar PATEC Finalizado'
+// (mesmo critério usado em "Total de RCs" quando esse filtro está selecionado).
+// É chamado sempre que o Radar é carregado/atualizado, então o valor fica
+// sempre em dia com o último upload do Radar — não depende mais do Mapa Diário.
+function syncPatecFinalizadoRadar(){
+  if(!_radarDados || !_radarDados.length) return;
+  const count = _radarDados.filter(d => (d.analista_auto||'').trim() === 'Analisar PATEC Finalizado').length;
+  if(count <= 0) return;
+  const tsR = _radarTs || localStorage.getItem('patec_radar_upload_ts');
+  const dtFmt = tsR ? new Date(tsR).toLocaleDateString('pt-BR') : fmtDt(HOJE.toISOString().split('T')[0]);
+  localStorage.setItem('patec_patec_val', String(count));
+  localStorage.setItem('patec_patec_sub', dtFmt);
+  if(typeof initMetaGap === 'function') initMetaGap();
+}
+
 async function fbCarregarRadar(){
   try {
     const db=getDB(); if(!db) return;
@@ -9517,6 +9529,7 @@ async function fbCarregarRadar(){
           _radarDados = cached;
           if(!_radarTs) _radarTs = localStorage.getItem('patec_radar_upload_ts');
           console.log('Radar (cache): '+_radarDados.length+' registros');
+          syncPatecFinalizadoRadar();
           const pg=document.getElementById('p-radar');
           if(pg&&pg.classList.contains('active')) renderRadarOperacional();
           const pgGov=document.getElementById('p-governanca');
@@ -9556,6 +9569,7 @@ async function fbCarregarRadar(){
     } catch(e){ console.warn('Radar cache save:', e); }
 
     console.log('Radar: '+_radarDados.length+' registros ('+(nChunks||1)+' chunk(s))');
+    syncPatecFinalizadoRadar();
     const pg=document.getElementById('p-radar');
     if(pg&&pg.classList.contains('active')) renderRadarOperacional();
     const pgGov=document.getElementById('p-governanca');
@@ -9659,6 +9673,7 @@ async function radarOnFile(file){
     // Atualizar MAPA: fila + novos itens (sem sobrescrever Status/Envio/Finalizado)
     govSincronizarMapa(rows);
     radarRenderPreview(rows);
+    syncPatecFinalizadoRadar();
     // Atualizar backlog automático após upload
     setTimeout(paAtualizarBacklogAuto, 500);
     // Disparar alertas após upload do radar
@@ -18464,15 +18479,19 @@ function _entrarNoApp(){
     fbCarregarTudo().then(()=>{
       initMetaGap();
       aaCarregarResultadoFirebase();
-      // Recalcula Painel Estratégico (renderCardsDia) — sincroniza automaticamente
-      // o PATEC FINALIZADO (ESQ2 da topbar/sidebar) com o valor real do dia,
-      // vindo do Mapa/Radar. Sem isso o valor mostrado fica parado no último
-      // número salvo, sem se atualizar sozinho.
+      // Recalcula o painel do dia (renderCardsDia, dentro de renderPainelEstrategico)
+      // para refletir o ciclo ativo correto.
       if(typeof cicloCarregarAtivo === 'function'){
         cicloCarregarAtivo().then(()=>{
           if(typeof renderPainelEstrategico === 'function') renderPainelEstrategico();
         }).catch(e=>console.warn('cicloCarregarAtivo:', e));
       }
+      // PATEC FINALIZADO (ESQ2 da topbar/sidebar) — fonte de verdade é o
+      // upload do Radar Estratégico (syncPatecFinalizadoRadar, chamada
+      // dentro de fbCarregarRadar). Carrega aqui pra já vir certo no login,
+      // sem precisar abrir a tela de Radar — usa o cache de 4h existente,
+      // então não gera leitura extra se já tiver sido carregado recentemente.
+      if(typeof fbCarregarRadar === 'function') fbCarregarRadar().catch(e=>console.warn('fbCarregarRadar (login):', e));
       const pg = document.getElementById('p-radar');
       if(pg && pg.classList.contains('active')) renderRadarOperacional();
       setTimeout(()=>alertasDisparar('auto-load'), 4000);
