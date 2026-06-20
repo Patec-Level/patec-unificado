@@ -1028,9 +1028,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button class="stab" onclick="setAdmTab('analista-upload',this)">📂 Upload Backlog</button>
         <button class="stab" onclick="setAdmTab('analista-auto',this)">📦 Analista Pedido</button>
         <button class="stab" onclick="setAdmTab('analista-completo-adm',this)">🤖 Analista Completo</button>
-        <button class="stab" onclick="setAdmTab('email-teste',this)">📧 Testar E-mails</button>
-        <button class="stab" onclick="setAdmTab('apresentacao',this);admApresentacaoInit()">🖥️ Apresentação</button>
-        <button class="stab" onclick="setAdmTab('apresentacao1',this);admApresentacao1Init()">📂 Apresentação 1</button>
+        <button class="stab" id="adm-nav-email-teste-btn" onclick="setAdmTab('email-teste',this)">📧 Testar E-mails</button>
+        <button class="stab" id="adm-nav-apresentacao-btn" onclick="setAdmTab('apresentacao',this);admApresentacaoInit()">🖥️ Apresentação</button>
+        <button class="stab" id="adm-nav-apresentacao1-btn" onclick="setAdmTab('apresentacao1',this);admApresentacao1Init()">📂 Apresentação 1</button>
         <button class="stab" onclick="setAdmTab('q18-upload',this)">🚫 Q18</button>
         <button class="stab" onclick="setAdmTab('gestao-prod',this)">✏️ Gestão de Produção</button>
       </div>
@@ -7605,6 +7605,13 @@ function setAdmTab(id,btn){
   // (André) — Admin do FAST tem acesso total às demais abas, mas não a esta.
   if(id==='usuarios' && !_isAdmGeral()){
     alert('Apenas o administrador geral pode gerenciar usuários.');
+    return;
+  }
+  // Testar E-mails, Apresentação e Apresentação 1 são exclusivas do ADLV —
+  // dependem de listas de destinatários e dados específicos do ADLV que não
+  // se aplicam ao FAST.
+  if((id==='email-teste' || id==='apresentacao' || id==='apresentacao1') && _moduloAtivo==='fast'){
+    alert('Esse recurso é exclusivo do ADLV.');
     return;
   }
   if(id==='ciclos') setTimeout(()=>{cicloCarregarAtivo().then(initCicloADM);},50);
@@ -18742,6 +18749,12 @@ function _entrarNoApp(){
     modBadge.style.display = 'inline-block';
     modBadge.textContent = (_moduloAtivo === 'fast' ? '⚡ FAST' : '🏢 ADLV');
   }
+
+  // Testar E-mails, Apresentação e Apresentação 1 são exclusivas do ADLV
+  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn'].forEach(id=>{
+    const btnAdlv = document.getElementById(id);
+    if(btnAdlv) btnAdlv.style.display = (_moduloAtivo==='fast') ? 'none' : '';
+  });
 
   rtIniciarListener();
 
