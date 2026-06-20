@@ -18457,18 +18457,25 @@ function _gateModuloELogin(){
 
 // Calcula quais módulos a pessoa logada pode acessar. ADM (e-mails fixos)
 // sempre tem acesso a ADLV + FAST. Os demais usam o campo `modulos` salvo no
-// Firestore (editável no ADM); se ainda não tiver sido definido, o padrão é
-// só ADLV — assim ninguém ganha acesso ao FAST sem isso ser explicitamente
-// concedido (fail-safe).
+// Firestore (editável no ADM). Enquanto o perfil real ainda não confirmou
+// (ou se a confirmação falhou de verdade, ex: sem internet), NENHUM módulo
+// fica liberado — é mais seguro recarregar a página do que arriscar abrir o
+// módulo errado nessa janela. Só depois de confirmar com sucesso que o
+// campo `modulos` realmente está ausente (conta antiga/legado) é que o
+// padrão ADLV entra em ação.
 // (_lsMod() foi movida pro início do arquivo — ver comentário lá perto de
 // _moduloAtivo — precisa existir antes de várias inicializações globais)
 function _modulosPermitidos(){
   const emailsAdm = ['andre.mazzali@levelgroup.com.br','andreluisj4@gmail.com'];
   const email = (_authPerfil?.email || _authUser?.email || window._authUser?.email || '').toLowerCase().trim();
   if(emailsAdm.includes(email)) return ['adlv','fast'];
+  if(!window._perfilCarregadoCompleto) return []; // ainda confirmando — nada liberado por enquanto
   const m = _authPerfil?.modulos || window._authPerfil?.modulos;
   if(Array.isArray(m) && m.length) return m;
-  return ['adlv'];
+  // Campo modulos ausente: só aplica o padrão ADLV se o perfil REALMENTE
+  // carregou com sucesso (conta antiga/legado sem esse campo). Se a busca
+  // falhou de verdade, não libera nada.
+  return window._perfilCarregouComSucesso ? ['adlv'] : [];
 }
 
 // ADM geral (André) — único que pode gerenciar usuários/conceder acesso aos
@@ -18497,6 +18504,12 @@ function _atualizarLockCardsModulo(){
   const cardFast = document.getElementById('modulo-card-fast');
   if(cardAdlv) cardAdlv.classList.toggle('bloqueado', !permitidos.includes('adlv'));
   if(cardFast) cardFast.classList.toggle('bloqueado', !permitidos.includes('fast'));
+  const instrucao = document.querySelector('#patec-modulo-overlay .modulo-instrucao');
+  if(instrucao){
+    instrucao.textContent = window._perfilCarregadoCompleto
+      ? 'Escolha o projeto para continuar'
+      : '🔄 Confirmando suas permissões...';
+  }
 }
 
 function mostrarSeletorModulo(){
@@ -18659,6 +18672,7 @@ async function authInit(){
     auth.onAuthStateChanged(async user => {
       if(user){
         _authUser = user;
+        window._perfilCarregadoCompleto = false; // bloqueia os cards de módulo até confirmar permissão real
         // Definir perfil mínimo imediatamente — não esperar Firestore
         const emailsAdm = ['andre.mazzali@levelgroup.com.br','andreluisj4@gmail.com'];
         const isAdm = emailsAdm.includes(user.email);
@@ -18676,6 +18690,7 @@ async function authInit(){
       } else {
         _authUser = null;
         _authPerfil = null;
+        window._perfilCarregadoCompleto = false;
         authMostrarLogin();
       }
     });
@@ -18695,19 +18710,40 @@ async function authCarregarPerfil(user){
     colabNome: ''
   };
 
-  // Tentar carregar do Firestore (pode falhar se offline/limite)
+  // Tentar carregar do Firestore (pode falhar se offline/limite, ou — mais
+  // comum — por um erro TRANSITÓRIO de permissão logo após o login, antes do
+  // token de autenticação propagar de vez pro SDK do Firestore). Por isso
+  // tenta algumas vezes antes de desistir, em vez de cair direto no perfil
+  // mínimo (que não tem `modulos` definido e poderia liberar o módulo
+  // errado pra alguém por engano).
   // Cadastro de usuários é sempre no projeto ADLV — independente do módulo
   // que a pessoa vai usar depois de logar (getDBUsuarios força isso)
-  try{
-    const db = getDBUsuarios(); if(!db) return;
-    const doc = await db.collection('usuarios').doc(user.uid).get();
-    if(doc.exists){
-      const d = doc.data();
-      _authPerfil = { ...d, perfil: isAdm ? 'adm' : (d.perfil||'colaborador') };
-    } else {
-      await db.collection('usuarios').doc(user.uid).set(_authPerfil, {merge:true});
+  const db = getDBUsuarios();
+  if(!db){
+    window._perfilCarregouComSucesso = false;
+    window._perfilCarregadoCompleto = true;
+    if(typeof _atualizarLockCardsModulo === 'function') _atualizarLockCardsModulo();
+    return;
+  }
+  let carregouOk = false;
+  for(let tentativa=0; tentativa<4 && !carregouOk; tentativa++){
+    try{
+      if(tentativa>0) await new Promise(r=>setTimeout(r, 600*tentativa));
+      const doc = await db.collection('usuarios').doc(user.uid).get();
+      if(doc.exists){
+        const d = doc.data();
+        _authPerfil = { ...d, perfil: isAdm ? 'adm' : (d.perfil||'colaborador') };
+      } else {
+        await db.collection('usuarios').doc(user.uid).set(_authPerfil, {merge:true});
+      }
+      carregouOk = true;
+    } catch(e){
+      console.warn(`authCarregarPerfil (tentativa ${tentativa+1}/4):`, e.message);
     }
-  } catch(e){ console.warn('authCarregarPerfil (Firestore indisponível, usando perfil local):', e.message); }
+  }
+  if(!carregouOk){
+    console.warn('authCarregarPerfil: não foi possível confirmar o perfil real após várias tentativas — módulos ficam bloqueados até recarregar a página.');
+  }
 
   // Garantir ADM por e-mail independente do Firestore
   if(isAdm){
@@ -18742,11 +18778,17 @@ async function authCarregarPerfil(user){
   window._authPerfil = _authPerfil;
 
   // Garantir que sempre exista um array `modulos` (controla acesso ADLV/FAST).
-  // Se o usuário ainda não tiver isso definido no cadastro, padrão é só ADLV
-  // (fail-safe — FAST precisa ser liberado explicitamente no ADM > Usuários).
-  if(!Array.isArray(_authPerfil.modulos) || !_authPerfil.modulos.length){
+  // Se o usuário REALMENTE não tiver isso definido no cadastro (perfil
+  // confirmado carregado do Firestore, campo ausente — conta antiga/legado),
+  // o padrão é só ADLV. MAS: se o carregamento do Firestore falhou (rede,
+  // permissão transitória), NÃO aplica esse padrão — senão alguém que só
+  // tem FAST acabaria vendo o ADLV liberado por engano nessa janela de
+  // falha (foi exatamente o bug que causou a Aline ver dados do ADLV).
+  if(carregouOk && (!Array.isArray(_authPerfil.modulos) || !_authPerfil.modulos.length)){
     _authPerfil.modulos = ['adlv'];
   }
+  window._perfilCarregouComSucesso = carregouOk;
+  window._perfilCarregadoCompleto = true;
 
   // Se a tela de seleção de módulo já estiver visível (mostrada com o perfil
   // mínimo, antes do Firestore responder), corrige o estado travado/liberado
