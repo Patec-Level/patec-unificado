@@ -9644,17 +9644,36 @@ async function fbCarregarRadar(){
     // Isso evita que outra máquina veja dados antigos do localStorage por até 4h
     // quando alguém faz um novo upload em outra máquina.
     let _tsFirebaseMaisRecente = null;
+    let _radarDocSumiu = false;
     try{
       const metaCheck = await db.collection('config').doc('radar_dados').get();
       if(metaCheck.exists){
         const dCheck = metaCheck.data();
         _tsFirebaseMaisRecente = dCheck.ts || dCheck.updated_at || null;
+      } else {
+        // CORREÇÃO BUG (20/06): antes, se o documento fosse apagado do
+        // Firebase (não só atualizado), essa checagem não detectava nada —
+        // só sabia comparar timestamps, não "documento sumiu". Resultado: o
+        // cache antigo do navegador continuava sendo servido por até 4h
+        // mesmo depois do dado real ser apagado.
+        _radarDocSumiu = true;
       }
     } catch(e){ console.warn('Radar: check ts falhou', e); }
 
     const _tsCacheLocal = localStorage.getItem(_lsMod('patec_radar_upload_ts'));
-    const _cacheDesatualizado = _tsFirebaseMaisRecente && _tsCacheLocal &&
-      new Date(_tsFirebaseMaisRecente).getTime() > new Date(_tsCacheLocal).getTime();
+    const _cacheDesatualizado = _radarDocSumiu || (_tsFirebaseMaisRecente && _tsCacheLocal &&
+      new Date(_tsFirebaseMaisRecente).getTime() > new Date(_tsCacheLocal).getTime());
+    if(_radarDocSumiu){
+      console.log('Radar: documento não existe mais no Firebase. Limpando cache local.');
+      _radarDados = [];
+      localStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem(CACHE_TS_KEY);
+      localStorage.removeItem(_lsMod('patec_radar_upload_ts'));
+      syncPatecFinalizadoRadar();
+      const pg=document.getElementById('p-radar');
+      if(pg&&pg.classList.contains('active')) renderRadarOperacional();
+      return;
+    }
     if(_cacheDesatualizado){
       console.log('Radar: cache local desatualizado (Firebase mais recente). Invalidando cache.');
       localStorage.removeItem(CACHE_TS_KEY);
@@ -16679,7 +16698,7 @@ async function aaCompletoSalvar(){
     for(let i=0; i<rows.length; i+=CHUNK){
       const chunkIdx = Math.floor(i/CHUNK);
       if(_aaEl) _aaEl.textContent = '⏳ Salvando chunk ' + (chunkIdx+1) + ' de ' + totalChunks + '...';
-      await db.collection('patec-dashboard').doc('aa_completo_' + chunkIdx).set({
+      await db.collection('aa_completo').doc('aa_completo_' + chunkIdx).set({
         rows: rows.slice(i, i+CHUNK),
         arquivo: _aaCompleto.arquivo,
         dt: _aaCompleto.dt,
@@ -16688,7 +16707,7 @@ async function aaCompletoSalvar(){
       });
     }
     // Salvar metadata
-    await db.collection('patec-dashboard').doc('aa_completo_meta').set({
+    await db.collection('aa_completo').doc('aa_completo_meta').set({
       arquivo: _aaCompleto.arquivo,
       dt: _aaCompleto.dt,
       total: rows.length,
@@ -16723,7 +16742,7 @@ async function aaCompletoCarregar(){
   try{
     const db = getDB();
     if(!db){ if(elAtt) elAtt.textContent = '⚠ Firebase não disponível.'; return; }
-    const meta = await db.collection('patec-dashboard').doc('aa_completo_meta').get();
+    const meta = await db.collection('aa_completo').doc('aa_completo_meta').get();
     if(!meta.exists){
       if(elSem){ elSem.style.display='block'; }
       if(elWrap){ elWrap.style.display='none'; }
@@ -16734,7 +16753,7 @@ async function aaCompletoCarregar(){
     const chunks = d.chunks || 1;
     let rows = [];
     for(let i=0; i<chunks; i++){
-      const doc = await db.collection('patec-dashboard').doc('aa_completo_' + i).get();
+      const doc = await db.collection('aa_completo').doc('aa_completo_' + i).get();
       if(doc.exists) rows = rows.concat(doc.data().rows || []);
     }
     _aacDados = rows;
