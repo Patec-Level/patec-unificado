@@ -4729,15 +4729,15 @@ async function fbGetAll(col){
 
 async function fbSalvarTopbar(){
   await fbSet('config','topbar',{
-    meta:           localStorage.getItem('patec_meta')||'',
-    meta_label:     localStorage.getItem('patec_meta_label')||'',
-    patec_val:      localStorage.getItem('patec_patec_val')||'',
-    patec_sub:      localStorage.getItem('patec_patec_sub')||'',
-    meta_proj:      localStorage.getItem('patec_meta_proj')||'',
-    meta_proj_lbl:  localStorage.getItem('patec_meta_proj_label')||'',
-    gap_manual:     localStorage.getItem('patec_gap_manual')||'',
-    gap_label:      localStorage.getItem('patec_gap_label')||'',
-    realizado:      localStorage.getItem('patec_realizado')||'',
+    meta:           localStorage.getItem(_lsMod('patec_meta'))||'',
+    meta_label:     localStorage.getItem(_lsMod('patec_meta_label'))||'',
+    patec_val:      localStorage.getItem(_lsMod('patec_patec_val'))||'',
+    patec_sub:      localStorage.getItem(_lsMod('patec_patec_sub'))||'',
+    meta_proj:      localStorage.getItem(_lsMod('patec_meta_proj'))||'',
+    meta_proj_lbl:  localStorage.getItem(_lsMod('patec_meta_proj_label'))||'',
+    gap_manual:     localStorage.getItem(_lsMod('patec_gap_manual'))||'',
+    gap_label:      localStorage.getItem(_lsMod('patec_gap_label'))||'',
+    realizado:      localStorage.getItem(_lsMod('patec_realizado'))||'',
     ts:             new Date().toISOString()
   });
 }
@@ -4783,11 +4783,11 @@ async function fbCarregarTudo(){
   const topbar = await fbGet('config','topbar');
   if(topbar){
     const map = {
-      meta:'patec_meta', meta_label:'patec_meta_label',
-      patec_val:'patec_patec_val', patec_sub:'patec_patec_sub',
-      meta_proj:'patec_meta_proj', meta_proj_lbl:'patec_meta_proj_label',
-      gap_manual:'patec_gap_manual', gap_label:'patec_gap_label',
-      realizado:'patec_realizado'
+      meta:_lsMod('patec_meta'), meta_label:_lsMod('patec_meta_label'),
+      patec_val:_lsMod('patec_patec_val'), patec_sub:_lsMod('patec_patec_sub'),
+      meta_proj:_lsMod('patec_meta_proj'), meta_proj_lbl:_lsMod('patec_meta_proj_label'),
+      gap_manual:_lsMod('patec_gap_manual'), gap_label:_lsMod('patec_gap_label'),
+      realizado:_lsMod('patec_realizado')
     };
     Object.entries(map).forEach(([fb,ls]) => { if(topbar[fb]) localStorage.setItem(ls, topbar[fb]); });
     initMetaGap();
@@ -4834,12 +4834,12 @@ async function fbCarregarTudo(){
 
   // Férias — sync Firebase ↔ localStorage
   const ferias=await fbGet('config','ferias');
-  const feriasLs=localStorage.getItem('patec_ferias');
+  const feriasLs=localStorage.getItem(_lsMod('patec_ferias'));
   const fbTs=ferias?.ts?new Date(ferias.ts).getTime():0;
-  const lsTs=parseInt(localStorage.getItem('patec_ferias_ts')||'0');
+  const lsTs=parseInt(localStorage.getItem(_lsMod('patec_ferias_ts'))||'0');
   if(ferias&&ferias.lista&&ferias.lista.length>0&&fbTs>=lsTs){
     FERIAS_DATA.length=0;ferias.lista.forEach(f=>FERIAS_DATA.push(f));
-    localStorage.setItem('patec_ferias',JSON.stringify(FERIAS_DATA));
+    localStorage.setItem(_lsMod('patec_ferias'),JSON.stringify(FERIAS_DATA));
     console.log('✓ Férias (Firebase):',FERIAS_DATA.length,'períodos');
   } else if(feriasLs&&lsTs>fbTs){
     try{
@@ -4939,7 +4939,7 @@ function presPill(p) {
   return '<span class="pl pl-g">' + (p||'—') + '</span>';
 }
 function perfPill(v) {
-  const p = pct(v, parseInt(localStorage.getItem('patec_meta_min')||'30'));
+  const p = pct(v, parseInt(localStorage.getItem(_lsMod('patec_meta_min'))||'30'));
   if(p>=100) return '<span class="pl pl-ok">'+p+'%</span>';
   if(p>=80)  return '<span class="pl pl-w">'+p+'%</span>';
   return '<span class="pl pl-b">'+p+'%</span>';
@@ -5030,7 +5030,7 @@ const L12_LB = 2682;
 const L10_LB = 4516;
 
 // Ciclos históricos
-let ciclos_historico = JSON.parse(localStorage.getItem('patec_ciclos_historico')||'[]');
+let ciclos_historico = JSON.parse(localStorage.getItem(_lsMod('patec_ciclos_historico'))||'[]');
 
 (function(){
   const ID='marabr2026';
@@ -5159,10 +5159,10 @@ function go(id, el) {
     // Lazy: carregar desfechos se não tiver cache
     // Limpar cache de desfecho se estiver vazio (pode ter sido gravado vazio)
     try{
-      const _cached = JSON.parse(localStorage.getItem('patec_desfecho_cache')||'null');
+      const _cached = JSON.parse(localStorage.getItem(_lsMod('patec_desfecho_cache'))||'null');
       if(!_cached || Object.keys(_cached).length === 0){
-        localStorage.removeItem('patec_desfecho_cache');
-        localStorage.removeItem('patec_desfecho_cache_ts');
+        localStorage.removeItem(_lsMod('patec_desfecho_cache'));
+        localStorage.removeItem(_lsMod('patec_desfecho_cache_ts'));
       }
     }catch(e){}
     if(!Object.keys(_desfechoCache||{}).length) desfechoCarregarFirebase().then(()=>{ estRenderDevolucoes(); radarRenderDevolucoes(); estRenderDesfechoCards(); });
@@ -6215,7 +6215,7 @@ function renderComparativo(){
 function estSalvarFim(){
   const val=document.getElementById('est-fim-ciclo')?.value;
   if(!val) return;
-  localStorage.setItem('patec_fim_ciclo', val);
+  localStorage.setItem(_lsMod('patec_fim_ciclo'), val);
   const lbl=document.getElementById('est-fim-label');
   const hoje=HOJE.toISOString().split('T')[0];
   const dias=Math.round((new Date(val+'T12:00:00')-HOJE)/86400000);
@@ -6225,11 +6225,11 @@ function estSalvarFim(){
 function estInitFim(){
   const hoje=HOJE.toISOString().split('T')[0];
   // Se o localStorage tem data do ciclo antigo (< hoje), limpar e usar novo ciclo
-  const savedRaw=localStorage.getItem('patec_fim_ciclo')||'';
+  const savedRaw=localStorage.getItem(_lsMod('patec_fim_ciclo'))||'';
   if(savedRaw && savedRaw < CICLO_NOVO_INICIO){
-    localStorage.removeItem('patec_fim_ciclo');
+    localStorage.removeItem(_lsMod('patec_fim_ciclo'));
   }
-  const saved=localStorage.getItem('patec_fim_ciclo') || (_cicloAtivo?.fim_previsto||'') || CICLO_MAIJUN.fim_previsto;
+  const saved=localStorage.getItem(_lsMod('patec_fim_ciclo')) || (_cicloAtivo?.fim_previsto||'') || CICLO_MAIJUN.fim_previsto;
   const el=document.getElementById('est-fim-ciclo');
   if(el) el.value=saved;
   const lbl=document.getElementById('est-fim-label');
@@ -6572,13 +6572,13 @@ const PCP_INICIAL = [];
 // Senhas dos colaboradores (editáveis pelo ADM via localStorage)
 const SENHAS_DEFAULT = {André:'andre123',Aline:'aline123',Lory:'lory123',Ludy:'ludy123',Wanessa:'wanessa123'};
 function getSenhas(){
-  try{const s=localStorage.getItem('patec_senhas');return s?JSON.parse(s):SENHAS_DEFAULT;}
+  try{const s=localStorage.getItem(_lsMod('patec_senhas'));return s?JSON.parse(s):SENHAS_DEFAULT;}
   catch{return SENHAS_DEFAULT;}
 }
 
 // Meta mínima (editável pelo ADM)
 function getMeta(){
-  try{return parseInt(localStorage.getItem('patec_meta_min')||'30');}
+  try{return parseInt(localStorage.getItem(_lsMod('patec_meta_min'))||'30');}
   catch{return 30;}
 }
 
@@ -7590,9 +7590,9 @@ function setAdmTab(id,btn){
 
 // ── METAS E GAP ──
 function admCarregarValores(){
-  const meta=parseInt(localStorage.getItem('patec_meta')||'1980');
-  const real=parseInt(localStorage.getItem('patec_realizado')||'743');
-  const metaMin=parseInt(localStorage.getItem('patec_meta_min')||'30');
+  const meta=parseInt(localStorage.getItem(_lsMod('patec_meta'))||'1980');
+  const real=parseInt(localStorage.getItem(_lsMod('patec_realizado'))||'743');
+  const metaMin=parseInt(localStorage.getItem(_lsMod('patec_meta_min'))||'30');
   // Campos podem não existir se aba Metas e Gap foi removida — usar optional chaining
   const sel=id=>{const e=document.getElementById(id);return e||{value:0,textContent:'',style:{}};};
   sel('adm-meta-ciclo').value=meta;
@@ -7621,9 +7621,9 @@ async function salvarMetas(){
   const meta=parseInt(document.getElementById('adm-meta-ciclo').value)||1980;
   const real=parseInt(document.getElementById('adm-realizado').value)||743;
   const metaMin=parseInt(document.getElementById('adm-meta-min').value)||30;
-  localStorage.setItem('patec_meta',meta);
-  localStorage.setItem('patec_realizado',real);
-  localStorage.setItem('patec_meta_min',metaMin);
+  localStorage.setItem(_lsMod('patec_meta'),meta);
+  localStorage.setItem(_lsMod('patec_realizado'),real);
+  localStorage.setItem(_lsMod('patec_meta_min'),metaMin);
   // Refletir no sidebar imediatamente
   initMetaGap();
   admCarregarValores();
@@ -7649,7 +7649,7 @@ async function salvarSenhas(){
     const v=document.getElementById('adm-senha-'+c)?.value?.trim();
     if(v) novas[c]=v;
   });
-  localStorage.setItem('patec_senhas',JSON.stringify(novas));
+  localStorage.setItem(_lsMod('patec_senhas'),JSON.stringify(novas));
   const ok=document.getElementById('adm-senhas-ok');
   ok.style.display='inline';setTimeout(()=>ok.style.display='none',3000);
 }
@@ -8330,8 +8330,8 @@ async function salvarFeriasAdm(){
     });
   });
   FERIAS_DATA.sort((a,b)=>a.saida.localeCompare(b.saida));
-  localStorage.setItem('patec_ferias',JSON.stringify(FERIAS_DATA));
-  localStorage.setItem('patec_ferias_ts',String(Date.now()));
+  localStorage.setItem(_lsMod('patec_ferias'),JSON.stringify(FERIAS_DATA));
+  localStorage.setItem(_lsMod('patec_ferias_ts'),String(Date.now()));
   await fbSalvarFerias();
   console.log('✓ Férias salvas Firebase+LS:',FERIAS_DATA.length,'períodos');
   renderFerias();
@@ -8675,7 +8675,7 @@ async function salvarBancoAdm(){
     r.destino = document.getElementById('adm-bh-d-'+i)?.value||'A definir';
     r.folgas_usadas = (r.datas_folgas||[]).length;
   });
-  localStorage.setItem('patec_banco', JSON.stringify(BANCO_HORAS));
+  localStorage.setItem(_lsMod('patec_banco'), JSON.stringify(BANCO_HORAS));
   await fbSalvarBanco();
   renderBanco();
   const ok = document.getElementById('adm-banco-ok');
@@ -9285,8 +9285,8 @@ function initMetaGap(){
   const ls = k => localStorage.getItem(k)||'';
 
   // ESQ 1 — Meta Operacional (localStorage > TB_* padrão do arquivo)
-  const meta    = ls('patec_meta')    || TB_META;
-  const metaLbl = ls('patec_meta_label') || TB_META_LBL;
+  const meta    = ls(_lsMod('patec_meta'))    || TB_META;
+  const metaLbl = ls(_lsMod('patec_meta_label')) || TB_META_LBL;
   const metaFmt = isNaN(parseInt(meta)) ? meta : parseInt(meta).toLocaleString('pt-BR');
   _setEl('top-meta',       metaFmt);
   _setEl('top-meta-label', metaLbl);
@@ -9294,30 +9294,30 @@ function initMetaGap(){
   _setEl('sb-meta-label',  metaLbl);
 
   // ESQ 2 — Patec Finalizado
-  const patecVal = ls('patec_patec_val') || TB_PATEC;
-  const patecSub = ls('patec_patec_sub') || TB_PATEC_SUB;
+  const patecVal = ls(_lsMod('patec_patec_val')) || TB_PATEC;
+  const patecSub = ls(_lsMod('patec_patec_sub')) || TB_PATEC_SUB;
   _setEl('top-patec-val', patecVal);
   _setEl('top-patec-sub', patecSub);
   _setEl('sb-patec',      patecVal);
   _setEl('sb-patec-sub',  patecSub);
 
   // DIR 1 — Meta do Projeto
-  const metaProj    = ls('patec_meta_proj')       || TB_META_PROJ;
-  const metaProjLbl = ls('patec_meta_proj_label') || TB_META_PROJ_LBL;
+  const metaProj    = ls(_lsMod('patec_meta_proj'))       || TB_META_PROJ;
+  const metaProjLbl = ls(_lsMod('patec_meta_proj_label')) || TB_META_PROJ_LBL;
   const metaProjFmt = isNaN(parseInt(metaProj)) ? metaProj : parseInt(metaProj).toLocaleString('pt-BR');
   _setEl('top-meta-proj',       metaProjFmt);
   _setEl('top-meta-proj-label', metaProjLbl);
 
   // DIR 2 — Gap do Projeto
-  const gapManual = ls('patec_gap_manual') || TB_GAP;
-  const gapReal   = parseInt(ls('patec_realizado')||'0');
-  const gapMeta   = parseInt(ls('patec_meta_proj')||'0');
+  const gapManual = ls(_lsMod('patec_gap_manual')) || TB_GAP;
+  const gapReal   = parseInt(ls(_lsMod('patec_realizado'))||'0');
+  const gapMeta   = parseInt(ls(_lsMod('patec_meta_proj'))||'0');
   const gapCalc   = gapReal - gapMeta;
-  const gapSub    = ls('patec_gap_label') || TB_GAP_SUB;
+  const gapSub    = ls(_lsMod('patec_gap_label')) || TB_GAP_SUB;
   let   gapStr;
-  if(ls('patec_gap_manual')) {
-    gapStr = ls('patec_gap_manual');
-  } else if(ls('patec_meta_proj') || ls('patec_realizado')) {
+  if(ls(_lsMod('patec_gap_manual'))) {
+    gapStr = ls(_lsMod('patec_gap_manual'));
+  } else if(ls(_lsMod('patec_meta_proj')) || ls(_lsMod('patec_realizado'))) {
     gapStr = (gapCalc>=0?'+':'')+gapCalc.toLocaleString('pt-BR');
   } else {
     gapStr = TB_GAP;
@@ -9346,15 +9346,15 @@ function initMetaGapADM(){
   const ls = k => localStorage.getItem(k)||'';
   const el = id => document.getElementById(id);
 
-  const meta    = ls('patec_meta')||'1980';
-  const metaLbl = ls('patec_meta_label')||'itens · ciclo';
-  const patecVal = ls('patec_patec_val')||'';
-  const patecSub = ls('patec_patec_sub')||'';
-  const metaProj    = ls('patec_meta_proj')||'';
-  const metaProjLbl = ls('patec_meta_proj_label')||'itens · ciclo';
-  const gapReal  = ls('patec_realizado')||'';
-  const gapLbl   = ls('patec_gap_label')||'vs programado';
-  const gapMan   = ls('patec_gap_manual')||'';
+  const meta    = ls(_lsMod('patec_meta'))||'1980';
+  const metaLbl = ls(_lsMod('patec_meta_label'))||'itens · ciclo';
+  const patecVal = ls(_lsMod('patec_patec_val'))||'';
+  const patecSub = ls(_lsMod('patec_patec_sub'))||'';
+  const metaProj    = ls(_lsMod('patec_meta_proj'))||'';
+  const metaProjLbl = ls(_lsMod('patec_meta_proj_label'))||'itens · ciclo';
+  const gapReal  = ls(_lsMod('patec_realizado'))||'';
+  const gapLbl   = ls(_lsMod('patec_gap_label'))||'vs programado';
+  const gapMan   = ls(_lsMod('patec_gap_manual'))||'';
 
   if(el('mg-meta'))           el('mg-meta').value = meta;
   if(el('mg-meta-label'))     el('mg-meta-label').value = metaLbl;
@@ -9365,7 +9365,7 @@ function initMetaGapADM(){
   if(el('mg-gap-real'))       el('mg-gap-real').value = gapReal;
   if(el('mg-gap-label'))      el('mg-gap-label').value = gapLbl;
   if(el('mg-gap-manual-val')) el('mg-gap-manual-val').value = gapMan;
-  const metaMinVal=parseInt(ls('patec_meta_min')||'30');
+  const metaMinVal=parseInt(ls(_lsMod('patec_meta_min'))||'30');
   if(el('adm-meta-min')) el('adm-meta-min').value=metaMinVal;
   if(el('adm-cur-metamin')) el('adm-cur-metamin').textContent=metaMinVal+'/dia';
 
@@ -9428,8 +9428,8 @@ function mgToggleManual(){
 async function salvarMetaCard(){
   const meta    = parseInt(document.getElementById('mg-meta')?.value||'1980');
   const metaLbl = document.getElementById('mg-meta-label')?.value||'itens · ciclo';
-  localStorage.setItem('patec_meta', String(meta));
-  localStorage.setItem('patec_meta_label', metaLbl);
+  localStorage.setItem(_lsMod('patec_meta'), String(meta));
+  localStorage.setItem(_lsMod('patec_meta_label'), metaLbl);
   initMetaGap();
   _setEl('mg-cur-meta',       meta.toLocaleString('pt-BR'));
   _setEl('mg-cur-meta-label', metaLbl);
@@ -9439,8 +9439,8 @@ async function salvarMetaCard(){
 async function salvarPatecCard(){
   const val = document.getElementById('mg-patec-val')?.value||'';
   const sub = document.getElementById('mg-patec-sub')?.value||'ADM';
-  localStorage.setItem('patec_patec_val', val);
-  localStorage.setItem('patec_patec_sub', sub);
+  localStorage.setItem(_lsMod('patec_patec_val'), val);
+  localStorage.setItem(_lsMod('patec_patec_sub'), sub);
   initMetaGap();
   _setEl('mg-cur-patec',       val||'—');
   _setEl('mg-cur-patec-label', sub);
@@ -9450,8 +9450,8 @@ async function salvarPatecCard(){
 async function salvarMetaProjCard(){
   const val = parseInt(document.getElementById('mg-metaproj')?.value||'0');
   const lbl = document.getElementById('mg-metaproj-label')?.value||'itens · ciclo';
-  localStorage.setItem('patec_meta_proj', String(val));
-  localStorage.setItem('patec_meta_proj_label', lbl);
+  localStorage.setItem(_lsMod('patec_meta_proj'), String(val));
+  localStorage.setItem(_lsMod('patec_meta_proj_label'), lbl);
   initMetaGap();
   _setEl('mg-cur-metaproj',       val.toLocaleString('pt-BR'));
   _setEl('mg-cur-metaproj-label', lbl);
@@ -9464,9 +9464,9 @@ async function salvarGapProjCard(){
   const lbl    = document.getElementById('mg-gap-label')?.value||'vs programado';
   const manual = document.getElementById('mg-gap-manual')?.checked;
   const manVal = document.getElementById('mg-gap-manual-val')?.value||'';
-  localStorage.setItem('patec_realizado', String(real));
-  localStorage.setItem('patec_gap_label', lbl);
-  localStorage.setItem('patec_gap_manual', manual ? manVal : '');
+  localStorage.setItem(_lsMod('patec_realizado'), String(real));
+  localStorage.setItem(_lsMod('patec_gap_label'), lbl);
+  localStorage.setItem(_lsMod('patec_gap_manual'), manual ? manVal : '');
   initMetaGap();
   mgRecalcGapProj();
   await fbSalvarTopbar();
@@ -9475,7 +9475,7 @@ async function salvarGapProjCard(){
 function _flash(id){ const el=document.getElementById(id); if(el){el.style.display='inline';setTimeout(()=>el.style.display='none',3000);} }
 async function salvarMetaMin(){
   const val=parseInt(document.getElementById('adm-meta-min')?.value||'30')||30;
-  localStorage.setItem('patec_meta_min',String(val));
+  localStorage.setItem(_lsMod('patec_meta_min'),String(val));
   const el=document.getElementById('adm-cur-metamin');
   if(el) el.textContent=val+'/dia';
   await fbSalvarTopbar();
@@ -9506,10 +9506,10 @@ function syncPatecFinalizadoRadar(){
   if(!_radarDados || !_radarDados.length) return;
   const count = _radarDados.filter(d => (d.analista_auto||'').trim() === 'Analisar PATEC Finalizado').length;
   if(count <= 0) return;
-  const tsR = _radarTs || localStorage.getItem('patec_radar_upload_ts');
+  const tsR = _radarTs || localStorage.getItem(_lsMod('patec_radar_upload_ts'));
   const dtFmt = tsR ? new Date(tsR).toLocaleDateString('pt-BR') : fmtDt(HOJE.toISOString().split('T')[0]);
-  localStorage.setItem('patec_patec_val', String(count));
-  localStorage.setItem('patec_patec_sub', dtFmt);
+  localStorage.setItem(_lsMod('patec_patec_val'), String(count));
+  localStorage.setItem(_lsMod('patec_patec_sub'), dtFmt);
   if(typeof initMetaGap === 'function') initMetaGap();
 }
 
@@ -9518,8 +9518,8 @@ async function fbCarregarRadar(){
     const db=getDB(); if(!db) return;
 
     // ── Cache localStorage: evitar re-leitura se dados recentes (< 4h) ──
-    const CACHE_KEY = 'patec_radar_cache';
-    const CACHE_TS_KEY = 'patec_radar_cache_ts';
+    const CACHE_KEY = _lsMod('patec_radar_cache');
+    const CACHE_TS_KEY = _lsMod('patec_radar_cache_ts');
     const cacheTs = parseInt(localStorage.getItem(CACHE_TS_KEY)||'0');
     const agora = Date.now();
     const CACHE_TTL = 4 * 60 * 60 * 1000; // 4 horas
@@ -9536,7 +9536,7 @@ async function fbCarregarRadar(){
       }
     } catch(e){ console.warn('Radar: check ts falhou', e); }
 
-    const _tsCacheLocal = localStorage.getItem('patec_radar_upload_ts');
+    const _tsCacheLocal = localStorage.getItem(_lsMod('patec_radar_upload_ts'));
     const _cacheDesatualizado = _tsFirebaseMaisRecente && _tsCacheLocal &&
       new Date(_tsFirebaseMaisRecente).getTime() > new Date(_tsCacheLocal).getTime();
     if(_cacheDesatualizado){
@@ -9549,7 +9549,7 @@ async function fbCarregarRadar(){
         const cached = JSON.parse(localStorage.getItem(CACHE_KEY)||'[]');
         if(cached.length > 0){
           _radarDados = cached;
-          if(!_radarTs) _radarTs = localStorage.getItem('patec_radar_upload_ts');
+          if(!_radarTs) _radarTs = localStorage.getItem(_lsMod('patec_radar_upload_ts'));
           console.log('Radar (cache): '+_radarDados.length+' registros');
           syncPatecFinalizadoRadar();
           const pg=document.getElementById('p-radar');
@@ -9565,8 +9565,8 @@ async function fbCarregarRadar(){
     const meta=await db.collection('config').doc('radar_dados').get();
     if(!meta.exists) return;
     const d=meta.data();
-    _radarTs = d.ts || d.updated_at || localStorage.getItem('patec_radar_upload_ts') || new Date().toISOString();
-    localStorage.setItem('patec_radar_upload_ts', _radarTs);
+    _radarTs = d.ts || d.updated_at || localStorage.getItem(_lsMod('patec_radar_upload_ts')) || new Date().toISOString();
+    localStorage.setItem(_lsMod('patec_radar_upload_ts'), _radarTs);
     const nChunks = d.nChunks||0;
 
     if(nChunks > 0){
@@ -9689,8 +9689,8 @@ async function radarOnFile(file){
     }
     _radarDados=rows;
     _radarTs=new Date().toISOString();
-    localStorage.setItem('patec_radar_upload_ts', _radarTs);
-    localStorage.setItem('patec_radar_upload_nome', file.name);
+    localStorage.setItem(_lsMod('patec_radar_upload_ts'), _radarTs);
+    localStorage.setItem(_lsMod('patec_radar_upload_nome'), file.name);
     if(lbl) lbl.textContent = file.name + ' — ' + new Date(_radarTs).toLocaleDateString('pt-BR') + ' às ' + new Date(_radarTs).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     // Atualizar MAPA: fila + novos itens (sem sobrescrever Status/Envio/Finalizado)
     govSincronizarMapa(rows);
@@ -9730,7 +9730,7 @@ function radarRenderPreview(rows){
 
 async function radarSalvarFirebase(){
   // Invalidar cache ao salvar novo radar
-  localStorage.removeItem('patec_radar_cache_ts');
+  localStorage.removeItem(_lsMod('patec_radar_cache_ts'));
   try {
     const db=getDB(); if(!db){alert('Firebase não conectado.');return;}
     const CHUNK = 400;
@@ -9770,7 +9770,7 @@ async function radarSalvarFirebase(){
 
 // ── Regras de saúde ──
 function radarGetRegras(){
-  return JSON.parse(localStorage.getItem('patec_radar_regras')||'{"sla_alerta":60,"sla_critico":90,"prazo_alerta":30,"prazo_critico":60,"sla_card_dias":90,"pa_backlog_val":766,"pa_backlog_dt":"2026-03-16","pa_meta_dia":30,"limiar_estavel":10,"limiar_alerta":25}');
+  return JSON.parse(localStorage.getItem(_lsMod('patec_radar_regras'))||'{"sla_alerta":60,"sla_critico":90,"prazo_alerta":30,"prazo_critico":60,"sla_card_dias":90,"pa_backlog_val":766,"pa_backlog_dt":"2026-03-16","pa_meta_dia":30,"limiar_estavel":10,"limiar_alerta":25}');
 }
 
 function radarInitADM(){
@@ -9823,7 +9823,7 @@ function radarSalvarRegras(){
     limiar_estavel:   parseInt(document.getElementById('radar-limiar-estavel')?.value||'10'),
     limiar_alerta:    parseInt(document.getElementById('radar-limiar-alerta')?.value||'25'),
   };
-  localStorage.setItem('patec_radar_regras',JSON.stringify(regras));
+  localStorage.setItem(_lsMod('patec_radar_regras'),JSON.stringify(regras));
   radarInitADM();
   _flash('radar-regras-ok');
   renderRadarOperacional();
@@ -10084,8 +10084,8 @@ function _renderRadarCore(){
   // Status calculado depois — placeholder
   let saude='',saudeIco='',saudeCor='';
   if(icoEl) icoEl.textContent='⏳';
-  const _tsR = _radarTs || localStorage.getItem('patec_radar_upload_ts');
-  const _nomeR = localStorage.getItem('patec_radar_upload_nome');
+  const _tsR = _radarTs || localStorage.getItem(_lsMod('patec_radar_upload_ts'));
+  const _nomeR = localStorage.getItem(_lsMod('patec_radar_upload_nome'));
   if(attEl && _tsR){
     const d = new Date(_tsR);
     attEl.textContent = '📋 ' + (_nomeR ? _nomeR + ' · ' : '') + d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -10463,11 +10463,11 @@ function renderRadarTabela(){
 // META & GAP — Edição manual na topbar
 // ════════════════════════════════════════════
 function initMetaGapADM(){
-  const meta   = parseInt(localStorage.getItem('patec_meta')||'1980');
-  const real   = parseInt(localStorage.getItem('patec_realizado')||'743');
-  const metaLbl= localStorage.getItem('patec_meta_label')||'itens · ciclo';
-  const gapLbl = localStorage.getItem('patec_gap_label')||'vs programado';
-  const manual = localStorage.getItem('patec_gap_manual')||'';
+  const meta   = parseInt(localStorage.getItem(_lsMod('patec_meta'))||'1980');
+  const real   = parseInt(localStorage.getItem(_lsMod('patec_realizado'))||'743');
+  const metaLbl= localStorage.getItem(_lsMod('patec_meta_label'))||'itens · ciclo';
+  const gapLbl = localStorage.getItem(_lsMod('patec_gap_label'))||'vs programado';
+  const manual = localStorage.getItem(_lsMod('patec_gap_manual'))||'';
   const gap    = real - meta;
 
   const el = id => document.getElementById(id);
@@ -10527,11 +10527,11 @@ function salvarMetaGap(){
   const manualVal = el('mg-gap-manual-val')?.value || '';
   const gap = real - meta;
 
-  localStorage.setItem('patec_meta', String(meta));
-  localStorage.setItem('patec_realizado', String(real));
-  localStorage.setItem('patec_meta_label', metaLbl);
-  localStorage.setItem('patec_gap_label', gapLbl);
-  localStorage.setItem('patec_gap_manual', manual ? manualVal : '');
+  localStorage.setItem(_lsMod('patec_meta'), String(meta));
+  localStorage.setItem(_lsMod('patec_realizado'), String(real));
+  localStorage.setItem(_lsMod('patec_meta_label'), metaLbl);
+  localStorage.setItem(_lsMod('patec_gap_label'), gapLbl);
+  localStorage.setItem(_lsMod('patec_gap_manual'), manual ? manualVal : '');
 
   // Atualizar topbar imediatamente
   initMetaGap();
@@ -10642,7 +10642,7 @@ async function encerrarCicloConfirmar(){
   await fbSet('ciclos_encerrados', snap.id, snap);
   if(_cicloAtivo){ _cicloAtivo.status='fechado'; _cicloAtivo.fim=dtFech; await fbSet('config','ciclo_ativo',_cicloAtivo); }
   ciclos_historico.push(snap);
-  localStorage.setItem('patec_ciclos_historico', JSON.stringify(ciclos_historico));
+  localStorage.setItem(_lsMod('patec_ciclos_historico'), JSON.stringify(ciclos_historico));
   const ok = document.getElementById('ciclo-fechamento-ok');
   if(ok){ ok.style.display='inline'; setTimeout(()=>ok.style.display='none',6000); }
   alert('✅ Ciclo ' + snap.nome + ' encerrado!\n\nTotal: ' + total.toLocaleString('pt-BR') + ' itens (' + pct + '% da meta)\nDias úteis: ' + dias + '\n\nDados arquivados. Veja em Resultado de Medição.');
@@ -10670,7 +10670,7 @@ async function iniciarNovoCiclo(){
   if(!confirm('Iniciar novo ciclo "'+nome+'" a partir de '+fmtDt(inicio)+' com meta de '+meta.toLocaleString('pt-BR')+' itens?')) return;
   _cicloAtivo = {id:'ciclo_'+Date.now(),nome,inicio,fim:'',fim_previsto:fimPrev,meta,status:'ativo',ts_inicio:new Date().toISOString()};
   await fbSet('config','ciclo_ativo', _cicloAtivo);
-  localStorage.setItem('patec_meta', String(meta));
+  localStorage.setItem(_lsMod('patec_meta'), String(meta));
   initMetaGap();
   const ok = document.getElementById('novo-ciclo-ok');
   if(ok){ ok.style.display='inline'; setTimeout(()=>ok.style.display='none',4000); }
@@ -10774,7 +10774,7 @@ function excluirCicloResultado(idx){
   const c=(window._resultadoCiclos||[])[idx];if(!c)return;
   if(!confirm('Excluir analise "'+c.nome+'"?'))return;
   ciclos_historico=ciclos_historico.filter(x=>x.id!==c.id);
-  localStorage.setItem('patec_ciclos_historico',JSON.stringify(ciclos_historico));
+  localStorage.setItem(_lsMod('patec_ciclos_historico'),JSON.stringify(ciclos_historico));
   try{const db=getDB();if(db)db.collection('ciclos_encerrados').doc(c.id).delete();}catch(e){}
   document.getElementById('resultado-detalhe').style.display='none';
   renderResultadoMedicao();
@@ -10906,7 +10906,7 @@ function initCicloADMExtra(){
   else if(prevEl && CICLO_ATUAL.fim) prevEl.value = CICLO_ATUAL.fim;
 }
 function renderCicloHistorico(){renderResultadoMedicao();}
-function deletarCicloHist(id){if(confirm('Excluir?')){ciclos_historico=ciclos_historico.filter(c=>c.id!==id);localStorage.setItem('patec_ciclos_historico',JSON.stringify(ciclos_historico));renderResultadoMedicao();}}
+function deletarCicloHist(id){if(confirm('Excluir?')){ciclos_historico=ciclos_historico.filter(c=>c.id!==id);localStorage.setItem(_lsMod('patec_ciclos_historico'),JSON.stringify(ciclos_historico));renderResultadoMedicao();}}
 let _novoCicloData=null;
 function cicloOnDrop(e){e.preventDefault();}
 function cicloOnFile(i){}
@@ -11385,17 +11385,17 @@ function gerarHTMLAtualizado(){
   const el = id => document.getElementById(id);
 
   // Ler valores atuais (do localStorage ou dos campos ADM)
-  const meta       = el('mg-meta')?.value        || localStorage.getItem('patec_meta')       || '1980';
-  const metaLbl    = el('mg-meta-label')?.value  || localStorage.getItem('patec_meta_label') || 'itens · ciclo';
-  const patec      = el('mg-patec-val')?.value   || localStorage.getItem('patec_patec_val')  || '—';
-  const patecSub   = el('mg-patec-sub')?.value   || localStorage.getItem('patec_patec_sub')  || 'atualizar no ADM';
-  const metaProj   = el('mg-metaproj')?.value    || localStorage.getItem('patec_meta_proj')  || '—';
-  const metaProjLbl= el('mg-metaproj-label')?.value || localStorage.getItem('patec_meta_proj_label') || 'itens · ciclo';
+  const meta       = el('mg-meta')?.value        || localStorage.getItem(_lsMod('patec_meta'))       || '1980';
+  const metaLbl    = el('mg-meta-label')?.value  || localStorage.getItem(_lsMod('patec_meta_label')) || 'itens · ciclo';
+  const patec      = el('mg-patec-val')?.value   || localStorage.getItem(_lsMod('patec_patec_val'))  || '—';
+  const patecSub   = el('mg-patec-sub')?.value   || localStorage.getItem(_lsMod('patec_patec_sub'))  || 'atualizar no ADM';
+  const metaProj   = el('mg-metaproj')?.value    || localStorage.getItem(_lsMod('patec_meta_proj'))  || '—';
+  const metaProjLbl= el('mg-metaproj-label')?.value || localStorage.getItem(_lsMod('patec_meta_proj_label')) || 'itens · ciclo';
   const gapManual  = el('mg-gap-manual')?.checked && el('mg-gap-manual-val')?.value
                    ? el('mg-gap-manual-val').value
-                   : localStorage.getItem('patec_gap_manual')||'';
-  const gapReal    = el('mg-gap-real')?.value    || localStorage.getItem('patec_realizado')  || '0';
-  const gapSub     = el('mg-gap-label')?.value   || localStorage.getItem('patec_gap_label')  || 'vs programado';
+                   : localStorage.getItem(_lsMod('patec_gap_manual'))||'';
+  const gapReal    = el('mg-gap-real')?.value    || localStorage.getItem(_lsMod('patec_realizado'))  || '0';
+  const gapSub     = el('mg-gap-label')?.value   || localStorage.getItem(_lsMod('patec_gap_label'))  || 'vs programado';
   // Calcular gap se não manual
   let gapFinal = gapManual;
   if(!gapFinal){
@@ -11441,11 +11441,11 @@ function gerarHTMLAtualizado(){
 // Migrar backlog para novo valor se ainda for o antigo
 (function(){
   try{
-    const reg = JSON.parse(localStorage.getItem('patec_radar_regras')||'{}');
+    const reg = JSON.parse(localStorage.getItem(_lsMod('patec_radar_regras'))||'{}');
     if(reg.pa_backlog_val===582 || reg.pa_backlog_val===505 || !reg.pa_backlog_val){
       reg.pa_backlog_val = 766;
       reg.pa_backlog_dt  = '2026-03-16';
-      localStorage.setItem('patec_radar_regras', JSON.stringify(reg));
+      localStorage.setItem(_lsMod('patec_radar_regras'), JSON.stringify(reg));
       console.log('✓ Backlog migrado para 766 / 2026-03-16');
     }
   }catch(e){}
@@ -11577,19 +11577,19 @@ function bheRemUso(colab,pi,ui){const dados=BANCO_HE.find(b=>b.colab===colab);if
 async function bheSalvarTudo(){
   const ts=new Date().toISOString();
   await fbSet('config','banco_he',{lista:JSON.parse(JSON.stringify(BANCO_HE)),ts});
-  localStorage.setItem('patec_banco_he',JSON.stringify(BANCO_HE));
-  localStorage.setItem('patec_banco_he_ts',String(Date.now()));
+  localStorage.setItem(_lsMod('patec_banco_he'),JSON.stringify(BANCO_HE));
+  localStorage.setItem(_lsMod('patec_banco_he_ts'),String(Date.now()));
   console.log('✓ Banco HE salvo');
   renderBHECards();
   const ok=document.getElementById('bhe-ok');if(ok){ok.style.display='inline';setTimeout(()=>ok.style.display='none',3000);}
 }
 async function fbCarregarBHE(){
   const dados=await fbGet('config','banco_he');
-  const lsRaw=localStorage.getItem('patec_banco_he');
+  const lsRaw=localStorage.getItem(_lsMod('patec_banco_he'));
   const fbTs=dados?.ts?new Date(dados.ts).getTime():0;
-  const lsTs=parseInt(localStorage.getItem('patec_banco_he_ts')||'0');
+  const lsTs=parseInt(localStorage.getItem(_lsMod('patec_banco_he_ts'))||'0');
   if(dados&&dados.lista&&dados.lista.length>0&&fbTs>=lsTs){
-    BANCO_HE=dados.lista;localStorage.setItem('patec_banco_he',JSON.stringify(BANCO_HE));
+    BANCO_HE=dados.lista;localStorage.setItem(_lsMod('patec_banco_he'),JSON.stringify(BANCO_HE));
     console.log('✓ Banco HE (Firebase):',BANCO_HE.reduce((s,b)=>s+b.periodos.length,0),'períodos');
   } else if(lsRaw&&lsTs>fbTs){
     try{const ls=JSON.parse(lsRaw);if(ls.length>0){BANCO_HE=ls;await fbSet('config','banco_he',{lista:JSON.parse(JSON.stringify(BANCO_HE)),ts:new Date().toISOString()});console.log('✓ Banco HE (LS→Firebase):',BANCO_HE.reduce((s,b)=>s+b.periodos.length,0));}}catch(e){}
@@ -11597,7 +11597,7 @@ async function fbCarregarBHE(){
     BANCO_HE=dados.lista;console.log('✓ Banco HE (Firebase fallback):',BANCO_HE.reduce((s,b)=>s+b.periodos.length,0));
   }
   const cfg=await fbGet('config','bhe_config');
-  if(cfg&&cfg.limite)localStorage.setItem('patec_bhe_limite',JSON.stringify(cfg.limite));
+  if(cfg&&cfg.limite)localStorage.setItem(_lsMod('patec_bhe_limite'),JSON.stringify(cfg.limite));
 }
 function bheArquivarVencidos(){
   const hoje=HOJE.toISOString().split('T')[0];let mudou=false;
@@ -11610,13 +11610,13 @@ function bheArquivarVencidos(){
     p.arquivado=true;p.arquivado_em=hoje;p.arquivado_motivo='Vencido — pago automaticamente';mudou=true;
     console.log('⚙️ BHE Auto:',b.colab,'—',p.mes_ref,'→ pago',sH+'h'+String(sM).padStart(2,'0')+'min');
   }));
-  if(mudou){fbSet('config','banco_he',{lista:JSON.parse(JSON.stringify(BANCO_HE)),ts:new Date().toISOString()});localStorage.setItem('patec_banco_he',JSON.stringify(BANCO_HE));}
+  if(mudou){fbSet('config','banco_he',{lista:JSON.parse(JSON.stringify(BANCO_HE)),ts:new Date().toISOString()});localStorage.setItem(_lsMod('patec_banco_he'),JSON.stringify(BANCO_HE));}
   return mudou;
 }
-function bheGetLimite(){try{const ls=localStorage.getItem('patec_bhe_limite');if(ls)return JSON.parse(ls);}catch(e){}return{h:0,m:0};}
+function bheGetLimite(){try{const ls=localStorage.getItem(_lsMod('patec_bhe_limite'));if(ls)return JSON.parse(ls);}catch(e){}return{h:0,m:0};}
 function bheCarregarLimiteADM(){const l=bheGetLimite();const elH=document.getElementById('bhe-limite-h');const elM=document.getElementById('bhe-limite-m');if(elH)elH.value=l.h||'';if(elM)elM.value=l.m||'';bhePrevLimite();}
 function bhePrevLimite(){const h=parseInt(document.getElementById('bhe-limite-h')?.value||0);const m=parseInt(document.getElementById('bhe-limite-m')?.value||0);const prev=document.getElementById('bhe-limite-preview');const regra=document.getElementById('bhe-limite-regra');if(h||m){if(prev)prev.textContent=h+'h'+String(m).padStart(2,'0')+'min por mês (equipe)';if(regra)regra.textContent='≤ '+h+'h'+String(m).padStart(2,'0')+'min → pode pagar · acima → dar folga';}else{if(prev)prev.textContent='Nenhum limite definido';if(regra)regra.textContent='Configure acima para ativar';}}
-async function bheSalvarLimite(){const h=parseInt(document.getElementById('bhe-limite-h')?.value||0);const m=parseInt(document.getElementById('bhe-limite-m')?.value||0);const limite={h,m};localStorage.setItem('patec_bhe_limite',JSON.stringify(limite));await fbSet('config','bhe_config',{limite,ts:new Date().toISOString()});bhePrevLimite();renderBHECards();const ok=document.getElementById('bhe-limite-ok');if(ok){ok.style.display='inline';setTimeout(()=>ok.style.display='none',3000);}}
+async function bheSalvarLimite(){const h=parseInt(document.getElementById('bhe-limite-h')?.value||0);const m=parseInt(document.getElementById('bhe-limite-m')?.value||0);const limite={h,m};localStorage.setItem(_lsMod('patec_bhe_limite'),JSON.stringify(limite));await fbSet('config','bhe_config',{limite,ts:new Date().toISOString()});bhePrevLimite();renderBHECards();const ok=document.getElementById('bhe-limite-ok');if(ok){ok.style.display='inline';setTimeout(()=>ok.style.display='none',3000);}}
 function renderBHECards(){
   const hoje=HOJE.toISOString().split('T')[0];const mesFiltro=document.getElementById('bhe-filtro-mes')?.value||'';
   const selMes=document.getElementById('bhe-filtro-mes');
@@ -11782,11 +11782,11 @@ const MAPA_ABR2026 = {
 // Migrar backlog para novo valor se ainda for o antigo
 (function(){
   try{
-    const reg = JSON.parse(localStorage.getItem('patec_radar_regras')||'{}');
+    const reg = JSON.parse(localStorage.getItem(_lsMod('patec_radar_regras'))||'{}');
     if(reg.pa_backlog_val===582 || reg.pa_backlog_val===505 || !reg.pa_backlog_val){
       reg.pa_backlog_val = 766;
       reg.pa_backlog_dt  = '2026-03-16';
-      localStorage.setItem('patec_radar_regras', JSON.stringify(reg));
+      localStorage.setItem(_lsMod('patec_radar_regras'), JSON.stringify(reg));
       console.log('✓ Backlog migrado para 766 / 2026-03-16');
     }
   }catch(e){}
@@ -12204,13 +12204,13 @@ let _paEntradas = []; // [{dt:'2026-05-14', val:45}, ...]
 let _backlogAtualGlobal = null; // Backlog atual calculado pelo gráfico de cascata
 
 // Histórico de backlog (apenas informativo)
-let _paHistorico = JSON.parse(localStorage.getItem('patec_pa_historico')||'[]');
+let _paHistorico = JSON.parse(localStorage.getItem(_lsMod('patec_pa_historico'))||'[]');
 if(!_paHistorico.length){
   _paHistorico = [
     {dt:'2026-03-16', val:766, label:'Início do acompanhamento'},
     {dt:'2026-05-06', val:488, label:'Base do gráfico de medição'},
   ];
-  localStorage.setItem('patec_pa_historico', JSON.stringify(_paHistorico));
+  localStorage.setItem(_lsMod('patec_pa_historico'), JSON.stringify(_paHistorico));
 }
 
 function paHistoricoRender(){
@@ -12279,7 +12279,7 @@ function paHistoricoRenderADM(){
 
 async function paHistoricoSalvarFirebase(){
   _paHistorico.sort((a,b)=>a.dt.localeCompare(b.dt));
-  localStorage.setItem('patec_pa_historico', JSON.stringify(_paHistorico));
+  localStorage.setItem(_lsMod('patec_pa_historico'), JSON.stringify(_paHistorico));
   try{
     const db=getDB(); if(!db){alert('Firebase não conectado.');return;}
     await db.collection('config').doc('pa_historico').set({lista:_paHistorico, ts:new Date().toISOString()});
@@ -12336,7 +12336,7 @@ async function paHistoricoCarregarFirebase(){
       const lista = doc.data().lista || [];
       if(lista.length){
         _paHistorico = lista;
-        try{ localStorage.setItem('patec_pa_historico', JSON.stringify(_paHistorico)); }catch(e){}
+        try{ localStorage.setItem(_lsMod('patec_pa_historico'), JSON.stringify(_paHistorico)); }catch(e){}
         console.log('PA Histórico carregado do Firebase:', _paHistorico.length, 'marcos');
         paHistoricoRender();
       }
@@ -12531,7 +12531,7 @@ function bkProcessarArquivo(file){
 
 async function bkSalvarFirebase(){
   // Invalidar cache ao salvar novo backlog
-  localStorage.removeItem('patec_bk_cache_ts');
+  localStorage.removeItem(_lsMod('patec_bk_cache_ts'));
   if(!_bkDados || !_bkDados.rows || !_bkDados.rows.length){
     alert('Nenhuma planilha carregada. Faça o upload primeiro.');
     return;
@@ -12603,8 +12603,8 @@ async function bkCarregarFirebase(){
     }
 
     // ── Cache localStorage: evitar re-leitura de chunks (TTL 4h) ──
-    const CACHE_KEY = 'patec_bk_cache';
-    const CACHE_TS_KEY = 'patec_bk_cache_ts';
+    const CACHE_KEY = _lsMod('patec_bk_cache');
+    const CACHE_TS_KEY = _lsMod('patec_bk_cache_ts');
     const cacheTs = parseInt(localStorage.getItem(CACHE_TS_KEY)||'0');
     const CACHE_TTL = 4 * 60 * 60 * 1000;
 
@@ -12966,7 +12966,7 @@ function aaProcessar(){
 
 async function aaSalvarFirebase(aptas){
   // Invalidar cache ao fazer novo upload
-  localStorage.removeItem('patec_aa_cache_ts');
+  localStorage.removeItem(_lsMod('patec_aa_cache_ts'));
   try {
     const db = getDB(); if(!db) return;
     const payload = {
@@ -12994,8 +12994,8 @@ async function aaCarregarResultadoFirebase(){
     }
 
     // Cache 24h — upload feito uma vez por dia
-    const CACHE_KEY = 'patec_aa_cache';
-    const CACHE_TS_KEY = 'patec_aa_cache_ts';
+    const CACHE_KEY = _lsMod('patec_aa_cache');
+    const CACHE_TS_KEY = _lsMod('patec_aa_cache_ts');
     const cacheTs = parseInt(localStorage.getItem(CACHE_TS_KEY)||'0');
     if(Date.now() - cacheTs < 24*60*60*1000){
       try{
@@ -13259,8 +13259,8 @@ function pcInicializar(){
 
   // Atualização
   const elDt = document.getElementById('pc-ultima-att');
-  const _tsP = _radarTs || localStorage.getItem('patec_radar_upload_ts');
-  const _nomeP = localStorage.getItem('patec_radar_upload_nome');
+  const _tsP = _radarTs || localStorage.getItem(_lsMod('patec_radar_upload_ts'));
+  const _nomeP = localStorage.getItem(_lsMod('patec_radar_upload_nome'));
   if(elDt && _tsP){
     const d = new Date(_tsP);
     elDt.textContent = '📋 ' + (_nomeP ? _nomeP + ' · ' : '') + d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -13897,8 +13897,8 @@ async function govInicializar(){
 
   // Atualização
   const _govEl = document.getElementById('gov-ultima-att');
-  const _tsG = _radarTs || localStorage.getItem('patec_radar_upload_ts');
-  const _nomeG = localStorage.getItem('patec_radar_upload_nome');
+  const _tsG = _radarTs || localStorage.getItem(_lsMod('patec_radar_upload_ts'));
+  const _nomeG = localStorage.getItem(_lsMod('patec_radar_upload_nome'));
   if(_govEl && _tsG){
     const d = new Date(_tsG);
     _govEl.textContent = '📋 ' + (_nomeG ? _nomeG + ' · ' : '') + d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -13959,7 +13959,7 @@ function govRenderMapa(dados){
 
 async function govSalvarCampo(chave, campo, valor, idx){
   // Invalidar cache para refletir mudança na próxima carga
-  localStorage.removeItem('patec_gov_cache_ts');
+  localStorage.removeItem(_lsMod('patec_gov_cache_ts'));
   // Atualizar backlog auto quando status muda no MAPA
   if(campo === 'status') setTimeout(paAtualizarBacklogAuto, 300);
   if(!_govDados[chave]) _govDados[chave] = {};
@@ -13989,7 +13989,7 @@ async function govSalvarCampo(chave, campo, valor, idx){
     });
     // Invalidar cache das outras máquinas
     await db.collection('config').doc('gov_mapa_ts').set({ts: _tsAutoSave});
-    localStorage.setItem('patec_gov_cache_saved_ts', _tsAutoSave);
+    localStorage.setItem(_lsMod('patec_gov_cache_saved_ts'), _tsAutoSave);
   } catch(e){ console.warn('govAutoSave:', e); }
 }
 
@@ -14016,8 +14016,8 @@ async function govCarregarFirebase(){
     const db = getDB(); if(!db) return;
 
     // ── Cache localStorage (TTL 2h — dados de gov mudam com frequência) ──
-    const CACHE_KEY = 'patec_gov_cache';
-    const CACHE_TS_KEY = 'patec_gov_cache_ts';
+    const CACHE_KEY = _lsMod('patec_gov_cache');
+    const CACHE_TS_KEY = _lsMod('patec_gov_cache_ts');
     const cacheTs = parseInt(localStorage.getItem(CACHE_TS_KEY)||'0');
     const CACHE_TTL = 2 * 60 * 60 * 1000;
 
@@ -14029,7 +14029,7 @@ async function govCarregarFirebase(){
         const _metaGov = await db.collection('config').doc('gov_mapa_ts').get();
         if(_metaGov.exists){
           const _tsFirebaseGov = _metaGov.data().ts || null;
-          const _tsCacheGov    = localStorage.getItem('patec_gov_cache_saved_ts');
+          const _tsCacheGov    = localStorage.getItem(_lsMod('patec_gov_cache_saved_ts'));
           if(_tsFirebaseGov && _tsCacheGov && new Date(_tsFirebaseGov).getTime() > new Date(_tsCacheGov).getTime()){
             console.log('Gov MAPA: cache local desatualizado (Firebase mais recente). Invalidando.');
             _govCacheInvalido = true;
@@ -14090,7 +14090,7 @@ async function govCarregarFirebase(){
     try{
       localStorage.setItem(CACHE_KEY, JSON.stringify(_govDados));
       localStorage.setItem(CACHE_TS_KEY, String(Date.now()));
-      localStorage.setItem('patec_gov_cache_saved_ts', _nowGovTs);
+      localStorage.setItem(_lsMod('patec_gov_cache_saved_ts'), _nowGovTs);
     } catch(e){}
     // Atualizar metadata de timestamp no Firebase (outras máquinas usam para invalidar cache)
     try{ await db.collection('config').doc('gov_mapa_ts').set({ts: _nowGovTs}); } catch(e){}
@@ -14102,7 +14102,7 @@ async function govCarregarFirebase(){
 
 function govAtualizar(){
   // Invalidar cache para forçar releitura do Firebase
-  localStorage.removeItem('patec_gov_cache_ts');
+  localStorage.removeItem(_lsMod('patec_gov_cache_ts'));
   govCarregarFirebase().then(()=>govInicializar());
 }
 
@@ -14210,8 +14210,8 @@ function xglOnFile(input){
         if(!vistos.has(k)){ _xglItens.push(r); vistos.add(k); adicionados++; }
       });
       const _xglTs = new Date().toISOString();
-      localStorage.setItem('patec_xgl_upload_ts', _xglTs);
-      localStorage.setItem('patec_xgl_upload_nome', file.name);
+      localStorage.setItem(_lsMod('patec_xgl_upload_ts'), _xglTs);
+      localStorage.setItem(_lsMod('patec_xgl_upload_nome'), file.name);
       document.getElementById('xgl-upload-info').textContent =
         '✓ ' + file.name + ' — ' + adicionados + ' novos (total: ' + _xglItens.length + ') — ' + new Date(_xglTs).toLocaleDateString('pt-BR') + ' às ' + new Date(_xglTs).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
       xglSalvarItensFirebase();
@@ -14701,7 +14701,7 @@ async function desfechoSalvar(){
         chave, aba, ...desfecho, finalizado: _desfechoCtx.valor,
         data: new Date().toISOString().split('T')[0]
       }, {merge:true});
-      localStorage.removeItem('patec_desfecho_cache_ts');
+      localStorage.removeItem(_lsMod('patec_desfecho_cache_ts'));
       console.log('✓ Desfecho salvo:', tipo, chave);
     }
   } catch(e){ console.warn('desfechoSalvar:', e); }
@@ -14756,8 +14756,8 @@ async function desfechoCarregarFirebase(){
   try{
     const db = getDB(); if(!db) return;
 
-    const CACHE_KEY = 'patec_desfecho_cache';
-    const CACHE_TS_KEY = 'patec_desfecho_cache_ts';
+    const CACHE_KEY = _lsMod('patec_desfecho_cache');
+    const CACHE_TS_KEY = _lsMod('patec_desfecho_cache_ts');
     const TIPO_NORM = {
       'pedido':'Pedido','devolução':'Devolução','devolucao':'Devolução',
       'republicação':'Republicação','republicacao':'Republicação','xgl':'XGL'
@@ -16067,7 +16067,7 @@ function paAtualizarBacklogAuto(){
 
   // Ordenar e salvar
   _paHistorico.sort((a,b) => a.dt.localeCompare(b.dt));
-  localStorage.setItem('patec_pa_historico', JSON.stringify(_paHistorico));
+  localStorage.setItem(_lsMod('patec_pa_historico'), JSON.stringify(_paHistorico));
 
   // Salvar no Firebase
   const db = getDB();
@@ -16108,10 +16108,10 @@ const ANALISTAS_EMAIL = {
 };
 
 // Chaves dos itens já conhecidos (evita reenvio)
-let _alertasEnviados = JSON.parse(localStorage.getItem('patec_alertas_enviados')||'{}');
+let _alertasEnviados = JSON.parse(localStorage.getItem(_lsMod('patec_alertas_enviados'))||'{}');
 
 function alertaSalvarEnviados(){
-  localStorage.setItem('patec_alertas_enviados', JSON.stringify(_alertasEnviados));
+  localStorage.setItem(_lsMod('patec_alertas_enviados'), JSON.stringify(_alertasEnviados));
 }
 
 async function alertaEnviarEmail(email, nome, assunto, mensagem, listaItens, template){
@@ -16551,8 +16551,8 @@ async function aaCompletoSalvar(){
       chunks: totalChunks
     });
     const _aaTs = new Date().toISOString();
-    localStorage.setItem('patec_aa_upload_ts', _aaTs);
-    localStorage.setItem('patec_aa_upload_nome', _aaCompleto.arquivo||'');
+    localStorage.setItem(_lsMod('patec_aa_upload_ts'), _aaTs);
+    localStorage.setItem(_lsMod('patec_aa_upload_nome'), _aaCompleto.arquivo||'');
     if(_aaEl) _aaEl.textContent = '✅ ' + rows.length + ' registros salvos — ' + new Date(_aaTs).toLocaleDateString('pt-BR') + ' às ' + new Date(_aaTs).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
     if(_prevBtn){ _prevBtn.disabled = false; _prevBtn.textContent = '💾 Salvar no Firebase'; }
   } catch(err){
@@ -16567,8 +16567,8 @@ let _aacFiltrado = []; // dados após filtro
 
 async function aaCompletoCarregar(){
   const elAtt = document.getElementById('aac-ultima-att');
-  const _tsAa = localStorage.getItem('patec_aa_upload_ts');
-  const _nomeAa = localStorage.getItem('patec_aa_upload_nome');
+  const _tsAa = localStorage.getItem(_lsMod('patec_aa_upload_ts'));
+  const _nomeAa = localStorage.getItem(_lsMod('patec_aa_upload_nome'));
   if(elAtt && _tsAa){
     const d = new Date(_tsAa);
     elAtt.textContent = '📋 ' + (_nomeAa ? _nomeAa + ' · ' : '') + d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -18047,8 +18047,8 @@ async function q18HandleUpload(file){
     status.innerHTML = `<span style="color:var(--am)">⏳ Salvando no Firebase...</span>`;
     await q18SalvarFirebase(impedidos, file.name, _q18Total);
     const _q18Ts = new Date().toISOString();
-    localStorage.setItem('patec_q18_upload_ts', _q18Ts);
-    localStorage.setItem('patec_q18_upload_nome', file.name);
+    localStorage.setItem(_lsMod('patec_q18_upload_ts'), _q18Ts);
+    localStorage.setItem(_lsMod('patec_q18_upload_nome'), file.name);
     status.innerHTML = `<span style="color:var(--vd)">✓ <strong>${file.name}</strong> — ${impedidos.length} impedidos — ${new Date(_q18Ts).toLocaleDateString('pt-BR')} às ${new Date(_q18Ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>`;
     q18AtualizarInfo();
   } catch(e){
@@ -18060,7 +18060,7 @@ async function q18SalvarFirebase(impedidos, arquivo, total){
   try{
     const db = getDB(); if(!db) return;
     // Invalidar cache
-    localStorage.removeItem('patec_q18_cache_ts');
+    localStorage.removeItem(_lsMod('patec_q18_cache_ts'));
     // Salvar em chunks de 5000
     const CHUNK = 5000;
     const chunks = Math.ceil(impedidos.length / CHUNK) || 1;
@@ -18079,8 +18079,8 @@ async function q18SalvarFirebase(impedidos, arquivo, total){
 async function q18CarregarFirebase(){
   try{
     // Cache 7 dias — upload semanal, carrega só sob demanda
-    const CACHE_KEY = 'patec_q18_cache';
-    const CACHE_TS_KEY = 'patec_q18_cache_ts';
+    const CACHE_KEY = _lsMod('patec_q18_cache');
+    const CACHE_TS_KEY = _lsMod('patec_q18_cache_ts');
     const cacheTs = parseInt(localStorage.getItem(CACHE_TS_KEY)||'0');
     if(Date.now() - cacheTs < 7*24*60*60*1000){
       try{
@@ -18441,6 +18441,19 @@ function _gateModuloELogin(){
 // Firestore (editável no ADM); se ainda não tiver sido definido, o padrão é
 // só ADLV — assim ninguém ganha acesso ao FAST sem isso ser explicitamente
 // concedido (fail-safe).
+// CORREÇÃO BUG (20/06): dados do FAST apareciam iguais aos do ADLV. Causa:
+// vários caches de dados (Radar, Backlog, Analista Automático, Governança,
+// Desfechos, Q18) ficavam salvos no localStorage com a MESMA chave pros dois
+// módulos (ex: 'patec_radar_cache'). Como ADLV e FAST rodam no mesmo domínio
+// (patec-level.github.io), o localStorage é compartilhado entre eles — então
+// ao trocar de módulo, o app lia o cache "fresco" (< 4h) do módulo ANTERIOR
+// em vez de buscar os dados certos do Firebase do módulo atual. Esta função
+// isola cada chave por módulo ativo (sufixo _adlv/_fast), então cada módulo
+// passa a ter seu próprio cache, sem vazar dado de um pro outro.
+function _lsMod(base){
+  return base + '__' + (_moduloAtivo === 'fast' ? 'fast' : 'adlv');
+}
+
 function _modulosPermitidos(){
   const emailsAdm = ['andre.mazzali@levelgroup.com.br','andreluisj4@gmail.com'];
   const email = (_authPerfil?.email || _authUser?.email || window._authUser?.email || '').toLowerCase().trim();
@@ -20042,15 +20055,15 @@ async function prodConfirmarAcao(){
     registro.dataFinalizado = _dataFin;
     // Invalidar cache localStorage para que outros usuários e recargas leiam o Firebase
     try{
-      localStorage.removeItem('patec_gov_cache_ts');
+      localStorage.removeItem(_lsMod('patec_gov_cache_ts'));
       // Atualizar o cache com os dados novos para não perder edições locais de outros campos
-      const _cacheStr = localStorage.getItem('patec_gov_cache');
+      const _cacheStr = localStorage.getItem(_lsMod('patec_gov_cache'));
       if(_cacheStr){
         const _cacheObj = JSON.parse(_cacheStr);
         for(const _ch of _chaves){ _cacheObj[_ch] = _govDados[_ch]; }
-        localStorage.setItem('patec_gov_cache', JSON.stringify(_cacheObj));
+        localStorage.setItem(_lsMod('patec_gov_cache'), JSON.stringify(_cacheObj));
         // Deixar TTL zerado para que na próxima carga force releitura do Firebase
-        localStorage.removeItem('patec_gov_cache_ts');
+        localStorage.removeItem(_lsMod('patec_gov_cache_ts'));
       }
     } catch(e){}
   }
