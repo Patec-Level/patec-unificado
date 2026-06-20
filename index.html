@@ -438,8 +438,17 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
   width:100%;max-width:460px;box-shadow:0 20px 60px rgba(0,0,0,.3);
   text-align:center;margin:1rem;
 }
-#patec-modulo-overlay h2{font-size:18px;font-weight:700;color:#0D2347;margin:0 0 4px}
-#patec-modulo-overlay p{font-size:12px;color:#5A6A7E;margin:0 0 1.5rem}
+#patec-modulo-overlay .modulo-logo{
+  background:#0D2347;border-radius:12px;padding:.85rem 1.5rem;
+  display:inline-block;margin-bottom:1.25rem;
+}
+#patec-modulo-overlay .modulo-logo h2{
+  color:#fff;font-size:20px;font-weight:700;letter-spacing:.5px;margin:0;
+}
+#patec-modulo-overlay .modulo-logo p{
+  color:rgba(255,255,255,.5);font-size:10px;margin:3px 0 0;letter-spacing:1px;text-transform:uppercase;
+}
+#patec-modulo-overlay .modulo-instrucao{font-size:12px;color:#5A6A7E;margin:0 0 1.5rem}
 #patec-modulo-overlay .modulo-cards{display:flex;gap:12px}
 #patec-modulo-overlay .modulo-card{
   flex:1;border:1.5px solid #DDE3EE;border-radius:12px;padding:1.25rem 1rem;
@@ -569,10 +578,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 <!-- ══ fim LOGIN GLOBAL ══ -->
 
 <!-- ══ TELA DE SELEÇÃO DE MÓDULO/PROJETO (ADLV / FAST) ══ -->
-<div id="patec-modulo-overlay">
+<div id="patec-modulo-overlay" translate="no" class="notranslate">
   <div class="modulo-box">
-    <h2>Qual projeto você quer abrir?</h2>
-    <p>Escolha o módulo para continuar</p>
+    <div class="modulo-logo">
+      <h2>PATEC</h2>
+      <p>Unificado</p>
+    </div>
+    <p class="modulo-instrucao">Escolha o projeto para continuar</p>
     <div class="modulo-cards">
       <div class="modulo-card" onclick="selecionarModulo('adlv')">
         <div class="ico">🏢</div>
@@ -646,7 +658,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
   <!-- ── DIREITA: 2 cards (Meta do Projeto + Gap do Projeto) + badge usuário ── -->
   <div style="display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0;position:relative;z-index:2">
     <!-- badge módulo ativo (ADLV/FAST) -->
-    <span id="topbar-modulo-badge" style="display:none" onclick="trocarModulo()" title="Clique para trocar de projeto">—</span>
+    <span id="topbar-modulo-badge" translate="no" class="notranslate" style="display:none" onclick="trocarModulo()" title="Clique para trocar de projeto">—</span>
     <!-- badge usuário logado -->
     <div id="topbar-user-badge" style="display:none;align-items:center;gap:7px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:20px;padding:4px 12px 4px 6px;margin-right:4px">
       <div id="topbar-user-avatar" style="width:24px;height:24px;border-radius:50%;background:rgba(14,158,106,.35);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">—</div>
