@@ -6632,6 +6632,14 @@ function _atualizarColabsPorModulo(){
   if(typeof registros !== 'undefined'){
     registros = (_moduloAtivo === 'fast') ? [] : [...HISTORICO_INICIAL];
   }
+  // Limpeza defensiva: remove o snapshot Mar/Abr (ADLV) da memória se a
+  // pessoa entrar no FAST nesta sessão (cobre o caso em que o IIFE do
+  // snapshot já rodou com um _moduloAtivo desatualizado no carregamento da
+  // página, antes da escolha real do módulo).
+  if(_moduloAtivo === 'fast' && typeof ciclos_historico !== 'undefined'){
+    ciclos_historico = ciclos_historico.filter(c => c.id !== 'marabr2026_enc');
+    window._pendingSnapshotMarAbr = null;
+  }
 }
 
 BANCO_HE = COLABS.map(c => ({ colab: c, periodos: [] })); // inicializa BANCO_HE
@@ -7986,8 +7994,11 @@ async function mapaExcluirDia(dt){
 function filtrarHistMapa(modo, l12Anterior=null, periodoDE=null, periodoATE=null){
   let dados=[];
   // Fonte única: mapaFirebase (dados do Firebase) complementado por dados embutidos
+  // CORREÇÃO BUG (20/06): L[3..8]/DATAS_MAPA são dados reais do ciclo Abr/Mai
+  // do ADLV, embutidos no código — só usa como baseline quando o módulo
+  // ativo é o ADLV. No FAST, parte só do que estiver no Firebase mesmo.
   const mapaFb = (mapaFirebase||[]);
-  const mapaEmb = L[3].map((_,i)=>({dia:i+1,dt:DATAS_MAPA[i],dtiso:DATAS_ISO_MAPA[i],l3:L[3][i],l4:L[4][i],l5:L[5][i],l6:L[6][i],l7:L[7][i],l8:L[8][i]}));
+  const mapaEmb = (_moduloAtivo === 'fast') ? [] : L[3].map((_,i)=>({dia:i+1,dt:DATAS_MAPA[i],dtiso:DATAS_ISO_MAPA[i],l3:L[3][i],l4:L[4][i],l5:L[5][i],l6:L[6][i],l7:L[7][i],l8:L[8][i]}));
   // Merge: Firebase prevalece sobre embutido
   const mapaAll = [...mapaEmb];
   mapaFb.forEach(fb=>{
@@ -8000,7 +8011,7 @@ function filtrarHistMapa(modo, l12Anterior=null, periodoDE=null, periodoATE=null
 
   if(modo==='all'){
     dados=[...mapaAll];
-    if(l12Anterior===null) l12Anterior=MAPA_ABR2026.L3.slice(-1)[0]+MAPA_ABR2026.L4.slice(-1)[0]+MAPA_ABR2026.L5.slice(-1)[0]+MAPA_ABR2026.L6.slice(-1)[0];
+    if(l12Anterior===null && _moduloAtivo !== 'fast') l12Anterior=MAPA_ABR2026.L3.slice(-1)[0]+MAPA_ABR2026.L4.slice(-1)[0]+MAPA_ABR2026.L5.slice(-1)[0]+MAPA_ABR2026.L6.slice(-1)[0];
   } else if(modo==='periodo' && periodoDE){
     dados=mapaAll.filter(d=>d.dtiso>=periodoDE&&d.dtiso<=(periodoATE||'9999'));
   } else {
@@ -8035,6 +8046,14 @@ function filtrarHistMapaCiclo(){
 
   // Calcular L12 do último dia de um dataset
   function ultimoL12(M){ const n=M.L3.length-1; return M.L3[n]+M.L4[n]+M.L5[n]+M.L6[n]; }
+
+  // CORREÇÃO BUG (20/06): Fev/Mar, Mar/Abr e o baseline de Abr/Mai (MAPA_FEV2026,
+  // MAPA_ABR2026, L[3..8]) são ciclos reais e embutidos do ADLV — esses ciclos
+  // nunca existiram pro FAST, então não faz sentido mostrá-los lá.
+  if(_moduloAtivo === 'fast' && (ciclo==='fevmar2026' || ciclo==='marabr2026' || ciclo==='abr_mai2026')){
+    renderMapaTabela([], null);
+    return;
+  }
 
   if(ciclo==='fevmar2026'){
     // Fev/Mar: primeiro ciclo histórico — sem anterior, usa null
@@ -10918,7 +10937,14 @@ function _renderResultadoColab(c){
   }).join('');
 }
 
-// ── Snapshot Mar/Abr ──
+// ── Snapshot Mar/Abr (SÓ ADLV) ──
+// CORREÇÃO BUG (20/06): esse snapshot é um dado histórico REAL do ADLV
+// (registros de produção, mapa L3-L8, pcp) embutido direto no código. Antes
+// rodava sempre, e além de aparecer no histórico de ciclos, ainda tentava
+// GRAVAR esse snapshot no Firebase (ciclos_encerrados) — inclusive no banco
+// do FAST, se fosse o módulo ativo no login. Agora só roda quando ADLV é
+// o módulo ativo.
+if(_moduloAtivo !== 'fast'){
 (function(){
   const _s={id:'marabr2026_enc',nome:'Ciclo Mar/Abr 2026',inicio:'2026-03-26',fim:'2026-04-24',meta:1584,realizado:2003,pct:126,dias_uteis:20,obs:'Primeiro ciclo completo do sistema',ts_encerramento:'2026-04-24T18:00:00.000Z',n_registros:79,
     registros:[
@@ -10944,6 +10970,7 @@ function _renderResultadoColab(c){
     window._pendingSnapshotMarAbr = _s;
   }
 })();
+}
 
 // compatibilidade
 function fecharCiclo(){encerrarCicloConfirmar();}
@@ -18680,13 +18707,17 @@ function _entrarNoApp(){
   // Todos os carregamentos Firebase centralizados aqui, só uma vez após login
   if(!window._fbCarregadoUmaVez){
     window._fbCarregadoUmaVez = true;
-    // Snapshot Mar/Abr pendente
-    if(window._pendingSnapshotMarAbr){
+    // Snapshot Mar/Abr pendente — segunda trava de segurança: só grava se o
+    // módulo ativo CONFIRMADO (pós-seleção) for ADLV. Esse snapshot é dado
+    // histórico real do ADLV, nunca deve ir parar no Firebase do FAST.
+    if(window._pendingSnapshotMarAbr && _moduloAtivo !== 'fast'){
       const _s = window._pendingSnapshotMarAbr;
       window._pendingSnapshotMarAbr = null;
       fbSet('ciclos_encerrados', _s.id, _s)
         .then(()=>console.log('Snapshot Mar/Abr salvo'))
         .catch(e=>console.warn('Snapshot Mar/Abr:', e));
+    } else {
+      window._pendingSnapshotMarAbr = null;
     }
     // Dados gerais
     paEntradaCarregarFirebase();
