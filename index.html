@@ -6647,6 +6647,20 @@ function _atualizarColabsPorModulo(){
   if(_moduloAtivo === 'fast' && typeof L !== 'undefined'){
     Object.keys(L).forEach(k => { for(let i=0;i<L[k].length;i++) L[k][i]=0; });
   }
+  // CORREÇÃO BUG CRÍTICO (20/06): `pcpData` nunca era resetada ao trocar de
+  // módulo na MESMA sessão (sem recarregar a página) — e tanto
+  // pcpRecalcularTudo() quanto fbCarregarPCPDiario() só ADICIONAM/ATUALIZAM
+  // registros, nunca removem os que não deveriam mais estar lá. Resultado:
+  // se a pessoa entrasse no ADLV primeiro (pcpData populada com dado real)
+  // e depois trocasse pro FAST sem recarregar, os registros do ADLV
+  // ficavam "grudados" em pcpData pro resto da sessão — era essa a causa
+  // real do "350 itens" aparecendo sempre no Painel Estratégico/Dados PCP
+  // do FAST, mesmo com o Firebase do FAST genuinamente vazio. Resetando
+  // aqui, sempre que o módulo é escolhido, garante que o próximo
+  // carregamento (Firebase + registros) comece do zero.
+  if(typeof pcpData !== 'undefined'){
+    pcpData = [];
+  }
 }
 
 BANCO_HE = COLABS.map(c => ({ colab: c, periodos: [] })); // inicializa BANCO_HE
