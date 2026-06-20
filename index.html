@@ -4511,6 +4511,21 @@ const FIREBASE_CONFIG_FAST = {
 // a tela de seleção de módulo (selecionarModulo()).
 let _moduloAtivo = localStorage.getItem('patec_modulo_ativo') || null;
 
+// CORREÇÃO BUG CRÍTICO (20/06): esta função precisa existir bem no INÍCIO do
+// arquivo. Várias variáveis globais (ciclos_historico, _paHistorico,
+// _alertasEnviados, etc.) são inicializadas no nível raiz do script — ou
+// seja, rodam IMEDIATAMENTE quando a página carrega, não dentro de uma
+// função. Se _lsMod() só existisse lá no fim do arquivo (como estava antes),
+// essas inicializações rodavam ANTES da função existir, disparando
+// "ReferenceError: _lsMod is not defined" — um erro não tratado que
+// interrompe a execução do script bem no meio, deixando todo o código
+// abaixo dele (inclusive o carregamento de dados do Firebase) sem rodar.
+// Isola cada chave de cache/config por módulo ativo (sufixo _adlv/_fast),
+// pra ADLV e FAST nunca lerem/escreverem o cache um do outro.
+function _lsMod(base){
+  return base + '__' + (_moduloAtivo === 'fast' ? 'fast' : 'adlv');
+}
+
 function getFirebaseConfigAtivo(){
   return _moduloAtivo === 'fast' ? FIREBASE_CONFIG_FAST : FIREBASE_CONFIG_ADLV;
 }
@@ -18441,19 +18456,8 @@ function _gateModuloELogin(){
 // Firestore (editável no ADM); se ainda não tiver sido definido, o padrão é
 // só ADLV — assim ninguém ganha acesso ao FAST sem isso ser explicitamente
 // concedido (fail-safe).
-// CORREÇÃO BUG (20/06): dados do FAST apareciam iguais aos do ADLV. Causa:
-// vários caches de dados (Radar, Backlog, Analista Automático, Governança,
-// Desfechos, Q18) ficavam salvos no localStorage com a MESMA chave pros dois
-// módulos (ex: 'patec_radar_cache'). Como ADLV e FAST rodam no mesmo domínio
-// (patec-level.github.io), o localStorage é compartilhado entre eles — então
-// ao trocar de módulo, o app lia o cache "fresco" (< 4h) do módulo ANTERIOR
-// em vez de buscar os dados certos do Firebase do módulo atual. Esta função
-// isola cada chave por módulo ativo (sufixo _adlv/_fast), então cada módulo
-// passa a ter seu próprio cache, sem vazar dado de um pro outro.
-function _lsMod(base){
-  return base + '__' + (_moduloAtivo === 'fast' ? 'fast' : 'adlv');
-}
-
+// (_lsMod() foi movida pro início do arquivo — ver comentário lá perto de
+// _moduloAtivo — precisa existir antes de várias inicializações globais)
 function _modulosPermitidos(){
   const emailsAdm = ['andre.mazzali@levelgroup.com.br','andreluisj4@gmail.com'];
   const email = (_authPerfil?.email || _authUser?.email || window._authUser?.email || '').toLowerCase().trim();
