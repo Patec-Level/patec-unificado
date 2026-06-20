@@ -12439,11 +12439,11 @@ async function paEntradaCarregarFirebase(){
     }
     const db=getDB(); if(!db){ console.warn('PA Entradas: db null'); return; }
     const doc=await db.collection('config').doc('pa_entradas').get();
-    if(doc.exists){
-      _paEntradas = doc.data().lista || [];
-      console.log('PA Entradas carregadas:', _paEntradas.length);
-      renderCascata(); // atualizar gráfico com entradas carregadas
-    }
+    // CORREÇÃO BUG (20/06): sincroniza sempre, mesmo se o documento não
+    // existir mais — antes ficava com o dado antigo "preso" em memória.
+    _paEntradas = (doc.exists && doc.data().lista) ? doc.data().lista : [];
+    console.log('PA Entradas carregadas:', _paEntradas.length);
+    renderCascata(); // atualizar gráfico com entradas carregadas
   } catch(e){ console.warn('PA Entradas load:', e); }
 }
 
@@ -12456,15 +12456,16 @@ async function paHistoricoCarregarFirebase(){
     }
     const db=getDB(); if(!db){ console.warn('PA Histórico: db null'); return; }
     const doc=await db.collection('config').doc('pa_historico').get();
-    if(doc.exists){
-      const lista = doc.data().lista || [];
-      if(lista.length){
-        _paHistorico = lista;
-        try{ localStorage.setItem(_lsMod('patec_pa_historico'), JSON.stringify(_paHistorico)); }catch(e){}
-        console.log('PA Histórico carregado do Firebase:', _paHistorico.length, 'marcos');
-        paHistoricoRender();
-      }
-    }
+    const lista = (doc.exists && doc.data().lista) ? doc.data().lista : [];
+    // CORREÇÃO BUG (20/06): antes, se o documento não existisse mais no
+    // Firebase (ex: apagado manualmente), essa função simplesmente não
+    // fazia nada — deixando o cache antigo do localStorage "preso" pra
+    // sempre, mesmo depois do dado real ser apagado. Agora sempre
+    // sincroniza com o que existe (ou não) no Firebase.
+    _paHistorico = lista;
+    try{ localStorage.setItem(_lsMod('patec_pa_historico'), JSON.stringify(_paHistorico)); }catch(e){}
+    console.log('PA Histórico carregado do Firebase:', _paHistorico.length, 'marcos');
+    paHistoricoRender();
   } catch(e){ console.warn('PA Histórico load:', e); }
 }
 
