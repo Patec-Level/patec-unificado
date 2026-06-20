@@ -1235,7 +1235,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <div style="margin-bottom:10px">
               <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:6px">Módulos com acesso</div>
               <div id="usr-novo-modulos" style="display:flex;flex-wrap:wrap;gap:6px">
-                <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd)"><input type="checkbox" id="usr-novo-mod-adlv" value="adlv" checked> 🏢 ADLV</label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd)"><input type="checkbox" id="usr-novo-mod-adlv" value="adlv"> 🏢 ADLV</label>
                 <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd)"><input type="checkbox" id="usr-novo-mod-fast" value="fast"> ⚡ FAST</label>
               </div>
               <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;background:var(--amc);padding:6px 10px;border-radius:6px;border:1px solid var(--am);margin-top:6px;width:fit-content">
@@ -6623,12 +6623,21 @@ function _atualizarColabsPorModulo(){
     COLABS_SEM_META_RT = (_moduloAtivo === 'fast') ? COLABS_SEM_META_RT_FAST : COLABS_SEM_META_RT_ADLV;
     META_ANALISTA_RT = (_moduloAtivo === 'fast') ? META_ANALISTA_RT_FAST : META_ANALISTA_RT_ADLV;
   }
+  // CORREÇÃO BUG (20/06): `registros` começava com HISTORICO_INICIAL (dados
+  // reais do ADLV) baseado no módulo ativo NA HORA QUE A PÁGINA CARREGOU —
+  // antes do login/escolha de módulo. Como esse array só recebe itens via
+  // .push() (nunca é substituído), se a pessoa entrasse direto no FAST na
+  // mesma sessão sem recarregar a página, ficava com histórico do ADLV
+  // "grudado" o tempo todo. Reseta aqui, no momento real da escolha.
+  if(typeof registros !== 'undefined'){
+    registros = (_moduloAtivo === 'fast') ? [] : [...HISTORICO_INICIAL];
+  }
 }
 
 BANCO_HE = COLABS.map(c => ({ colab: c, periodos: [] })); // inicializa BANCO_HE
 const SENHA_PCP = 'patec2026';
 
-let registros = [...HISTORICO_INICIAL];
+let registros = (_moduloAtivo === 'fast') ? [] : [...HISTORICO_INICIAL];
 let pcpData   = [...PCP_INICIAL];
 let colabLogado = null;
 let presAtual   = null;
@@ -14295,12 +14304,17 @@ async function xglCarregarFirebase(){
       return true;
     });
     // Sempre mesclar: Firebase + base embutida (sem duplicatas)
+    // CORREÇÃO BUG (20/06): _XGL_BASE_ITENS é uma base real do ADLV embutida
+    // no código — só faz sentido mesclar quando o módulo ativo é o ADLV,
+    // senão vaza pro FAST (que começa com Firestore vazio).
     const vistosXgl = new Set(fbItens.map(r => xglChave(r.rc, r.item, r.oport||"", r.itemop||"")));
     _xglItens = [...fbItens];
-    _XGL_BASE_ITENS.forEach(r => {
-      const k = xglChave(r.rc, r.item, r.oport||"", r.itemop||"");
-      if(!vistosXgl.has(k)){ _xglItens.push(r); vistosXgl.add(k); }
-    });
+    if(_moduloAtivo !== 'fast'){
+      _XGL_BASE_ITENS.forEach(r => {
+        const k = xglChave(r.rc, r.item, r.oport||"", r.itemop||"");
+        if(!vistosXgl.has(k)){ _xglItens.push(r); vistosXgl.add(k); }
+      });
+    }
     // Carregar dados manuais do Firebase
     const snap = await db.collection('gov_xgl').get();
     _xglDados = {};
@@ -15382,6 +15396,16 @@ function govNormalizarStatus(s){
 }
 
 async function govCarregarBase(){
+  // CORREÇÃO BUG (20/06): _GOV_BASE_DADOS é uma base histórica REAL do ADLV,
+  // embutida direto no código (milhares de registros) — não vem do Firebase,
+  // então nunca foi isolada por módulo. Como ela preenche qualquer chave
+  // ausente em _govDados, no FAST (onde o Firestore começa vazio) ela
+  // acabava preenchendo TUDO com dados antigos do ADLV. Só faz sentido
+  // mesclar essa base quando o módulo ativo é o ADLV.
+  if(_moduloAtivo === 'fast'){
+    console.log('Base embutida do ADLV ignorada (módulo ativo: FAST)');
+    return;
+  }
   // Mesclar dados da base embutida no _govDados (sem sobrescrever dados do Firebase)
   _GOV_BASE_DADOS.forEach(d => {
     if(!_govDados[d.chave]){
@@ -15721,12 +15745,16 @@ async function sbCarregarFirebase(){
     if(docItens.exists){
       const fbItens = docItens.data().itens || [];
       // Mesclar Firebase + base embutida (Firebase tem prioridade)
+      // CORREÇÃO BUG (20/06): _SB_BASE_ITENS é uma base real do ADLV
+      // embutida no código — só mescla quando o módulo ativo é o ADLV.
       const vistos = new Set(fbItens.map(r => sbChave(r.rc,r.seq,r.op,r.item)));
       _sbItens = [...fbItens];
-      _SB_BASE_ITENS.forEach(r => {
-        const k = sbChave(r.rc,r.seq,r.op,r.item);
-        if(!vistos.has(k)){ _sbItens.push(r); vistos.add(k); }
-      });
+      if(_moduloAtivo !== 'fast'){
+        _SB_BASE_ITENS.forEach(r => {
+          const k = sbChave(r.rc,r.seq,r.op,r.item);
+          if(!vistos.has(k)){ _sbItens.push(r); vistos.add(k); }
+        });
+      }
     }
     // Carregar dados manuais
     const snap = await db.collection('gov_sb').get();
@@ -19096,6 +19124,9 @@ async function usrCadastrar(){
     const checksModulos = document.querySelectorAll('#usr-novo-modulos input[type=checkbox]:checked');
     modulos = Array.from(checksModulos).map(c=>c.value);
   }
+  if(modulos.includes('adlv') && modulos.includes('fast')){
+    if(!confirm('Você marcou ADLV e FAST ao mesmo tempo pra essa pessoa — ela vai ter acesso aos dois módulos. Confirma mesmo?')) return;
+  }
   const colabNomes = ['André','Lory','Ludy','Wanessa'];
   const colabNome = colabNomes.find(n => nome.toLowerCase().includes(n.toLowerCase())) || '';
 
@@ -19330,6 +19361,9 @@ async function usrSalvarPerms(uid, nome){
   const checksModulos = modal.querySelectorAll('#usr-perms-modulos input[type=checkbox]:checked');
   let modulos = Array.from(checksModulos).map(c=>c.value);
   if(isAdmFast) modulos = ['fast']; // garante que Admin do FAST nunca grava ADLV
+  if(modulos.includes('adlv') && modulos.includes('fast')){
+    if(!confirm('Você marcou ADLV e FAST ao mesmo tempo pra essa pessoa — ela vai ter acesso aos dois módulos. Confirma mesmo?')) return;
+  }
   const checksPaginas = modal.querySelectorAll('#usr-perms-paginas input[type=checkbox]:checked');
   const perms = Array.from(checksPaginas).map(c=>c.value);
   const jaTinhaFast = modal.dataset.jaTinhaFast === 'true';
