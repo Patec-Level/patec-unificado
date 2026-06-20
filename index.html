@@ -6661,6 +6661,11 @@ function _atualizarColabsPorModulo(){
   if(typeof pcpData !== 'undefined'){
     pcpData = [];
   }
+  // Mesma categoria de bug: cache global de ações recentes, usada pelo
+  // "Hist. Produção" (Performance Semanal, Distribuição, Alertas) — reseta
+  // aqui também por segurança, mesmo já tendo corrigido o ponto onde ela é
+  // carregada pra nunca mais rodar com o módulo errado.
+  window._prodAcoesCache = {};
 }
 
 BANCO_HE = COLABS.map(c => ({ colab: c, periodos: [] })); // inicializa BANCO_HE
@@ -18810,6 +18815,9 @@ function _entrarNoApp(){
     // Dados gerais
     paEntradaCarregarFirebase();
     aaPublicoCarregar();
+    // Cache de ações recentes + recálculo automático do PCP — só roda aqui,
+    // depois que o módulo já está confirmado (ver comentário na função)
+    setTimeout(()=>_carregarCacheProducaoEAtualizarPCP(), 1500);
     fbCarregarTudo().then(()=>{
       initMetaGap();
       aaCarregarResultadoFirebase();
@@ -19156,27 +19164,39 @@ window._authLogoutReal      = authLogout;
 // ── Iniciar na carga ──
 document.addEventListener('DOMContentLoaded', ()=>{
   setTimeout(authInit, 800);
-  // Carregar ações recentes para alimentar PCP
-  setTimeout(async ()=>{
-    try{
-      const db = getDB(); if(!db) return;
-      const hoje = new Date().toISOString().split('T')[0];
-      const h7 = new Date(); h7.setDate(h7.getDate()-7);
-      const de7 = h7.toISOString().split('T')[0];
-      const snap = await db.collection('producao_acoes')
-        .where('data','>=',de7).get();
-      if(!window._prodAcoesCache) window._prodAcoesCache = {};
-      snap.docs.forEach(d=>{
-        const a = d.data();
-        if(!window._prodAcoesCache[a.data]) window._prodAcoesCache[a.data] = [];
-        window._prodAcoesCache[a.data].push(a);
-      });
-      // Recalcular PCP dos últimos 7 dias
-      Object.keys(window._prodAcoesCache).forEach(dt => pcpAtualizarRegistroDia(dt));
-      console.log('✓ Cache producao_acoes carregado:', snap.docs.length, 'ações');
-    } catch(e){ console.warn('Cache producao_acoes:', e); }
-  }, 3000);
 });
+
+// CORREÇÃO BUG CRÍTICO (20/06): essa função carregava ações recentes pra
+// alimentar o PCP automaticamente — mas antes rodava num timer fixo de 3s
+// a partir do carregamento da página, SEMPRE, independente de qual módulo
+// a pessoa ia escolher (e antes da escolha até acontecer). Como nesse
+// momento _moduloAtivo ainda não estava confirmado, getDB() caía no padrão
+// ADLV — carregando as ações REAIS do ADLV pra uma cache global
+// (window._prodAcoesCache) nunca resetada, e ainda gravando esse cálculo
+// automaticamente no Firebase via pcpAtualizarRegistroDia()→fbSet
+// ('pcp_diario',...). Era esse o caminho real por trás do "350 itens"
+// aparecendo sempre no FAST. Agora só roda depois que o módulo já foi
+// confirmado (chamada em _entrarNoApp()), então getDB() sempre aponta pro
+// banco certo.
+async function _carregarCacheProducaoEAtualizarPCP(){
+  try{
+    const db = getDB(); if(!db) return;
+    const hoje = new Date().toISOString().split('T')[0];
+    const h7 = new Date(); h7.setDate(h7.getDate()-7);
+    const de7 = h7.toISOString().split('T')[0];
+    const snap = await db.collection('producao_acoes')
+      .where('data','>=',de7).get();
+    window._prodAcoesCache = {};
+    snap.docs.forEach(d=>{
+      const a = d.data();
+      if(!window._prodAcoesCache[a.data]) window._prodAcoesCache[a.data] = [];
+      window._prodAcoesCache[a.data].push(a);
+    });
+    // Recalcular PCP dos últimos 7 dias
+    Object.keys(window._prodAcoesCache).forEach(dt => pcpAtualizarRegistroDia(dt));
+    console.log('✓ Cache producao_acoes carregado ['+(_moduloAtivo||'adlv').toUpperCase()+']:', snap.docs.length, 'ações');
+  } catch(e){ console.warn('Cache producao_acoes:', e); }
+}
 
 // ══════════════════════════════════════════════════════
 // GERENCIAR USUÁRIOS — ADM
