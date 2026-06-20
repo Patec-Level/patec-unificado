@@ -1024,7 +1024,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button class="stab" onclick="setAdmTab('export-adm',this)">💾 Exportar</button>
         <button class="stab" onclick="setAdmTab('resultado-medicao',this)">📊 Resultado de Medição</button>
         <button class="stab" onclick="setAdmTab('radar-adm',this)">📡 Radar Estratégico</button>
-        <button class="stab" onclick="setAdmTab('pa-entradas',this)">📥 Entradas Plano de Ação</button>
+        <button class="stab" id="adm-nav-pa-entradas-btn" onclick="setAdmTab('pa-entradas',this)">📥 Entradas Plano de Ação</button>
         <button class="stab" onclick="setAdmTab('analista-upload',this)">📂 Upload Backlog</button>
         <button class="stab" onclick="setAdmTab('analista-auto',this)">📦 Analista Pedido</button>
         <button class="stab" onclick="setAdmTab('analista-completo-adm',this)">🤖 Analista Completo</button>
@@ -5085,6 +5085,12 @@ let ciclos_historico = JSON.parse(localStorage.getItem(_lsMod('patec_ciclos_hist
 // ══ NAVEGAÇÃO UNIFICADA ══
 
 function go(id, el) {
+  // Plano de Ação é exclusivo do ADLV — bloqueia navegação direta no FAST
+  // (a página nem aparece no menu, mas isso cobre tentativa via console/link)
+  if(id === 'plano-acao' && _moduloAtivo === 'fast'){
+    alert('Plano de Ação é exclusivo do ADLV.');
+    return;
+  }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.sb-it').forEach(i => i.classList.remove('active'));
   const page = document.getElementById('p-' + id);
@@ -7626,10 +7632,10 @@ function setAdmTab(id,btn){
     alert('Apenas o administrador geral pode gerenciar usuários.');
     return;
   }
-  // Testar E-mails, Apresentação e Apresentação 1 são exclusivas do ADLV —
-  // dependem de listas de destinatários e dados específicos do ADLV que não
-  // se aplicam ao FAST.
-  if((id==='email-teste' || id==='apresentacao' || id==='apresentacao1') && _moduloAtivo==='fast'){
+  // Testar E-mails, Apresentação, Apresentação 1 e Entradas Plano de Ação
+  // são exclusivas do ADLV — dependem de listas de destinatários e dados
+  // específicos do ADLV que não se aplicam ao FAST.
+  if((id==='email-teste' || id==='apresentacao' || id==='apresentacao1' || id==='pa-entradas') && _moduloAtivo==='fast'){
     alert('Esse recurso é exclusivo do ADLV.');
     return;
   }
@@ -18789,8 +18795,9 @@ function _entrarNoApp(){
     modBadge.textContent = (_moduloAtivo === 'fast' ? '⚡ FAST' : '🏢 ADLV');
   }
 
-  // Testar E-mails, Apresentação e Apresentação 1 são exclusivas do ADLV
-  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn'].forEach(id=>{
+  // Testar E-mails, Apresentação, Apresentação 1 e Entradas Plano de Ação
+  // são exclusivas do ADLV
+  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','adm-nav-pa-entradas-btn'].forEach(id=>{
     const btnAdlv = document.getElementById(id);
     if(btnAdlv) btnAdlv.style.display = (_moduloAtivo==='fast') ? 'none' : '';
   });
@@ -19035,7 +19042,10 @@ function authMontarSidebar(emailParam){
   // Montar por módulo
   const mods = {};
   const ordemMods = ['ESTRATÉGICO','EXECUÇÃO'];
+  // Plano de Ação é exclusivo do ADLV — não se aplica ao FAST
+  const PAGINAS_ADLV_ONLY = ['plano-acao'];
   Object.entries(PERMS_SIDEBAR).forEach(([key, cfg]) => {
+    if(_moduloAtivo === 'fast' && PAGINAS_ADLV_ONLY.includes(key)) return;
     if(podeVerTudo || perms.includes(key)){
       if(!mods[cfg.mod]) mods[cfg.mod] = [];
       mods[cfg.mod].push({key, ...cfg});
