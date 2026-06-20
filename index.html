@@ -19025,15 +19025,39 @@ async function usrCadastrar(){
 
   try{
     const apiKey = FIREBASE_CONFIG.apiKey;
+    let uid;
     const resp = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ email, password: senha, displayName: nome, returnSecureToken: true })
     });
     const data = await resp.json();
-    if(data.error){ throw new Error(data.error.message); }
+    if(data.error && data.error.message === 'EMAIL_EXISTS'){
+      // Conta de login já existe (provavelmente removida só do app antes, não
+      // do Authentication — esse app não consegue apagar contas de login).
+      // Tenta reconectar: se a senha digitada bater com a conta existente,
+      // reaproveita o UID dela e recria o cadastro no app normalmente.
+      const respLogin = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ email, password: senha, returnSecureToken: true })
+      });
+      const dataLogin = await respLogin.json();
+      if(dataLogin.error){
+        throw new Error(
+          'Esse e-mail já tem uma conta de login (provavelmente de um cadastro anterior removido), ' +
+          'mas a senha digitada não bate com a senha antiga dela. Tente cadastrar de novo usando a ' +
+          'senha que essa pessoa já usava antes, ou peça pra ela entrar uma vez com a senha antiga ' +
+          '(o perfil é recriado sozinho) e depois ajuste as permissões dela na lista.'
+        );
+      }
+      uid = dataLogin.localId;
+    } else if(data.error){
+      throw new Error(data.error.message);
+    } else {
+      uid = data.localId;
+    }
 
-    const uid = data.localId;
     const perfil = isAdmFastNovo ? 'adm_fast' : (nome.toLowerCase()==='andré' ? 'adm' : 'colaborador');
 
     await db.collection('usuarios').doc(uid).set({
@@ -19136,7 +19160,7 @@ async function usrResetarSenha(email, nome){
 
 async function usrRemover(uid, nome){
   window._usrRemoverReal = usrRemover;
-  if(!confirm(`Remover acesso de ${nome}? O usuário não conseguirá mais entrar.`)) return;
+  if(!confirm(`Remover ${nome} do app?\n\nIMPORTANTE: isso apaga só o cadastro/permissões dentro do sistema. A conta de login dela no Firebase continua existindo (esse app não tem acesso de servidor pra apagar contas de login) — se ela tentar entrar de novo com a senha antiga, o sistema vai criar um perfil padrão pra ela automaticamente (sem FAST, mas com todas as páginas do ADLV liberadas).\n\nPra bloquear o login dela de vez, é preciso desativar a conta direto no Console do Firebase (Authentication).\n\nContinuar mesmo assim?`)) return;
   try{
     // Cadastro de usuários é sempre no ADLV, independente do módulo ativo
     const db = getDBUsuarios(); if(!db) return;
