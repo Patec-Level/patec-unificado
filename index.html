@@ -17,7 +17,7 @@ function usrCarregarLista(){ if(typeof window._usrCarregarListaReal==='function'
 function usrCadastrar(){ if(typeof window._usrCadastrarReal==='function') window._usrCadastrarReal(); else setTimeout(usrCadastrar, 300); }
 function usrResetarSenha(e,n){ if(typeof window._usrResetarSenhaReal==='function') window._usrResetarSenhaReal(e,n); }
 function usrRemover(u,n){ if(typeof window._usrRemoverReal==='function') window._usrRemoverReal(u,n); }
-function usrEditarPerms(u,n,p){ if(typeof window._usrEditarPermsReal==='function') window._usrEditarPermsReal(u,n,p); }
+function usrEditarPerms(u,n,p,m){ if(typeof window._usrEditarPermsReal==='function') window._usrEditarPermsReal(u,n,p,m); }
 
 // Estado global de autenticação — acessível antes do módulo auth carregar
 window._authUser   = null;
@@ -458,6 +458,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 #patec-modulo-overlay .modulo-card .ico{font-size:26px;margin-bottom:8px}
 #patec-modulo-overlay .modulo-card .nome{font-size:15px;font-weight:700;color:#0D2347;margin-bottom:2px}
 #patec-modulo-overlay .modulo-card .desc{font-size:11px;color:#5A6A7E}
+#patec-modulo-overlay .modulo-card .lock-tag{display:none;font-size:10px;color:#B45050;margin-top:6px;font-weight:700}
+#patec-modulo-overlay .modulo-card.bloqueado{opacity:.5;cursor:not-allowed;background:#EFEFF2}
+#patec-modulo-overlay .modulo-card.bloqueado:hover{transform:none;border-color:#DDE3EE;background:#EFEFF2}
+#patec-modulo-overlay .modulo-card.bloqueado .lock-tag{display:block}
 /* Badge do módulo ativo na topbar */
 #topbar-modulo-badge{
   font-size:9px;font-weight:700;letter-spacing:.5px;color:rgba(255,255,255,.7);
@@ -586,15 +590,17 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
     </div>
     <p class="modulo-instrucao">Escolha o projeto para continuar</p>
     <div class="modulo-cards">
-      <div class="modulo-card" onclick="selecionarModulo('adlv')">
+      <div class="modulo-card" id="modulo-card-adlv" onclick="selecionarModulo('adlv')">
         <div class="ico">🏢</div>
         <div class="nome">ADLV</div>
         <div class="desc">Sistema original</div>
+        <div class="lock-tag">🔒 Sem acesso</div>
       </div>
-      <div class="modulo-card" onclick="selecionarModulo('fast')">
+      <div class="modulo-card" id="modulo-card-fast" onclick="selecionarModulo('fast')">
         <div class="ico">⚡</div>
         <div class="nome">FAST</div>
         <div class="desc">Novo módulo</div>
+        <div class="lock-tag">🔒 Sem acesso</div>
       </div>
     </div>
   </div>
@@ -1223,6 +1229,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <div>
                 <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:4px">Senha inicial</div>
                 <input type="text" id="usr-novo-senha" placeholder="Ex: Patec@2026" style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px">
+              </div>
+            </div>
+            <div style="margin-bottom:10px">
+              <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:6px">Módulos com acesso</div>
+              <div id="usr-novo-modulos" style="display:flex;flex-wrap:wrap;gap:6px">
+                <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd)"><input type="checkbox" value="adlv" checked> 🏢 ADLV</label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd)"><input type="checkbox" value="fast"> ⚡ FAST</label>
               </div>
             </div>
             <div style="margin-bottom:10px">
@@ -18405,21 +18418,52 @@ window._authMostrarAppReal = function(){
 // ════════════════════════════════════════════
 // O login é sempre feito contra o projeto ADLV (cadastro central de
 // usuários), mas os DADOS do app podem vir de dois projetos Firebase
-// diferentes (ADLV ou FAST). Por isso, depois do login, perguntamos qual
-// projeto a pessoa quer abrir ANTES de montar o sidebar/carregar dados.
-// A escolha fica salva em localStorage e é lembrada nos próximos logins —
-// para trocar de projeto, usa o badge na topbar (trocarModulo()).
+// diferentes (ADLV ou FAST). Por isso, depois do login, SEMPRE perguntamos
+// qual projeto a pessoa quer abrir — essa tela nunca é pulada, mesmo que a
+// pessoa já tenha escolhido antes. Quem não tem permissão para um módulo
+// (campo `modulos` no cadastro do usuário, editável no ADM > Usuários) vê o
+// card daquele módulo travado e não consegue entrar nele.
 function _gateModuloELogin(){
-  const jaEscolhido = localStorage.getItem('patec_modulo_ativo');
-  if(jaEscolhido === 'adlv' || jaEscolhido === 'fast'){
-    _moduloAtivo = jaEscolhido;
-    _entrarNoApp();
-  } else {
-    document.getElementById('patec-modulo-overlay').style.display = 'flex';
-  }
+  mostrarSeletorModulo();
+}
+
+// Calcula quais módulos a pessoa logada pode acessar. ADM (e-mails fixos)
+// sempre tem acesso a ADLV + FAST. Os demais usam o campo `modulos` salvo no
+// Firestore (editável no ADM); se ainda não tiver sido definido, o padrão é
+// só ADLV — assim ninguém ganha acesso ao FAST sem isso ser explicitamente
+// concedido (fail-safe).
+function _modulosPermitidos(){
+  const emailsAdm = ['andre.mazzali@levelgroup.com.br','andreluisj4@gmail.com'];
+  const email = (_authPerfil?.email || _authUser?.email || window._authUser?.email || '').toLowerCase().trim();
+  if(emailsAdm.includes(email)) return ['adlv','fast'];
+  const m = _authPerfil?.modulos || window._authPerfil?.modulos;
+  if(Array.isArray(m) && m.length) return m;
+  return ['adlv'];
+}
+
+// Aplica o estado travado/liberado nos cards conforme a permissão atual.
+// É chamado tanto ao mostrar a tela quanto depois que o perfil completo
+// termina de carregar do Firestore (authCarregarPerfil), pra corrigir o
+// estado caso a tela já esteja visível antes da permissão real chegar.
+function _atualizarLockCardsModulo(){
+  const permitidos = _modulosPermitidos();
+  const cardAdlv = document.getElementById('modulo-card-adlv');
+  const cardFast = document.getElementById('modulo-card-fast');
+  if(cardAdlv) cardAdlv.classList.toggle('bloqueado', !permitidos.includes('adlv'));
+  if(cardFast) cardFast.classList.toggle('bloqueado', !permitidos.includes('fast'));
+}
+
+function mostrarSeletorModulo(){
+  _atualizarLockCardsModulo();
+  document.getElementById('patec-modulo-overlay').style.display = 'flex';
 }
 
 function selecionarModulo(mod){
+  const permitidos = _modulosPermitidos();
+  if(!permitidos.includes(mod)){
+    alert('Você não tem acesso a este módulo. Fale com o administrador para liberar.');
+    return;
+  }
   _moduloAtivo = (mod === 'fast') ? 'fast' : 'adlv';
   localStorage.setItem('patec_modulo_ativo', _moduloAtivo);
   document.getElementById('patec-modulo-overlay').style.display = 'none';
@@ -18429,7 +18473,8 @@ function selecionarModulo(mod){
 // Permite trocar de projeto sem precisar deslogar. Como dezenas de telas
 // guardam dados já carregados em memória (arrays/caches do módulo anterior),
 // o jeito seguro de trocar é recarregar a página — o login fica salvo
-// (sessão do Firebase Auth persiste), só a escolha de módulo é resetada.
+// (sessão do Firebase Auth persiste), e a tela de seleção de módulo aparece
+// de novo automaticamente (ela sempre aparece após o login).
 function trocarModulo(){
   if(!confirm('Trocar de projeto (ADLV ⇄ FAST)? A página será recarregada.')) return;
   localStorage.removeItem('patec_modulo_ativo');
@@ -18600,6 +18645,18 @@ async function authCarregarPerfil(user){
   // Propagar colabNome para variáveis globais
   window.colabLogado = _authPerfil.colabNome;
   window._authPerfil = _authPerfil;
+
+  // Garantir que sempre exista um array `modulos` (controla acesso ADLV/FAST).
+  // Se o usuário ainda não tiver isso definido no cadastro, padrão é só ADLV
+  // (fail-safe — FAST precisa ser liberado explicitamente no ADM > Usuários).
+  if(!Array.isArray(_authPerfil.modulos) || !_authPerfil.modulos.length){
+    _authPerfil.modulos = ['adlv'];
+  }
+
+  // Se a tela de seleção de módulo já estiver visível (mostrada com o perfil
+  // mínimo, antes do Firestore responder), corrige o estado travado/liberado
+  // agora que a permissão real chegou.
+  if(typeof _atualizarLockCardsModulo === 'function') _atualizarLockCardsModulo();
 
   // Re-carregar produção do dia com colabNome correto
   if(_authPerfil.colabNome && typeof prodCarregarHoje === 'function'){
@@ -18817,11 +18874,12 @@ async function usrCadastrar(){
   // Garantir Firebase carregado
   await loadFirebaseSDK();
   ensureDefaultApp();
-  let db = window._db || getDB();
+  // Cadastro de usuários é sempre no ADLV, independente do módulo ativo
+  let db = getDBUsuarios();
   if(!db){
     for(let i=0;i<10;i++){
       await new Promise(r=>setTimeout(r,500));
-      db = window._db || getDB();
+      db = getDBUsuarios();
       if(db) break;
     }
   }
@@ -18833,6 +18891,8 @@ async function usrCadastrar(){
 
   const checks = document.querySelectorAll('#usr-novo-perms input[type=checkbox]:checked');
   const perms = Array.from(checks).map(c=>c.value);
+  const checksModulos = document.querySelectorAll('#usr-novo-modulos input[type=checkbox]:checked');
+  const modulos = Array.from(checksModulos).map(c=>c.value);
   const colabNomes = ['André','Lory','Ludy','Wanessa'];
   const colabNome = colabNomes.find(n => nome.toLowerCase().includes(n.toLowerCase())) || '';
 
@@ -18850,7 +18910,7 @@ async function usrCadastrar(){
     const perfil = nome.toLowerCase()==='andré' ? 'adm' : 'colaborador';
 
     await db.collection('usuarios').doc(uid).set({
-      nome, email, perfil, permissoes: perms, colabNome,
+      nome, email, perfil, permissoes: perms, modulos: modulos.length ? modulos : ['adlv'], colabNome,
       criadoEm: new Date().toISOString(), criadoPor: window._authUser?.email||'adm'
     });
 
@@ -18898,13 +18958,16 @@ async function usrCarregarLista(){
         <div style="flex:1;min-width:160px">
           <div style="font-size:13px;font-weight:700;color:var(--az)">${u.nome||'—'}</div>
           <div style="font-size:11px;color:var(--tx2)">${u.email||'—'}</div>
-          <div style="font-size:10px;margin-top:3px">
+          <div style="font-size:10px;margin-top:3px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
             <span class="pl ${u.perfil==='adm'?'pl-w':'pl-az'}" style="font-size:9px">${u.perfil==='adm'?'🔐 ADM':'👤 Colaborador'}</span>
-            ${(u.permissoes||[]).length ? '<span style="color:var(--tx2);margin-left:6px">'+u.permissoes.length+' módulos</span>' : ''}
+            ${(u.permissoes||[]).length ? '<span style="color:var(--tx2)">'+u.permissoes.length+' páginas</span>' : ''}
+            <span style="color:var(--tx2)">·</span>
+            ${(u.modulos||['adlv']).includes('adlv') ? '<span class="pl pl-az" style="font-size:9px">🏢 ADLV</span>' : ''}
+            ${(u.modulos||[]).includes('fast') ? '<span class="pl pl-az" style="font-size:9px">⚡ FAST</span>' : ''}
           </div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-s" style="font-size:10px;padding:4px 10px" onclick="usrEditarPerms('${u.uid}','${u.nome}',${JSON.stringify(u.permissoes||[]).replace(/"/g,"'")})">✏️ Permissões</button>
+          <button class="btn btn-s" style="font-size:10px;padding:4px 10px" onclick="usrEditarPerms('${u.uid}','${u.nome}',${JSON.stringify(u.permissoes||[]).replace(/"/g,"'")},${JSON.stringify(u.modulos||['adlv']).replace(/"/g,"'")})">✏️ Permissões</button>
           <button class="btn btn-s" style="font-size:10px;padding:4px 10px;background:var(--amc);color:var(--am)" onclick="usrResetarSenha('${u.email}','${u.nome}')">🔑 Resetar Senha</button>
           <button class="btn btn-r" style="font-size:10px;padding:4px 10px" onclick="usrRemover('${u.uid}','${u.nome}')">🗑</button>
         </div>
@@ -18928,19 +18991,31 @@ async function usrRemover(uid, nome){
   window._usrRemoverReal = usrRemover;
   if(!confirm(`Remover acesso de ${nome}? O usuário não conseguirá mais entrar.`)) return;
   try{
-    const db = getDB(); if(!db) return;
+    // Cadastro de usuários é sempre no ADLV, independente do módulo ativo
+    const db = getDBUsuarios(); if(!db) return;
     await db.collection('usuarios').doc(uid).delete();
     usrCarregarLista();
   } catch(e){ alert('Erro ao remover: ' + e.message); }
 }
 
-function usrEditarPerms(uid, nome, permsAtual){
+function usrEditarPerms(uid, nome, permsAtual, modulosAtual){
   window._usrEditarPermsReal = usrEditarPerms;
+  modulosAtual = modulosAtual || ['adlv'];
   const mhtml = `
   <div id="usr-perms-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:5000;display:flex;align-items:center;justify-content:center">
     <div style="background:#fff;border-radius:14px;padding:1.5rem;max-width:480px;width:95%;max-height:80vh;overflow-y:auto">
       <div style="font-size:14px;font-weight:700;color:var(--az);margin-bottom:1rem">✏️ Permissões — ${nome}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1.25rem">
+      <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:6px">Módulos com acesso</div>
+      <div id="usr-perms-modulos" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1.25rem">
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:var(--cin);padding:6px 12px;border-radius:6px;border:1px solid var(--brd)">
+          <input type="checkbox" value="adlv" ${modulosAtual.includes('adlv')?'checked':''}> 🏢 ADLV
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:var(--cin);padding:6px 12px;border-radius:6px;border:1px solid var(--brd)">
+          <input type="checkbox" value="fast" ${modulosAtual.includes('fast')?'checked':''}> ⚡ FAST
+        </label>
+      </div>
+      <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:6px">Páginas liberadas</div>
+      <div id="usr-perms-paginas" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1.25rem">
         ${Object.entries(PERMS_SIDEBAR).map(([key,cfg])=>`
           <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:var(--cin);padding:6px 12px;border-radius:6px;border:1px solid var(--brd)">
             <input type="checkbox" value="${key}" ${permsAtual.includes(key)?'checked':''}> ${cfg.icon} ${cfg.label}
@@ -18958,11 +19033,14 @@ function usrEditarPerms(uid, nome, permsAtual){
 
 async function usrSalvarPerms(uid){
   const modal = document.getElementById('usr-perms-modal');
-  const checks = modal.querySelectorAll('input[type=checkbox]:checked');
-  const perms = Array.from(checks).map(c=>c.value);
+  const checksModulos = modal.querySelectorAll('#usr-perms-modulos input[type=checkbox]:checked');
+  const modulos = Array.from(checksModulos).map(c=>c.value);
+  const checksPaginas = modal.querySelectorAll('#usr-perms-paginas input[type=checkbox]:checked');
+  const perms = Array.from(checksPaginas).map(c=>c.value);
   try{
-    const db = getDB(); if(!db) return;
-    await db.collection('usuarios').doc(uid).update({ permissoes: perms });
+    // Cadastro de usuários é sempre no ADLV, independente do módulo ativo
+    const db = getDBUsuarios(); if(!db) return;
+    await db.collection('usuarios').doc(uid).update({ permissoes: perms, modulos: modulos.length ? modulos : ['adlv'] });
     modal.remove();
     usrCarregarLista();
   } catch(e){ alert('Erro: ' + e.message); }
