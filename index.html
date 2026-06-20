@@ -18195,7 +18195,10 @@ function q18Consultar(valor){
     </div>
 
     <!-- Tipo selecionado -->
-    <div id="acao-tipo-badge" style="display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;margin-bottom:1.25rem;background:var(--azc);color:var(--azm)">—</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:1.25rem;flex-wrap:wrap">
+      <div id="acao-tipo-badge" style="display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;background:var(--azc);color:var(--azm)">—</div>
+      <div id="acao-idas-badge" style="display:none;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;background:var(--amc);color:var(--am)">🛒 Idas ao Mercado: <span id="acao-idas-val">0</span></div>
+    </div>
 
     <!-- ESTÁGIO 1: Status Tratamento -->
     <div id="acao-estagio-1">
@@ -19684,6 +19687,18 @@ function prodAbrirModalRC(chave, tipo){
     _rcNum.textContent = rcBusca + (_seq ? ' · Item ' + _seq : '');
   }
 
+  // Idas ao Mercado — só disponível quando a RC vem do Radar (não no XGL/Status B)
+  const _idasBadge = document.getElementById('acao-idas-badge');
+  const _idasVal    = document.getElementById('acao-idas-val');
+  if(_idasBadge && _idasVal){
+    if(r && typeof r.idas === 'number'){
+      _idasVal.textContent = r.idas;
+      _idasBadge.style.display = 'inline-flex';
+    } else {
+      _idasBadge.style.display = 'none';
+    }
+  }
+
   // Pré-preencher com dados existentes (tenta gov_mapa, xgl, sb)
   const _gd = _govDados[chave] || _xglDados[chave] || _sbDados[chave] || {};
   const _envioEl = document.getElementById('acao-data-envio');
@@ -19737,6 +19752,17 @@ function prodAbrirModal(origem, tipo){
   document.getElementById('acao-obs').value = '';
   document.getElementById('acao-erro').style.display = 'none';
   document.querySelectorAll('.acao-sel-btn').forEach(b=>b.classList.remove('selecionado'));
+  // Idas ao Mercado — só disponível quando a RC vem do Radar (não no XGL/Status B)
+  const _idasBadge2 = document.getElementById('acao-idas-badge');
+  const _idasVal2    = document.getElementById('acao-idas-val');
+  if(_idasBadge2 && _idasVal2){
+    if(_rcRowsRadar.length > 0 && typeof _rcRowsRadar[0].idas === 'number'){
+      _idasVal2.textContent = _rcRowsRadar[0].idas;
+      _idasBadge2.style.display = 'inline-flex';
+    } else {
+      _idasBadge2.style.display = 'none';
+    }
+  }
   // Preencher data de envio com hoje
   const _hoje = new Date().toISOString().split('T')[0];
   const _envioEl = document.getElementById('acao-data-envio');
@@ -19756,6 +19782,8 @@ function prodFecharModal(){
   document.getElementById('modal-acao-rc').style.display = 'none';
   const _rcBadge = document.getElementById('acao-rc-badge');
   if(_rcBadge) _rcBadge.style.display = 'none';
+  const _idasBadge3 = document.getElementById('acao-idas-badge');
+  if(_idasBadge3) _idasBadge3.style.display = 'none';
   _prodCtx = { origem:null, tipo:null, tratamento:null, conclusao:null };
 }
 
