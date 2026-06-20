@@ -17,7 +17,7 @@ function usrCarregarLista(){ if(typeof window._usrCarregarListaReal==='function'
 function usrCadastrar(){ if(typeof window._usrCadastrarReal==='function') window._usrCadastrarReal(); else setTimeout(usrCadastrar, 300); }
 function usrResetarSenha(e,n,m){ if(typeof window._usrResetarSenhaReal==='function') window._usrResetarSenhaReal(e,n,m); }
 function usrRemover(u,n){ if(typeof window._usrRemoverReal==='function') window._usrRemoverReal(u,n); }
-function usrEditarPerms(u,n,p,m,pf){ if(typeof window._usrEditarPermsReal==='function') window._usrEditarPermsReal(u,n,p,m,pf); }
+function usrEditarPerms(u,n,p,m,pf,cn){ if(typeof window._usrEditarPermsReal==='function') window._usrEditarPermsReal(u,n,p,m,pf,cn); }
 
 // Estado global de autenticação — acessível antes do módulo auth carregar
 window._authUser   = null;
@@ -19276,7 +19276,11 @@ async function usrCadastrar(){
   if(modulos.includes('adlv') && modulos.includes('fast')){
     if(!confirm('Você marcou ADLV e FAST ao mesmo tempo pra essa pessoa — ela vai ter acesso aos dois módulos. Confirma mesmo?')) return;
   }
-  const colabNomes = ['André','Lory','Ludy','Wanessa'];
+  // CORREÇÃO BUG (20/06): essa lista só tinha os nomes do ADLV — qualquer
+  // pessoa do FAST cadastrada (Aline, Herina, etc.) ficava sem colabNome
+  // preenchido, e sem isso o sistema não reconhece a pessoa como "logada"
+  // pra registrar produção (mesmo estando autenticada normalmente).
+  const colabNomes = [...COLABS_ADLV, ...COLABS_FAST];
   const colabNome = colabNomes.find(n => nome.toLowerCase().includes(n.toLowerCase())) || '';
 
   try{
@@ -19401,7 +19405,7 @@ async function usrCarregarLista(){
           </div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-s" style="font-size:10px;padding:4px 10px" onclick="usrEditarPerms('${u.uid}','${u.nome}',${JSON.stringify(u.permissoes||[]).replace(/"/g,"'")},${JSON.stringify(u.modulos||['adlv']).replace(/"/g,"'")},'${u.perfil||'colaborador'}')">✏️ Permissões</button>
+          <button class="btn btn-s" style="font-size:10px;padding:4px 10px" onclick="usrEditarPerms('${u.uid}','${u.nome}',${JSON.stringify(u.permissoes||[]).replace(/"/g,"'")},${JSON.stringify(u.modulos||['adlv']).replace(/"/g,"'")},'${u.perfil||'colaborador'}','${(u.colabNome||'').replace(/'/g,"\\'")}')">✏️ Permissões</button>
           <button class="btn btn-s" style="font-size:10px;padding:4px 10px;background:var(--amc);color:var(--am)" onclick="usrResetarSenha('${u.email}','${u.nome}',${JSON.stringify(u.modulos||['adlv']).replace(/"/g,"'")})">🔑 Resetar Senha</button>
           <button class="btn btn-r" style="font-size:10px;padding:4px 10px" onclick="usrRemover('${u.uid}','${u.nome}')">🗑</button>
         </div>
@@ -19454,7 +19458,7 @@ async function usrRemover(uid, nome){
   } catch(e){ alert('Erro ao remover: ' + e.message); }
 }
 
-function usrEditarPerms(uid, nome, permsAtual, modulosAtual, perfilAtual){
+function usrEditarPerms(uid, nome, permsAtual, modulosAtual, perfilAtual, colabNomeAtual){
   window._usrEditarPermsReal = usrEditarPerms;
   modulosAtual = modulosAtual || ['adlv'];
   const isAdmFastAtual = perfilAtual === 'adm_fast';
@@ -19463,6 +19467,8 @@ function usrEditarPerms(uid, nome, permsAtual, modulosAtual, perfilAtual){
   <div id="usr-perms-modal" data-ja-tinha-fast="${jaTinhaFast}" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:5000;display:flex;align-items:center;justify-content:center">
     <div style="background:#fff;border-radius:14px;padding:1.5rem;max-width:480px;width:95%;max-height:80vh;overflow-y:auto">
       <div style="font-size:14px;font-weight:700;color:var(--az);margin-bottom:1rem">✏️ Permissões — ${nome}</div>
+      <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:6px">Nome de colaborador (usado pra registrar produção)</div>
+      <input type="text" id="usr-perms-colabnome" value="${(colabNomeAtual||'').replace(/"/g,'&quot;')}" placeholder="Ex: Aline, Herina, Lory..." style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--brd);font-size:12px;margin-bottom:1rem">
       <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:6px">Módulos com acesso</div>
       <div id="usr-perms-modulos" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
         <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:var(--cin);padding:6px 12px;border-radius:6px;border:1px solid var(--brd)">
@@ -19546,7 +19552,8 @@ async function usrSalvarPerms(uid, nome){
   try{
     // Cadastro de usuários é sempre no ADLV, independente do módulo ativo
     const db = getDBUsuarios(); if(!db) return;
-    const update = { permissoes: perms, modulos: modulos.length ? modulos : ['adlv'] };
+    const colabNome = document.getElementById('usr-perms-colabnome')?.value?.trim() || '';
+    const update = { permissoes: perms, modulos: modulos.length ? modulos : ['adlv'], colabNome };
     // Só ajusta o perfil se a pessoa não for o ADM geral (nunca rebaixar André)
     const docAtual = await db.collection('usuarios').doc(uid).get();
     const perfilAtual = docAtual.exists ? docAtual.data().perfil : 'colaborador';
