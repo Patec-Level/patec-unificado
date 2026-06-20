@@ -6599,8 +6599,32 @@ function getMeta(){
 }
 
 const LINHAS_PROD = ['Analisados','Tratativa','Status B','Fornecedor','Requisitante','MDG','Val.Thiago','XGL','Republicação','Pedidos','Devoluções','Outros'];
-const COLABS_SEM_META = ['André','Ajuda de outros times'];
-const COLABS = ['André','Lory','Ludy','Wanessa']; // Aline transferida Mai/2026
+
+// CORREÇÃO BUG (20/06): essas listas de nomes eram fixas no código (não
+// vinham do banco), então apareciam IGUAIS nos dois módulos — alguém no
+// FAST via "André, Lory, Ludy, Wanessa" (time do ADLV) em painéis como
+// Performance da Equipe, Férias, Banco de Horas etc. Agora cada módulo tem
+// sua própria lista, e `COLABS`/`COLABS_SEM_META` trocam sozinhos conforme
+// o módulo ativo (ver _atualizarColabsPorModulo(), chamada em
+// selecionarModulo()).
+const COLABS_SEM_META_ADLV = ['André','Ajuda de outros times'];
+const COLABS_SEM_META_FAST = ['Herina','Aline','Priscila','Ajuda de outros times']; // admins do FAST sem meta individual
+let COLABS_SEM_META = (_moduloAtivo === 'fast') ? COLABS_SEM_META_FAST : COLABS_SEM_META_ADLV;
+
+const COLABS_ADLV = ['André','Lory','Ludy','Wanessa']; // Aline transferida Mai/2026
+const COLABS_FAST = ['Herina','Aline','Priscila','Claudio','Indaia','Camila'];
+let COLABS = (_moduloAtivo === 'fast') ? COLABS_FAST : COLABS_ADLV;
+
+function _atualizarColabsPorModulo(){
+  COLABS = (_moduloAtivo === 'fast') ? COLABS_FAST : COLABS_ADLV;
+  COLABS_SEM_META = (_moduloAtivo === 'fast') ? COLABS_SEM_META_FAST : COLABS_SEM_META_ADLV;
+  if(typeof COLABS_RT !== 'undefined'){
+    COLABS_RT = (_moduloAtivo === 'fast') ? COLABS_RT_FAST : COLABS_RT_ADLV;
+    COLABS_SEM_META_RT = (_moduloAtivo === 'fast') ? COLABS_SEM_META_RT_FAST : COLABS_SEM_META_RT_ADLV;
+    META_ANALISTA_RT = (_moduloAtivo === 'fast') ? META_ANALISTA_RT_FAST : META_ANALISTA_RT_ADLV;
+  }
+}
+
 BANCO_HE = COLABS.map(c => ({ colab: c, periodos: [] })); // inicializa BANCO_HE
 const SENHA_PCP = 'patec2026';
 
@@ -18574,6 +18598,7 @@ async function selecionarModulo(mod){
   }
   _moduloAtivo = (mod === 'fast') ? 'fast' : 'adlv';
   localStorage.setItem('patec_modulo_ativo', _moduloAtivo);
+  if(typeof _atualizarColabsPorModulo === 'function') _atualizarColabsPorModulo();
   document.getElementById('patec-modulo-overlay').style.display = 'none';
   _entrarNoApp();
 }
@@ -19165,14 +19190,21 @@ async function usrCarregarLista(){
     listaEl.style.display = 'block';
     if(!users.length){ listaEl.innerHTML='<div style="font-size:12px;color:var(--tx2)">Nenhum usuário cadastrado ainda.</div>'; return; }
 
-    listaEl.innerHTML = users.map(u=>`
+    listaEl.innerHTML = users.map(u=>{
+      // O status de ADM geral é sempre decidido pelo e-mail fixo no código,
+      // não pelo campo `perfil` salvo no documento (que pode estar
+      // desatualizado, ex: criado como 'colaborador' antes do e-mail virar
+      // ADM). Calcula o status EFETIVO aqui só pra exibição correta.
+      const emailsAdmGeral = ['andre.mazzali@levelgroup.com.br','andreluisj4@gmail.com'];
+      const perfilEfetivo = emailsAdmGeral.includes((u.email||'').toLowerCase().trim()) ? 'adm' : u.perfil;
+      return `
       <div style="display:flex;align-items:center;gap:10px;padding:.875rem;background:var(--cin);border-radius:9px;border:1px solid var(--brd);margin-bottom:8px;flex-wrap:wrap">
-        <div style="width:36px;height:36px;border-radius:50%;background:${u.perfil==='adm'?'var(--am)':'var(--azm)'};color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0">${(u.nome||'?')[0].toUpperCase()}</div>
+        <div style="width:36px;height:36px;border-radius:50%;background:${perfilEfetivo==='adm'?'var(--am)':'var(--azm)'};color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0">${(u.nome||'?')[0].toUpperCase()}</div>
         <div style="flex:1;min-width:160px">
           <div style="font-size:13px;font-weight:700;color:var(--az)">${u.nome||'—'}</div>
           <div style="font-size:11px;color:var(--tx2)">${u.email||'—'}</div>
           <div style="font-size:10px;margin-top:3px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-            <span class="pl ${u.perfil==='adm'?'pl-w':u.perfil==='adm_fast'?'pl-w':'pl-az'}" style="font-size:9px">${u.perfil==='adm'?'🔐 ADM':u.perfil==='adm_fast'?'🛠️ Admin FAST':'👤 Colaborador'}</span>
+            <span class="pl ${perfilEfetivo==='adm'?'pl-w':perfilEfetivo==='adm_fast'?'pl-w':'pl-az'}" style="font-size:9px">${perfilEfetivo==='adm'?'🔐 ADM':perfilEfetivo==='adm_fast'?'🛠️ Admin FAST':'👤 Colaborador'}</span>
             ${(u.permissoes||[]).length ? '<span style="color:var(--tx2)">'+u.permissoes.length+' páginas</span>' : ''}
             <span style="color:var(--tx2)">·</span>
             ${(u.modulos||['adlv']).includes('adlv') ? '<span class="pl pl-az" style="font-size:9px">🏢 ADLV</span>' : ''}
@@ -19185,7 +19217,8 @@ async function usrCarregarLista(){
           <button class="btn btn-r" style="font-size:10px;padding:4px 10px" onclick="usrRemover('${u.uid}','${u.nome}')">🗑</button>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   } catch(e){
     console.warn('usrCarregarLista:', e);
     if(loadEl){ loadEl.style.display='block'; loadEl.innerHTML=`<span style="color:var(--vm)">⚠ Erro: ${e.message} <button class="btn btn-s" style="font-size:10px;margin-left:8px" onclick="usrCarregarLista()">↺ Tentar novamente</button></span>`; }
@@ -19339,10 +19372,16 @@ async function usrSalvarPerms(uid, nome){
 // PRODUÇÃO EM TEMPO REAL — onSnapshot
 // ══════════════════════════════════════════════════════
 
-const META_ANALISTA_RT = { 'Lory':30, 'Ludy':30, 'Wanessa':30 }; // André não tem meta individual
-const META_EQUIPE_RT = 90; // meta das 3 analistas
-const COLABS_RT = ['André','Lory','Ludy','Wanessa'];
-const COLABS_SEM_META_RT = ['André']; // contribui para equipe mas sem meta diária individual
+const META_ANALISTA_RT_ADLV = { 'Lory':30, 'Ludy':30, 'Wanessa':30 }; // André não tem meta individual
+const META_ANALISTA_RT_FAST = { 'Claudio':30, 'Indaia':30, 'Camila':30 }; // ajustável depois pelo André
+let META_ANALISTA_RT = (_moduloAtivo === 'fast') ? META_ANALISTA_RT_FAST : META_ANALISTA_RT_ADLV;
+const META_EQUIPE_RT = 90; // meta das 3 analistas/colaboradoras
+const COLABS_RT_ADLV = ['André','Lory','Ludy','Wanessa'];
+const COLABS_RT_FAST = ['Herina','Aline','Priscila','Claudio','Indaia','Camila'];
+let COLABS_RT = (_moduloAtivo === 'fast') ? COLABS_RT_FAST : COLABS_RT_ADLV;
+const COLABS_SEM_META_RT_ADLV = ['André']; // contribui para equipe mas sem meta diária individual
+const COLABS_SEM_META_RT_FAST = ['Herina','Aline','Priscila'];
+let COLABS_SEM_META_RT = (_moduloAtivo === 'fast') ? COLABS_SEM_META_RT_FAST : COLABS_SEM_META_RT_ADLV;
 
 function rtIniciarListener(){
   try{
