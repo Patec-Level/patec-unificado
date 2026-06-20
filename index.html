@@ -18463,6 +18463,16 @@ function _entrarNoApp(){
     aaPublicoCarregar();
     fbCarregarTudo().then(()=>{
       initMetaGap();
+      aaCarregarResultadoFirebase();
+      // Recalcula Painel Estratégico (renderCardsDia) — sincroniza automaticamente
+      // o PATEC FINALIZADO (ESQ2 da topbar/sidebar) com o valor real do dia,
+      // vindo do Mapa/Radar. Sem isso o valor mostrado fica parado no último
+      // número salvo, sem se atualizar sozinho.
+      if(typeof cicloCarregarAtivo === 'function'){
+        cicloCarregarAtivo().then(()=>{
+          if(typeof renderPainelEstrategico === 'function') renderPainelEstrategico();
+        }).catch(e=>console.warn('cicloCarregarAtivo:', e));
+      }
       const pg = document.getElementById('p-radar');
       if(pg && pg.classList.contains('active')) renderRadarOperacional();
       setTimeout(()=>alertasDisparar('auto-load'), 4000);
