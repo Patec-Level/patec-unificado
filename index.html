@@ -17,7 +17,7 @@ function usrCarregarLista(){ if(typeof window._usrCarregarListaReal==='function'
 function usrCadastrar(){ if(typeof window._usrCadastrarReal==='function') window._usrCadastrarReal(); else setTimeout(usrCadastrar, 300); }
 function usrResetarSenha(e,n){ if(typeof window._usrResetarSenhaReal==='function') window._usrResetarSenhaReal(e,n); }
 function usrRemover(u,n){ if(typeof window._usrRemoverReal==='function') window._usrRemoverReal(u,n); }
-function usrEditarPerms(u,n,p,m){ if(typeof window._usrEditarPermsReal==='function') window._usrEditarPermsReal(u,n,p,m); }
+function usrEditarPerms(u,n,p,m,pf){ if(typeof window._usrEditarPermsReal==='function') window._usrEditarPermsReal(u,n,p,m,pf); }
 
 // Estado global de autenticação — acessível antes do módulo auth carregar
 window._authUser   = null;
@@ -1009,7 +1009,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <!-- ABAS ADM -->
       <div class="stabs" id="adm-tabs">
         <button class="stab active" onclick="setAdmTab('ciclos',this)">🔄 Gestão de Ciclos</button>
-        <button class="stab" onclick="setAdmTab('usuarios',this)">👥 Usuários</button>
+        <button class="stab" id="adm-nav-usuarios-btn" onclick="setAdmTab('usuarios',this)">👥 Usuários</button>
         <button class="stab" onclick="setAdmTab('rt-producao',this)">📡 Produção Tempo Real</button>
         <button class="stab" onclick="setAdmTab('metas',this)">🎯 Metas e Gap</button>
         <button class="stab" onclick="setAdmTab('meta-gap',this)">📌 Meta & Gap (Topbar)</button>
@@ -1234,9 +1234,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <div style="margin-bottom:10px">
               <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:6px">Módulos com acesso</div>
               <div id="usr-novo-modulos" style="display:flex;flex-wrap:wrap;gap:6px">
-                <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd)"><input type="checkbox" value="adlv" checked> 🏢 ADLV</label>
-                <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd)"><input type="checkbox" value="fast"> ⚡ FAST</label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd)"><input type="checkbox" id="usr-novo-mod-adlv" value="adlv" checked> 🏢 ADLV</label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd)"><input type="checkbox" id="usr-novo-mod-fast" value="fast"> ⚡ FAST</label>
               </div>
+              <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;background:var(--amc);padding:6px 10px;border-radius:6px;border:1px solid var(--am);margin-top:6px;width:fit-content">
+                <input type="checkbox" id="usr-novo-admfast" onchange="usrToggleAdmFastNovo()"> 🛠️ Admin do FAST (acesso total ao ADM do FAST, exceto Usuários — não dá acesso ao ADLV)
+              </label>
             </div>
             <div style="margin-bottom:10px">
               <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:6px">Permissões de acesso</div>
@@ -7534,6 +7537,12 @@ function admLogout(){
 }
 
 function setAdmTab(id,btn){
+  // Aba "Usuários" (cadastro/permissões/módulos) é exclusiva do ADM geral
+  // (André) — Admin do FAST tem acesso total às demais abas, mas não a esta.
+  if(id==='usuarios' && !_isAdmGeral()){
+    alert('Apenas o administrador geral pode gerenciar usuários.');
+    return;
+  }
   if(id==='ciclos') setTimeout(()=>{cicloCarregarAtivo().then(initCicloADM);},50);
   if(id==='resultado-medicao') setTimeout(renderResultadoMedicao,50);
   if(id==='radar-adm') setTimeout(radarInitADM,50);
@@ -18441,6 +18450,22 @@ function _modulosPermitidos(){
   return ['adlv'];
 }
 
+// ADM geral (André) — único que pode gerenciar usuários/conceder acesso aos
+// dois módulos. Identificado sempre por e-mail fixo, nunca por campo editável.
+function _isAdmGeral(){
+  const emailsAdm = ['andre.mazzali@levelgroup.com.br','andreluisj4@gmail.com'];
+  const email = (_authPerfil?.email || _authUser?.email || window._authUser?.email || '').toLowerCase().trim();
+  return emailsAdm.includes(email);
+}
+
+// Admin do FAST — papel concedido pelo ADM geral (campo `perfil:'adm_fast'`
+// no cadastro do usuário, em ADM > Usuários). Tem acesso total às
+// ferramentas operacionais do ADM dentro do FAST (uploads, banco de horas,
+// férias, etc.), mas NUNCA à aba Usuários nem ao módulo ADLV.
+function _isAdmFast(){
+  return (_authPerfil?.perfil || window._authPerfil?.perfil) === 'adm_fast';
+}
+
 // Aplica o estado travado/liberado nos cards conforme a permissão atual.
 // É chamado tanto ao mostrar a tela quanto depois que o perfil completo
 // termina de carregar do Firestore (authCarregarPerfil), pra corrigir o
@@ -18694,8 +18719,12 @@ function authMontarSidebar(emailParam){
     window._authPerfil?.email ||
     ''
   ).toLowerCase().trim();
-  const emailsAdm = ['andre.mazzali@levelgroup.com.br'];
+  const emailsAdm = ['andre.mazzali@levelgroup.com.br','andreluisj4@gmail.com'];
   const isAdm = emailsAdm.includes(emailAtual);
+  // Admin do FAST: papel concedido pelo ADM geral, acesso total às páginas e
+  // ao ADM (exceto Usuários) — mas só dentro do módulo FAST (modulos=['fast']).
+  const isAdmFast = _isAdmFast();
+  const podeVerTudo = isAdm || isAdmFast;
 
   const perms = _authPerfil?.permissoes || Object.keys(PERMS_SIDEBAR);
 
@@ -18706,7 +18735,7 @@ function authMontarSidebar(emailParam){
   const mods = {};
   const ordemMods = ['ESTRATÉGICO','EXECUÇÃO'];
   Object.entries(PERMS_SIDEBAR).forEach(([key, cfg]) => {
-    if(isAdm || perms.includes(key)){
+    if(podeVerTudo || perms.includes(key)){
       if(!mods[cfg.mod]) mods[cfg.mod] = [];
       mods[cfg.mod].push({key, ...cfg});
     }
@@ -18721,8 +18750,8 @@ function authMontarSidebar(emailParam){
     });
   });
 
-  // ADM sempre aparece para emails ADM
-  if(isAdm){
+  // ADM aparece para ADM geral e para Admin do FAST
+  if(podeVerTudo){
     html += `<div class="sb-sec" style="padding:.7rem 1rem .2rem;font-size:9px;font-weight:600;color:rgba(255,255,255,.28);letter-spacing:1.2px;text-transform:uppercase;flex-shrink:0">ADM</div>`;
     html += `<div class="sb-it" onclick="go('adm',this)">🔐 Administração</div>`;
   }
@@ -18731,8 +18760,13 @@ function authMontarSidebar(emailParam){
   // Controlar ADM estático
   const _sa = document.getElementById('sb-adm-sec');
   const _ia = document.getElementById('sb-adm-it');
-  if(_sa) _sa.style.display = isAdm ? '' : 'none';
-  if(_ia) _ia.style.display = isAdm ? '' : 'none';
+  if(_sa) _sa.style.display = podeVerTudo ? '' : 'none';
+  if(_ia) _ia.style.display = podeVerTudo ? '' : 'none';
+  // Aba "Usuários" dentro do ADM só aparece pro ADM geral (André) — Admin do
+  // FAST vê todas as outras abas do ADM, mas precisa pedir pra André
+  // cadastrar/liberar acesso de novos colaboradores.
+  const _btnUsuarios = document.getElementById('adm-nav-usuarios-btn');
+  if(_btnUsuarios) _btnUsuarios.style.display = isAdm ? '' : 'none';
   console.log('✓ Sidebar montada — isAdm:', isAdm, '— email:', emailAtual);
 }
 
@@ -18854,6 +18888,22 @@ document.addEventListener('DOMContentLoaded', ()=>{
 // GERENCIAR USUÁRIOS — ADM
 // ══════════════════════════════════════════════════════
 
+// Quando "Admin do FAST" é marcado no cadastro de novo usuário, força FAST
+// marcado + ADLV desmarcado e trava os dois checkboxes (essa pessoa nunca
+// pode ter ADLV, por definição do papel). Desmarcando, libera de novo.
+function usrToggleAdmFastNovo(){
+  const admFast = document.getElementById('usr-novo-admfast').checked;
+  const cbAdlv = document.getElementById('usr-novo-mod-adlv');
+  const cbFast = document.getElementById('usr-novo-mod-fast');
+  if(admFast){
+    cbAdlv.checked = false; cbAdlv.disabled = true;
+    cbFast.checked = true;  cbFast.disabled = true;
+  } else {
+    cbAdlv.disabled = false;
+    cbFast.disabled = false;
+  }
+}
+
 async function usrCadastrar(){
   window._usrCadastrarReal = usrCadastrar;
   const nome  = document.getElementById('usr-novo-nome').value.trim();
@@ -18891,8 +18941,14 @@ async function usrCadastrar(){
 
   const checks = document.querySelectorAll('#usr-novo-perms input[type=checkbox]:checked');
   const perms = Array.from(checks).map(c=>c.value);
-  const checksModulos = document.querySelectorAll('#usr-novo-modulos input[type=checkbox]:checked');
-  const modulos = Array.from(checksModulos).map(c=>c.value);
+  const isAdmFastNovo = document.getElementById('usr-novo-admfast')?.checked || false;
+  let modulos;
+  if(isAdmFastNovo){
+    modulos = ['fast']; // Admin do FAST nunca tem ADLV, mesmo que os checkboxes digam outra coisa
+  } else {
+    const checksModulos = document.querySelectorAll('#usr-novo-modulos input[type=checkbox]:checked');
+    modulos = Array.from(checksModulos).map(c=>c.value);
+  }
   const colabNomes = ['André','Lory','Ludy','Wanessa'];
   const colabNome = colabNomes.find(n => nome.toLowerCase().includes(n.toLowerCase())) || '';
 
@@ -18907,7 +18963,7 @@ async function usrCadastrar(){
     if(data.error){ throw new Error(data.error.message); }
 
     const uid = data.localId;
-    const perfil = nome.toLowerCase()==='andré' ? 'adm' : 'colaborador';
+    const perfil = isAdmFastNovo ? 'adm_fast' : (nome.toLowerCase()==='andré' ? 'adm' : 'colaborador');
 
     await db.collection('usuarios').doc(uid).set({
       nome, email, perfil, permissoes: perms, modulos: modulos.length ? modulos : ['adlv'], colabNome,
@@ -18959,7 +19015,7 @@ async function usrCarregarLista(){
           <div style="font-size:13px;font-weight:700;color:var(--az)">${u.nome||'—'}</div>
           <div style="font-size:11px;color:var(--tx2)">${u.email||'—'}</div>
           <div style="font-size:10px;margin-top:3px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-            <span class="pl ${u.perfil==='adm'?'pl-w':'pl-az'}" style="font-size:9px">${u.perfil==='adm'?'🔐 ADM':'👤 Colaborador'}</span>
+            <span class="pl ${u.perfil==='adm'?'pl-w':u.perfil==='adm_fast'?'pl-w':'pl-az'}" style="font-size:9px">${u.perfil==='adm'?'🔐 ADM':u.perfil==='adm_fast'?'🛠️ Admin FAST':'👤 Colaborador'}</span>
             ${(u.permissoes||[]).length ? '<span style="color:var(--tx2)">'+u.permissoes.length+' páginas</span>' : ''}
             <span style="color:var(--tx2)">·</span>
             ${(u.modulos||['adlv']).includes('adlv') ? '<span class="pl pl-az" style="font-size:9px">🏢 ADLV</span>' : ''}
@@ -18967,7 +19023,7 @@ async function usrCarregarLista(){
           </div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-s" style="font-size:10px;padding:4px 10px" onclick="usrEditarPerms('${u.uid}','${u.nome}',${JSON.stringify(u.permissoes||[]).replace(/"/g,"'")},${JSON.stringify(u.modulos||['adlv']).replace(/"/g,"'")})">✏️ Permissões</button>
+          <button class="btn btn-s" style="font-size:10px;padding:4px 10px" onclick="usrEditarPerms('${u.uid}','${u.nome}',${JSON.stringify(u.permissoes||[]).replace(/"/g,"'")},${JSON.stringify(u.modulos||['adlv']).replace(/"/g,"'")},'${u.perfil||'colaborador'}')">✏️ Permissões</button>
           <button class="btn btn-s" style="font-size:10px;padding:4px 10px;background:var(--amc);color:var(--am)" onclick="usrResetarSenha('${u.email}','${u.nome}')">🔑 Resetar Senha</button>
           <button class="btn btn-r" style="font-size:10px;padding:4px 10px" onclick="usrRemover('${u.uid}','${u.nome}')">🗑</button>
         </div>
@@ -18998,22 +19054,26 @@ async function usrRemover(uid, nome){
   } catch(e){ alert('Erro ao remover: ' + e.message); }
 }
 
-function usrEditarPerms(uid, nome, permsAtual, modulosAtual){
+function usrEditarPerms(uid, nome, permsAtual, modulosAtual, perfilAtual){
   window._usrEditarPermsReal = usrEditarPerms;
   modulosAtual = modulosAtual || ['adlv'];
+  const isAdmFastAtual = perfilAtual === 'adm_fast';
   const mhtml = `
   <div id="usr-perms-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:5000;display:flex;align-items:center;justify-content:center">
     <div style="background:#fff;border-radius:14px;padding:1.5rem;max-width:480px;width:95%;max-height:80vh;overflow-y:auto">
       <div style="font-size:14px;font-weight:700;color:var(--az);margin-bottom:1rem">✏️ Permissões — ${nome}</div>
       <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:6px">Módulos com acesso</div>
-      <div id="usr-perms-modulos" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1.25rem">
+      <div id="usr-perms-modulos" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
         <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:var(--cin);padding:6px 12px;border-radius:6px;border:1px solid var(--brd)">
-          <input type="checkbox" value="adlv" ${modulosAtual.includes('adlv')?'checked':''}> 🏢 ADLV
+          <input type="checkbox" id="usr-perms-mod-adlv" value="adlv" ${modulosAtual.includes('adlv')?'checked':''} ${isAdmFastAtual?'disabled':''}> 🏢 ADLV
         </label>
         <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:var(--cin);padding:6px 12px;border-radius:6px;border:1px solid var(--brd)">
-          <input type="checkbox" value="fast" ${modulosAtual.includes('fast')?'checked':''}> ⚡ FAST
+          <input type="checkbox" id="usr-perms-mod-fast" value="fast" ${modulosAtual.includes('fast')?'checked':''} ${isAdmFastAtual?'disabled':''}> ⚡ FAST
         </label>
       </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;background:var(--amc);padding:6px 10px;border-radius:6px;border:1px solid var(--am);margin-bottom:1.25rem;width:fit-content">
+        <input type="checkbox" id="usr-perms-admfast" onchange="usrToggleAdmFastEdit()" ${isAdmFastAtual?'checked':''}> 🛠️ Admin do FAST (acesso total ao ADM do FAST, exceto Usuários — não dá acesso ao ADLV)
+      </label>
       <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:6px">Páginas liberadas</div>
       <div id="usr-perms-paginas" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1.25rem">
         ${Object.entries(PERMS_SIDEBAR).map(([key,cfg])=>`
@@ -19031,16 +19091,39 @@ function usrEditarPerms(uid, nome, permsAtual, modulosAtual){
   document.body.insertAdjacentHTML('beforeend', mhtml);
 }
 
+// Mesma lógica do cadastro: marcar Admin do FAST trava FAST=sim/ADLV=não.
+function usrToggleAdmFastEdit(){
+  const admFast = document.getElementById('usr-perms-admfast').checked;
+  const cbAdlv = document.getElementById('usr-perms-mod-adlv');
+  const cbFast = document.getElementById('usr-perms-mod-fast');
+  if(admFast){
+    cbAdlv.checked = false; cbAdlv.disabled = true;
+    cbFast.checked = true;  cbFast.disabled = true;
+  } else {
+    cbAdlv.disabled = false;
+    cbFast.disabled = false;
+  }
+}
+
 async function usrSalvarPerms(uid){
   const modal = document.getElementById('usr-perms-modal');
+  const isAdmFast = document.getElementById('usr-perms-admfast')?.checked || false;
   const checksModulos = modal.querySelectorAll('#usr-perms-modulos input[type=checkbox]:checked');
-  const modulos = Array.from(checksModulos).map(c=>c.value);
+  let modulos = Array.from(checksModulos).map(c=>c.value);
+  if(isAdmFast) modulos = ['fast']; // garante que Admin do FAST nunca grava ADLV
   const checksPaginas = modal.querySelectorAll('#usr-perms-paginas input[type=checkbox]:checked');
   const perms = Array.from(checksPaginas).map(c=>c.value);
   try{
     // Cadastro de usuários é sempre no ADLV, independente do módulo ativo
     const db = getDBUsuarios(); if(!db) return;
-    await db.collection('usuarios').doc(uid).update({ permissoes: perms, modulos: modulos.length ? modulos : ['adlv'] });
+    const update = { permissoes: perms, modulos: modulos.length ? modulos : ['adlv'] };
+    // Só ajusta o perfil se a pessoa não for o ADM geral (nunca rebaixar André)
+    const docAtual = await db.collection('usuarios').doc(uid).get();
+    const perfilAtual = docAtual.exists ? docAtual.data().perfil : 'colaborador';
+    if(perfilAtual !== 'adm'){
+      update.perfil = isAdmFast ? 'adm_fast' : 'colaborador';
+    }
+    await db.collection('usuarios').doc(uid).update(update);
     modal.remove();
     usrCarregarLista();
   } catch(e){ alert('Erro: ' + e.message); }
