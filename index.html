@@ -13597,7 +13597,7 @@ async function pcAtualizarStatusGov(chave, valor, selEl){
   // Também re-renderizar tabela gov MAPA se ativa
   const abaAtiva = document.querySelector('.stab.active')?.textContent;
   if(abaAtiva && abaAtiva.includes('MAPA')){
-    govRenderMapa((_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='Analisar PATEC Finalizado'));
+    govRenderMapa(govFiltroMapaPadrao());
   }
 }
 
@@ -13619,7 +13619,7 @@ function pcBuscarRCDetalhe(rc){
   if(!rcBusca || rcBusca.length < 5){ el.style.display='none'; el.innerHTML=''; return; }
 
   // Busca nos dados MAPA, 100% Reprovados e Cancelados
-  const dadosMapa   = (_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='Analisar PATEC Finalizado');
+  const dadosMapa   = govFiltroMapaPadrao();
   const dadosReprov = (_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='PATEC Finalizado sem fornecedores aprovados');
   const dadosCancel = (_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='Analisar PATEC Cancelado');
   const resultadosMapa   = dadosMapa.filter(r=>(r.rc||'').includes(rcBusca));
@@ -14085,6 +14085,19 @@ async function govInicializar(){
   }
 
   govRenderMapa(dados);
+}
+
+// Lista padrão de itens do MAPA (Governança). No ADLV, continua exatamente
+// como sempre foi: só "Analisar PATEC Finalizado". No FAST, inclui também
+// "Aguardar PATEC ser Finalizado" (distinguidos pela coluna "Status Mapa").
+function govFiltroMapaPadrao(){
+  return (_radarDados||[]).filter(r=>{
+    const aa = (r.analista_auto||'').trim();
+    if(_moduloAtivo === 'fast'){
+      return aa === 'Analisar PATEC Finalizado' || aa === 'Aguardar PATEC ser Finalizado';
+    }
+    return aa === 'Analisar PATEC Finalizado';
+  });
 }
 
 function govRenderMapa(dados){
@@ -14672,7 +14685,7 @@ async function govImportarPlanilha(input){
 
       elStatus.textContent = '✓ ' + salvos + ' registros importados com sucesso!';
       // Re-renderizar tabela com dados novos
-      govRenderMapa((_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='Analisar PATEC Finalizado'));
+      govRenderMapa(govFiltroMapaPadrao());
 
     } catch(err){
       document.getElementById('gov-import-status').textContent = '❌ Erro: ' + err.message;
@@ -14701,7 +14714,7 @@ function govBuscarRC(rc){
   const resultados = [];
 
   // MAPA
-  const dadosMapa = (_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='Analisar PATEC Finalizado');
+  const dadosMapa = govFiltroMapaPadrao();
   dadosMapa.filter(r=>(r.rc||'').includes(rcBusca)).forEach(r=>{
     const chave = govChave(r);
     const m = _govDados[chave]||{};
@@ -15472,7 +15485,7 @@ async function govBuscaSalvar(aba, chave, campo, valor){
       });
     } catch(e){ console.warn('govBuscaSalvar analista:', e); }
     // Re-renderizar tabela correspondente
-    if(aba==='MAPA') govRenderMapa((_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='Analisar PATEC Finalizado'));
+    if(aba==='MAPA') govRenderMapa(govFiltroMapaPadrao());
     if(aba==='XGL'){
       // Atualizar analista em _xglItens e persistir
       const xglIdx = (_xglItens||[]).findIndex(r => xglChave(r.rc,r.item,r.oport,r.itemop) === chave);
@@ -15582,7 +15595,7 @@ function govRenderConcluidos(){
   if(!tbody) return;
 
   // Buscar concluídos no MAPA (finalizado preenchido)
-  const dadosMapa = (_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='Analisar PATEC Finalizado');
+  const dadosMapa = govFiltroMapaPadrao();
   const concluidos = dadosMapa.filter(r => {
     const chave = govChave(r);
     return !!(_govDados[chave]?.finalizado);
@@ -17278,7 +17291,7 @@ async function admApresentacaoGerar(){
 
   // ── Detalhamento Governança — "Analisar PATEC Finalizado" agrupado por FILA ──
   // Mesma lógica do "Por fila (Level Board)" do Radar Estratégico
-  const govItens = (_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='Analisar PATEC Finalizado');
+  const govItens = govFiltroMapaPadrao();
   const govCounts = {};
   govItens.forEach(r=>{
     const f = (r.fila||'—').trim();
