@@ -3845,6 +3845,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <thead>
               <tr>
                 <th>Analista</th>
+                <th id="gov-th-status-mapa" style="display:none">Status Mapa</th>
                 <th>Fila Level Board</th>
                 <th>SLA</th>
                 <th>RC</th>
@@ -14090,6 +14091,10 @@ function govRenderMapa(dados){
   const tbody = document.getElementById('gov-mapa-tbody');
   if(!tbody) return;
 
+  // Cabeçalho "Status Mapa" só aparece no FAST
+  const thStatusMapa = document.getElementById('gov-th-status-mapa');
+  if(thStatusMapa) thStatusMapa.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
+
   tbody.innerHTML = dados.map((r, idx) => {
     const chave = govChave(r);
     const m = _govDados[chave] || {};
@@ -14116,8 +14121,21 @@ function govRenderMapa(dados){
       return '';
     };
 
+    // Coluna "Status Mapa" — exclusiva do FAST. Vem do analista_auto do
+    // Radar Estratégico: "Analisar PATEC Finalizado" → "PATEC Finalizado";
+    // "Aguardar PATEC ser Finalizado" → "PATEC Em Andamento".
+    let tdStatusMapa = '';
+    if(_moduloAtivo === 'fast'){
+      const aa = (r.analista_auto||'').trim();
+      let statusMapaTxt = '—';
+      if(aa === 'Analisar PATEC Finalizado') statusMapaTxt = 'PATEC Finalizado';
+      else if(aa === 'Aguardar PATEC ser Finalizado') statusMapaTxt = 'PATEC Em Andamento';
+      tdStatusMapa = `<td style="font-size:11px">${statusMapaTxt}</td>`;
+    }
+
     return `<tr id="gov-row-${idx}">
       <td style="font-size:11px">${r.analista||'—'}</td>
+      ${tdStatusMapa}
       <td style="font-size:11px">${r.fila||'—'}</td>
       <td style="text-align:center">${r.sla||'—'}</td>
       <td style="font-weight:700;color:var(--az)">${r.rc||'—'}</td>
