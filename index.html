@@ -14133,11 +14133,15 @@ async function govInicializar(){
 // "Aguardar PATEC ser Finalizado" (distinguidos pela coluna "Status Mapa").
 function govFiltroMapaPadrao(){
   return (_radarDados||[]).filter(r=>{
-    const aa = (r.analista_auto||'').trim();
+    const aaLower = (r.analista_auto||'').trim().toLowerCase();
+    // Exige "finalizado" também — evita confundir com "Analisar PATEC
+    // Cancelado", que também contém "analisar"+"patec"
+    const ehFinalizado = aaLower.includes('analisar') && aaLower.includes('patec') && aaLower.includes('finalizado');
     if(_moduloAtivo === 'fast'){
-      return aa === 'Analisar PATEC Finalizado' || aa === 'Aguardar PATEC ser Finalizado';
+      const ehAndamento = aaLower.includes('aguardar') && aaLower.includes('patec') && aaLower.includes('finalizado');
+      return ehFinalizado || ehAndamento;
     }
-    return aa === 'Analisar PATEC Finalizado';
+    return ehFinalizado;
   });
 }
 
@@ -14192,8 +14196,8 @@ function govRenderMapa(dados, tbodyId){
     if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
       const aaLower = (r.analista_auto||'').trim().toLowerCase();
       let statusMapaTxt = '—';
-      if(aaLower.includes('analisar') && aaLower.includes('patec')) statusMapaTxt = 'PATEC Finalizado';
-      else if(aaLower.includes('aguardar') && aaLower.includes('patec')) statusMapaTxt = 'PATEC Em Andamento';
+      if(aaLower.includes('analisar') && aaLower.includes('patec') && aaLower.includes('finalizado')) statusMapaTxt = 'PATEC Finalizado';
+      else if(aaLower.includes('aguardar') && aaLower.includes('patec') && aaLower.includes('finalizado')) statusMapaTxt = 'PATEC Em Andamento';
       tdStatusMapa = `<td style="font-size:11px">${statusMapaTxt}</td>`;
     }
 
@@ -14227,7 +14231,7 @@ function govRenderAndamento(){
   if(_moduloAtivo === 'fast') return; // exclusiva do ADLV
   const dados = (_radarDados||[]).filter(r => {
     const aa = (r.analista_auto||'').trim().toLowerCase();
-    return aa.includes('aguardar') && aa.includes('patec');
+    return aa.includes('aguardar') && aa.includes('patec') && aa.includes('finalizado');
   });
 
   const semDados = document.getElementById('gov-andamento-sem-dados');
@@ -21427,4 +21431,3 @@ if(_goOrig){
 // Adicionar Fechamento do Dia ao PERMS_SIDEBAR e navegação
 PERMS_SIDEBAR['fechamento-dia'] = { icon:'🔒', label:'Fechamento do Dia', mod:'EXECUÇÃO' };
 </script>
-  
