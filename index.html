@@ -14391,7 +14391,7 @@ async function govCarregarFirebase(){
         const _envioNorm = _normData(d.envio||'');
         const _finalNorm = _normData(d.finalizado||'');
         // Guardar TODOS os docs — inclusive os com só status (AG. TRATAMENTO sem envio)
-        _govDados[chaveDoc] = { status: _stRaw, envio: _envioNorm, finalizado: _finalNorm, comentario: d.comentario||'' };
+        _govDados[chaveDoc] = { status: _stRaw, envio: _envioNorm, finalizado: _finalNorm, comentario: d.comentario||'', _emAndamentoFast: !!d._emAndamentoFast };
       }
     });
     // Salvar cache com timestamp
@@ -15788,17 +15788,79 @@ function govSincronizarMapa(rows){
   // Filtrar só Analisar PATEC Finalizado
   const aptos = rows.filter(r => (r.analista_auto||'').trim() === 'Analisar PATEC Finalizado');
 
+  // REGRA EXCLUSIVA DO FAST: rastrear itens em "PATEC em Andamento" (Aguardar
+  // PATEC ser Finalizado) entre uploads. Se um item que estava "Em Andamento"
+  // aparecer "Finalizado" no próximo upload, força o Status de Tratamento pra
+  // "AG. TRATAMENTO" (mesmo se já tinha outro status antes). Se continuar "Em
+  // Andamento", não mexe no status de tratamento que já tiver. A marca de
+  // rastreamento (_emAndamentoFast) precisa ser salva no Firebase — não só na
+  // memória — porque a transição é detectada entre uploads de SESSÕES
+  // diferentes (normalmente dias diferentes).
+  const chavesEmAndamentoNovas = [];
+  const chavesEmAndamentoMarcar = [];
+  if(_moduloAtivo === 'fast'){
+    const emAndamento = rows.filter(r => {
+      const aa = (r.analista_auto||'').trim().toLowerCase();
+      return aa.includes('aguardar') && aa.includes('patec') && aa.includes('finalizado');
+    });
+    emAndamento.forEach(r => {
+      const chave = govChave(r);
+      if(!_govDados[chave]){
+        // Primeira vez que vemos esse item — registra como "em andamento"
+        _govDados[chave] = { status: '', envio: '', finalizado: '', _emAndamentoFast: true };
+        chavesEmAndamentoNovas.push(chave);
+      } else if(!_govDados[chave]._emAndamentoFast){
+        // Já existia (de upload anterior) — só garante a marca de
+        // rastreamento, sem tocar no status de tratamento que já tiver
+        _govDados[chave]._emAndamentoFast = true;
+        chavesEmAndamentoMarcar.push(chave);
+      }
+    });
+  }
+
   // Adicionar itens novos com AG. TRATAMENTO (sem sobrescrever existentes)
   let novos = 0;
   const novasChaves = [];
+  const chavesTransicao = [];
   aptos.forEach(r => {
     const chave = govChave(r);
     if(!_govDados[chave]){
       _govDados[chave] = { status: 'AG. TRATAMENTO', envio: '', finalizado: '' };
       novasChaves.push(chave);
       novos++;
+    } else if(_moduloAtivo === 'fast' && _govDados[chave]._emAndamentoFast){
+      // Transição detectada: estava "Em Andamento" num upload anterior e
+      // agora apareceu "Finalizado" — força AG. TRATAMENTO, mesmo que já
+      // tivesse algum status de tratamento registrado antes.
+      _govDados[chave].status = 'AG. TRATAMENTO';
+      _govDados[chave]._emAndamentoFast = false;
+      chavesTransicao.push(chave);
+      console.log('[Status Mapa] Transição Em Andamento → Finalizado:', chave, '— status forçado para AG. TRATAMENTO');
     }
+    // Se já existia e não veio de "Em Andamento" (já era Finalizado antes),
+    // não mexe — segue a regra original do ADLV (não sobrescreve status já tratado)
   });
+
+  // Persistir as 3 categorias do FAST no Firebase (fbSet usa merge:true,
+  // então não apaga outros campos do mesmo documento)
+  if(chavesEmAndamentoNovas.length || chavesEmAndamentoMarcar.length || chavesTransicao.length){
+    (async () => {
+      const docIdDe = ch => ch.replace(/[|]/g,'_').substring(0,400);
+      for(const chave of chavesEmAndamentoNovas){
+        await fbSet('gov_mapa', docIdDe(chave), { chave, status:'', envio:'', finalizado:'', _emAndamentoFast:true, ts:new Date().toISOString() });
+        await new Promise(r=>setTimeout(r,150));
+      }
+      for(const chave of chavesEmAndamentoMarcar){
+        await fbSet('gov_mapa', docIdDe(chave), { _emAndamentoFast:true });
+        await new Promise(r=>setTimeout(r,150));
+      }
+      for(const chave of chavesTransicao){
+        await fbSet('gov_mapa', docIdDe(chave), { status:'AG. TRATAMENTO', _emAndamentoFast:false });
+        await new Promise(r=>setTimeout(r,150));
+      }
+      console.log('[Status Mapa] Persistido no Firebase: '+chavesEmAndamentoNovas.length+' novos em andamento, '+chavesEmAndamentoMarcar.length+' marcados, '+chavesTransicao.length+' transições pra AG. TRATAMENTO');
+    })();
+  }
 
   if(novos > 0){
     console.log('Gov MAPA: ' + novos + ' itens novos adicionados com AG. TRATAMENTO');
