@@ -5536,6 +5536,77 @@ function abrirHistoricoRC(rc){
   modal.style.display = 'flex';
 }
 
+// FAST: histórico de cobrança — versão filtrada do histórico geral, só com
+// as ações que tiveram um Status de Tratamento associado (Fornecedor, MDG,
+// Requisitante, Validação Thiago...), com contagem por etapa no topo. Usa
+// o mesmo modal do histórico geral (abrirHistoricoRC).
+function abrirHistoricoCobranca(rc){
+  rc = String(rc).trim();
+  const acoesRC = _buscarAcoesRC(rc).filter(a => a.tratamento).slice().reverse();
+  const fmtData = d => {
+    if(!d) return '—';
+    const [y,m,dd] = d.split('-');
+    return `${dd}/${m}/${y}`;
+  };
+
+  let conteudo = '';
+  if(!acoesRC.length){
+    conteudo = '<div style="font-size:12px;color:var(--tx2);padding:1rem;text-align:center">⚫ Nenhuma cobrança registrada para esta RC ainda.</div>';
+  } else {
+    // Contagem por etapa, pra dar destaque visual a quem já bateu 3x
+    const contagem = {};
+    acoesRC.forEach(a => { contagem[a.tratamento] = (contagem[a.tratamento]||0) + 1; });
+    const resumoChips = Object.entries(contagem).map(([k,v]) =>
+      `<span style="font-size:10px;background:${v>=3?'var(--vmc)':'var(--cin)'};border:1px solid ${v>=3?'var(--vm)':'var(--brd)'};border-radius:5px;padding:2px 8px;color:${v>=3?'var(--vm)':'var(--tx2)'};font-weight:700">${k}: ${v}x${v>=3?' ⚠':''}</span>`
+    ).join(' ');
+
+    conteudo = `
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:.875rem;padding:.625rem .875rem;background:var(--cin);border-radius:8px;border:1px solid var(--brd)">
+        ${resumoChips}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;max-height:420px;overflow-y:auto;padding-right:4px">
+        ${acoesRC.map((a,idx) => {
+          const hora = a.ts ? new Date(a.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
+          const faseLabel = a.statusMapa === 'Andamento' ? '⏳ Em Andamento' : 'PATEC Finalizado';
+          return `
+            <div style="background:${idx===0?'var(--amc)':'#fff'};border:1px solid ${idx===0?'var(--am)':'var(--brd)'};border-radius:8px;padding:.625rem .875rem">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="font-size:11px;font-weight:700;color:var(--tx2);min-width:75px">${fmtData(a.data)}${hora?' '+hora:''}</span>
+                <span style="font-size:11px;font-weight:700;color:var(--am)">${a.tratamento}</span>
+                <span style="font-size:10px;color:var(--tx2)">${faseLabel}</span>
+                <span style="font-size:10px;color:var(--tx2);margin-left:auto">${a.colab||'—'}</span>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  // Reaproveita o mesmo modal do histórico geral
+  let modal = document.getElementById('modal-historico-rc');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'modal-historico-rc';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5000;align-items:center;justify-content:center';
+    modal.innerHTML = `<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:560px;width:95%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <div>
+          <div style="font-size:15px;font-weight:700;color:var(--az)" id="hist-titulo">Histórico da RC</div>
+          <div style="font-size:11px;color:var(--tx2);margin-top:2px" id="hist-subtitulo"></div>
+        </div>
+        <button onclick="document.getElementById('modal-historico-rc').style.display='none'"
+          style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--tx2)">×</button>
+      </div>
+      <div id="hist-conteudo"></div>
+    </div>`;
+    document.body.appendChild(modal);
+  }
+
+  document.getElementById('hist-titulo').textContent = `💰 Histórico de Cobrança — RC ${rc}`;
+  document.getElementById('hist-subtitulo').textContent = `3x ou mais na mesma etapa = pode devolver a requisição pra Petrobras`;
+  document.getElementById('hist-conteudo').innerHTML = conteudo;
+  modal.style.display = 'flex';
+}
+
 // ── ALERTAS DE PERFORMANCE ──
 async function _buscarFechamentos5Dias(colabs){
   const db = getDB(); if(!db) return {};
@@ -14245,12 +14316,11 @@ function govRenderMapa(dados, tbodyId){
     let tdCobranca = '';
     if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
       const acoesRC = _buscarAcoesRC(r.rc).filter(a => a.tratamento);
-      const listaCobranca = acoesRC.map(a => {
-        const [y,m,dd] = (a.data||'').split('-');
-        const dataFmt = (y&&m&&dd) ? `${dd}.${m}.${y.slice(2)}` : (a.data||'?');
-        return `${dataFmt} - ${a.tratamento}`;
-      }).join(', ');
-      tdCobranca = `<td style="font-size:10px;max-width:240px;white-space:normal;line-height:1.5">${listaCobranca || '—'}</td>`;
+      if(acoesRC.length){
+        tdCobranca = `<td style="text-align:center"><button onclick="abrirHistoricoCobranca('${r.rc||''}')" title="Ver histórico de cobrança" style="background:var(--amc);border:1.5px solid var(--am);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:var(--am);white-space:nowrap">💰 Cobrança (${acoesRC.length})</button></td>`;
+      } else {
+        tdCobranca = `<td style="text-align:center;color:var(--tx2);font-size:11px">—</td>`;
+      }
     }
 
     return `<tr id="${tbodyId}-row-${idx}">
@@ -14963,16 +15033,15 @@ function govBuscarRC(rc){
           const fmtGrupo = obj => Object.keys(obj).length
             ? Object.entries(obj).map(([k,v])=>`<span style="background:#fff;border:1px solid var(--brd);border-radius:5px;padding:1px 7px;margin-right:4px;white-space:nowrap">${k}: <strong>${v}x</strong></span>`).join('')
             : '<span style="color:var(--tx2)">— nenhuma cobrança ainda</span>';
-          const temAndamento = Object.keys(cont.Andamento).length > 0;
           return `<tr style="background:#fff8ec;border-top:none">
           <td colspan="12" style="padding:4px 8px 6px 8px">
             <div style="font-size:10px;color:var(--tx2);font-weight:700;margin-bottom:3px">💰 Cobrança por etapa</div>
-            <div style="font-size:11px;display:flex;align-items:center;gap:2px;flex-wrap:wrap;${temAndamento?'margin-bottom:3px':''}">
+            <div style="font-size:11px;display:flex;align-items:center;gap:2px;flex-wrap:wrap;margin-bottom:3px">
               <span style="font-weight:700;color:var(--az);margin-right:4px">Finalizado:</span> ${fmtGrupo(cont.Finalizado)}
             </div>
-            ${temAndamento?`<div style="font-size:11px;display:flex;align-items:center;gap:2px;flex-wrap:wrap">
+            <div style="font-size:11px;display:flex;align-items:center;gap:2px;flex-wrap:wrap">
               <span style="font-weight:700;color:var(--am);margin-right:4px">Em Andamento:</span> ${fmtGrupo(cont.Andamento)}
-            </div>`:''}
+            </div>
           </td>
         </tr>`;
         })():''}
