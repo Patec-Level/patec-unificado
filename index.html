@@ -14095,6 +14095,11 @@ function govRenderMapa(dados){
   const thStatusMapa = document.getElementById('gov-th-status-mapa');
   if(thStatusMapa) thStatusMapa.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
 
+  if(_moduloAtivo === 'fast'){
+    const valoresUnicos = [...new Set(dados.map(r => (r.analista_auto||'').trim()).filter(Boolean))];
+    console.log('[Status Mapa] Valores únicos de analista_auto encontrados:', valoresUnicos);
+  }
+
   tbody.innerHTML = dados.map((r, idx) => {
     const chave = govChave(r);
     const m = _govDados[chave] || {};
@@ -14122,14 +14127,16 @@ function govRenderMapa(dados){
     };
 
     // Coluna "Status Mapa" — exclusiva do FAST. Vem do analista_auto do
-    // Radar Estratégico: "Analisar PATEC Finalizado" → "PATEC Finalizado";
-    // "Aguardar PATEC ser Finalizado" → "PATEC Em Andamento".
+    // Radar Estratégico (coluna "STATUS MAPA" da planilha): "Analisar PATEC
+    // Finalizado" → "PATEC Finalizado"; "Aguardar PATEC ser Finalizado" →
+    // "PATEC Em Andamento". Comparação por palavra-chave (sem diferenciar
+    // maiúscula/minúscula) pra não depender de bater a frase exata.
     let tdStatusMapa = '';
     if(_moduloAtivo === 'fast'){
-      const aa = (r.analista_auto||'').trim();
+      const aaLower = (r.analista_auto||'').trim().toLowerCase();
       let statusMapaTxt = '—';
-      if(aa === 'Analisar PATEC Finalizado') statusMapaTxt = 'PATEC Finalizado';
-      else if(aa === 'Aguardar PATEC ser Finalizado') statusMapaTxt = 'PATEC Em Andamento';
+      if(aaLower.includes('analisar') && aaLower.includes('patec')) statusMapaTxt = 'PATEC Finalizado';
+      else if(aaLower.includes('aguardar') && aaLower.includes('patec')) statusMapaTxt = 'PATEC Em Andamento';
       tdStatusMapa = `<td style="font-size:11px">${statusMapaTxt}</td>`;
     }
 
