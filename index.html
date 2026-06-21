@@ -6754,6 +6754,13 @@ function _atualizarColabsPorModulo(){
     COLABS_SEM_META_RT = (_moduloAtivo === 'fast') ? COLABS_SEM_META_RT_FAST : COLABS_SEM_META_RT_ADLV;
     META_ANALISTA_RT = (_moduloAtivo === 'fast') ? META_ANALISTA_RT_FAST : META_ANALISTA_RT_ADLV;
   }
+  // Regras de Governança (Status de Tratamento e prazos por etapa) — o FAST
+  // tem etapas e prazos próprios (sem Validação do Thiago, com MDG Equipe
+  // SCOMP), o ADLV continua com as regras originais.
+  if(typeof GOV_PRAZOS_FAST !== 'undefined'){
+    GOV_PRAZOS = (_moduloAtivo === 'fast') ? GOV_PRAZOS_FAST : GOV_PRAZOS_ADLV;
+    GOV_STATUS_OPCOES = (_moduloAtivo === 'fast') ? GOV_STATUS_OPCOES_FAST : GOV_STATUS_OPCOES_ADLV;
+  }
   // CORREÇÃO BUG (20/06): `registros` começava com HISTORICO_INICIAL (dados
   // reais do ADLV) baseado no módulo ativo NA HORA QUE A PÁGINA CARREGOU —
   // antes do login/escolha de módulo. Como esse array só recebe itens via
@@ -14079,7 +14086,7 @@ const GOV_FERIADOS = [
   '2027-10-12','2027-11-02','2027-11-15','2027-11-20','2027-12-25'
 ];
 
-const GOV_PRAZOS = {
+const GOV_PRAZOS_ADLV = {
   'MDG': 5,
   'FORNECEDOR': 2,
   'REQUISITANTE': 5,
@@ -14088,8 +14095,26 @@ const GOV_PRAZOS = {
   'XGL BAIXO': 20,
   'XGL ALTO': 15
 };
+// FAST: prazos próprios por etapa, sem Validação do Thiago, com MDG Equipe
+// SCOMP novo. "MDG Equipe SCOMP" precisa vir ANTES de "MDG" na ordem de
+// checagem (govCalcPrazo usa .includes() no nome do status, e "MDG" é
+// substring de "MDG EQUIPE SCOMP" — testar MDG primeiro bateria errado).
+const GOV_PRAZOS_FAST = {
+  'MDG EQUIPE SCOMP': 10,
+  'FORNECEDOR': 2,
+  'MDG': 4,
+  'REQUISITANTE': 5,
+  'AG. TRATAMENTO': null
+};
+let GOV_PRAZOS = GOV_PRAZOS_ADLV; // valor inicial; _atualizarRegrasGovPorModulo() troca na hora certa
 
-const GOV_STATUS_OPCOES = [
+const GOV_STATUS_OPCOES_ADLV = [
+  'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','VALIDAÇÃO DO THIAGO'
+];
+const GOV_STATUS_OPCOES_FAST = [
+  'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','MDG EQUIPE SCOMP'
+];
+let GOV_STATUS_OPCOES = [
   'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','VALIDAÇÃO DO THIAGO'
 ];
 const XGL_STATUS_OPCOES = [
@@ -18724,10 +18749,15 @@ function q18Consultar(valor){
           <div style="font-size:20px;margin-bottom:4px">🗂</div>
           <div style="font-size:12px;font-weight:600;color:var(--tx)">MDG</div>
         </button>
-        <button class="acao-sel-btn" onclick="acaoSelecionarTratamento(this,'Validação Thiago')"
+        <button class="acao-sel-btn" id="acao-btn-validacao-thiago" onclick="acaoSelecionarTratamento(this,'Validação Thiago')"
           style="background:var(--cin);border:1.5px solid var(--brd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;transition:all .18s">
           <div style="font-size:20px;margin-bottom:4px">✔️</div>
           <div style="font-size:12px;font-weight:600;color:var(--tx)">Validação Thiago</div>
+        </button>
+        <button class="acao-sel-btn" id="acao-btn-mdg-scomp" onclick="acaoSelecionarTratamento(this,'MDG Equipe SCOMP')"
+          style="display:none;background:var(--cin);border:1.5px solid var(--brd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;transition:all .18s">
+          <div style="font-size:20px;margin-bottom:4px">🗂</div>
+          <div style="font-size:12px;font-weight:600;color:var(--tx)">MDG Equipe SCOMP</div>
         </button>
         <button class="acao-sel-btn" onclick="acaoSelecionarTratamento(this,'Concluído')"
           style="background:var(--vdc);border:1.5px solid var(--vd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;grid-column:span 2;transition:all .18s">
@@ -19157,11 +19187,17 @@ function _entrarNoApp(){
   }
 
   // Testar E-mails, Apresentação, Apresentação 1, Entradas Plano de Ação,
-  // XGL (Governança), Tirar do Fluxo (Planilha Crítica) e PATEC em
-  // Andamento (Governança) são exclusivas do ADLV
-  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','adm-nav-pa-entradas-btn','gov-nav-xgl-btn','pc-nav-fluxo-btn','gov-nav-andamento-btn'].forEach(id=>{
+  // XGL (Governança), Tirar do Fluxo (Planilha Crítica), PATEC em
+  // Andamento (Governança), a opção "XGL" no Concluído e "Validação Thiago"
+  // são exclusivas do ADLV
+  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','adm-nav-pa-entradas-btn','gov-nav-xgl-btn','pc-nav-fluxo-btn','gov-nav-andamento-btn','acao-btn-xgl','acao-btn-validacao-thiago'].forEach(id=>{
     const btnAdlv = document.getElementById(id);
     if(btnAdlv) btnAdlv.style.display = (_moduloAtivo==='fast') ? 'none' : '';
+  });
+  // "MDG Equipe SCOMP" é exclusivo do FAST
+  ['acao-btn-mdg-scomp'].forEach(id=>{
+    const btnFast = document.getElementById(id);
+    if(btnFast) btnFast.style.display = (_moduloAtivo==='fast') ? '' : 'none';
   });
 
   rtIniciarListener();
