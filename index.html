@@ -3827,6 +3827,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <!-- Abas -->
       <div class="stabs" style="margin-bottom:1rem">
         <button class="stab active" onclick="govSetTab('mapa',this)">🗺 MAPA</button>
+        <button class="stab" id="gov-nav-andamento-btn" onclick="govSetTab('andamento',this)">⏳ PATEC em Andamento</button>
         <button class="stab" id="gov-nav-xgl-btn" onclick="govSetTab('xgl',this)">📋 XGL</button>
         <button class="stab" onclick="govSetTab('statusb',this)">📊 Status B</button>
         <button class="stab" onclick="govSetTab('concluidos',this)">✅ Concluídos</button>
@@ -3863,6 +3864,38 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               </tr>
             </thead>
             <tbody id="gov-mapa-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ABA PATEC EM ANDAMENTO (exclusiva do ADLV) -->
+      <div id="gov-tab-andamento" style="display:none">
+        <div class="kgrid" id="gov-andamento-kpis" style="margin-bottom:1rem"></div>
+        <div id="gov-andamento-sem-dados" style="text-align:center;padding:3rem;color:var(--tx2);font-size:13px;display:none">
+          📡 Nenhum item em "Aguardar PATEC ser Finalizado" no momento.
+        </div>
+        <div class="tw" style="max-height:560px" id="gov-andamento-wrap">
+          <table id="gov-andamento-table">
+            <thead>
+              <tr>
+                <th>Analista</th>
+                <th>Fila Level Board</th>
+                <th>SLA</th>
+                <th>RC</th>
+                <th>Item RC</th>
+                <th>Oportunidade</th>
+                <th>Item OP</th>
+                <th>Status Tratamento</th>
+                <th>Envio</th>
+                <th>Prazo Retorno</th>
+                <th>Status</th>
+                <th>Ações</th>
+                <th>Finalizado</th>
+                <th>Validade Proposta</th>
+                <th>Idas Mercado</th>
+              </tr>
+            </thead>
+            <tbody id="gov-andamento-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -14023,16 +14056,24 @@ function govSetTab(aba, btn){
     alert('XGL é exclusivo do ADLV.');
     return;
   }
+  // Aba "PATEC em Andamento" é exclusiva do ADLV — no FAST, esses itens já
+  // aparecem misturados na MAPA com a coluna "Status Mapa"
+  if(aba === 'andamento' && _moduloAtivo === 'fast'){
+    alert('Essa aba é exclusiva do ADLV.');
+    return;
+  }
   _govTabAtiva = aba;
   document.querySelectorAll('.stabs .stab').forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   document.getElementById('gov-tab-mapa').style.display       = aba === 'mapa'       ? 'block' : 'none';
+  document.getElementById('gov-tab-andamento').style.display  = aba === 'andamento'  ? 'block' : 'none';
   document.getElementById('gov-tab-xgl').style.display        = aba === 'xgl'        ? 'block' : 'none';
   document.getElementById('gov-tab-concluidos').style.display = aba === 'concluidos' ? 'block' : 'none';
   document.getElementById('gov-tab-statusb').style.display    = aba === 'statusb'    ? 'block' : 'none';
   if(aba === 'statusb') setTimeout(()=>{ if(!_sbItens.length) sbCarregarFirebase().then(sbRender); else sbRender(); }, 100);
   if(aba === 'xgl'){ if(!_xglItens||!_xglItens.length){ xglCarregarFirebase().then(xglRender); } else { xglRender(); } }
   if(aba === 'concluidos') govRenderConcluidos();
+  if(aba === 'andamento') govRenderAndamento();
 }
 
 async function govInicializar(){
@@ -14100,15 +14141,16 @@ function govFiltroMapaPadrao(){
   });
 }
 
-function govRenderMapa(dados){
-  const tbody = document.getElementById('gov-mapa-tbody');
+function govRenderMapa(dados, tbodyId){
+  tbodyId = tbodyId || 'gov-mapa-tbody';
+  const tbody = document.getElementById(tbodyId);
   if(!tbody) return;
 
-  // Cabeçalho "Status Mapa" só aparece no FAST
+  // Cabeçalho "Status Mapa" só aparece no FAST (só existe na tabela MAPA)
   const thStatusMapa = document.getElementById('gov-th-status-mapa');
   if(thStatusMapa) thStatusMapa.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
 
-  if(_moduloAtivo === 'fast'){
+  if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
     const valoresUnicos = [...new Set(dados.map(r => (r.analista_auto||'').trim()).filter(Boolean))];
     console.log('[Status Mapa] Valores únicos de analista_auto encontrados:', valoresUnicos);
   }
@@ -14139,13 +14181,15 @@ function govRenderMapa(dados){
       return '';
     };
 
-    // Coluna "Status Mapa" — exclusiva do FAST. Vem do analista_auto do
-    // Radar Estratégico (coluna "STATUS MAPA" da planilha): "Analisar PATEC
-    // Finalizado" → "PATEC Finalizado"; "Aguardar PATEC ser Finalizado" →
-    // "PATEC Em Andamento". Comparação por palavra-chave (sem diferenciar
-    // maiúscula/minúscula) pra não depender de bater a frase exata.
+    // Coluna "Status Mapa" — exclusiva do FAST, e só na tabela MAPA (a aba
+    // "PATEC em Andamento" do ADLV já é, por definição, só desse status).
+    // Vem do analista_auto do Radar Estratégico (coluna "STATUS MAPA" da
+    // planilha): "Analisar PATEC Finalizado" → "PATEC Finalizado";
+    // "Aguardar PATEC ser Finalizado" → "PATEC Em Andamento". Comparação
+    // por palavra-chave (sem diferenciar maiúscula/minúscula) pra não
+    // depender de bater a frase exata.
     let tdStatusMapa = '';
-    if(_moduloAtivo === 'fast'){
+    if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
       const aaLower = (r.analista_auto||'').trim().toLowerCase();
       let statusMapaTxt = '—';
       if(aaLower.includes('analisar') && aaLower.includes('patec')) statusMapaTxt = 'PATEC Finalizado';
@@ -14153,7 +14197,7 @@ function govRenderMapa(dados){
       tdStatusMapa = `<td style="font-size:11px">${statusMapaTxt}</td>`;
     }
 
-    return `<tr id="gov-row-${idx}">
+    return `<tr id="${tbodyId}-row-${idx}">
       <td style="font-size:11px">${r.analista||'—'}</td>
       ${tdStatusMapa}
       <td style="font-size:11px">${r.fila||'—'}</td>
@@ -14172,6 +14216,46 @@ function govRenderMapa(dados){
       <td style="text-align:center">${r.idas||'—'}</td>
     </tr>`;
   }).join('');
+}
+
+// Aba "PATEC em Andamento" — exclusiva do ADLV. Mostra só itens com
+// analista_auto === "Aguardar PATEC ser Finalizado" (vindo da coluna
+// "STATUS MAPA" do upload do Radar Estratégico). Reaproveita o mesmo
+// template de linha da tabela MAPA (govRenderMapa), só muda o filtro e a
+// tabela de destino.
+function govRenderAndamento(){
+  if(_moduloAtivo === 'fast') return; // exclusiva do ADLV
+  const dados = (_radarDados||[]).filter(r => {
+    const aa = (r.analista_auto||'').trim().toLowerCase();
+    return aa.includes('aguardar') && aa.includes('patec');
+  });
+
+  const semDados = document.getElementById('gov-andamento-sem-dados');
+  const wrap = document.getElementById('gov-andamento-wrap');
+  if(semDados) semDados.style.display = dados.length ? 'none' : 'block';
+  if(wrap) wrap.style.display = dados.length ? '' : 'none';
+
+  const total = dados.length;
+  const concluido = dados.filter(r => !!(_govDados[govChave(r)]?.finalizado)).length;
+  const emAberto = total - concluido;
+  const atrasado = dados.filter(r => {
+    const k = govChave(r); const m = _govDados[k]||{};
+    if(m.finalizado) return false;
+    return govCalcStatus(govCalcPrazo(m.status, m.envio), m.finalizado) === 'ATRASADO';
+  }).length;
+  const semStatus = dados.filter(r => !(_govDados[govChave(r)]?.status)).length;
+
+  const kpiEl = document.getElementById('gov-andamento-kpis');
+  if(kpiEl){
+    kpiEl.innerHTML = `
+      <div class="kc"><div class="kn" style="color:var(--az)">${total}</div><div class="kl">Total</div></div>
+      <div class="kc"><div class="kn" style="color:var(--am)">${emAberto}</div><div class="kl">Em Aberto<br><span style="font-size:10px;color:var(--vm);font-weight:600">${atrasado} atrasado${atrasado!==1?'s':''} · ${emAberto-atrasado} no prazo</span></div></div>
+      <div class="kc"><div class="kn" style="color:var(--vd)">${concluido}</div><div class="kl">Concluídos</div></div>
+      <div class="kc"><div class="kn" style="color:var(--am)">${semStatus}</div><div class="kl">Sem Status</div></div>
+    `;
+  }
+
+  govRenderMapa(dados, 'gov-andamento-tbody');
 }
 
 async function govSalvarCampo(chave, campo, valor, idx){
@@ -18783,6 +18867,35 @@ async function _autenticarFast(senhaOverride){
   }
 }
 
+// Caixinha de senha customizada (campo type="password", mascara os
+// caracteres com pontinhos) — substitui o prompt() nativo do navegador, que
+// sempre mostra a senha em texto puro (problema se a pessoa estiver
+// compartilhando tela).
+function _pedirSenhaModal(mensagem){
+  return new Promise(resolve => {
+    const id = '_senha-modal-' + Date.now();
+    const html = `
+    <div id="${id}" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center">
+      <div style="background:#fff;border-radius:14px;padding:1.5rem;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-size:13px;color:var(--az);margin-bottom:10px;font-weight:600">${mensagem}</div>
+        <input type="password" id="${id}-input" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--brd);font-size:14px;margin-bottom:14px;box-sizing:border-box">
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button id="${id}-cancel" class="btn btn-s">Cancelar</button>
+          <button id="${id}-ok" class="btn btn-p">OK</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+    const modalEl = document.getElementById(id);
+    const inputEl = document.getElementById(id+'-input');
+    const finalizar = (valor) => { modalEl.remove(); resolve(valor); };
+    document.getElementById(id+'-ok').onclick = () => finalizar(inputEl.value || null);
+    document.getElementById(id+'-cancel').onclick = () => finalizar(null);
+    inputEl.addEventListener('keydown', e => { if(e.key === 'Enter') finalizar(inputEl.value || null); });
+    setTimeout(()=>inputEl.focus(), 50);
+  });
+}
+
 async function selecionarModulo(mod){
   const permitidos = _modulosPermitidos();
   if(!permitidos.includes(mod)){
@@ -18792,7 +18905,7 @@ async function selecionarModulo(mod){
   if(mod === 'fast'){
     let r = await _autenticarFast();
     if(!r.ok){
-      const senhaConfirm = prompt('Confirme sua senha para acessar o FAST:');
+      const senhaConfirm = await _pedirSenhaModal('Confirme sua senha para acessar o FAST:');
       if(!senhaConfirm) return;
       r = await _autenticarFast(senhaConfirm);
       if(!r.ok){
@@ -18844,8 +18957,9 @@ function _entrarNoApp(){
   }
 
   // Testar E-mails, Apresentação, Apresentação 1, Entradas Plano de Ação,
-  // XGL (Governança) e Tirar do Fluxo (Planilha Crítica) são exclusivas do ADLV
-  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','adm-nav-pa-entradas-btn','gov-nav-xgl-btn','pc-nav-fluxo-btn'].forEach(id=>{
+  // XGL (Governança), Tirar do Fluxo (Planilha Crítica) e PATEC em
+  // Andamento (Governança) são exclusivas do ADLV
+  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','adm-nav-pa-entradas-btn','gov-nav-xgl-btn','pc-nav-fluxo-btn','gov-nav-andamento-btn'].forEach(id=>{
     const btnAdlv = document.getElementById(id);
     if(btnAdlv) btnAdlv.style.display = (_moduloAtivo==='fast') ? 'none' : '';
   });
@@ -21313,3 +21427,4 @@ if(_goOrig){
 // Adicionar Fechamento do Dia ao PERMS_SIDEBAR e navegação
 PERMS_SIDEBAR['fechamento-dia'] = { icon:'🔒', label:'Fechamento do Dia', mod:'EXECUÇÃO' };
 </script>
+  
