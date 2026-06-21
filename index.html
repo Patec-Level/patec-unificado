@@ -3603,7 +3603,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button class="stab active" onclick="pcSetTab('vencido',this)">⏰ Vencido</button>
         <button class="stab" onclick="pcSetTab('reprovado',this)">❌ 100% Reprovado</button>
         <button class="stab" onclick="pcSetTab('criticos',this)">🔴 Itens Críticos</button>
-        <button class="stab" onclick="pcSetTab('fluxo',this)">🗑 Tirar do Fluxo</button>
+        <button class="stab" id="pc-nav-fluxo-btn" onclick="pcSetTab('fluxo',this)">🗑 Tirar do Fluxo</button>
         <button class="stab" onclick="pcSetTab('cancelado',this)">🚫 Cancelado</button>
         <button class="stab" onclick="pcSetTab('urgmuitoalta',this)">🔴 Urgência Muito Alta</button>
         <button class="stab" onclick="pcSetTab('urgalta',this)">🟠 Urgência Alta</button>
@@ -3827,7 +3827,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <!-- Abas -->
       <div class="stabs" style="margin-bottom:1rem">
         <button class="stab active" onclick="govSetTab('mapa',this)">🗺 MAPA</button>
-        <button class="stab" onclick="govSetTab('xgl',this)">📋 XGL</button>
+        <button class="stab" id="gov-nav-xgl-btn" onclick="govSetTab('xgl',this)">📋 XGL</button>
         <button class="stab" onclick="govSetTab('statusb',this)">📊 Status B</button>
         <button class="stab" onclick="govSetTab('concluidos',this)">✅ Concluídos</button>
       </div>
@@ -13743,6 +13743,11 @@ function pcLimparFiltros(){
 }
 
 function pcSetTab(aba, btn){
+  // Aba "Tirar do Fluxo" é exclusiva do ADLV
+  if(aba === 'fluxo' && _moduloAtivo === 'fast'){
+    alert('Tirar do Fluxo é exclusivo do ADLV.');
+    return;
+  }
   _pcTabAtiva = aba;
   document.querySelectorAll('#pc-tabs .stab').forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
@@ -14012,6 +14017,11 @@ function govCorStatus(status){
 }
 
 function govSetTab(aba, btn){
+  // Aba XGL é exclusiva do ADLV
+  if(aba === 'xgl' && _moduloAtivo === 'fast'){
+    alert('XGL é exclusivo do ADLV.');
+    return;
+  }
   _govTabAtiva = aba;
   document.querySelectorAll('.stabs .stab').forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
@@ -18795,9 +18805,9 @@ function _entrarNoApp(){
     modBadge.textContent = (_moduloAtivo === 'fast' ? '⚡ FAST' : '🏢 ADLV');
   }
 
-  // Testar E-mails, Apresentação, Apresentação 1 e Entradas Plano de Ação
-  // são exclusivas do ADLV
-  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','adm-nav-pa-entradas-btn'].forEach(id=>{
+  // Testar E-mails, Apresentação, Apresentação 1, Entradas Plano de Ação,
+  // XGL (Governança) e Tirar do Fluxo (Planilha Crítica) são exclusivas do ADLV
+  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','adm-nav-pa-entradas-btn','gov-nav-xgl-btn','pc-nav-fluxo-btn'].forEach(id=>{
     const btnAdlv = document.getElementById(id);
     if(btnAdlv) btnAdlv.style.display = (_moduloAtivo==='fast') ? 'none' : '';
   });
