@@ -3858,6 +3858,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Prazo Retorno</th>
                 <th>Status</th>
                 <th>Ações</th>
+                <th id="gov-th-cobranca" style="display:none">Histórico de Cobrança</th>
                 <th>Finalizado</th>
                 <th>Validade Proposta</th>
                 <th>Idas Mercado</th>
@@ -5416,20 +5417,42 @@ function renderTopSLA(){
 }
 
 // ── MODAL HISTÓRICO POR RC ──
-function abrirHistoricoRC(rc){
-  rc = String(rc).trim();
-  // Buscar todas as ações desse RC no cache
+// Busca todas as ações registradas (não anuladas) de uma RC no cache local
+// — reaproveitado pelo Histórico, pelo contador de cobrança e pela coluna
+// de histórico de cobrança da tabela MAPA do FAST.
+function _buscarAcoesRC(rc){
+  rc = String(rc||'').trim();
+  if(!rc) return [];
   const todasAcoes = Object.values(window._prodAcoesCache||{}).flat();
-  const acoesRC = todasAcoes.filter(a =>
+  return todasAcoes.filter(a =>
     String(a.rc||'').trim() === rc || (a.rcChave||'').startsWith(rc+'|')
-  ).filter(a => !a.anulada);
-
-  // Ordenar por data+hora decrescente
-  acoesRC.sort((a,b) => {
+  ).filter(a => !a.anulada).sort((a,b) => {
     const da = (a.data||'')+(a.ts||'');
     const db = (b.data||'')+(b.ts||'');
-    return db.localeCompare(da);
+    return da.localeCompare(db); // ordem cronológica (mais antiga primeiro)
   });
+}
+
+// FAST: conta quantas vezes cada "etapa" (tratamento: Fornecedor,
+// Requisitante, MDG, etc.) foi cobrada nessa RC, separado por Status Mapa
+// (Finalizado / Andamento) — usado pro contador visual na busca de RC e
+// pra regra de devolução por 3x cobrança.
+function _contarCobrancaPorEtapa(rc){
+  const acoes = _buscarAcoesRC(rc);
+  const contagem = { Finalizado: {}, Andamento: {} };
+  acoes.forEach(a => {
+    if(!a.tratamento) return;
+    const grupo = a.statusMapa === 'Andamento' ? 'Andamento' : 'Finalizado';
+    contagem[grupo][a.tratamento] = (contagem[grupo][a.tratamento]||0) + 1;
+  });
+  return contagem;
+}
+
+function abrirHistoricoRC(rc){
+  rc = String(rc).trim();
+  // Buscar todas as ações desse RC no cache (usa o helper compartilhado,
+  // mas mantém ordem decrescente — mais recente primeiro — pra esse modal)
+  const acoesRC = _buscarAcoesRC(rc).slice().reverse();
 
   const hoje = new Date(); hoje.setHours(0,0,0,0);
   const fmtData = d => {
@@ -14131,17 +14154,26 @@ async function govInicializar(){
 // Lista padrão de itens do MAPA (Governança). No ADLV, continua exatamente
 // como sempre foi: só "Analisar PATEC Finalizado". No FAST, inclui também
 // "Aguardar PATEC ser Finalizado" (distinguidos pela coluna "Status Mapa").
+// Classifica o valor de analista_auto (coluna "STATUS MAPA" do upload do
+// Radar Estratégico) em 'Finalizado' ou 'Andamento' — usado em várias partes
+// do FAST (filtro do MAPA, coluna Status Mapa, contador de cobrança por
+// etapa). Comparação por palavra-chave (sem diferenciar maiúscula/
+// minúscula), pra não depender de bater a frase exata. Exige "finalizado"
+// também nos dois casos, pra não confundir com "Analisar PATEC Cancelado".
+function _classificarStatusMapa(analistaAuto){
+  const aa = (analistaAuto||'').trim().toLowerCase();
+  if(aa.includes('analisar') && aa.includes('patec') && aa.includes('finalizado')) return 'Finalizado';
+  if(aa.includes('aguardar') && aa.includes('patec') && aa.includes('finalizado')) return 'Andamento';
+  return '';
+}
+
 function govFiltroMapaPadrao(){
   return (_radarDados||[]).filter(r=>{
-    const aaLower = (r.analista_auto||'').trim().toLowerCase();
-    // Exige "finalizado" também — evita confundir com "Analisar PATEC
-    // Cancelado", que também contém "analisar"+"patec"
-    const ehFinalizado = aaLower.includes('analisar') && aaLower.includes('patec') && aaLower.includes('finalizado');
+    const cls = _classificarStatusMapa(r.analista_auto);
     if(_moduloAtivo === 'fast'){
-      const ehAndamento = aaLower.includes('aguardar') && aaLower.includes('patec') && aaLower.includes('finalizado');
-      return ehFinalizado || ehAndamento;
+      return cls === 'Finalizado' || cls === 'Andamento';
     }
-    return ehFinalizado;
+    return cls === 'Finalizado';
   });
 }
 
@@ -14150,9 +14182,12 @@ function govRenderMapa(dados, tbodyId){
   const tbody = document.getElementById(tbodyId);
   if(!tbody) return;
 
-  // Cabeçalho "Status Mapa" só aparece no FAST (só existe na tabela MAPA)
+  // Cabeçalho "Status Mapa" e "Histórico de Cobrança" só aparecem no FAST
+  // (só existem na tabela MAPA)
   const thStatusMapa = document.getElementById('gov-th-status-mapa');
   if(thStatusMapa) thStatusMapa.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
+  const thCobranca = document.getElementById('gov-th-cobranca');
+  if(thCobranca) thCobranca.style.display = (_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody') ? '' : 'none';
 
   if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
     // Diagnóstico: mostra os valores de TODO o _radarDados (bruto), não só
@@ -14198,11 +14233,24 @@ function govRenderMapa(dados, tbodyId){
     // depender de bater a frase exata.
     let tdStatusMapa = '';
     if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
-      const aaLower = (r.analista_auto||'').trim().toLowerCase();
-      let statusMapaTxt = '—';
-      if(aaLower.includes('analisar') && aaLower.includes('patec') && aaLower.includes('finalizado')) statusMapaTxt = 'PATEC Finalizado';
-      else if(aaLower.includes('aguardar') && aaLower.includes('patec') && aaLower.includes('finalizado')) statusMapaTxt = 'PATEC Em Andamento';
+      const cls = _classificarStatusMapa(r.analista_auto);
+      const statusMapaTxt = cls === 'Finalizado' ? 'PATEC Finalizado' : cls === 'Andamento' ? 'PATEC Em Andamento' : '—';
       tdStatusMapa = `<td style="font-size:11px">${statusMapaTxt}</td>`;
+    }
+
+    // Coluna "Histórico de Cobrança" — exclusiva do FAST. Lista cada vez
+    // que o Status de Tratamento foi alterado pra essa RC (data + etapa),
+    // ex: "01.01.26 - Fornecedor, 04.01.26 - Fornecedor" — usado pra
+    // acompanhar a regra de devolução por cobrança repetida.
+    let tdCobranca = '';
+    if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
+      const acoesRC = _buscarAcoesRC(r.rc).filter(a => a.tratamento);
+      const listaCobranca = acoesRC.map(a => {
+        const [y,m,dd] = (a.data||'').split('-');
+        const dataFmt = (y&&m&&dd) ? `${dd}.${m}.${y.slice(2)}` : (a.data||'?');
+        return `${dataFmt} - ${a.tratamento}`;
+      }).join(', ');
+      tdCobranca = `<td style="font-size:10px;max-width:240px;white-space:normal;line-height:1.5">${listaCobranca || '—'}</td>`;
     }
 
     return `<tr id="${tbodyId}-row-${idx}">
@@ -14219,6 +14267,7 @@ function govRenderMapa(dados, tbodyId){
       <td style="text-align:center;font-size:11px;${prazo?'font-weight:600':'color:var(--tx2)'}">${prazo?fmtBR(prazo):'—'}</td>
       <td style="text-align:center;font-size:11px;${govCorStatus(statusCalc)}">${statusCalc||'—'}</td>
       <td style="text-align:center"><button onclick="abrirHistoricoRC('${r.rc||''}')" title="Ver histórico de ações" style="background:var(--azc);border:1.5px solid var(--azm);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:var(--azm);white-space:nowrap">📋 Histórico</button></td>
+      ${tdCobranca}
       <td style="font-size:11px">${finalizado?fmtBR(finalizado):'—'}</td>
       <td style="font-size:11px;${corVal(r.validade)}">${r.validade||'—'}</td>
       <td style="text-align:center">${r.idas||'—'}</td>
@@ -14233,10 +14282,7 @@ function govRenderMapa(dados, tbodyId){
 // tabela de destino.
 function govRenderAndamento(){
   if(_moduloAtivo === 'fast') return; // exclusiva do ADLV
-  const dados = (_radarDados||[]).filter(r => {
-    const aa = (r.analista_auto||'').trim().toLowerCase();
-    return aa.includes('aguardar') && aa.includes('patec') && aa.includes('finalizado');
-  });
+  const dados = (_radarDados||[]).filter(r => _classificarStatusMapa(r.analista_auto) === 'Andamento');
 
   const semDados = document.getElementById('gov-andamento-sem-dados');
   const wrap = document.getElementById('gov-andamento-wrap');
@@ -14912,6 +14958,24 @@ function govBuscarRC(rc){
             </div>
           </td>
         </tr>`:''}
+        ${(r.aba==='MAPA' && _moduloAtivo==='fast')?(() => {
+          const cont = _contarCobrancaPorEtapa(r.rc);
+          const fmtGrupo = obj => Object.keys(obj).length
+            ? Object.entries(obj).map(([k,v])=>`<span style="background:#fff;border:1px solid var(--brd);border-radius:5px;padding:1px 7px;margin-right:4px;white-space:nowrap">${k}: <strong>${v}x</strong></span>`).join('')
+            : '<span style="color:var(--tx2)">— nenhuma cobrança ainda</span>';
+          const temAndamento = Object.keys(cont.Andamento).length > 0;
+          return `<tr style="background:#fff8ec;border-top:none">
+          <td colspan="12" style="padding:4px 8px 6px 8px">
+            <div style="font-size:10px;color:var(--tx2);font-weight:700;margin-bottom:3px">💰 Cobrança por etapa</div>
+            <div style="font-size:11px;display:flex;align-items:center;gap:2px;flex-wrap:wrap;${temAndamento?'margin-bottom:3px':''}">
+              <span style="font-weight:700;color:var(--az);margin-right:4px">Finalizado:</span> ${fmtGrupo(cont.Finalizado)}
+            </div>
+            ${temAndamento?`<div style="font-size:11px;display:flex;align-items:center;gap:2px;flex-wrap:wrap">
+              <span style="font-weight:700;color:var(--am);margin-right:4px">Em Andamento:</span> ${fmtGrupo(cont.Andamento)}
+            </div>`:''}
+          </td>
+        </tr>`;
+        })():''}
         <tr style="background:#f0f4fc;border-top:none">
           <td colspan="12" style="padding:5px 8px 8px 8px">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -15799,10 +15863,7 @@ function govSincronizarMapa(rows){
   const chavesEmAndamentoNovas = [];
   const chavesEmAndamentoMarcar = [];
   if(_moduloAtivo === 'fast'){
-    const emAndamento = rows.filter(r => {
-      const aa = (r.analista_auto||'').trim().toLowerCase();
-      return aa.includes('aguardar') && aa.includes('patec') && aa.includes('finalizado');
-    });
+    const emAndamento = rows.filter(r => _classificarStatusMapa(r.analista_auto) === 'Andamento');
     emAndamento.forEach(r => {
       const chave = govChave(r);
       if(!_govDados[chave]){
@@ -20622,6 +20683,15 @@ async function prodConfirmarAcao(){
   // Capturar RC antes de montar o registro
   const _rcChavePre  = (_prodCtx.rcChaves||[_prodCtx.rcChave]||[]).filter(Boolean)[0] || '';
   const _rcNumPre    = _rcChavePre ? _rcChavePre.split('|')[0] : (_prodCtx.rcBusca||'');
+  // FAST: captura o Status Mapa (Finalizado/Andamento) que essa RC tinha no
+  // momento da ação — necessário pro contador de cobrança por etapa, que
+  // separa "quantas vezes cobrei enquanto Finalizado" de "...enquanto Em
+  // Andamento".
+  let _statusMapaAcao = '';
+  if(_moduloAtivo === 'fast' && _rcChavePre){
+    const _rRadar = (_radarDados||[]).find(rr => govChave(rr) === _rcChavePre);
+    if(_rRadar) _statusMapaAcao = _classificarStatusMapa(_rRadar.analista_auto);
+  }
   const registro = {
     colab,
     data: hoje,
@@ -20632,7 +20702,8 @@ async function prodConfirmarAcao(){
     origem: _prodCtx.origem,
     ts: new Date().toISOString(),
     ...(_rcChavePre ? { rcChave: _rcChavePre, rc: _rcNumPre } : (_rcNumPre ? { rc: _rcNumPre } : {})),
-    ...(_devVis ? { centro: _devCentro, motivo: _devMotivo } : {})
+    ...(_devVis ? { centro: _devCentro, motivo: _devMotivo } : {}),
+    ...(_statusMapaAcao ? { statusMapa: _statusMapaAcao } : {})
   };
 
   // Salvar no Firebase
