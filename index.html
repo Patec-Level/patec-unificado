@@ -14155,8 +14155,12 @@ function govRenderMapa(dados, tbodyId){
   if(thStatusMapa) thStatusMapa.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
 
   if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
-    const valoresUnicos = [...new Set(dados.map(r => (r.analista_auto||'').trim()).filter(Boolean))];
-    console.log('[Status Mapa] Valores únicos de analista_auto encontrados:', valoresUnicos);
+    // Diagnóstico: mostra os valores de TODO o _radarDados (bruto), não só
+    // dos que já passaram pelo filtro — pra saber se "Aguardar PATEC ser
+    // Finalizado" existe nos dados crus ou se nem está sendo lido da planilha.
+    const todosValores = [...new Set((_radarDados||[]).map(r => (r.analista_auto||'').trim()).filter(Boolean))];
+    console.log('[Status Mapa] TODOS os valores únicos de analista_auto (dado bruto, '+(_radarDados||[]).length+' linhas):', todosValores);
+    console.log('[Status Mapa] Quantos passaram no filtro da tabela:', dados.length);
   }
 
   tbody.innerHTML = dados.map((r, idx) => {
