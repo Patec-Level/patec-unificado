@@ -14082,8 +14082,8 @@ async function govInicializar(){
     await fbCarregarRadar();
     await new Promise(r=>setTimeout(r,200));
   }
-  // Filtro obrigatório: STATUS MAPA = 'Analisar PATEC Finalizado'
-  const dados = (_radarDados || []).filter(r => (r.analista_auto||'').trim() === 'Analisar PATEC Finalizado');
+  // Lista padrão do MAPA — module-aware (ver govFiltroMapaPadrao)
+  const dados = govFiltroMapaPadrao();
   if(!dados.length){
     document.getElementById('gov-sem-dados').style.display = 'block';
     document.getElementById('gov-mapa-wrap').style.display = 'none';
@@ -14420,7 +14420,7 @@ async function govExportar(){
   const dt = new Date().toLocaleDateString('pt-BR').split('/').join('-');
 
   // ── Aba MAPA ──
-  const dadosMapa = (_radarDados || []).filter(r => (r.analista_auto||'').trim() === 'Analisar PATEC Finalizado');
+  const dadosMapa = govFiltroMapaPadrao();
   const wsMapa = [['Analista','Fila Level Board','Validade Proposta','Idas Mercado','SLA','RC','Item RC','Oportunidade','Item OP','Status Tratamento','Envio','Prazo Retorno','Status','Finalizado','Comentário']];
   dadosMapa.forEach(r => {
     const chave = govChave(r);
