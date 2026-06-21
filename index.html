@@ -20153,8 +20153,13 @@ function prodAbrirModalRC(chave, tipo){
 }
 
 function prodAbrirModal(origem, tipo){
-  // Identificar colaborador — ADM = André
-  const colab = _authPerfil?.colabNome || colabLogado || (_authPerfil?.perfil==='adm' ? 'André' : null);
+  // Identificar colaborador — ADM geral = André. Admin do FAST: usa
+  // colabNome se tiver sido preenchido no cadastro; senão, cai pro nome
+  // dela mesma (evita travar pedindo "faça login" pra quem já está
+  // logada de verdade, só porque esqueceram de preencher colabNome).
+  const colab = _authPerfil?.colabNome || colabLogado ||
+    (_authPerfil?.perfil==='adm' ? 'André' : null) ||
+    (_authPerfil?.perfil==='adm_fast' ? (_authPerfil?.nome || null) : null);
   if(!colab){
     alert('Faça login para registrar produção.');
     return;
