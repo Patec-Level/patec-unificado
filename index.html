@@ -14975,7 +14975,7 @@ function govBuscarRC(rc){
       if(!statusDefault && GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase()))) statusDefault = 'AG. TRATAMENTO';
       const prazo = govCalcPrazo(statusDefault, m.envio||'');
       const status = govCalcStatus(prazo, m.finalizado||'');
-      resultados.push({aba:'MAPA', chave, analista:r.analista||'—', rc:r.rc, seq:r.seq, op:r.num_oport, item:r.item_rc,
+      resultados.push({aba:'MAPA', abaLabel:'⏳ Em Andamento', chave, analista:r.analista||'—', rc:r.rc, seq:r.seq, op:r.num_oport, item:r.item_rc,
         status: statusDefault, envio:m.envio||'', prazo:prazo||'—', statusCalc:status, finalizado:m.finalizado||'',
         sla:r.sla||'—', fila:r.fila||'—', seguimento:r.seguimento||'—', cat_familia:r.cat_familia||'—', familia:r.familia||'—', tipo_familia:r.tipo_familia||'—', familia_lq:r.familia_lq||'—'});
     });
@@ -15035,7 +15035,7 @@ function govBuscarRC(rc){
       <tbody>
         ${resultados.map((r,i)=>`
         <tr>
-          <td style="font-weight:700;color:var(--azm)">${r.aba}</td>
+          <td style="font-weight:700;color:var(--azm)">${r.abaLabel || r.aba}</td>
           <td style="font-size:11px;min-width:90px">
             <select style="font-size:11px;padding:2px 4px;width:100%"
               onchange="govBuscaSalvar('${r.aba}','${r.chave}','analista',this.value)">
