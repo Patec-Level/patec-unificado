@@ -13846,6 +13846,7 @@ function pcBuscarRCDetalhe(rc){
           const chaveId = chave.replace(/[|]/g,'_');
           const analistasOptsSel = _govAnalistasOpts.replace(`value="${r.analista||''}"`,`value="${r.analista||''}" selected`);
           const optsStatusSel = GOV_STATUS_OPCOES.map(o=>`<option value="${o}" ${statusAtual===o?'selected':''}>${o}</option>`).join('');
+          const btnAgParecer = (_moduloAtivo==='fast') ? '<button onclick="prodAbrirModalRCTratamento(\''+chave+'\',\'em_tratativa\',\'Parecerista\')" style="background:#F3E8FF;border:1.5px solid #7C3AED;border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:#7C3AED;white-space:nowrap">📝 Ag Parecer</button>' : '';
           return `
         <tr>
           <td style="font-weight:700;color:${r._abaCor}">${r._abaLabel}</td>
@@ -13891,7 +13892,7 @@ function pcBuscarRCDetalhe(rc){
           <td colspan="12" style="padding:5px 8px 8px 8px">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
               <span style="font-size:10px;font-weight:700;color:var(--tx2);margin-right:2px">Registrar ação:</span>
-              ${_moduloAtivo==='fast' ? `<button onclick="prodAbrirModalRCTratamento('${chave}','em_tratativa','Parecerista')" style="background:#F3E8FF;border:1.5px solid #7C3AED;border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:#7C3AED;white-space:nowrap" onmouseover="this.style.background='#7C3AED';this.style.color='#fff'" onmouseout="this.style.background='#F3E8FF';this.style.color='#7C3AED'">📝 Ag Parecer</button>` : ''}
+              ${btnAgParecer}
               <button onclick="prodAbrirModalRC('${chave}','primeira_analise')"
                 style="background:var(--azc);border:1.5px solid var(--azm);border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:var(--azm);white-space:nowrap"
                 onmouseover="this.style.background='var(--azm)';this.style.color='#fff'"
@@ -15028,10 +15029,8 @@ function govBuscarRC(rc){
       sla:r.sla||'—', fila:r.fila||'—', seguimento:r.seguimento||'—', cat_familia:r.cat_familia||'—', familia:r.familia||'—', tipo_familia:r.tipo_familia||'—', familia_lq:r.familia_lq||'—'});
   });
 
-  // PATEC EM ANDAMENTO (exclusiva do ADLV) — mesma aba ('MAPA') pra usar a
-  // mesma estrutura de dados (_govDados) e ganhar o mesmo tratamento de
-  // edição, comentário e "Registrar ação" que o MAPA já tem.
-  if(_moduloAtivo !== 'fast'){
+  // PATEC EM ANDAMENTO — disponível no ADLV e no FAST
+  {
     const dadosAndamento = (_radarDados||[]).filter(r => {
       const aa = (r.analista_auto||'').trim().toLowerCase();
       return aa.includes('aguardar') && aa.includes('patec') && aa.includes('finalizado');
