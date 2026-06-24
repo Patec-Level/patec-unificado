@@ -3895,6 +3895,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Prazo Retorno</th>
                 <th>Status</th>
                 <th>Ações</th>
+                <th id="gov-th-cobranca-and" style="display:none">Histórico de Cobrança</th>
                 <th>Finalizado</th>
                 <th>Validade Proposta</th>
                 <th>Idas Mercado</th>
@@ -13797,19 +13798,22 @@ function pcBuscarRCDetalhe(rc){
   const rcBusca = (rc||'').trim();
   if(!rcBusca || rcBusca.length < 5){ el.style.display='none'; el.innerHTML=''; return; }
 
-  // Busca nos dados MAPA, 100% Reprovados e Cancelados
-  const dadosMapa   = govFiltroMapaPadrao();
-  const dadosReprov = (_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='PATEC Finalizado sem fornecedores aprovados');
-  const dadosCancel = (_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='Analisar PATEC Cancelado');
-  const resultadosMapa   = dadosMapa.filter(r=>(r.rc||'').includes(rcBusca));
-  const resultadosReprov = dadosReprov.filter(r=>(r.rc||'').includes(rcBusca));
-  const resultadosCancel = dadosCancel.filter(r=>(r.rc||'').includes(rcBusca));
+  // Busca nos dados MAPA, PATEC em Andamento, 100% Reprovados e Cancelados
+  const dadosMapa     = govFiltroMapaPadrao();
+  const dadosAndamento = (_moduloAtivo === 'fast') ? (_radarDados||[]).filter(r => _classificarStatusMapa(r.analista_auto) === 'Andamento') : [];
+  const dadosReprov   = (_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='PATEC Finalizado sem fornecedores aprovados');
+  const dadosCancel   = (_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='Analisar PATEC Cancelado');
+  const resultadosMapa      = dadosMapa.filter(r=>(r.rc||'').includes(rcBusca));
+  const resultadosAndamento = dadosAndamento.filter(r=>(r.rc||'').includes(rcBusca));
+  const resultadosReprov    = dadosReprov.filter(r=>(r.rc||'').includes(rcBusca));
+  const resultadosCancel    = dadosCancel.filter(r=>(r.rc||'').includes(rcBusca));
 
   // Montar resultados no mesmo formato usado pela tabela da Governança
   const resultados = [
-    ...resultadosMapa.map(r => ({ ...r, _abaLabel:'MAPA',        _abaCor:'var(--azm)' })),
-    ...resultadosReprov.map(r => ({ ...r, _abaLabel:'100% REPROV.', _abaCor:'var(--vm)' })),
-    ...resultadosCancel.map(r => ({ ...r, _abaLabel:'CANCELADO',  _abaCor:'var(--am)' })),
+    ...resultadosMapa.map(r => ({ ...r, _abaLabel:'MAPA',              _abaCor:'var(--azm)' })),
+    ...resultadosAndamento.map(r => ({ ...r, _abaLabel:'PATEC ANDAMENTO', _abaCor:'var(--am)' })),
+    ...resultadosReprov.map(r => ({ ...r, _abaLabel:'100% REPROV.',     _abaCor:'var(--vm)' })),
+    ...resultadosCancel.map(r => ({ ...r, _abaLabel:'CANCELADO',        _abaCor:'var(--am)' })),
   ];
 
   if(!resultados.length){
@@ -13887,7 +13891,7 @@ function pcBuscarRCDetalhe(rc){
           <td colspan="12" style="padding:5px 8px 8px 8px">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
               <span style="font-size:10px;font-weight:700;color:var(--tx2);margin-right:2px">Registrar ação:</span>
-              ${_moduloAtivo==='fast' ? '<button onclick="prodAbrirModalRCTratamento(\''+chave+'\',\'em_tratativa\',\'Parecerista\')" style="background:#F3E8FF;border:1.5px solid #7C3AED;border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:#7C3AED;white-space:nowrap" onmouseover="this.style.background=\'#7C3AED\';this.style.color=\'#fff\'" onmouseout="this.style.background=\'#F3E8FF\';this.style.color=\'#7C3AED\'">📝 Ag Parecer</button>' : ''}
+              ${_moduloAtivo==='fast' ? `<button onclick="prodAbrirModalRCTratamento('${chave}','em_tratativa','Parecerista')" style="background:#F3E8FF;border:1.5px solid #7C3AED;border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:#7C3AED;white-space:nowrap" onmouseover="this.style.background='#7C3AED';this.style.color='#fff'" onmouseout="this.style.background='#F3E8FF';this.style.color='#7C3AED'">📝 Ag Parecer</button>` : ''}
               <button onclick="prodAbrirModalRC('${chave}','primeira_analise')"
                 style="background:var(--azc);border:1.5px solid var(--azm);border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:var(--azm);white-space:nowrap"
                 onmouseover="this.style.background='var(--azm)';this.style.color='#fff'"
@@ -14325,7 +14329,9 @@ function govRenderMapa(dados, tbodyId){
   const thStatusMapa = document.getElementById('gov-th-status-mapa');
   if(thStatusMapa) thStatusMapa.style.display = 'none';
   const thCobranca = document.getElementById('gov-th-cobranca');
-  if(thCobranca) thCobranca.style.display = (_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody') ? '' : 'none';
+  if(thCobranca) thCobranca.style.display = isFast ? '' : 'none';
+  const thCobrancaAnd = document.getElementById('gov-th-cobranca-and');
+  if(thCobrancaAnd) thCobrancaAnd.style.display = isFast ? '' : 'none';
 
   // Colunas NM, Tipo Avaliação, Grupo Mercadoria, Centro — exclusivas do FAST
   const isFast = _moduloAtivo === 'fast';
@@ -14370,12 +14376,10 @@ function govRenderMapa(dados, tbodyId){
       return '';
     };
 
-    // Coluna "Histórico de Cobrança" — exclusiva do FAST. Lista cada vez
-    // que o Status de Tratamento foi alterado pra essa RC (data + etapa),
-    // ex: "01.01.26 - Fornecedor, 04.01.26 - Fornecedor" — usado pra
-    // acompanhar a regra de devolução por cobrança repetida.
+    // Coluna "Histórico de Cobrança" — exclusiva do FAST. Aparece nas abas
+    // PATEC Finalizado e PATEC em Andamento.
     let tdCobranca = '';
-    if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
+    if(isFast){
       const acoesRC = _buscarAcoesRC(r.rc).filter(a => a.tratamento);
       if(acoesRC.length){
         tdCobranca = `<td style="text-align:center"><button onclick="abrirHistoricoCobranca('${r.rc||''}')" title="Ver histórico de cobrança" style="background:var(--amc);border:1.5px solid var(--am);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:var(--am);white-space:nowrap">💰 Cobrança (${acoesRC.length})</button></td>`;
