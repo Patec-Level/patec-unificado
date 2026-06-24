@@ -9924,6 +9924,13 @@ async function radarOnFile(file){
     const wb=XLSX.read(buf,{type:'array',cellDates:false});
     const ws=wb.Sheets[wb.SheetNames[0]];
     const raw=XLSX.utils.sheet_to_json(ws,{defval:''});
+    // Leitura com header:1 para pegar nomes brutos e índices posicionais
+    const rawH1=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    const headers1 = rawH1[0] || [];
+    // Índices posicionais das colunas W=22 e X=23 (0-based) como fallback
+    const _iNM       = headers1.findIndex((h,i) => i===22 || String(h).trim()==='NM');
+    const _iTipoAval = headers1.findIndex((h,i) => i===23 || String(h).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().includes('TIPO') && String(h).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().includes('AVAL'));
+    console.log('[RADAR] header W(NM):', headers1[22], '| header X(TipoAval):', headers1[23]);
     if(msgEl) msgEl.textContent='Processando '+raw.length+' registros...';
 
     // DEBUG: mostrar nomes EXATOS das colunas da planilha para identificar a coluna de urgência corretamente
@@ -9979,17 +9986,20 @@ async function radarOnFile(file){
       })(),
       centro:        String(r['CENTRO']||r['Centro']||r['centro']||'').trim(),
       nm:            (()=>{
-        // Busca resiliente — qualquer coluna cujo nome seja exatamente "NM" ou contenha "NM MATERIAL"
         const k = Object.keys(r).find(k => k.trim() === 'NM' || k.trim().toUpperCase() === 'NM MATERIAL' || k.trim().toUpperCase() === 'NM_MATERIAL');
-        const v = k ? String(r[k]||'').trim() : '';
+        // Fallback posicional: coluna W = índice 22 no header1
+        const rowIdx = raw.indexOf(r);
+        const vPos = (!k && _iNM >= 0 && rawH1[rowIdx+1]) ? String(rawH1[rowIdx+1][_iNM]||'').trim() : '';
+        const v = k ? String(r[k]||'').trim() : vPos;
         return v.endsWith('.0') ? v.slice(0,-2) : v;
       })(),
       tipo_aval:     (()=>{
-        // Busca resiliente — coluna cujo nome contenha "TIPO" e "AVAL" (cobre "Tipo de avalição",
-        // "Tipo de avaliação", "TIPO AVALIACAO", variantes com/sem acento)
         const norm = s => s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
         const k = Object.keys(r).find(k => { const n = norm(k); return n.includes('TIPO') && n.includes('AVAL'); });
-        return k ? String(r[k]||'').trim() : '';
+        // Fallback posicional: coluna X = índice 23 no header1
+        const rowIdx = raw.indexOf(r);
+        const vPos = (!k && _iTipoAval >= 0 && rawH1[rowIdx+1]) ? String(rawH1[rowIdx+1][_iTipoAval]||'').trim() : '';
+        return k ? String(r[k]||'').trim() : vPos;
       })(),
       grupo_merc:    (()=>{
         // Busca resiliente — qualquer coluna cujo nome contenha "MERC" (cobre GRUPO_MERCADORIAS, etc.)
