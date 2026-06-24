@@ -3849,10 +3849,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th id="gov-th-status-mapa" style="display:none">Status Mapa</th>
                 <th>Fila Level Board</th>
                 <th>SLA</th>
-                <th>NM</th>
-                <th>Tipo Avaliação</th>
-                <th>Grupo Mercadoria</th>
-                <th>Centro</th>
                 <th>RC</th>
                 <th>Item RC</th>
                 <th>Oportunidade</th>
@@ -3866,6 +3862,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Finalizado</th>
                 <th>Validade Proposta</th>
                 <th>Idas Mercado</th>
+                <th id="gov-th-nm" style="display:none">NM</th>
+                <th id="gov-th-tipo-aval" style="display:none">Tipo Avaliação</th>
+                <th id="gov-th-grupo-merc" style="display:none">Grupo Mercadoria</th>
+                <th id="gov-th-centro-fast" style="display:none">Centro</th>
               </tr>
             </thead>
             <tbody id="gov-mapa-tbody"></tbody>
@@ -3886,10 +3886,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Analista</th>
                 <th>Fila Level Board</th>
                 <th>SLA</th>
-                <th>NM</th>
-                <th>Tipo Avaliação</th>
-                <th>Grupo Mercadoria</th>
-                <th>Centro</th>
                 <th>RC</th>
                 <th>Item RC</th>
                 <th>Oportunidade</th>
@@ -3902,6 +3898,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Finalizado</th>
                 <th>Validade Proposta</th>
                 <th>Idas Mercado</th>
+                <th id="gov-th-nm-and" style="display:none">NM</th>
+                <th id="gov-th-tipo-aval-and" style="display:none">Tipo Avaliação</th>
+                <th id="gov-th-grupo-merc-and" style="display:none">Grupo Mercadoria</th>
+                <th id="gov-th-centro-fast-and" style="display:none">Centro</th>
               </tr>
             </thead>
             <tbody id="gov-andamento-tbody"></tbody>
@@ -9931,6 +9931,10 @@ async function radarOnFile(file){
       console.log('[RADAR] Colunas exatas da planilha:', Object.keys(raw[0]));
       const colUrg = Object.keys(raw[0]).find(k => k.toUpperCase().includes('URGEN'));
       console.log('[RADAR] Coluna de urgência encontrada:', colUrg, '| valor exemplo:', colUrg ? raw[0][colUrg] : 'NÃO ENCONTRADA');
+      const colNM   = Object.keys(raw[0]).find(k => k.trim() === 'NM' || k.trim().toUpperCase() === 'NM MATERIAL');
+      const colAval = Object.keys(raw[0]).find(k => k.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('AVAL'));
+      const colMerc = Object.keys(raw[0]).find(k => k.toUpperCase().includes('MERC'));
+      console.log('[RADAR] NM:', colNM||'NÃO ENCONTRADA', '| Tipo Aval:', colAval||'NÃO ENCONTRADA', '| Grupo Merc:', colMerc||'NÃO ENCONTRADA');
     }
 
     const rows=raw.filter(r=>r['RC']&&r['RC']!=='RC').map(r=>({
@@ -9974,9 +9978,24 @@ async function radarOnFile(file){
         return ''; // #N/A, vazio — não conta nem como Sim nem como Não
       })(),
       centro:        String(r['CENTRO']||r['Centro']||r['centro']||'').trim(),
-      nm:            (()=>{ const v=String(r['NM']||r['NM MATERIAL']||r['NM_MATERIAL']||'').trim(); return v.endsWith('.0')?v.slice(0,-2):v; })(),
-      tipo_aval:     String(r['Tipo de avalição']||r['Tipo de avaliação']||r['Tipo de Avaliação']||r['TIPO DE AVALIACAO']||r['TIPO DE AVALIAÇÃO']||r['tipo de avaliação']||r['Tipo avaliação']||'').trim(),
-      grupo_merc:    String(r['GRUPO_MERCADORIAS']||r['GRUPO MERCADORIAS']||r['Grupo Mercadorias']||r['Grupo de Mercadorias']||r['grupo_mercadorias']||'').trim(),
+      nm:            (()=>{
+        // Busca resiliente — qualquer coluna cujo nome seja exatamente "NM" ou contenha "NM MATERIAL"
+        const k = Object.keys(r).find(k => k.trim() === 'NM' || k.trim().toUpperCase() === 'NM MATERIAL' || k.trim().toUpperCase() === 'NM_MATERIAL');
+        const v = k ? String(r[k]||'').trim() : '';
+        return v.endsWith('.0') ? v.slice(0,-2) : v;
+      })(),
+      tipo_aval:     (()=>{
+        // Busca resiliente — coluna cujo nome contenha "TIPO" e "AVAL" (cobre "Tipo de avalição",
+        // "Tipo de avaliação", "TIPO AVALIACAO", variantes com/sem acento)
+        const norm = s => s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+        const k = Object.keys(r).find(k => { const n = norm(k); return n.includes('TIPO') && n.includes('AVAL'); });
+        return k ? String(r[k]||'').trim() : '';
+      })(),
+      grupo_merc:    (()=>{
+        // Busca resiliente — qualquer coluna cujo nome contenha "MERC" (cobre GRUPO_MERCADORIAS, etc.)
+        const k = Object.keys(r).find(k => k.toUpperCase().includes('MERC'));
+        return k ? String(r[k]||'').trim() : '';
+      })(),
       urgencia:      (()=>{
         // Busca resiliente: qualquer coluna cujo nome contenha "URGEN" (cobre URGENCIA, URGÊNCIA,
         // Urgencia, URGENCIA_NECESSIDADE, etc.) — não depende do nome exato da coluna
@@ -14291,6 +14310,14 @@ function govRenderMapa(dados, tbodyId){
   const thCobranca = document.getElementById('gov-th-cobranca');
   if(thCobranca) thCobranca.style.display = (_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody') ? '' : 'none';
 
+  // Colunas NM, Tipo Avaliação, Grupo Mercadoria, Centro — exclusivas do FAST
+  const isFast = _moduloAtivo === 'fast';
+  const suffix = tbodyId === 'gov-mapa-tbody' ? '' : '-and';
+  ['gov-th-nm','gov-th-tipo-aval','gov-th-grupo-merc','gov-th-centro-fast'].forEach(id => {
+    const th = document.getElementById(id + suffix);
+    if(th) th.style.display = isFast ? '' : 'none';
+  });
+
   if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
     // Diagnóstico: mostra os valores de TODO o _radarDados (bruto), não só
     // dos que já passaram pelo filtro — pra saber se "Aguardar PATEC ser
@@ -14344,13 +14371,9 @@ function govRenderMapa(dados, tbodyId){
       <td style="font-size:11px">${r.analista||'—'}</td>
       <td style="font-size:11px">${r.fila||'—'}</td>
       <td style="text-align:center">${r.sla||'—'}</td>
-      <td style="font-size:11px;text-align:center">${r.nm||'—'}</td>
-      <td style="font-size:11px">${r.tipo_aval||'—'}</td>
-      <td style="font-size:11px">${r.grupo_merc||'—'}</td>
-      <td style="font-size:11px;text-align:center">${r.centro||'—'}</td>
       <td style="font-weight:700;color:var(--az)">${r.rc||'—'}</td>
       <td style="font-size:11px">${r.item_rc||'—'}</td>
-      <td style="font-size:11px">${r.num_opart||r.num_oport||'—'}</td>
+      <td style="font-size:11px">${r.num_oport||'—'}</td>
       <td style="font-size:11px">${r.seq||'—'}</td>
       <td style="font-size:11px">${statusAtual||'—'}</td>
       <td style="font-size:11px">${envio?fmtBR(envio):'—'}</td>
@@ -14361,6 +14384,12 @@ function govRenderMapa(dados, tbodyId){
       <td style="font-size:11px">${finalizado?fmtBR(finalizado):'—'}</td>
       <td style="font-size:11px;${corVal(r.validade)}">${r.validade||'—'}</td>
       <td style="text-align:center">${r.idas||'—'}</td>
+      ${isFast ? `
+      <td style="font-size:11px;text-align:center">${r.nm||'—'}</td>
+      <td style="font-size:11px">${r.tipo_aval||'—'}</td>
+      <td style="font-size:11px">${r.grupo_merc||'—'}</td>
+      <td style="font-size:11px;text-align:center">${r.centro||'—'}</td>
+      ` : ''}
     </tr>`;
   }).join('');
 }
