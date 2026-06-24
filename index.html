@@ -14326,6 +14326,7 @@ function govRenderMapa(dados, tbodyId){
 
   // "Status Mapa" removido — MAPA e PATEC em Andamento agora são abas separadas,
   // não há mais necessidade de distinguir o status dentro da tabela.
+  const isFast = _moduloAtivo === 'fast';
   const thStatusMapa = document.getElementById('gov-th-status-mapa');
   if(thStatusMapa) thStatusMapa.style.display = 'none';
   const thCobranca = document.getElementById('gov-th-cobranca');
@@ -14334,7 +14335,6 @@ function govRenderMapa(dados, tbodyId){
   if(thCobrancaAnd) thCobrancaAnd.style.display = isFast ? '' : 'none';
 
   // Colunas NM, Tipo Avaliação, Grupo Mercadoria, Centro — exclusivas do FAST
-  const isFast = _moduloAtivo === 'fast';
   const suffix = tbodyId === 'gov-mapa-tbody' ? '' : '-and';
   ['gov-th-nm','gov-th-tipo-aval','gov-th-grupo-merc','gov-th-centro-fast'].forEach(id => {
     const th = document.getElementById(id + suffix);
