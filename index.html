@@ -10002,9 +10002,14 @@ async function radarOnFile(file){
         return k ? String(r[k]||'').trim() : vPos;
       })(),
       grupo_merc:    (()=>{
-        // Busca resiliente — qualquer coluna cujo nome contenha "MERC" (cobre GRUPO_MERCADORIAS, etc.)
-        const k = Object.keys(r).find(k => k.toUpperCase().includes('MERC'));
-        return k ? String(r[k]||'').trim() : '';
+        // Busca resiliente — coluna cujo nome contenha "GRUPO" e "MERC" juntos
+        // (evita pegar "Idas ao mercado" que também contém "MERC")
+        const norm = s => s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+        const k = Object.keys(r).find(k => { const n = norm(k); return n.includes('GRUPO') && n.includes('MERC'); });
+        // Fallback posicional: coluna T = índice 19
+        const rowIdx = raw.indexOf(r);
+        const vPos = (!k && rawH1[rowIdx+1]) ? String(rawH1[rowIdx+1][19]||'').trim() : '';
+        return k ? String(r[k]||'').trim() : vPos;
       })(),
       urgencia:      (()=>{
         // Busca resiliente: qualquer coluna cujo nome contenha "URGEN" (cobre URGENCIA, URGÊNCIA,
