@@ -14284,10 +14284,10 @@ function govRenderMapa(dados, tbodyId){
   const tbody = document.getElementById(tbodyId);
   if(!tbody) return;
 
-  // Cabeçalho "Status Mapa" e "Histórico de Cobrança" só aparecem no FAST
-  // (só existem na tabela MAPA)
+  // "Status Mapa" removido — MAPA e PATEC em Andamento agora são abas separadas,
+  // não há mais necessidade de distinguir o status dentro da tabela.
   const thStatusMapa = document.getElementById('gov-th-status-mapa');
-  if(thStatusMapa) thStatusMapa.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
+  if(thStatusMapa) thStatusMapa.style.display = 'none';
   const thCobranca = document.getElementById('gov-th-cobranca');
   if(thCobranca) thCobranca.style.display = (_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody') ? '' : 'none';
 
@@ -14326,20 +14326,6 @@ function govRenderMapa(dados, tbodyId){
       return '';
     };
 
-    // Coluna "Status Mapa" — exclusiva do FAST, e só na tabela MAPA (a aba
-    // "PATEC em Andamento" do ADLV já é, por definição, só desse status).
-    // Vem do analista_auto do Radar Estratégico (coluna "STATUS MAPA" da
-    // planilha): "Analisar PATEC Finalizado" → "PATEC Finalizado";
-    // "Aguardar PATEC ser Finalizado" → "PATEC Em Andamento". Comparação
-    // por palavra-chave (sem diferenciar maiúscula/minúscula) pra não
-    // depender de bater a frase exata.
-    let tdStatusMapa = '';
-    if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
-      const cls = _classificarStatusMapa(r.analista_auto);
-      const statusMapaTxt = cls === 'Finalizado' ? 'PATEC Finalizado' : cls === 'Andamento' ? 'PATEC Em Andamento' : '—';
-      tdStatusMapa = `<td style="font-size:11px">${statusMapaTxt}</td>`;
-    }
-
     // Coluna "Histórico de Cobrança" — exclusiva do FAST. Lista cada vez
     // que o Status de Tratamento foi alterado pra essa RC (data + etapa),
     // ex: "01.01.26 - Fornecedor, 04.01.26 - Fornecedor" — usado pra
@@ -14356,7 +14342,6 @@ function govRenderMapa(dados, tbodyId){
 
     return `<tr id="${tbodyId}-row-${idx}">
       <td style="font-size:11px">${r.analista||'—'}</td>
-      ${tdStatusMapa}
       <td style="font-size:11px">${r.fila||'—'}</td>
       <td style="text-align:center">${r.sla||'—'}</td>
       <td style="font-weight:700;color:var(--az)">${r.rc||'—'}</td>
