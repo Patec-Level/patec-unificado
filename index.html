@@ -13903,6 +13903,10 @@ function pcBuscarRCDetalhe(rc){
                 style="background:var(--amc);border:1.5px solid var(--am);border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:var(--am);white-space:nowrap"
                 onmouseover="this.style.background='var(--am)';this.style.color='#fff'"
                 onmouseout="this.style.background='var(--amc)';this.style.color='var(--am)'">📋 Outros</button>
+              ${_moduloAtivo==='fast'?`<button onclick="prodAbrirModalRCTratamento('${chave}','em_tratativa','Parecerista')"
+                style="background:#F3E8FF;border:1.5px solid #7C3AED;border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:#7C3AED;white-space:nowrap"
+                onmouseover="this.style.background='#7C3AED';this.style.color='#fff'"
+                onmouseout="this.style.background='#F3E8FF';this.style.color='#7C3AED'">📝 Ag Parecer</button>`:''}
             </div>
           </td>
         </tr>
@@ -14146,6 +14150,7 @@ const GOV_PRAZOS_ADLV = {
 // substring de "MDG EQUIPE SCOMP" — testar MDG primeiro bateria errado).
 const GOV_PRAZOS_FAST = {
   'MDG EQUIPE SCOMP': 10,
+  'PARECERISTA': 5,
   'FORNECEDOR': 2,
   'MDG': 4,
   'REQUISITANTE': 5,
@@ -14157,7 +14162,7 @@ const GOV_STATUS_OPCOES_ADLV = [
   'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','VALIDAÇÃO DO THIAGO'
 ];
 const GOV_STATUS_OPCOES_FAST = [
-  'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','MDG EQUIPE SCOMP'
+  'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','MDG EQUIPE SCOMP','PARECERISTA'
 ];
 let GOV_STATUS_OPCOES = [
   'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','VALIDAÇÃO DO THIAGO'
@@ -18842,6 +18847,11 @@ function q18Consultar(valor){
           <div style="font-size:20px;margin-bottom:4px">🗂</div>
           <div style="font-size:12px;font-weight:600;color:var(--tx)">MDG Equipe SCOMP</div>
         </button>
+        <button class="acao-sel-btn" id="acao-btn-parecerista" onclick="acaoSelecionarTratamento(this,'Parecerista')"
+          style="display:none;background:var(--cin);border:1.5px solid var(--brd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;transition:all .18s">
+          <div style="font-size:20px;margin-bottom:4px">📝</div>
+          <div style="font-size:12px;font-weight:600;color:var(--tx)">Parecerista</div>
+        </button>
         <button class="acao-sel-btn" onclick="acaoSelecionarTratamento(this,'Concluído')"
           style="background:var(--vdc);border:1.5px solid var(--vd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;grid-column:span 2;transition:all .18s">
           <div style="font-size:20px;margin-bottom:4px">🏁</div>
@@ -19278,7 +19288,7 @@ function _entrarNoApp(){
     if(btnAdlv) btnAdlv.style.display = (_moduloAtivo==='fast') ? 'none' : '';
   });
   // "MDG Equipe SCOMP" é exclusivo do FAST
-  ['acao-btn-mdg-scomp'].forEach(id=>{
+  ['acao-btn-mdg-scomp','acao-btn-parecerista'].forEach(id=>{
     const btnFast = document.getElementById(id);
     if(btnFast) btnFast.style.display = (_moduloAtivo==='fast') ? '' : 'none';
   });
@@ -20598,6 +20608,16 @@ function pcAbrirModalComRC(tipo){
   if(_allChaves.length > 1) _prodCtx.rcChaves = _allChaves;
 }
 
+// Atalho: abre modal já pré-selecionando um tratamento específico (ex: Parecerista)
+function prodAbrirModalRCTratamento(chave, tipo, tratamento){
+  prodAbrirModalRC(chave, tipo);
+  // Aguardar render do modal e pré-selecionar o botão de tratamento
+  setTimeout(()=>{
+    const btn = [...document.querySelectorAll('.acao-sel-btn')].find(b => b.textContent.trim().includes(tratamento));
+    if(btn) acaoSelecionarTratamento(btn, tratamento);
+  }, 150);
+}
+
 function prodAbrirModalRC(chave, tipo){
   // Abre modal para RC específica com chave conhecida (MAPA, XGL ou STATUS B)
   const r    = (_radarDados||[]).find(rx=>govChave(rx)===chave);
@@ -20923,6 +20943,8 @@ async function prodConfirmarAcao(){
     'Requisitante':     'REQUISITANTE',
     'MDG':              'MDG',
     'Validação Thiago': 'VALIDAÇÃO DO THIAGO',
+    'MDG Equipe SCOMP': 'MDG EQUIPE SCOMP',
+    'Parecerista':      'PARECERISTA',
     'Concluído':        'Concluído'
   };
   const _tratamentoRaw = _prodCtx.tratamento || '';
