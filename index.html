@@ -14597,21 +14597,45 @@ function govAtualizar(){
 async function govExportar(){
   const wb = XLSX.utils.book_new();
   const dt = new Date().toLocaleDateString('pt-BR').split('/').join('-');
+  const isFast = _moduloAtivo === 'fast';
 
-  // ── Aba MAPA ──
+  // ── Aba MAPA (PATEC Finalizado no FAST) ──
   const dadosMapa = govFiltroMapaPadrao();
-  const wsMapa = [['Analista','Fila Level Board','Validade Proposta','Idas Mercado','SLA','RC','Item RC','Oportunidade','Item OP','Status Tratamento','Envio','Prazo Retorno','Status','Finalizado','Comentário']];
+  const hdMapa = ['Analista','Fila Level Board','SLA','RC','Item RC','Oportunidade','Item OP','Status Tratamento','Envio','Prazo Retorno','Status','Finalizado','Comentário','Validade Proposta','Idas Mercado'];
+  if(isFast) hdMapa.push('NM','Tipo Avaliação','Grupo Mercadoria','Centro');
+  const wsMapa = [hdMapa];
   dadosMapa.forEach(r => {
     const chave = govChave(r);
     const m = _govDados[chave] || {};
     const statusAtual = m.status || (GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase())) ? 'AG. TRATAMENTO' : '');
     const prazo = govCalcPrazo(statusAtual, m.envio||'');
     const statusCalc = govCalcStatus(prazo, m.finalizado||'');
-    wsMapa.push([r.analista,r.fila,r.validade,r.idas,r.sla,r.rc,r.item_rc,r.num_oport,r.seq,statusAtual,m.envio||'',prazo||'',statusCalc,m.finalizado||'',m.comentario||'']);
+    const row = [r.analista,r.fila,r.sla,r.rc,r.item_rc,r.num_oport,r.seq,statusAtual,m.envio||'',prazo||'',statusCalc,m.finalizado||'',m.comentario||'',r.validade,r.idas];
+    if(isFast) row.push(r.nm||'',r.tipo_aval||'',r.grupo_merc||'',r.centro||'');
+    wsMapa.push(row);
   });
   const wsM = XLSX.utils.aoa_to_sheet(wsMapa);
-  wsM['!cols'] = [{wch:14},{wch:18},{wch:14},{wch:8},{wch:6},{wch:12},{wch:8},{wch:14},{wch:8},{wch:20},{wch:12},{wch:12},{wch:16},{wch:12},{wch:30}];
-  XLSX.utils.book_append_sheet(wb, wsM, 'MAPA');
+  const colsM = [{wch:14},{wch:18},{wch:6},{wch:12},{wch:8},{wch:14},{wch:8},{wch:20},{wch:12},{wch:12},{wch:16},{wch:12},{wch:30},{wch:14},{wch:8}];
+  if(isFast) colsM.push({wch:12},{wch:16},{wch:20},{wch:8});
+  wsM['!cols'] = colsM;
+  XLSX.utils.book_append_sheet(wb, wsM, isFast ? 'PATEC Finalizado' : 'MAPA');
+
+  // ── Aba PATEC em Andamento (exclusiva FAST) ──
+  if(isFast){
+    const dadosAnd = (_radarDados||[]).filter(r => _classificarStatusMapa(r.analista_auto) === 'Andamento');
+    const wsAnd = [['Analista','Fila Level Board','SLA','RC','Item RC','Oportunidade','Item OP','Status Tratamento','Envio','Prazo Retorno','Status','Finalizado','Comentário','Validade Proposta','Idas Mercado','NM','Tipo Avaliação','Grupo Mercadoria','Centro']];
+    dadosAnd.forEach(r => {
+      const chave = govChave(r);
+      const m = _govDados[chave] || {};
+      const statusAtual = m.status || (GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase())) ? 'AG. TRATAMENTO' : '');
+      const prazo = govCalcPrazo(statusAtual, m.envio||'');
+      const statusCalc = govCalcStatus(prazo, m.finalizado||'');
+      wsAnd.push([r.analista,r.fila,r.sla,r.rc,r.item_rc,r.num_oport,r.seq,statusAtual,m.envio||'',prazo||'',statusCalc,m.finalizado||'',m.comentario||'',r.validade,r.idas,r.nm||'',r.tipo_aval||'',r.grupo_merc||'',r.centro||'']);
+    });
+    const wsA = XLSX.utils.aoa_to_sheet(wsAnd);
+    wsA['!cols'] = [{wch:14},{wch:18},{wch:6},{wch:12},{wch:8},{wch:14},{wch:8},{wch:20},{wch:12},{wch:12},{wch:16},{wch:12},{wch:30},{wch:14},{wch:8},{wch:12},{wch:16},{wch:20},{wch:8}];
+    XLSX.utils.book_append_sheet(wb, wsA, 'PATEC em Andamento');
+  }
 
   // ── Aba XGL — garantir itens carregados do Firebase ──
   if(!(_xglItens||[]).length){
