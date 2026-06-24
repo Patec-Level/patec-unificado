@@ -14175,12 +14175,7 @@ function govSetTab(aba, btn){
     alert('XGL é exclusivo do ADLV.');
     return;
   }
-  // Aba "PATEC em Andamento" é exclusiva do ADLV — no FAST, esses itens já
-  // aparecem misturados na MAPA com a coluna "Status Mapa"
-  if(aba === 'andamento' && _moduloAtivo === 'fast'){
-    alert('Essa aba é exclusiva do ADLV.');
-    return;
-  }
+  // Aba "PATEC em Andamento" habilitada também no FAST
   _govTabAtiva = aba;
   document.querySelectorAll('.stabs .stab').forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
@@ -14247,12 +14242,13 @@ async function govInicializar(){
   govRenderMapa(dados);
 }
 
-// Lista padrão de itens do MAPA (Governança). No ADLV, continua exatamente
-// como sempre foi: só "Analisar PATEC Finalizado". No FAST, inclui também
-// "Aguardar PATEC ser Finalizado" (distinguidos pela coluna "Status Mapa").
+// Lista padrão de itens do MAPA (Governança). Tanto ADLV quanto FAST mostram
+// apenas "Analisar PATEC Finalizado" nesta aba. Os itens em andamento
+// ("Aguardar PATEC ser Finalizado") ficam na aba "PATEC em Andamento",
+// agora disponível nos dois módulos.
 // Classifica o valor de analista_auto (coluna "STATUS MAPA" do upload do
 // Radar Estratégico) em 'Finalizado' ou 'Andamento' — usado em várias partes
-// do FAST (filtro do MAPA, coluna Status Mapa, contador de cobrança por
+// do sistema (filtro do MAPA, coluna Status Mapa, contador de cobrança por
 // etapa). Comparação por palavra-chave (sem diferenciar maiúscula/
 // minúscula), pra não depender de bater a frase exata. Exige "finalizado"
 // também nos dois casos, pra não confundir com "Analisar PATEC Cancelado".
@@ -14264,11 +14260,10 @@ function _classificarStatusMapa(analistaAuto){
 }
 
 function govFiltroMapaPadrao(){
+  // Tanto ADLV quanto FAST: aba MAPA mostra só itens Finalizado.
+  // Itens em Andamento ficam na aba "PATEC em Andamento" (agora disponível nos dois módulos).
   return (_radarDados||[]).filter(r=>{
     const cls = _classificarStatusMapa(r.analista_auto);
-    if(_moduloAtivo === 'fast'){
-      return cls === 'Finalizado' || cls === 'Andamento';
-    }
     return cls === 'Finalizado';
   });
 }
@@ -14376,7 +14371,6 @@ function govRenderMapa(dados, tbodyId){
 // template de linha da tabela MAPA (govRenderMapa), só muda o filtro e a
 // tabela de destino.
 function govRenderAndamento(){
-  if(_moduloAtivo === 'fast') return; // exclusiva do ADLV
   const dados = (_radarDados||[]).filter(r => _classificarStatusMapa(r.analista_auto) === 'Andamento');
 
   const semDados = document.getElementById('gov-andamento-sem-dados');
@@ -19211,7 +19205,7 @@ function _entrarNoApp(){
   // XGL (Governança), Tirar do Fluxo (Planilha Crítica), PATEC em
   // Andamento (Governança), a opção "XGL" no Concluído e "Validação Thiago"
   // são exclusivas do ADLV
-  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','adm-nav-pa-entradas-btn','gov-nav-xgl-btn','pc-nav-fluxo-btn','gov-nav-andamento-btn','acao-btn-xgl','acao-btn-validacao-thiago'].forEach(id=>{
+  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','adm-nav-pa-entradas-btn','gov-nav-xgl-btn','pc-nav-fluxo-btn','acao-btn-xgl','acao-btn-validacao-thiago'].forEach(id=>{
     const btnAdlv = document.getElementById(id);
     if(btnAdlv) btnAdlv.style.display = (_moduloAtivo==='fast') ? 'none' : '';
   });
@@ -19220,6 +19214,20 @@ function _entrarNoApp(){
     const btnFast = document.getElementById(id);
     if(btnFast) btnFast.style.display = (_moduloAtivo==='fast') ? '' : 'none';
   });
+  // Renomear abas de Governança conforme módulo:
+  // No FAST: MAPA vira "PATEC Finalizado"; "PATEC em Andamento" fica visível com label ajustado
+  // No ADLV: labels originais
+  (function(){
+    const btnMapa = document.querySelector('.stabs .stab[onclick*="govSetTab(\'mapa\'"]');
+    const btnAndamento = document.getElementById('gov-nav-andamento-btn');
+    if(_moduloAtivo === 'fast'){
+      if(btnMapa) btnMapa.textContent = '✅ PATEC Finalizado';
+      if(btnAndamento){ btnAndamento.textContent = '⏳ PATEC em Andamento'; btnAndamento.style.display = ''; }
+    } else {
+      if(btnMapa) btnMapa.textContent = '🗺 MAPA';
+      if(btnAndamento){ btnAndamento.textContent = '⏳ PATEC em Andamento'; btnAndamento.style.display = ''; }
+    }
+  })();
 
   rtIniciarListener();
 
