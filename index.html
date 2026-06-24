@@ -20938,6 +20938,10 @@ async function prodConfirmarAcao(){
     }
   } catch(e){ console.warn('prodConfirmarAcao save:', e); }
 
+  // Atualizar _prodAcoesHoje imediatamente (sem esperar o onSnapshot)
+  if(!window._prodAcoesHoje) window._prodAcoesHoje = [];
+  window._prodAcoesHoje.push(registro);
+
   // Mapear tratamento do modal → valor de GOV_STATUS_OPCOES
   const _TRAT_MAP = {
     'Fornecedor':       'FORNECEDOR',
