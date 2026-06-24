@@ -3849,11 +3849,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th id="gov-th-status-mapa" style="display:none">Status Mapa</th>
                 <th>Fila Level Board</th>
                 <th>SLA</th>
-                <th>RC</th>
                 <th>NM</th>
                 <th>Tipo Avaliação</th>
                 <th>Grupo Mercadoria</th>
                 <th>Centro</th>
+                <th>RC</th>
                 <th>Item RC</th>
                 <th>Oportunidade</th>
                 <th>Item OP</th>
@@ -3886,11 +3886,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Analista</th>
                 <th>Fila Level Board</th>
                 <th>SLA</th>
-                <th>RC</th>
                 <th>NM</th>
                 <th>Tipo Avaliação</th>
                 <th>Grupo Mercadoria</th>
                 <th>Centro</th>
+                <th>RC</th>
                 <th>Item RC</th>
                 <th>Oportunidade</th>
                 <th>Item OP</th>
@@ -9975,7 +9975,7 @@ async function radarOnFile(file){
       })(),
       centro:        String(r['CENTRO']||r['Centro']||r['centro']||'').trim(),
       nm:            (()=>{ const v=String(r['NM']||r['NM MATERIAL']||r['NM_MATERIAL']||'').trim(); return v.endsWith('.0')?v.slice(0,-2):v; })(),
-      tipo_aval:     String(r['Tipo de avaliação']||r['Tipo de Avaliação']||r['TIPO DE AVALIACAO']||r['TIPO DE AVALIAÇÃO']||r['tipo de avaliação']||r['Tipo avaliação']||'').trim(),
+      tipo_aval:     String(r['Tipo de avalição']||r['Tipo de avaliação']||r['Tipo de Avaliação']||r['TIPO DE AVALIACAO']||r['TIPO DE AVALIAÇÃO']||r['tipo de avaliação']||r['Tipo avaliação']||'').trim(),
       grupo_merc:    String(r['GRUPO_MERCADORIAS']||r['GRUPO MERCADORIAS']||r['Grupo Mercadorias']||r['Grupo de Mercadorias']||r['grupo_mercadorias']||'').trim(),
       urgencia:      (()=>{
         // Busca resiliente: qualquer coluna cujo nome contenha "URGEN" (cobre URGENCIA, URGÊNCIA,
@@ -14344,14 +14344,14 @@ function govRenderMapa(dados, tbodyId){
       <td style="font-size:11px">${r.analista||'—'}</td>
       <td style="font-size:11px">${r.fila||'—'}</td>
       <td style="text-align:center">${r.sla||'—'}</td>
-      <td style="font-weight:700;color:var(--az)">${r.rc||'—'}</td>
       <td style="font-size:11px;text-align:center">${r.nm||'—'}</td>
       <td style="font-size:11px">${r.tipo_aval||'—'}</td>
       <td style="font-size:11px">${r.grupo_merc||'—'}</td>
       <td style="font-size:11px;text-align:center">${r.centro||'—'}</td>
-      <td>${r.seq||'—'}</td>
-      <td>${r.num_oport||'—'}</td>
-      <td>${r.item_rc||'—'}</td>
+      <td style="font-weight:700;color:var(--az)">${r.rc||'—'}</td>
+      <td style="font-size:11px">${r.item_rc||'—'}</td>
+      <td style="font-size:11px">${r.num_opart||r.num_oport||'—'}</td>
+      <td style="font-size:11px">${r.seq||'—'}</td>
       <td style="font-size:11px">${statusAtual||'—'}</td>
       <td style="font-size:11px">${envio?fmtBR(envio):'—'}</td>
       <td style="text-align:center;font-size:11px;${prazo?'font-weight:600':'color:var(--tx2)'}">${prazo?fmtBR(prazo):'—'}</td>
