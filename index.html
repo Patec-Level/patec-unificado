@@ -10907,10 +10907,18 @@ async function cicloCarregarAtivo(){
     const cicloFechado = saved && (saved.status==='fechado' || (saved.fim && saved.fim < hoje));
     if(hoje >= CICLO_NOVO_INICIO && (cicloFechado || cicloAntigo)){
       // Ciclo antigo encerrado — ativar o novo automaticamente
-      _cicloAtivo = {...CICLO_MAIJUN};
-      // Salvar no Firebase para próximas cargas
-      try{ await fbSet('config','ciclo_ativo', _cicloAtivo); }catch(e2){}
-      console.log('[Ciclo] Novo ciclo Mai/Jun ativado automaticamente');
+      // CORREÇÃO: só usa o CICLO_MAIJUN padrão se não houver um ciclo ativo
+      // já salvo no Firebase com inicio >= CICLO_NOVO_INICIO (evita sobrescrever
+      // fim_previsto que o usuário já ajustou manualmente)
+      const jaTemCicloAtivo = saved && saved.inicio >= CICLO_NOVO_INICIO && saved.status !== 'fechado';
+      if(jaTemCicloAtivo){
+        _cicloAtivo = saved;
+      } else {
+        _cicloAtivo = {...CICLO_MAIJUN};
+        try{ await fbSet('config','ciclo_ativo', _cicloAtivo); }catch(e2){}
+        console.log('[Ciclo] Novo ciclo Mai/Jun ativado automaticamente');
+      }
+
     } else {
       _cicloAtivo = saved || {...CICLO_MAIJUN};
     }
