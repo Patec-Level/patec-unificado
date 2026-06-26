@@ -5038,14 +5038,23 @@ const CICLO_VALIDACAO = {
   status: 'validacao', // aberto para edição antes do fechamento
 };
 
-// Novo ciclo já contabilizando 26/05 em diante
-const CICLO_NOVO_INICIO = '2026-05-26';
+// Novo ciclo já contabilizando 26/06 em diante
+const CICLO_NOVO_INICIO = '2026-06-26';
 const CICLO_MAIJUN = {
   id: 'maijun2026',
   nome: 'Ciclo Mai/Jun 2026',
   inicio: '2026-05-26',
-  fim: '',
+  fim: '2026-06-25',
   fim_previsto: '2026-06-25',
+  meta: 1980,
+  status: 'fechado',
+};
+const CICLO_JUNJUL = {
+  id: 'junjul2026',
+  nome: 'Ciclo Jun/Jul 2026',
+  inicio: '2026-06-26',
+  fim: '',
+  fim_previsto: '2026-07-25',
   meta: 1980,
   status: 'ativo',
 };
@@ -10902,28 +10911,22 @@ async function cicloCarregarAtivo(){
   try{
     const saved=await fbGet('config','ciclo_ativo');
     const hoje = new Date().toISOString().split('T')[0];
-    // Se o ciclo salvo está fechado OU seu fim é anterior a hoje, usar novo ciclo
     const cicloAntigo = saved && (saved.inicio||'') < CICLO_NOVO_INICIO;
     const cicloFechado = saved && (saved.status==='fechado' || (saved.fim && saved.fim < hoje));
     if(hoje >= CICLO_NOVO_INICIO && (cicloFechado || cicloAntigo)){
-      // Ciclo antigo encerrado — ativar o novo automaticamente
-      // CORREÇÃO: só usa o CICLO_MAIJUN padrão se não houver um ciclo ativo
-      // já salvo no Firebase com inicio >= CICLO_NOVO_INICIO (evita sobrescrever
-      // fim_previsto que o usuário já ajustou manualmente)
       const jaTemCicloAtivo = saved && saved.inicio >= CICLO_NOVO_INICIO && saved.status !== 'fechado';
       if(jaTemCicloAtivo){
         _cicloAtivo = saved;
       } else {
-        _cicloAtivo = {...CICLO_MAIJUN};
+        _cicloAtivo = {...CICLO_JUNJUL};
         try{ await fbSet('config','ciclo_ativo', _cicloAtivo); }catch(e2){}
-        console.log('[Ciclo] Novo ciclo Mai/Jun ativado automaticamente');
+        console.log('[Ciclo] Novo ciclo Jun/Jul ativado automaticamente');
       }
-
     } else {
-      _cicloAtivo = saved || {...CICLO_MAIJUN};
+      _cicloAtivo = saved || {...CICLO_JUNJUL};
     }
   }catch(e){
-    _cicloAtivo = {...CICLO_MAIJUN};
+    _cicloAtivo = {...CICLO_JUNJUL};
   }
 }
 
