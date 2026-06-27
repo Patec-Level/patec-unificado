@@ -15934,7 +15934,7 @@ function govRenderConcluidos(){
     const m = _govDados[chave]||{};
     if(!m.finalizado) return;
     const prazo = govCalcPrazo(m.status||'', m.envio||'');
-    const origem = _moduloAtivo === 'fast' ? 'PATEC Finalizado' : 'MAPA';
+    const origem = _moduloAtivo === 'fast' ? 'PATEC Finalizado' : 'PATEC Finalizado';
     rows.push({ origem, analista: r.analista||'—', fila: r.fila||'—', sla: r.sla||'—',
       rc: r.rc||'—', item_rc: r.item_rc||'—', op: r.num_oport||'—', seq: r.seq||'—',
       status: m.status||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado });
@@ -15984,7 +15984,7 @@ function govRenderConcluidos(){
     if(!v || !v.finalizado || chavesVivas.has(k)) return;
     const partes = k.split('|');
     const prazo = govCalcPrazo(v.status||'', v.envio||'');
-    rows.push({ origem: v._origem || 'MAPA', analista: '—', fila: '—', sla: '—',
+    rows.push({ origem: v._origem || 'PATEC Finalizado', analista: '—', fila: '—', sla: '—',
       rc: partes[0]||'—', item_rc: partes[1]||'—', op: partes[2]||'—', seq: partes[3]||'—',
       status: v.status||'—', envio: v.envio||'—', prazo: prazo||'—', finalizado: v.finalizado });
   });
@@ -15995,7 +15995,7 @@ function govRenderConcluidos(){
   if(ct) ct.textContent = rows.length + ' item(ns) concluído(s)';
 
   const corOrigem = o => {
-    if(o==='PATEC Finalizado'||o==='MAPA') return 'var(--az)';
+    if(o==='PATEC Finalizado') return 'var(--az)';
     if(o==='PATEC em Andamento') return 'var(--am)';
     if(o==='XGL') return 'var(--vd)';
     if(o==='Status B') return 'var(--vm)';
