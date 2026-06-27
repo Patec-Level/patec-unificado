@@ -3774,6 +3774,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <span id="gov-kpi-1a" title="1ª Análise" style="font-size:11px;font-weight:700;color:var(--azm);background:var(--azc);padding:2px 10px;border-radius:20px;cursor:default">🔍 0</span>
               <span id="gov-kpi-trat" title="Em Tratativa" style="font-size:11px;font-weight:700;color:var(--azm);background:var(--azc);padding:2px 10px;border-radius:20px;cursor:default">⚙️ 0</span>
               <span id="gov-kpi-sb" title="Status B" style="font-size:11px;font-weight:700;color:var(--vd);background:var(--vdc);padding:2px 10px;border-radius:20px;cursor:default">✅ 0</span>
+              <span id="gov-kpi-agp" title="Ag Parecer" style="font-size:11px;font-weight:700;color:#7c3aed;background:#ede9fe;padding:2px 10px;border-radius:20px;cursor:default">📝 0</span>
               <span id="gov-kpi-outros" title="Outros" style="font-size:11px;font-weight:700;color:var(--am);background:var(--amc);padding:2px 10px;border-radius:20px;cursor:default">📋 0</span>
               <span id="gov-kpi-total" title="Total do dia / Meta" style="font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;background:var(--cin);color:var(--tx2);cursor:default">Total: 0 / 30</span>
               <span class="rt-dot" style="margin-left:2px" title="Tempo real"></span>
@@ -18936,9 +18937,9 @@ function q18Consultar(valor){
           <div style="font-size:12px;font-weight:600;color:var(--tx)">MDG Equipe SCOMP</div>
         </button>
         <button class="acao-sel-btn" id="acao-btn-parecerista" onclick="acaoSelecionarTratamento(this,'Parecerista')"
-          style="background:#ede9fe;border:1.5px solid #7c3aed;border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;transition:all .18s">
+          style="background:var(--cin);border:1.5px solid var(--brd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;transition:all .18s">
           <div style="font-size:20px;margin-bottom:4px">📝</div>
-          <div style="font-size:12px;font-weight:600;color:#7c3aed">Parecerista</div>
+          <div style="font-size:12px;font-weight:600;color:var(--tx)">Parecerista</div>
         </button>
         <button class="acao-sel-btn" onclick="acaoSelecionarTratamento(this,'Concluído')"
           style="background:var(--vdc);border:1.5px solid var(--vd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;grid-column:span 2;transition:all .18s">
@@ -21219,9 +21220,9 @@ async function prodCarregarHistorico(colab, dias=7){
 }
 
 function prodContarHoje(acoes){
-  const cnt = { primeira_analise:0, em_tratativa:0, status_b:0, outros:0, total:0, meta:0 };
+  const cnt = { primeira_analise:0, em_tratativa:0, status_b:0, ag_parecer:0, outros:0, total:0, meta:0 };
   (acoes||[]).forEach(r=>{
-    if(r.anulada) return; // ignorar ações anuladas (lançamento manual sobrepõe)
+    if(r.anulada) return;
     if(cnt[r.tipo]!==undefined) cnt[r.tipo]++;
     cnt.total++;
   });
@@ -21289,6 +21290,7 @@ function prodRenderizarPaineis(colab){
     if(s('1a'))     s('1a').textContent     = `🔍 ${cnt.primeira_analise}`;
     if(s('trat'))   s('trat').textContent   = `⚙️ ${cnt.em_tratativa}`;
     if(s('sb'))     s('sb').textContent     = `✅ ${cnt.status_b}`;
+    if(s('agp'))    s('agp').textContent    = `📝 ${cnt.ag_parecer}`;
     if(s('outros')) s('outros').textContent = `📋 ${cnt.outros}`;
     if(s('total')){
       s('total').textContent = totalLabel;
