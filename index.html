@@ -1405,15 +1405,15 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
         <!-- AÇÃO RÁPIDA: ENCERRAR MAI/JUN E INICIAR JUN/JUL -->
         <div id="ciclo-acao-rapida" class="cd" style="border-top:3px solid var(--vm);margin-bottom:1rem">
-          <div class="cd-t" style="color:var(--vm)">⚡ Ação Rápida — Encerrar Mai/Jun e Iniciar Jun/Jul 2026</div>
-          <div class="al al-r" style="margin-bottom:1rem">⚠️ Esta ação vai <strong>arquivar o Ciclo Mai/Jun 2026</strong> com data de encerramento 25/06/2026 e <strong>ativar o Ciclo Jun/Jul 2026</strong> (início 26/06/2026, fechamento previsto 25/07/2026). Confirme a meta antes de continuar.</div>
+          <div class="cd-t" style="color:var(--vm)">⚡ Arquivar Ciclo Mai/Jun 2026 (retroativo)</div>
+          <div class="al al-r" style="margin-bottom:1rem">⚠️ O ciclo <strong>Jun/Jul 2026 já está ativo</strong>. Use este botão para <strong>arquivar retroativamente o Ciclo Mai/Jun 2026</strong> (26/05 → 25/06/2026) no Resultado de Medição. Os registros serão buscados diretamente do Firebase. Informe a meta do Jun/Jul para atualizar.</div>
           <div class="form-grid" style="margin-bottom:1rem">
             <div class="field-wrap">
-              <span class="field-label">Meta do Jun/Jul 2026 (itens)</span>
+              <span class="field-label">Meta do Ciclo Jun/Jul 2026 (itens)</span>
               <input type="number" id="acao-rapida-meta" placeholder="Ex: 2700" style="width:100%">
             </div>
           </div>
-          <button class="btn" style="background:var(--vm);color:#fff;font-weight:700;padding:9px 20px" onclick="cicloAcaoRapida()">⚡ Encerrar Mai/Jun e Iniciar Jun/Jul 2026</button>
+          <button class="btn" style="background:var(--vm);color:#fff;font-weight:700;padding:9px 20px" onclick="cicloAcaoRapida()">⚡ Arquivar Mai/Jun 2026 agora</button>
         </div>
 
         <!-- INICIAR NOVO CICLO (futuro) -->
@@ -10989,7 +10989,26 @@ async function encerrarCicloConfirmar(){
   const ciclo  = _cicloAtivo || CICLO_ATUAL;
   const inicio = ciclo.inicio || CICLO_ATUAL.inicio;
   const meta   = ciclo.meta   || CICLO_ATUAL.meta_ciclo;
-  const regsC  = registros.filter(r => r.data >= inicio && r.data <= dtFech);
+
+  // Buscar registros do período no Firebase diretamente (não depende do filtro de memória)
+  let regsC = registros.filter(r => r.data >= inicio && r.data <= dtFech);
+  // Se poucos registros em memória, buscar do Firebase
+  const db = getDB();
+  if(db && regsC.length < 5){
+    try{
+      const [snapP, snapF] = await Promise.all([
+        db.collection('producoes').where('data','>=',inicio).where('data','<=',dtFech).get(),
+        db.collection('fechamento_dia').where('data','>=',inicio).where('data','<=',dtFech).get().catch(()=>({docs:[]}))
+      ]);
+      const mapFb = {};
+      snapP.docs.forEach(d=>{ const r=d.data(); if(r.colab&&r.data) mapFb[r.colab+'|'+r.data]=r; });
+      snapF.docs.forEach(d=>{ const r=d.data(); if(r.colab&&r.data) mapFb[r.colab+'|'+r.data]=r; });
+      if(Object.keys(mapFb).length > regsC.length){
+        regsC = Object.values(mapFb).map(r=>({colab:r.colab,data:r.data,pres:r.presenca||r.pres||'Presente',f:r.f||Array(10).fill(0)}));
+      }
+    }catch(e){ console.warn('Busca FB encerramento:', e); }
+  }
+
   const regsA  = regsC.filter(r => r.pres !== 'Folga' && r.pres !== 'Férias');
   const dias   = [...new Set(regsA.map(r => r.data))].length;
   const total  = regsA.reduce((s,r) => s + (r.f[0]||0) + (r.f[1]||0) + (r.f[2]||0), 0);
@@ -11034,12 +11053,12 @@ async function cicloAtualizarPrevisto(novaData){
 
 async function cicloAcaoRapida(){
   const meta = parseInt(document.getElementById('acao-rapida-meta')?.value||'0');
-  if(!meta){ alert('Informe a meta do Ciclo Jun/Jul 2026.'); return; }
+  if(!meta){ alert('Informe a meta do Ciclo Jun/Jul 2026 (ex: 2700).'); return; }
   if(!confirm(
     'CONFIRMAR AÇÃO RÁPIDA\n\n' +
     '1. Arquivar Ciclo Mai/Jun 2026 (26/05 → 25/06/2026) com todos os registros\n' +
-    '2. Iniciar Ciclo Jun/Jul 2026 (26/06/2026 → 25/07/2026)\n' +
-    'Meta: ' + meta.toLocaleString('pt-BR') + ' itens\n\n' +
+    '2. Manter Ciclo Jun/Jul 2026 ativo (já iniciado em 26/06/2026)\n' +
+    'Meta Jun/Jul: ' + meta.toLocaleString('pt-BR') + ' itens\n\n' +
     'Os dados históricos NÃO serão apagados — apenas arquivados.\nConfirmar?'
   )) return;
   try{
@@ -11047,25 +11066,38 @@ async function cicloAcaoRapida(){
 
     const INICIO_MAIJUN = '2026-05-26';
     const FIM_MAIJUN    = '2026-06-25';
+    const META_MAIJUN   = 1980;
 
-    // 1. Coletar registros de produção do período Mai/Jun
-    const regsC = registros.filter(r => r.data >= INICIO_MAIJUN && r.data <= FIM_MAIJUN);
+    // Buscar registros do Mai/Jun diretamente do Firebase
+    alert('⏳ Buscando registros do período Mai/Jun no Firebase...');
+    const [snapP, snapF] = await Promise.all([
+      db.collection('producoes').where('data','>=',INICIO_MAIJUN).where('data','<=',FIM_MAIJUN).get(),
+      db.collection('fechamento_dia').where('data','>=',INICIO_MAIJUN).where('data','<=',FIM_MAIJUN).get().catch(()=>({docs:[]}))
+    ]);
+    const mapFb = {};
+    snapP.docs.forEach(d=>{ const r=d.data(); if(r.colab&&r.data) mapFb[r.colab+'|'+r.data]=r; });
+    snapF.docs.forEach(d=>{ const r=d.data(); if(r.colab&&r.data) mapFb[r.colab+'|'+r.data]=r; });
+    const regsC = Object.values(mapFb).map(r=>({
+      colab:r.colab, data:r.data,
+      pres:r.presenca||r.pres||'Presente',
+      f:r.f||Array(10).fill(0)
+    }));
     const regsA = regsC.filter(r => r.pres !== 'Folga' && r.pres !== 'Férias');
     const dias  = [...new Set(regsA.map(r => r.data))].length;
     const total = regsA.reduce((s,r) => s + (r.f[0]||0) + (r.f[1]||0) + (r.f[2]||0), 0);
-    const pct   = meta > 0 ? Math.round(total / meta * 100) : 0;
+    const pct   = META_MAIJUN > 0 ? Math.round(total / META_MAIJUN * 100) : 0;
 
     // PCP do período
-    const pcpC = (typeof pcpData !== 'undefined' ? pcpData : []).filter(r => r.data >= INICIO_MAIJUN && r.data <= FIM_MAIJUN);
+    const pcpC = (typeof pcpData !== 'undefined' ? pcpData : [])
+      .filter(r => r.data >= INICIO_MAIJUN && r.data <= FIM_MAIJUN);
 
-    // 2. Arquivar em ciclos_encerrados com todos os dados
-    const cicloAtual = _cicloAtivo || {};
+    // Arquivar em ciclos_encerrados com todos os dados
     const snapEnc = {
       id: 'maijun2026_enc_' + Date.now(),
       nome: 'Ciclo Mai/Jun 2026',
       inicio: INICIO_MAIJUN,
       fim: FIM_MAIJUN,
-      meta,
+      meta: META_MAIJUN,
       realizado: total,
       pct,
       dias_uteis: dias,
@@ -11078,26 +11110,12 @@ async function cicloAcaoRapida(){
     };
     await db.collection('ciclos_encerrados').doc(snapEnc.id).set(snapEnc);
 
-    // 3. Marcar ciclo atual como fechado no Firebase
-    await db.collection('config').doc('ciclo_ativo').set({
-      ...(cicloAtual),
-      status: 'fechado',
-      fim: FIM_MAIJUN
-    });
+    // Atualizar meta do ciclo Jun/Jul ativo
+    if(_cicloAtivo && _cicloAtivo.id === 'junjul2026'){
+      _cicloAtivo.meta = meta;
+      await db.collection('config').doc('ciclo_ativo').set(_cicloAtivo);
+    }
 
-    // 4. Ativar o novo ciclo Jun/Jul
-    const novoC = {
-      id: 'junjul2026',
-      nome: 'Ciclo Jun/Jul 2026',
-      inicio: '2026-06-26',
-      fim: '',
-      fim_previsto: '2026-07-25',
-      meta,
-      status: 'ativo',
-      ts_inicio: new Date().toISOString()
-    };
-    await db.collection('config').doc('ciclo_ativo').set(novoC);
-    _cicloAtivo = novoC;
     localStorage.setItem(_lsMod('patec_meta'), String(meta));
     initMetaGap();
     initCicloADM();
@@ -11107,10 +11125,12 @@ async function cicloAcaoRapida(){
       '✅ Concluído!\n\n' +
       '📁 Ciclo Mai/Jun 2026 arquivado\n' +
       '   Período: 26/05 → 25/06/2026\n' +
+      '   Registros encontrados: ' + regsC.length + '\n' +
       '   Produção: ' + total.toLocaleString('pt-BR') + ' itens (' + pct + '% da meta)\n' +
-      '   Registros: ' + regsC.length + '\n\n' +
-      '🟢 Ciclo Jun/Jul 2026 ativado\n' +
-      '   Início: 26/06/2026 | Meta: ' + meta.toLocaleString('pt-BR') + ' itens'
+      '   Dias úteis: ' + dias + '\n\n' +
+      '🟢 Ciclo Jun/Jul 2026 mantido ativo\n' +
+      '   Meta atualizada: ' + meta.toLocaleString('pt-BR') + ' itens\n\n' +
+      'Verifique em Resultado de Medição.'
     );
   } catch(e){ alert('Erro: ' + e.message); console.error(e); }
 }
