@@ -1331,6 +1331,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <!-- ── GESTÃO DE CICLOS ── -->
       <div id="adm-ciclos" class="adm-tab" style="display:block">
 
+        <!-- AVISO CICLO PENDENTE -->
+        <div id="ciclo-aviso-pendente" style="display:none;background:#fff3cd;border:1.5px solid #f59e0b;border-radius:10px;padding:1rem;margin-bottom:1rem;font-size:13px;color:#92400e;line-height:1.6"></div>
+
         <!-- CICLO ATIVO -->
         <div class="cd" style="border-top:3px solid var(--vd);margin-bottom:1rem">
           <div class="cd-t">🟢 Ciclo de Medição Ativo</div>
@@ -10894,16 +10897,19 @@ let _cicloAtivo = null;
 async function cicloCarregarAtivo(){
   try{
     const saved=await fbGet('config','ciclo_ativo');
-    const hoje = new Date().toISOString().split('T')[0];
-    // Se o ciclo salvo está fechado OU seu fim é anterior a hoje, usar novo ciclo
-    const cicloAntigo = saved && (saved.inicio||'') < CICLO_NOVO_INICIO;
+    const hoje = new Date().toISOString().split('T')[0];\n    // Só troca automaticamente se o ciclo salvo estiver EXPLICITAMENTE fechado
     const cicloFechado = saved && (saved.status==='fechado' || (saved.fim && saved.fim < hoje));
-    if(hoje >= CICLO_NOVO_INICIO && (cicloFechado || cicloAntigo)){
-      // Ciclo antigo encerrado — ativar o novo automaticamente
+    const cicloAntigo  = saved && (saved.inicio||'') < CICLO_NOVO_INICIO;
+    if(cicloFechado){
+      // Ciclo explicitamente encerrado — ativar o novo
       _cicloAtivo = {...CICLO_MAIJUN};
-      // Salvar no Firebase para próximas cargas
       try{ await fbSet('config','ciclo_ativo', _cicloAtivo); }catch(e2){}
-      console.log('[Ciclo] Novo ciclo Mai/Jun ativado automaticamente');
+      console.log('[Ciclo] Novo ciclo Jun/Jul ativado após fechamento do anterior');
+    } else if(cicloAntigo && hoje >= CICLO_NOVO_INICIO){
+      // Ciclo antigo ainda ativo mas período passou — manter o salvo até encerrar manualmente
+      // NÃO sobrescrever: preservar o ciclo antigo para o ADM encerrar via painel
+      _cicloAtivo = saved || {...CICLO_MAIJUN};
+      console.warn('[Ciclo] Ciclo anterior ainda não encerrado — use o painel ADM para encerrar e iniciar Jun/Jul 2026');
     } else {
       _cicloAtivo = saved || {...CICLO_MAIJUN};
     }
@@ -10917,6 +10923,20 @@ function initCicloADM(){
   if(!el('ciclo-nome-ativo'))return;
   const ciclo=_cicloAtivo||CICLO_ATUAL;
   const inicio=ciclo.inicio||CICLO_ATUAL.inicio;
+
+  // Aviso: ciclo antigo não encerrado
+  const hoje=new Date().toISOString().split('T')[0];
+  const pendente = ciclo.inicio < CICLO_NOVO_INICIO && ciclo.status !== 'fechado';
+  const avisoEl = document.getElementById('ciclo-aviso-pendente');
+  if(avisoEl){
+    if(pendente){
+      avisoEl.style.display='block';
+      avisoEl.innerHTML=`⚠️ <strong>Atenção:</strong> O ciclo <strong>${ciclo.nome}</strong> ainda não foi encerrado. 
+        Encerre-o abaixo antes de iniciar o <strong>Ciclo Jun/Jul 2026</strong>.`;
+    } else {
+      avisoEl.style.display='none';
+    }
+  }
   const meta=ciclo.meta||CICLO_MAIJUN.meta;
   const regsA=registros.filter(r=>r.data>=inicio&&r.pres!=='Folga'&&r.pres!=='Férias');
   const dias=[...new Set(regsA.map(r=>r.data))].length;
