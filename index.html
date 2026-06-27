@@ -14326,6 +14326,8 @@ function _classificarStatusMapa(analistaAuto){
   const aa = (analistaAuto||'').trim().toLowerCase();
   if(aa.includes('analisar') && aa.includes('patec') && aa.includes('finalizado')) return 'Finalizado';
   if(aa.includes('aguardar') && aa.includes('patec') && aa.includes('finalizado')) return 'Andamento';
+  if(aa.includes('patec') && aa.includes('finalizado') && aa.includes('sem')) return 'Finalizado';
+  if(aa.includes('analisar') && aa.includes('patec') && aa.includes('cancelado')) return 'Finalizado';
   return '';
 }
 
