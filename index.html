@@ -4889,9 +4889,9 @@ async function fbCarregarTudo(){
   // Prioridade: fechamento_dia > producoes > producao (mais recente prevalece)
   try{
     const [snapAntiga, snapNova, snapFecha] = await Promise.all([
-      db.collection('producao').where('data','>=', CICLO_NOVO_INICIO).get(),
-      db.collection('producoes').where('data','>=', CICLO_NOVO_INICIO).get(),
-      db.collection('fechamento_dia').where('data','>=', CICLO_NOVO_INICIO).get().catch(()=>({docs:[]}))
+      db.collection('producao').where('data','>=', '2026-05-26').get(),
+      db.collection('producoes').where('data','>=', '2026-05-26').get(),
+      db.collection('fechamento_dia').where('data','>=', '2026-05-26').get().catch(()=>({docs:[]}))
     ]);
     const map = {};
     // Primeiro carrega os antigos
@@ -6451,7 +6451,7 @@ function renderPainelEstrategico(){
       if(!window._prodAcoesCache) window._prodAcoesCache = {};
       try {
         const snap = await db.collection('producao_acoes')
-          .where('data','>=', CICLO_NOVO_INICIO).get();
+          .where('data','>=', '2026-05-26').get();
         snap.docs.forEach(d => {
           const a = d.data();
           if(!window._prodAcoesCache[a.data]) window._prodAcoesCache[a.data] = [];
