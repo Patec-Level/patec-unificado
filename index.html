@@ -9204,43 +9204,53 @@ async function expRelatorioPedidos(){
     const snap = await db.collection('desfechos').where('tipo','==','Pedido').get();
     if(snap.empty){ _expStatus('⚠️ Nenhum pedido encontrado.'); return; }
 
-    // Montar linhas cruzando com _radarDados para pegar RC, Item, Oportunidade, Item OP
     const rows = [];
     snap.docs.forEach(doc => {
       const d = doc.data();
       const chave = d.chave || doc.id;
-      // Buscar dados da RC no radar
-      const rc = chave.split('|')[0] || '';
-      const item = chave.split('|')[1] || '';
-      const radar = (_radarDados||[]).find(r => r.rc === rc && (r.item_rc||r.seq||'') == item) || {};
+      const partes = chave.split('|');
+      const rc       = partes[0] || '';
+      const seq      = partes[1] || '';
+      const numOport = partes[2] || '';
+
+      // Oportunidade e Item OP só existem no PATEC Finalizado (MAPA)
+      // Se veio de Status B ou XGL a chave não tem num_oport — fica em branco
+      const aba = d.aba || '';
+      const temOport = aba === 'MAPA' && numOport;
+
+      // Buscar item_rc no _radarDados para cruzar com a oportunidade
+      const radar = temOport
+        ? (_radarDados||[]).find(r => r.rc === rc && String(r.num_oport||'').trim() === numOport) || {}
+        : {};
+
       rows.push({
-        'RC':                    rc,
-        'Item RC':               item,
-        'Oportunidade':          radar.num_oport || d.oportunidade || '',
-        'Item OP':               radar.item_rc   || d.item_op      || '',
-        'Analista':              radar.analista  || d.analista     || '',
-        'Fila Level Board':      radar.fila      || '',
-        'SLA':                   radar.sla       || '',
-        'Data Finalização':      d.finalizado    || '',
-        'Negociação (data)':     d.pedido_negociacao  || '',
-        'Fornecedor':            d.pedido_fornecedor  || '',
-        'Fornecedor Ganhador ID SAP': d.pedido_id_sap || '',
-        'NM do Pedido':          d.pedido_nm          || '',
-        'Comentário Equipe':     d.pedido_comentario  || '',
-        'Observação':            d.obs                || '',
-        'Aba Origem':            d.aba                || '',
-        'Data Registro':         d.data               || (d.ts||'').slice(0,10) || '',
+        'RC':                         rc,
+        'Item RC':                    seq,
+        'Oportunidade':               temOport ? numOport          : '',
+        'Item OP':                    temOport ? (radar.item_rc||'') : '',
+        'Analista':                   radar.analista || d.analista || '',
+        'Fila Level Board':           radar.fila     || '',
+        'SLA':                        radar.sla      || '',
+        'Aba Origem':                 aba,
+        'Data Finalização':           d.finalizado   || '',
+        'Negociação (data)':          d.pedido_negociacao  || '',
+        'Fornecedor':                 d.pedido_fornecedor  || '',
+        'Fornecedor Ganhador ID SAP': d.pedido_id_sap      || '',
+        'NM do Pedido':               d.pedido_nm          || '',
+        'Comentário Equipe':          d.pedido_comentario  || '',
+        'Observação':                 d.obs                || '',
+        'Data Registro':              d.data || (d.ts||'').slice(0,10) || '',
       });
     });
 
     // Ordenar por Data Registro
     rows.sort((a,b) => (a['Data Registro']||'').localeCompare(b['Data Registro']||''));
 
-    // Gerar CSV (sem dependência de lib Excel)
+    // Gerar CSV com BOM para Excel reconhecer UTF-8
     const cols = Object.keys(rows[0]||{});
     const csvLines = [cols.join(';')];
     rows.forEach(r => csvLines.push(cols.map(c => '"'+(r[c]||'').toString().replace(/"/g,'""')+'"').join(';')));
-    const csv = '\uFEFF' + csvLines.join('\n'); // BOM para Excel reconhecer UTF-8
+    const csv = '\uFEFF' + csvLines.join('\n');
 
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
     const url = URL.createObjectURL(blob);
