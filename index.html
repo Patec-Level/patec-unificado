@@ -2478,6 +2478,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div class="cd-t">📊 Relatórios de Performance</div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-bottom:1rem">
 
+            <!-- Exportar Pedidos -->
+            <div style="background:var(--vdc);border:1px solid var(--vd);border-radius:10px;padding:.875rem 1rem">
+              <div style="font-size:12px;font-weight:700;color:var(--vd);margin-bottom:.5rem">🛒 RCs para Pedido</div>
+              <div style="font-size:11px;color:var(--tx2);margin-bottom:.75rem">RC, Item, Oportunidade, Item OP, Analista, Negociação, Fornecedor, ID SAP, NM do Pedido e Comentário</div>
+              <button class="btn btn-g" style="width:100%;justify-content:center;font-size:11px;background:var(--vd);border-color:var(--vd)" onclick="expRelatorioPedidos()">📥 Exportar Excel</button>
+            </div>
+
             <!-- Performance Equipe -->
             <div style="background:var(--cin);border:1px solid var(--brd);border-radius:10px;padding:.875rem 1rem">
               <div style="font-size:12px;font-weight:700;color:var(--az);margin-bottom:.5rem">📈 Performance da Equipe</div>
@@ -9186,6 +9193,63 @@ function _expDatas(deId, ateId){
   const de  = document.getElementById(deId)?.value  || '2026-01-01';
   const ate = document.getElementById(ateId)?.value || hoje;
   return { de, ate };
+}
+
+async function expRelatorioPedidos(){
+  _expStatus('⏳ Buscando pedidos no Firebase...');
+  try{
+    const db = getDB(); if(!db){ _expStatus('✗ Firebase offline.'); return; }
+
+    // Buscar desfechos do tipo Pedido
+    const snap = await db.collection('desfechos').where('tipo','==','Pedido').get();
+    if(snap.empty){ _expStatus('⚠️ Nenhum pedido encontrado.'); return; }
+
+    // Montar linhas cruzando com _radarDados para pegar RC, Item, Oportunidade, Item OP
+    const rows = [];
+    snap.docs.forEach(doc => {
+      const d = doc.data();
+      const chave = d.chave || doc.id;
+      // Buscar dados da RC no radar
+      const rc = chave.split('|')[0] || '';
+      const item = chave.split('|')[1] || '';
+      const radar = (_radarDados||[]).find(r => r.rc === rc && (r.item_rc||r.seq||'') == item) || {};
+      rows.push({
+        'RC':                    rc,
+        'Item RC':               item,
+        'Oportunidade':          radar.num_oport || d.oportunidade || '',
+        'Item OP':               radar.item_rc   || d.item_op      || '',
+        'Analista':              radar.analista  || d.analista     || '',
+        'Fila Level Board':      radar.fila      || '',
+        'SLA':                   radar.sla       || '',
+        'Data Finalização':      d.finalizado    || '',
+        'Negociação (data)':     d.pedido_negociacao  || '',
+        'Fornecedor':            d.pedido_fornecedor  || '',
+        'Fornecedor Ganhador ID SAP': d.pedido_id_sap || '',
+        'NM do Pedido':          d.pedido_nm          || '',
+        'Comentário Equipe':     d.pedido_comentario  || '',
+        'Observação':            d.obs                || '',
+        'Aba Origem':            d.aba                || '',
+        'Data Registro':         d.data               || (d.ts||'').slice(0,10) || '',
+      });
+    });
+
+    // Ordenar por Data Registro
+    rows.sort((a,b) => (a['Data Registro']||'').localeCompare(b['Data Registro']||''));
+
+    // Gerar CSV (sem dependência de lib Excel)
+    const cols = Object.keys(rows[0]||{});
+    const csvLines = [cols.join(';')];
+    rows.forEach(r => csvLines.push(cols.map(c => '"'+(r[c]||'').toString().replace(/"/g,'""')+'"').join(';')));
+    const csv = '\uFEFF' + csvLines.join('\n'); // BOM para Excel reconhecer UTF-8
+
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `PATEC_Pedidos_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    _expStatus(`✅ ${rows.length} pedido(s) exportado(s).`);
+  } catch(e){ _expStatus('✗ Erro: '+e.message); console.error(e); }
 }
 
 async function expRelatorioPerformance(){
