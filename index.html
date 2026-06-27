@@ -3547,7 +3547,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <span style="font-size:10px;color:var(--tx2);font-weight:600">Hoje:</span>
               <span id="pc-kpi-1a" title="1ª Análise" style="font-size:11px;font-weight:700;color:var(--azm);background:var(--azc);padding:2px 10px;border-radius:20px;cursor:default">🔍 0</span>
               <span id="pc-kpi-trat" title="Em Tratativa" style="font-size:11px;font-weight:700;color:var(--azm);background:var(--azc);padding:2px 10px;border-radius:20px;cursor:default">⚙️ 0</span>
-              <span id="pc-kpi-ag-parecer" title="Ag Parecer" style="font-size:11px;font-weight:700;color:#7C3AED;background:#F3E8FF;padding:2px 10px;border-radius:20px;cursor:default;display:none">📝 0</span>
               <span id="pc-kpi-sb" title="Status B" style="font-size:11px;font-weight:700;color:var(--vd);background:var(--vdc);padding:2px 10px;border-radius:20px;cursor:default">✅ 0</span>
               <span id="pc-kpi-outros" title="Outros" style="font-size:11px;font-weight:700;color:var(--am);background:var(--amc);padding:2px 10px;border-radius:20px;cursor:default">📋 0</span>
               <span id="pc-kpi-total" title="Total do dia / Meta" style="font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;background:var(--cin);color:var(--tx2);cursor:default">Total: 0 / 30</span>
@@ -3774,7 +3773,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <span style="font-size:10px;color:var(--tx2);font-weight:600">Hoje:</span>
               <span id="gov-kpi-1a" title="1ª Análise" style="font-size:11px;font-weight:700;color:var(--azm);background:var(--azc);padding:2px 10px;border-radius:20px;cursor:default">🔍 0</span>
               <span id="gov-kpi-trat" title="Em Tratativa" style="font-size:11px;font-weight:700;color:var(--azm);background:var(--azc);padding:2px 10px;border-radius:20px;cursor:default">⚙️ 0</span>
-              <span id="gov-kpi-ag-parecer" title="Ag Parecer" style="font-size:11px;font-weight:700;color:#7C3AED;background:#F3E8FF;padding:2px 10px;border-radius:20px;cursor:default;display:none">📝 0</span>
               <span id="gov-kpi-sb" title="Status B" style="font-size:11px;font-weight:700;color:var(--vd);background:var(--vdc);padding:2px 10px;border-radius:20px;cursor:default">✅ 0</span>
               <span id="gov-kpi-outros" title="Outros" style="font-size:11px;font-weight:700;color:var(--am);background:var(--amc);padding:2px 10px;border-radius:20px;cursor:default">📋 0</span>
               <span id="gov-kpi-total" title="Total do dia / Meta" style="font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;background:var(--cin);color:var(--tx2);cursor:default">Total: 0 / 30</span>
@@ -3864,10 +3862,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Finalizado</th>
                 <th>Validade Proposta</th>
                 <th>Idas Mercado</th>
-                <th id="gov-th-nm" style="display:none">NM</th>
-                <th id="gov-th-tipo-aval" style="display:none">Tipo Avaliação</th>
-                <th id="gov-th-grupo-merc" style="display:none">Grupo Mercadoria</th>
-                <th id="gov-th-centro-fast" style="display:none">Centro</th>
               </tr>
             </thead>
             <tbody id="gov-mapa-tbody"></tbody>
@@ -3897,14 +3891,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Prazo Retorno</th>
                 <th>Status</th>
                 <th>Ações</th>
-                <th id="gov-th-cobranca-and" style="display:none">Histórico de Cobrança</th>
                 <th>Finalizado</th>
                 <th>Validade Proposta</th>
                 <th>Idas Mercado</th>
-                <th id="gov-th-nm-and" style="display:none">NM</th>
-                <th id="gov-th-tipo-aval-and" style="display:none">Tipo Avaliação</th>
-                <th id="gov-th-grupo-merc-and" style="display:none">Grupo Mercadoria</th>
-                <th id="gov-th-centro-fast-and" style="display:none">Centro</th>
               </tr>
             </thead>
             <tbody id="gov-andamento-tbody"></tbody>
@@ -5038,23 +5027,14 @@ const CICLO_VALIDACAO = {
   status: 'validacao', // aberto para edição antes do fechamento
 };
 
-// Novo ciclo já contabilizando 26/06 em diante
-const CICLO_NOVO_INICIO = '2026-06-26';
+// Novo ciclo já contabilizando 26/05 em diante
+const CICLO_NOVO_INICIO = '2026-05-26';
 const CICLO_MAIJUN = {
   id: 'maijun2026',
   nome: 'Ciclo Mai/Jun 2026',
   inicio: '2026-05-26',
-  fim: '2026-06-25',
-  fim_previsto: '2026-06-25',
-  meta: 1980,
-  status: 'fechado',
-};
-const CICLO_JUNJUL = {
-  id: 'junjul2026',
-  nome: 'Ciclo Jun/Jul 2026',
-  inicio: '2026-06-26',
   fim: '',
-  fim_previsto: '2026-07-25',
+  fim_previsto: '2026-06-25',
   meta: 1980,
   status: 'ativo',
 };
@@ -6413,6 +6393,15 @@ function renderPainelEstrategico(){
   if(!renderPainelEstrategico._cacheCarregado){
     renderPainelEstrategico._cacheCarregado = true;
     (async () => {
+      // Aguarda autenticação estar completamente propagada antes de ler
+      // — evita "Missing or insufficient permissions" em chamadas precoces
+      if(!firebase.auth().currentUser){
+        await new Promise(resolve => {
+          const unsub = firebase.auth().onAuthStateChanged(user => {
+            if(user){ unsub(); resolve(); }
+          });
+        });
+      }
       const db = getDB(); if(!db) return;
       if(!window._prodAcoesCache) window._prodAcoesCache = {};
       try {
@@ -9936,13 +9925,6 @@ async function radarOnFile(file){
     const wb=XLSX.read(buf,{type:'array',cellDates:false});
     const ws=wb.Sheets[wb.SheetNames[0]];
     const raw=XLSX.utils.sheet_to_json(ws,{defval:''});
-    // Leitura com header:1 para pegar nomes brutos e índices posicionais
-    const rawH1=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-    const headers1 = rawH1[0] || [];
-    // Índices posicionais das colunas W=22 e X=23 (0-based) como fallback
-    const _iNM       = headers1.findIndex((h,i) => i===22 || String(h).trim()==='NM');
-    const _iTipoAval = headers1.findIndex((h,i) => i===23 || String(h).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().includes('TIPO') && String(h).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().includes('AVAL'));
-    console.log('[RADAR] header W(NM):', headers1[22], '| header X(TipoAval):', headers1[23]);
     if(msgEl) msgEl.textContent='Processando '+raw.length+' registros...';
 
     // DEBUG: mostrar nomes EXATOS das colunas da planilha para identificar a coluna de urgência corretamente
@@ -9950,10 +9932,6 @@ async function radarOnFile(file){
       console.log('[RADAR] Colunas exatas da planilha:', Object.keys(raw[0]));
       const colUrg = Object.keys(raw[0]).find(k => k.toUpperCase().includes('URGEN'));
       console.log('[RADAR] Coluna de urgência encontrada:', colUrg, '| valor exemplo:', colUrg ? raw[0][colUrg] : 'NÃO ENCONTRADA');
-      const colNM   = Object.keys(raw[0]).find(k => k.trim() === 'NM' || k.trim().toUpperCase() === 'NM MATERIAL');
-      const colAval = Object.keys(raw[0]).find(k => k.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('AVAL'));
-      const colMerc = Object.keys(raw[0]).find(k => k.toUpperCase().includes('MERC'));
-      console.log('[RADAR] NM:', colNM||'NÃO ENCONTRADA', '| Tipo Aval:', colAval||'NÃO ENCONTRADA', '| Grupo Merc:', colMerc||'NÃO ENCONTRADA');
     }
 
     const rows=raw.filter(r=>r['RC']&&r['RC']!=='RC').map(r=>({
@@ -9997,32 +9975,6 @@ async function radarOnFile(file){
         return ''; // #N/A, vazio — não conta nem como Sim nem como Não
       })(),
       centro:        String(r['CENTRO']||r['Centro']||r['centro']||'').trim(),
-      nm:            (()=>{
-        const k = Object.keys(r).find(k => k.trim() === 'NM' || k.trim().toUpperCase() === 'NM MATERIAL' || k.trim().toUpperCase() === 'NM_MATERIAL');
-        // Fallback posicional: coluna W = índice 22 no header1
-        const rowIdx = raw.indexOf(r);
-        const vPos = (!k && _iNM >= 0 && rawH1[rowIdx+1]) ? String(rawH1[rowIdx+1][_iNM]||'').trim() : '';
-        const v = k ? String(r[k]||'').trim() : vPos;
-        return v.endsWith('.0') ? v.slice(0,-2) : v;
-      })(),
-      tipo_aval:     (()=>{
-        const norm = s => s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
-        const k = Object.keys(r).find(k => { const n = norm(k); return n.includes('TIPO') && n.includes('AVAL'); });
-        // Fallback posicional: coluna X = índice 23 no header1
-        const rowIdx = raw.indexOf(r);
-        const vPos = (!k && _iTipoAval >= 0 && rawH1[rowIdx+1]) ? String(rawH1[rowIdx+1][_iTipoAval]||'').trim() : '';
-        return k ? String(r[k]||'').trim() : vPos;
-      })(),
-      grupo_merc:    (()=>{
-        // Busca resiliente — coluna cujo nome contenha "GRUPO" e "MERC" juntos
-        // (evita pegar "Idas ao mercado" que também contém "MERC")
-        const norm = s => s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
-        const k = Object.keys(r).find(k => { const n = norm(k); return n.includes('GRUPO') && n.includes('MERC'); });
-        // Fallback posicional: coluna T = índice 19
-        const rowIdx = raw.indexOf(r);
-        const vPos = (!k && rawH1[rowIdx+1]) ? String(rawH1[rowIdx+1][19]||'').trim() : '';
-        return k ? String(r[k]||'').trim() : vPos;
-      })(),
       urgencia:      (()=>{
         // Busca resiliente: qualquer coluna cujo nome contenha "URGEN" (cobre URGENCIA, URGÊNCIA,
         // Urgencia, URGENCIA_NECESSIDADE, etc.) — não depende do nome exato da coluna
@@ -10911,22 +10863,20 @@ async function cicloCarregarAtivo(){
   try{
     const saved=await fbGet('config','ciclo_ativo');
     const hoje = new Date().toISOString().split('T')[0];
+    // Se o ciclo salvo está fechado OU seu fim é anterior a hoje, usar novo ciclo
     const cicloAntigo = saved && (saved.inicio||'') < CICLO_NOVO_INICIO;
     const cicloFechado = saved && (saved.status==='fechado' || (saved.fim && saved.fim < hoje));
     if(hoje >= CICLO_NOVO_INICIO && (cicloFechado || cicloAntigo)){
-      const jaTemCicloAtivo = saved && saved.inicio >= CICLO_NOVO_INICIO && saved.status !== 'fechado';
-      if(jaTemCicloAtivo){
-        _cicloAtivo = saved;
-      } else {
-        _cicloAtivo = {...CICLO_JUNJUL};
-        try{ await fbSet('config','ciclo_ativo', _cicloAtivo); }catch(e2){}
-        console.log('[Ciclo] Novo ciclo Jun/Jul ativado automaticamente');
-      }
+      // Ciclo antigo encerrado — ativar o novo automaticamente
+      _cicloAtivo = {...CICLO_MAIJUN};
+      // Salvar no Firebase para próximas cargas
+      try{ await fbSet('config','ciclo_ativo', _cicloAtivo); }catch(e2){}
+      console.log('[Ciclo] Novo ciclo Mai/Jun ativado automaticamente');
     } else {
-      _cicloAtivo = saved || {...CICLO_JUNJUL};
+      _cicloAtivo = saved || {...CICLO_MAIJUN};
     }
   }catch(e){
-    _cicloAtivo = {...CICLO_JUNJUL};
+    _cicloAtivo = {...CICLO_MAIJUN};
   }
 }
 
@@ -12694,15 +12644,48 @@ async function paHistoricoCarregarFirebase(){
     }
     const db=getDB(); if(!db){ console.warn('PA Histórico: db null'); return; }
     const doc=await db.collection('config').doc('pa_historico').get();
-    const lista = (doc.exists && doc.data().lista) ? doc.data().lista : [];
-    // CORREÇÃO BUG (20/06): antes, se o documento não existisse mais no
-    // Firebase (ex: apagado manualmente), essa função simplesmente não
-    // fazia nada — deixando o cache antigo do localStorage "preso" pra
-    // sempre, mesmo depois do dado real ser apagado. Agora sempre
-    // sincroniza com o que existe (ou não) no Firebase.
-    _paHistorico = lista;
+    const listaFB = (doc.exists && doc.data().lista) ? doc.data().lista : [];
+    // Sempre mescla Firebase + dados históricos embutidos — garante que os
+    // marcos históricos nunca sejam perdidos mesmo após perda de dados no Firebase.
+    const HISTORICO_INICIAL = [
+      {dt:'2026-03-16', val:766, label:'Início do acompanhamento'},
+      {dt:'2026-05-06', val:488, label:'Base do gráfico de medição'},
+      {dt:'2026-05-22', val:632, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-05-23', val:632, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-05-24', val:632, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-05-25', val:614, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-05-26', val:610, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-05-27', val:631, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-05-28', val:649, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-05-29', val:669, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-01', val:666, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-03', val:660, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-04', val:660, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-05', val:693, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-08', val:650, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-09', val:630, label:'Novo marco'},
+      {dt:'2026-06-10', val:593, label:'Novo marco'},
+      {dt:'2026-06-11', val:543, label:'Novo marco'},
+      {dt:'2026-06-12', val:533, label:'Novo marco'},
+      {dt:'2026-06-13', val:528, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-14', val:528, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-15', val:529, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-16', val:514, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-17', val:520, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-18', val:518, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-19', val:520, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-22', val:480, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-23', val:500, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-24', val:490, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-25', val:495, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-26', val:487, label:'Backlog Auto — AG. Tratamento'},
+    ];
+    const mapa = {};
+    HISTORICO_INICIAL.forEach(m => mapa[m.dt] = m);
+    listaFB.forEach(m => mapa[m.dt] = m);
+    _paHistorico = Object.values(mapa).sort((a,b)=>a.dt.localeCompare(b.dt));
     try{ localStorage.setItem(_lsMod('patec_pa_historico'), JSON.stringify(_paHistorico)); }catch(e){}
-    console.log('PA Histórico carregado do Firebase:', _paHistorico.length, 'marcos');
+    console.log('PA Histórico mesclado:', _paHistorico.length, 'marcos');
     paHistoricoRender();
   } catch(e){ console.warn('PA Histórico load:', e); }
 }
@@ -13811,22 +13794,19 @@ function pcBuscarRCDetalhe(rc){
   const rcBusca = (rc||'').trim();
   if(!rcBusca || rcBusca.length < 5){ el.style.display='none'; el.innerHTML=''; return; }
 
-  // Busca nos dados MAPA, PATEC em Andamento, 100% Reprovados e Cancelados
-  const dadosMapa     = govFiltroMapaPadrao();
-  const dadosAndamento = (_moduloAtivo === 'fast') ? (_radarDados||[]).filter(r => _classificarStatusMapa(r.analista_auto) === 'Andamento') : [];
-  const dadosReprov   = (_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='PATEC Finalizado sem fornecedores aprovados');
-  const dadosCancel   = (_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='Analisar PATEC Cancelado');
-  const resultadosMapa      = dadosMapa.filter(r=>(r.rc||'').includes(rcBusca));
-  const resultadosAndamento = dadosAndamento.filter(r=>(r.rc||'').includes(rcBusca));
-  const resultadosReprov    = dadosReprov.filter(r=>(r.rc||'').includes(rcBusca));
-  const resultadosCancel    = dadosCancel.filter(r=>(r.rc||'').includes(rcBusca));
+  // Busca nos dados MAPA, 100% Reprovados e Cancelados
+  const dadosMapa   = govFiltroMapaPadrao();
+  const dadosReprov = (_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='PATEC Finalizado sem fornecedores aprovados');
+  const dadosCancel = (_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='Analisar PATEC Cancelado');
+  const resultadosMapa   = dadosMapa.filter(r=>(r.rc||'').includes(rcBusca));
+  const resultadosReprov = dadosReprov.filter(r=>(r.rc||'').includes(rcBusca));
+  const resultadosCancel = dadosCancel.filter(r=>(r.rc||'').includes(rcBusca));
 
   // Montar resultados no mesmo formato usado pela tabela da Governança
   const resultados = [
-    ...resultadosMapa.map(r => ({ ...r, _abaLabel:'MAPA',              _abaCor:'var(--azm)' })),
-    ...resultadosAndamento.map(r => ({ ...r, _abaLabel:'PATEC ANDAMENTO', _abaCor:'var(--am)' })),
-    ...resultadosReprov.map(r => ({ ...r, _abaLabel:'100% REPROV.',     _abaCor:'var(--vm)' })),
-    ...resultadosCancel.map(r => ({ ...r, _abaLabel:'CANCELADO',        _abaCor:'var(--am)' })),
+    ...resultadosMapa.map(r => ({ ...r, _abaLabel:'MAPA',        _abaCor:'var(--azm)' })),
+    ...resultadosReprov.map(r => ({ ...r, _abaLabel:'100% REPROV.', _abaCor:'var(--vm)' })),
+    ...resultadosCancel.map(r => ({ ...r, _abaLabel:'CANCELADO',  _abaCor:'var(--am)' })),
   ];
 
   if(!resultados.length){
@@ -13859,7 +13839,6 @@ function pcBuscarRCDetalhe(rc){
           const chaveId = chave.replace(/[|]/g,'_');
           const analistasOptsSel = _govAnalistasOpts.replace(`value="${r.analista||''}"`,`value="${r.analista||''}" selected`);
           const optsStatusSel = GOV_STATUS_OPCOES.map(o=>`<option value="${o}" ${statusAtual===o?'selected':''}>${o}</option>`).join('');
-          const btnAgParecer = (_moduloAtivo==='fast') ? '<button onclick="prodAbrirModalRCTratamento(\''+chave+'\',\'em_tratativa\',\'Parecerista\')" style="background:#F3E8FF;border:1.5px solid #7C3AED;border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:#7C3AED;white-space:nowrap">📝 Ag Parecer</button>' : '';
           return `
         <tr>
           <td style="font-weight:700;color:${r._abaCor}">${r._abaLabel}</td>
@@ -13905,7 +13884,6 @@ function pcBuscarRCDetalhe(rc){
           <td colspan="12" style="padding:5px 8px 8px 8px">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
               <span style="font-size:10px;font-weight:700;color:var(--tx2);margin-right:2px">Registrar ação:</span>
-              ${btnAgParecer}
               <button onclick="prodAbrirModalRC('${chave}','primeira_analise')"
                 style="background:var(--azc);border:1.5px solid var(--azm);border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:var(--azm);white-space:nowrap"
                 onmouseover="this.style.background='var(--azm)';this.style.color='#fff'"
@@ -14165,7 +14143,6 @@ const GOV_PRAZOS_ADLV = {
 // substring de "MDG EQUIPE SCOMP" — testar MDG primeiro bateria errado).
 const GOV_PRAZOS_FAST = {
   'MDG EQUIPE SCOMP': 10,
-  'PARECERISTA': 5,
   'FORNECEDOR': 2,
   'MDG': 4,
   'REQUISITANTE': 5,
@@ -14177,7 +14154,7 @@ const GOV_STATUS_OPCOES_ADLV = [
   'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','VALIDAÇÃO DO THIAGO'
 ];
 const GOV_STATUS_OPCOES_FAST = [
-  'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','MDG EQUIPE SCOMP','PARECERISTA'
+  'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','MDG EQUIPE SCOMP'
 ];
 let GOV_STATUS_OPCOES = [
   'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','VALIDAÇÃO DO THIAGO'
@@ -14240,7 +14217,12 @@ function govSetTab(aba, btn){
     alert('XGL é exclusivo do ADLV.');
     return;
   }
-  // Aba "PATEC em Andamento" habilitada também no FAST
+  // Aba "PATEC em Andamento" é exclusiva do ADLV — no FAST, esses itens já
+  // aparecem misturados na MAPA com a coluna "Status Mapa"
+  if(aba === 'andamento' && _moduloAtivo === 'fast'){
+    alert('Essa aba é exclusiva do ADLV.');
+    return;
+  }
   _govTabAtiva = aba;
   document.querySelectorAll('.stabs .stab').forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
@@ -14307,13 +14289,12 @@ async function govInicializar(){
   govRenderMapa(dados);
 }
 
-// Lista padrão de itens do MAPA (Governança). Tanto ADLV quanto FAST mostram
-// apenas "Analisar PATEC Finalizado" nesta aba. Os itens em andamento
-// ("Aguardar PATEC ser Finalizado") ficam na aba "PATEC em Andamento",
-// agora disponível nos dois módulos.
+// Lista padrão de itens do MAPA (Governança). No ADLV, continua exatamente
+// como sempre foi: só "Analisar PATEC Finalizado". No FAST, inclui também
+// "Aguardar PATEC ser Finalizado" (distinguidos pela coluna "Status Mapa").
 // Classifica o valor de analista_auto (coluna "STATUS MAPA" do upload do
 // Radar Estratégico) em 'Finalizado' ou 'Andamento' — usado em várias partes
-// do sistema (filtro do MAPA, coluna Status Mapa, contador de cobrança por
+// do FAST (filtro do MAPA, coluna Status Mapa, contador de cobrança por
 // etapa). Comparação por palavra-chave (sem diferenciar maiúscula/
 // minúscula), pra não depender de bater a frase exata. Exige "finalizado"
 // também nos dois casos, pra não confundir com "Analisar PATEC Cancelado".
@@ -14325,10 +14306,11 @@ function _classificarStatusMapa(analistaAuto){
 }
 
 function govFiltroMapaPadrao(){
-  // Tanto ADLV quanto FAST: aba MAPA mostra só itens Finalizado.
-  // Itens em Andamento ficam na aba "PATEC em Andamento" (agora disponível nos dois módulos).
   return (_radarDados||[]).filter(r=>{
     const cls = _classificarStatusMapa(r.analista_auto);
+    if(_moduloAtivo === 'fast'){
+      return cls === 'Finalizado' || cls === 'Andamento';
+    }
     return cls === 'Finalizado';
   });
 }
@@ -14338,22 +14320,12 @@ function govRenderMapa(dados, tbodyId){
   const tbody = document.getElementById(tbodyId);
   if(!tbody) return;
 
-  // "Status Mapa" removido — MAPA e PATEC em Andamento agora são abas separadas,
-  // não há mais necessidade de distinguir o status dentro da tabela.
-  const isFast = _moduloAtivo === 'fast';
+  // Cabeçalho "Status Mapa" e "Histórico de Cobrança" só aparecem no FAST
+  // (só existem na tabela MAPA)
   const thStatusMapa = document.getElementById('gov-th-status-mapa');
-  if(thStatusMapa) thStatusMapa.style.display = 'none';
+  if(thStatusMapa) thStatusMapa.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
   const thCobranca = document.getElementById('gov-th-cobranca');
-  if(thCobranca) thCobranca.style.display = isFast ? '' : 'none';
-  const thCobrancaAnd = document.getElementById('gov-th-cobranca-and');
-  if(thCobrancaAnd) thCobrancaAnd.style.display = isFast ? '' : 'none';
-
-  // Colunas NM, Tipo Avaliação, Grupo Mercadoria, Centro — exclusivas do FAST
-  const suffix = tbodyId === 'gov-mapa-tbody' ? '' : '-and';
-  ['gov-th-nm','gov-th-tipo-aval','gov-th-grupo-merc','gov-th-centro-fast'].forEach(id => {
-    const th = document.getElementById(id + suffix);
-    if(th) th.style.display = isFast ? '' : 'none';
-  });
+  if(thCobranca) thCobranca.style.display = (_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody') ? '' : 'none';
 
   if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
     // Diagnóstico: mostra os valores de TODO o _radarDados (bruto), não só
@@ -14390,10 +14362,26 @@ function govRenderMapa(dados, tbodyId){
       return '';
     };
 
-    // Coluna "Histórico de Cobrança" — exclusiva do FAST. Aparece nas abas
-    // PATEC Finalizado e PATEC em Andamento.
+    // Coluna "Status Mapa" — exclusiva do FAST, e só na tabela MAPA (a aba
+    // "PATEC em Andamento" do ADLV já é, por definição, só desse status).
+    // Vem do analista_auto do Radar Estratégico (coluna "STATUS MAPA" da
+    // planilha): "Analisar PATEC Finalizado" → "PATEC Finalizado";
+    // "Aguardar PATEC ser Finalizado" → "PATEC Em Andamento". Comparação
+    // por palavra-chave (sem diferenciar maiúscula/minúscula) pra não
+    // depender de bater a frase exata.
+    let tdStatusMapa = '';
+    if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
+      const cls = _classificarStatusMapa(r.analista_auto);
+      const statusMapaTxt = cls === 'Finalizado' ? 'PATEC Finalizado' : cls === 'Andamento' ? 'PATEC Em Andamento' : '—';
+      tdStatusMapa = `<td style="font-size:11px">${statusMapaTxt}</td>`;
+    }
+
+    // Coluna "Histórico de Cobrança" — exclusiva do FAST. Lista cada vez
+    // que o Status de Tratamento foi alterado pra essa RC (data + etapa),
+    // ex: "01.01.26 - Fornecedor, 04.01.26 - Fornecedor" — usado pra
+    // acompanhar a regra de devolução por cobrança repetida.
     let tdCobranca = '';
-    if(isFast){
+    if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
       const acoesRC = _buscarAcoesRC(r.rc).filter(a => a.tratamento);
       if(acoesRC.length){
         tdCobranca = `<td style="text-align:center"><button onclick="abrirHistoricoCobranca('${r.rc||''}')" title="Ver histórico de cobrança" style="background:var(--amc);border:1.5px solid var(--am);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:var(--am);white-space:nowrap">💰 Cobrança (${acoesRC.length})</button></td>`;
@@ -14404,12 +14392,13 @@ function govRenderMapa(dados, tbodyId){
 
     return `<tr id="${tbodyId}-row-${idx}">
       <td style="font-size:11px">${r.analista||'—'}</td>
+      ${tdStatusMapa}
       <td style="font-size:11px">${r.fila||'—'}</td>
       <td style="text-align:center">${r.sla||'—'}</td>
       <td style="font-weight:700;color:var(--az)">${r.rc||'—'}</td>
-      <td style="font-size:11px">${r.item_rc||'—'}</td>
-      <td style="font-size:11px">${r.num_oport||'—'}</td>
-      <td style="font-size:11px">${r.seq||'—'}</td>
+      <td>${r.seq||'—'}</td>
+      <td>${r.num_oport||'—'}</td>
+      <td>${r.item_rc||'—'}</td>
       <td style="font-size:11px">${statusAtual||'—'}</td>
       <td style="font-size:11px">${envio?fmtBR(envio):'—'}</td>
       <td style="text-align:center;font-size:11px;${prazo?'font-weight:600':'color:var(--tx2)'}">${prazo?fmtBR(prazo):'—'}</td>
@@ -14419,12 +14408,6 @@ function govRenderMapa(dados, tbodyId){
       <td style="font-size:11px">${finalizado?fmtBR(finalizado):'—'}</td>
       <td style="font-size:11px;${corVal(r.validade)}">${r.validade||'—'}</td>
       <td style="text-align:center">${r.idas||'—'}</td>
-      ${isFast ? `
-      <td style="font-size:11px;text-align:center">${r.nm||'—'}</td>
-      <td style="font-size:11px">${r.tipo_aval||'—'}</td>
-      <td style="font-size:11px">${r.grupo_merc||'—'}</td>
-      <td style="font-size:11px;text-align:center">${r.centro||'—'}</td>
-      ` : ''}
     </tr>`;
   }).join('');
 }
@@ -14435,6 +14418,7 @@ function govRenderMapa(dados, tbodyId){
 // template de linha da tabela MAPA (govRenderMapa), só muda o filtro e a
 // tabela de destino.
 function govRenderAndamento(){
+  if(_moduloAtivo === 'fast') return; // exclusiva do ADLV
   const dados = (_radarDados||[]).filter(r => _classificarStatusMapa(r.analista_auto) === 'Andamento');
 
   const semDados = document.getElementById('gov-andamento-sem-dados');
@@ -14617,45 +14601,21 @@ function govAtualizar(){
 async function govExportar(){
   const wb = XLSX.utils.book_new();
   const dt = new Date().toLocaleDateString('pt-BR').split('/').join('-');
-  const isFast = _moduloAtivo === 'fast';
 
-  // ── Aba MAPA (PATEC Finalizado no FAST) ──
+  // ── Aba MAPA ──
   const dadosMapa = govFiltroMapaPadrao();
-  const hdMapa = ['Analista','Fila Level Board','SLA','RC','Item RC','Oportunidade','Item OP','Status Tratamento','Envio','Prazo Retorno','Status','Finalizado','Comentário','Validade Proposta','Idas Mercado'];
-  if(isFast) hdMapa.push('NM','Tipo Avaliação','Grupo Mercadoria','Centro');
-  const wsMapa = [hdMapa];
+  const wsMapa = [['Analista','Fila Level Board','Validade Proposta','Idas Mercado','SLA','RC','Item RC','Oportunidade','Item OP','Status Tratamento','Envio','Prazo Retorno','Status','Finalizado','Comentário']];
   dadosMapa.forEach(r => {
     const chave = govChave(r);
     const m = _govDados[chave] || {};
     const statusAtual = m.status || (GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase())) ? 'AG. TRATAMENTO' : '');
     const prazo = govCalcPrazo(statusAtual, m.envio||'');
     const statusCalc = govCalcStatus(prazo, m.finalizado||'');
-    const row = [r.analista,r.fila,r.sla,r.rc,r.item_rc,r.num_oport,r.seq,statusAtual,m.envio||'',prazo||'',statusCalc,m.finalizado||'',m.comentario||'',r.validade,r.idas];
-    if(isFast) row.push(r.nm||'',r.tipo_aval||'',r.grupo_merc||'',r.centro||'');
-    wsMapa.push(row);
+    wsMapa.push([r.analista,r.fila,r.validade,r.idas,r.sla,r.rc,r.item_rc,r.num_oport,r.seq,statusAtual,m.envio||'',prazo||'',statusCalc,m.finalizado||'',m.comentario||'']);
   });
   const wsM = XLSX.utils.aoa_to_sheet(wsMapa);
-  const colsM = [{wch:14},{wch:18},{wch:6},{wch:12},{wch:8},{wch:14},{wch:8},{wch:20},{wch:12},{wch:12},{wch:16},{wch:12},{wch:30},{wch:14},{wch:8}];
-  if(isFast) colsM.push({wch:12},{wch:16},{wch:20},{wch:8});
-  wsM['!cols'] = colsM;
-  XLSX.utils.book_append_sheet(wb, wsM, isFast ? 'PATEC Finalizado' : 'MAPA');
-
-  // ── Aba PATEC em Andamento (exclusiva FAST) ──
-  if(isFast){
-    const dadosAnd = (_radarDados||[]).filter(r => _classificarStatusMapa(r.analista_auto) === 'Andamento');
-    const wsAnd = [['Analista','Fila Level Board','SLA','RC','Item RC','Oportunidade','Item OP','Status Tratamento','Envio','Prazo Retorno','Status','Finalizado','Comentário','Validade Proposta','Idas Mercado','NM','Tipo Avaliação','Grupo Mercadoria','Centro']];
-    dadosAnd.forEach(r => {
-      const chave = govChave(r);
-      const m = _govDados[chave] || {};
-      const statusAtual = m.status || (GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase())) ? 'AG. TRATAMENTO' : '');
-      const prazo = govCalcPrazo(statusAtual, m.envio||'');
-      const statusCalc = govCalcStatus(prazo, m.finalizado||'');
-      wsAnd.push([r.analista,r.fila,r.sla,r.rc,r.item_rc,r.num_oport,r.seq,statusAtual,m.envio||'',prazo||'',statusCalc,m.finalizado||'',m.comentario||'',r.validade,r.idas,r.nm||'',r.tipo_aval||'',r.grupo_merc||'',r.centro||'']);
-    });
-    const wsA = XLSX.utils.aoa_to_sheet(wsAnd);
-    wsA['!cols'] = [{wch:14},{wch:18},{wch:6},{wch:12},{wch:8},{wch:14},{wch:8},{wch:20},{wch:12},{wch:12},{wch:16},{wch:12},{wch:30},{wch:14},{wch:8},{wch:12},{wch:16},{wch:20},{wch:8}];
-    XLSX.utils.book_append_sheet(wb, wsA, 'PATEC em Andamento');
-  }
+  wsM['!cols'] = [{wch:14},{wch:18},{wch:14},{wch:8},{wch:6},{wch:12},{wch:8},{wch:14},{wch:8},{wch:20},{wch:12},{wch:12},{wch:16},{wch:12},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, wsM, 'MAPA');
 
   // ── Aba XGL — garantir itens carregados do Firebase ──
   if(!(_xglItens||[]).length){
@@ -15042,8 +15002,10 @@ function govBuscarRC(rc){
       sla:r.sla||'—', fila:r.fila||'—', seguimento:r.seguimento||'—', cat_familia:r.cat_familia||'—', familia:r.familia||'—', tipo_familia:r.tipo_familia||'—', familia_lq:r.familia_lq||'—'});
   });
 
-  // PATEC EM ANDAMENTO — disponível no ADLV e no FAST
-  {
+  // PATEC EM ANDAMENTO (exclusiva do ADLV) — mesma aba ('MAPA') pra usar a
+  // mesma estrutura de dados (_govDados) e ganhar o mesmo tratamento de
+  // edição, comentário e "Registrar ação" que o MAPA já tem.
+  if(_moduloAtivo !== 'fast'){
     const dadosAndamento = (_radarDados||[]).filter(r => {
       const aa = (r.analista_auto||'').trim().toLowerCase();
       return aa.includes('aguardar') && aa.includes('patec') && aa.includes('finalizado');
@@ -15175,7 +15137,6 @@ function govBuscarRC(rc){
           <td colspan="12" style="padding:5px 8px 8px 8px">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
               <span style="font-size:10px;font-weight:700;color:var(--tx2);margin-right:2px">Registrar ação:</span>
-              ${_moduloAtivo==='fast' ? '<button onclick="prodAbrirModalRCTratamento(\''+r.chave+'\',\'em_tratativa\',\'Parecerista\')" style="background:#F3E8FF;border:1.5px solid #7C3AED;border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:#7C3AED;white-space:nowrap">📝 Ag Parecer</button>' : ''}
               <button onclick="prodAbrirModalRC('${r.chave}','primeira_analise')"
                 style="background:var(--azc);border:1.5px solid var(--azm);border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:var(--azm);white-space:nowrap"
                 onmouseover="this.style.background='var(--azm)';this.style.color='#fff'"
@@ -18861,11 +18822,6 @@ function q18Consultar(valor){
           <div style="font-size:20px;margin-bottom:4px">🗂</div>
           <div style="font-size:12px;font-weight:600;color:var(--tx)">MDG Equipe SCOMP</div>
         </button>
-        <button class="acao-sel-btn" id="acao-btn-parecerista" onclick="acaoSelecionarTratamento(this,'Parecerista')"
-          style="display:none;background:var(--cin);border:1.5px solid var(--brd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;transition:all .18s">
-          <div style="font-size:20px;margin-bottom:4px">📝</div>
-          <div style="font-size:12px;font-weight:600;color:var(--tx)">Parecerista</div>
-        </button>
         <button class="acao-sel-btn" onclick="acaoSelecionarTratamento(this,'Concluído')"
           style="background:var(--vdc);border:1.5px solid var(--vd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;grid-column:span 2;transition:all .18s">
           <div style="font-size:20px;margin-bottom:4px">🏁</div>
@@ -19297,29 +19253,15 @@ function _entrarNoApp(){
   // XGL (Governança), Tirar do Fluxo (Planilha Crítica), PATEC em
   // Andamento (Governança), a opção "XGL" no Concluído e "Validação Thiago"
   // são exclusivas do ADLV
-  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','adm-nav-pa-entradas-btn','gov-nav-xgl-btn','pc-nav-fluxo-btn','acao-btn-xgl','acao-btn-validacao-thiago'].forEach(id=>{
+  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','adm-nav-pa-entradas-btn','gov-nav-xgl-btn','pc-nav-fluxo-btn','gov-nav-andamento-btn','acao-btn-xgl','acao-btn-validacao-thiago'].forEach(id=>{
     const btnAdlv = document.getElementById(id);
     if(btnAdlv) btnAdlv.style.display = (_moduloAtivo==='fast') ? 'none' : '';
   });
   // "MDG Equipe SCOMP" é exclusivo do FAST
-  ['acao-btn-mdg-scomp','acao-btn-parecerista'].forEach(id=>{
+  ['acao-btn-mdg-scomp'].forEach(id=>{
     const btnFast = document.getElementById(id);
     if(btnFast) btnFast.style.display = (_moduloAtivo==='fast') ? '' : 'none';
   });
-  // Renomear abas de Governança conforme módulo:
-  // No FAST: MAPA vira "PATEC Finalizado"; "PATEC em Andamento" fica visível com label ajustado
-  // No ADLV: labels originais
-  (function(){
-    const btnMapa = document.querySelector('.stabs .stab[onclick*="govSetTab(\'mapa\'"]');
-    const btnAndamento = document.getElementById('gov-nav-andamento-btn');
-    if(_moduloAtivo === 'fast'){
-      if(btnMapa) btnMapa.textContent = '✅ PATEC Finalizado';
-      if(btnAndamento){ btnAndamento.textContent = '⏳ PATEC em Andamento'; btnAndamento.style.display = ''; }
-    } else {
-      if(btnMapa) btnMapa.textContent = '🗺 MAPA';
-      if(btnAndamento){ btnAndamento.textContent = '⏳ PATEC em Andamento'; btnAndamento.style.display = ''; }
-    }
-  })();
 
   rtIniciarListener();
 
@@ -20622,16 +20564,6 @@ function pcAbrirModalComRC(tipo){
   if(_allChaves.length > 1) _prodCtx.rcChaves = _allChaves;
 }
 
-// Atalho: abre modal já pré-selecionando um tratamento específico (ex: Parecerista)
-function prodAbrirModalRCTratamento(chave, tipo, tratamento){
-  prodAbrirModalRC(chave, tipo);
-  // Aguardar render do modal e pré-selecionar o botão de tratamento
-  setTimeout(()=>{
-    const btn = [...document.querySelectorAll('.acao-sel-btn')].find(b => b.textContent.trim().includes(tratamento));
-    if(btn) acaoSelecionarTratamento(btn, tratamento);
-  }, 150);
-}
-
 function prodAbrirModalRC(chave, tipo){
   // Abre modal para RC específica com chave conhecida (MAPA, XGL ou STATUS B)
   const r    = (_radarDados||[]).find(rx=>govChave(rx)===chave);
@@ -20928,11 +20860,10 @@ async function prodConfirmarAcao(){
     const _rRadar = (_radarDados||[]).find(rr => govChave(rr) === _rcChavePre);
     if(_rRadar) _statusMapaAcao = _classificarStatusMapa(_rRadar.analista_auto);
   }
-  const _tipoFinal = (_prodCtx.tratamento === 'Parecerista') ? 'ag_parecer' : _prodCtx.tipo;
   const registro = {
     colab,
     data: hoje,
-    tipo: _tipoFinal,
+    tipo: _prodCtx.tipo,
     tratamento: _prodCtx.tratamento,
     conclusao: _prodCtx.conclusao || '',
     obs,
@@ -20952,18 +20883,12 @@ async function prodConfirmarAcao(){
     }
   } catch(e){ console.warn('prodConfirmarAcao save:', e); }
 
-  // Atualizar _prodAcoesHoje imediatamente (sem esperar o onSnapshot)
-  if(!window._prodAcoesHoje) window._prodAcoesHoje = [];
-  window._prodAcoesHoje.push(registro);
-
   // Mapear tratamento do modal → valor de GOV_STATUS_OPCOES
   const _TRAT_MAP = {
     'Fornecedor':       'FORNECEDOR',
     'Requisitante':     'REQUISITANTE',
     'MDG':              'MDG',
     'Validação Thiago': 'VALIDAÇÃO DO THIAGO',
-    'MDG Equipe SCOMP': 'MDG EQUIPE SCOMP',
-    'Parecerista':      'PARECERISTA',
     'Concluído':        'Concluído'
   };
   const _tratamentoRaw = _prodCtx.tratamento || '';
@@ -21167,7 +21092,7 @@ async function prodCarregarHistorico(colab, dias=7){
     snap.docs.forEach(doc=>{
       const r=doc.data();
       if(r.anulada) return;
-      const contaMeta = semMeta || ['primeira_analise','em_tratativa','ag_parecer','status_b'].includes(r.tipo);
+      const contaMeta = semMeta || ['primeira_analise','em_tratativa','status_b'].includes(r.tipo);
       if(contaMeta && hist[r.data]!==undefined) hist[r.data]++;
     });
     return hist;
@@ -21175,13 +21100,13 @@ async function prodCarregarHistorico(colab, dias=7){
 }
 
 function prodContarHoje(acoes){
-  const cnt = { primeira_analise:0, em_tratativa:0, ag_parecer:0, status_b:0, outros:0, total:0, meta:0 };
+  const cnt = { primeira_analise:0, em_tratativa:0, status_b:0, outros:0, total:0, meta:0 };
   (acoes||[]).forEach(r=>{
-    if(r.anulada) return;
+    if(r.anulada) return; // ignorar ações anuladas (lançamento manual sobrepõe)
     if(cnt[r.tipo]!==undefined) cnt[r.tipo]++;
     cnt.total++;
   });
-  cnt.meta = cnt.primeira_analise + cnt.em_tratativa + cnt.ag_parecer + cnt.status_b;
+  cnt.meta = cnt.primeira_analise + cnt.em_tratativa + cnt.status_b;
   return cnt;
 }
 
@@ -21246,12 +21171,6 @@ function prodRenderizarPaineis(colab){
     if(s('trat'))   s('trat').textContent   = `⚙️ ${cnt.em_tratativa}`;
     if(s('sb'))     s('sb').textContent     = `✅ ${cnt.status_b}`;
     if(s('outros')) s('outros').textContent = `📋 ${cnt.outros}`;
-    // Badge Ag Parecer — só no FAST
-    const agParecer = s('ag-parecer');
-    if(agParecer){
-      agParecer.textContent = `📝 ${cnt.ag_parecer}`;
-      agParecer.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
-    }
     if(s('total')){
       s('total').textContent = totalLabel;
       s('total').style.background = semMeta ? 'var(--azc)' : cnt.meta>=metaVal?'var(--vdc)':cnt.meta>=metaVal*.8?'var(--amc)':'var(--vmc)';
