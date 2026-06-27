@@ -10897,7 +10897,8 @@ let _cicloAtivo = null;
 async function cicloCarregarAtivo(){
   try{
     const saved=await fbGet('config','ciclo_ativo');
-    const hoje = new Date().toISOString().split('T')[0];\n    // Só troca automaticamente se o ciclo salvo estiver EXPLICITAMENTE fechado
+    const hoje = new Date().toISOString().split('T')[0];
+    // Só troca automaticamente se o ciclo salvo estiver EXPLICITAMENTE fechado
     const cicloFechado = saved && (saved.status==='fechado' || (saved.fim && saved.fim < hoje));
     const cicloAntigo  = saved && (saved.inicio||'') < CICLO_NOVO_INICIO;
     if(cicloFechado){
