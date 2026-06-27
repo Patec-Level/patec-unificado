@@ -19038,6 +19038,14 @@ function q18Consultar(valor){
       </div>
     </div>
 
+    <!-- Campo Chamado MDG (aparece só quando MDG é selecionado) -->
+    <div id="acao-mdg-box" style="display:none;background:#e0f2fe;border:1px solid #0284c7;border-radius:10px;padding:.875rem;margin-bottom:.75rem">
+      <div style="font-size:11px;font-weight:700;color:#0284c7;margin-bottom:.625rem;text-transform:uppercase;letter-spacing:.4px">🗂 Dados do MDG</div>
+      <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Número do Chamado <span style="color:var(--vm)">*</span></div>
+      <input type="text" id="acao-mdg-chamado" placeholder="Ex: 1234567"
+        style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid #0284c7;border-radius:8px;background:#fff">
+    </div>
+
     <!-- Observação -->
     <div style="margin-bottom:1rem">
       <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Observação (opcional)</div>
@@ -20781,6 +20789,8 @@ function prodAbrirModal(origem, tipo){
   document.getElementById('acao-dev-box').style.display = 'none';
   const _dc0 = document.getElementById('acao-dev-centro'); if(_dc0) _dc0.value = '';
   const _dm0 = document.getElementById('acao-dev-motivo'); if(_dm0) _dm0.value = '';
+  const _mdgBox0 = document.getElementById('acao-mdg-box'); if(_mdgBox0) _mdgBox0.style.display = 'none';
+  const _mc0 = document.getElementById('acao-mdg-chamado'); if(_mc0) _mc0.value = '';
   document.getElementById('acao-obs').value = '';
   document.getElementById('acao-erro').style.display = 'none';
   document.querySelectorAll('.acao-sel-btn').forEach(b=>b.classList.remove('selecionado'));
@@ -20840,6 +20850,11 @@ function acaoSelecionarTratamento(btn, tratamento){
     if(_devBox) _devBox.style.display = _prodCtx.tipo === 'outros' ? 'block' : 'none';
     if(_prodCtx.tipo !== 'outros' && document.getElementById('acao-dev-centro')) document.getElementById('acao-dev-centro').value = '';
     if(_prodCtx.tipo !== 'outros' && document.getElementById('acao-dev-motivo')) document.getElementById('acao-dev-motivo').value = '';
+    // Mostrar campo de chamado se MDG selecionado
+    const _mdgBox = document.getElementById('acao-mdg-box');
+    const _isMDG = tratamento === 'MDG' || tratamento === 'MDG Equipe SCOMP';
+    if(_mdgBox) _mdgBox.style.display = _isMDG ? 'block' : 'none';
+    if(!_isMDG && document.getElementById('acao-mdg-chamado')) document.getElementById('acao-mdg-chamado').value = '';
   }
 }
 
@@ -20968,6 +20983,16 @@ async function prodConfirmarAcao(){
     if(!_devCentro){ errEl.textContent='Informe o Centro.'; errEl.style.display='block'; document.getElementById('acao-dev-centro')?.focus(); return; }
     if(!_devMotivo){ errEl.textContent='Selecione o Motivo da devolução.'; errEl.style.display='block'; document.getElementById('acao-dev-motivo')?.focus(); return; }
   }
+  // Capturar e validar número do chamado MDG
+  const _mdgBoxEl = document.getElementById('acao-mdg-box');
+  const _mdgVis   = _mdgBoxEl && _mdgBoxEl.style.display !== 'none';
+  const _mdgChamado = _mdgVis ? (document.getElementById('acao-mdg-chamado')?.value||'').trim() : '';
+  if(_mdgVis && !_mdgChamado){
+    errEl.textContent = 'Informe o número do chamado MDG.';
+    errEl.style.display = 'block';
+    document.getElementById('acao-mdg-chamado')?.focus();
+    return;
+  }
   // Capturar RC antes de montar o registro
   const _rcChavePre  = (_prodCtx.rcChaves||[_prodCtx.rcChave]||[]).filter(Boolean)[0] || '';
   const _rcNumPre    = _rcChavePre ? _rcChavePre.split('|')[0] : (_prodCtx.rcBusca||'');
@@ -20991,6 +21016,7 @@ async function prodConfirmarAcao(){
     ts: new Date().toISOString(),
     ...(_rcChavePre ? { rcChave: _rcChavePre, rc: _rcNumPre } : (_rcNumPre ? { rc: _rcNumPre } : {})),
     ...(_devVis ? { centro: _devCentro, motivo: _devMotivo } : {}),
+    ...(_mdgVis && _mdgChamado ? { chamado_mdg: _mdgChamado } : {}),
     ...(_statusMapaAcao ? { statusMapa: _statusMapaAcao } : {})
   };
 
