@@ -12630,6 +12630,10 @@ let _paEntradas = []; // [{dt:'2026-05-14', val:45}, ...]
 let _backlogAtualGlobal = null; // Backlog atual calculado pelo gráfico de cascata
 
 // Histórico de backlog (apenas informativo)
+// Limpar cache antigo que pode ter dados incorretos (13/06 e 14/06)
+const _paHistCache = JSON.parse(localStorage.getItem(_lsMod('patec_pa_historico'))||'[]');
+const _paHistTemErrado = _paHistCache.some(h => h.dt === '2026-06-13' || h.dt === '2026-06-14');
+if(_paHistTemErrado) localStorage.removeItem(_lsMod('patec_pa_historico'));
 let _paHistorico = JSON.parse(localStorage.getItem(_lsMod('patec_pa_historico'))||'[]');
 if(!_paHistorico.length){
   _paHistorico = [
@@ -12652,8 +12656,6 @@ if(!_paHistorico.length){
     {dt:'2026-06-10', val:593, label:'Backlog Auto — AG. Tratamento'},
     {dt:'2026-06-11', val:543, label:'Backlog Auto — AG. Tratamento'},
     {dt:'2026-06-12', val:533, label:'Backlog Auto — AG. Tratamento'},
-    {dt:'2026-06-13', val:528, label:'Backlog Auto — AG. Tratamento'},
-    {dt:'2026-06-14', val:528, label:'Backlog Auto — AG. Tratamento'},
     {dt:'2026-06-15', val:529, label:'Backlog Auto — AG. Tratamento'},
     {dt:'2026-06-16', val:514, label:'Backlog Auto — AG. Tratamento'},
     {dt:'2026-06-17', val:520, label:'Backlog Auto — AG. Tratamento'},
@@ -12806,12 +12808,10 @@ async function paHistoricoCarregarFirebase(){
       {dt:'2026-06-04', val:660, label:'Backlog Auto — AG. Tratamento'},
       {dt:'2026-06-05', val:693, label:'Backlog Auto — AG. Tratamento'},
       {dt:'2026-06-08', val:650, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-09', val:630, label:'Novo marco'},
-      {dt:'2026-06-10', val:593, label:'Novo marco'},
-      {dt:'2026-06-11', val:543, label:'Novo marco'},
-      {dt:'2026-06-12', val:533, label:'Novo marco'},
-      {dt:'2026-06-13', val:528, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-14', val:528, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-09', val:630, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-10', val:593, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-11', val:543, label:'Backlog Auto — AG. Tratamento'},
+      {dt:'2026-06-12', val:533, label:'Backlog Auto — AG. Tratamento'},
       {dt:'2026-06-15', val:529, label:'Backlog Auto — AG. Tratamento'},
       {dt:'2026-06-16', val:514, label:'Backlog Auto — AG. Tratamento'},
       {dt:'2026-06-17', val:520, label:'Backlog Auto — AG. Tratamento'},
