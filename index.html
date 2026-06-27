@@ -20951,8 +20951,8 @@ function acaoSelecionarConclusao(btn, conclusao){
       const el = document.getElementById(id); if(el) el.value = '';
     });
   }
-  } else {
-    // Auto-preencher Centro a partir da coluna CENTRO da planilha (Radar), se disponível
+  // Auto-preencher Centro a partir da coluna CENTRO da planilha (Radar), se disponível
+  if(conclusao === 'Devolução'){
     const _dcAuto = document.getElementById('acao-dev-centro');
     if(_dcAuto && !_dcAuto.value){
       try{
