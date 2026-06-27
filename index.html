@@ -3860,11 +3860,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Ações</th>
                 <th id="gov-th-cobranca" style="display:none">Histórico de Cobrança</th>
                 <th>Finalizado</th>
-                <th>Validade Proposta</th>
-                <th>Idas Mercado</th>
                 <th id="gov-th-nm" style="display:none">NM</th>
                 <th id="gov-th-tipo-aval" style="display:none">Tipo de Avaliação</th>
                 <th id="gov-th-grupo-merc" style="display:none">Grupo Mercadorias</th>
+                <th>Validade Proposta</th>
+                <th>Idas Mercado</th>
               </tr>
             </thead>
             <tbody id="gov-mapa-tbody"></tbody>
@@ -3896,8 +3896,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Ações</th>
                 <th id="gov-th-cobranca-and" style="display:none">Histórico de Cobrança</th>
                 <th>Finalizado</th>
+                <th id="gov-th-nm-and" style="display:none">NM</th>
                 <th id="gov-th-tipo-aval-and" style="display:none">Tipo de Avaliação</th>
                 <th id="gov-th-grupo-merc-and" style="display:none">Grupo Mercadorias</th>
+                <th>Validade Proposta</th>
+                <th>Idas Mercado</th>
               </tr>
             </thead>
             <tbody id="gov-andamento-tbody"></tbody>
@@ -14417,9 +14420,9 @@ function govRenderMapa(dados, tbodyId){
       <td style="text-align:center"><button onclick="abrirHistoricoRC('${r.rc||''}')" title="Ver histórico de ações" style="background:var(--azc);border:1.5px solid var(--azm);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:var(--azm);white-space:nowrap">📋 Histórico</button></td>
       ${tdCobranca}
       <td style="font-size:11px">${finalizado?fmtBR(finalizado):'—'}</td>
+      ${isFast?`<td style="font-size:11px;text-align:center">${r.nm||'—'}</td><td style="font-size:11px">${r.tipo_aval||'—'}</td><td style="font-size:11px">${r.grupo_merc||'—'}</td>`:''}
       <td style="font-size:11px;${corVal(r.validade)}">${r.validade||'—'}</td>
       <td style="text-align:center">${r.idas||'—'}</td>
-      ${isFast?`<td style="font-size:11px;text-align:center">${r.nm||'—'}</td><td style="font-size:11px">${r.tipo_aval||'—'}</td><td style="font-size:11px">${r.grupo_merc||'—'}</td>`:''}
     </tr>`;
   }).join('');
 }
