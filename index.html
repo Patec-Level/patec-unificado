@@ -6460,7 +6460,7 @@ function renderPainelEstrategico(){
       if(!window._prodAcoesCache) window._prodAcoesCache = {};
       try {
         const snap = await db.collection('producao_acoes')
-          .where('data','>=', '2026-05-26').get();
+          .where('data','>=', (_cicloAtivo?.inicio||CICLO_NOVO_INICIO)).get();
         snap.docs.forEach(d => {
           const a = d.data();
           if(!window._prodAcoesCache[a.data]) window._prodAcoesCache[a.data] = [];
@@ -6492,8 +6492,8 @@ function renderPainelEstrategico(){
     dtDe = document.getElementById('est-de')?.value || '';
     dtAte = document.getElementById('est-ate')?.value || hoje;
   } else {
-    // HARD: sempre a partir de 26/05/2026 (início fixo do ciclo Mai/Jun)
-    dtDe = CICLO_NOVO_INICIO; // '2026-05-26'
+    // Usar início do ciclo ativo (do Firebase)
+    dtDe = (_cicloAtivo?.inicio) || CICLO_NOVO_INICIO;
     dtAte = hoje;
   }
 
@@ -6638,7 +6638,8 @@ function renderPainelEstrategico(){
   }
 
   const cicloFimGraf = _fimSalvo || CICLO_MAIJUN.fim_previsto;
-  const todosOsDias = gerarDiasUteisCiclo('2026-05-26', cicloFimGraf);
+  const cicloInicioGraf = (_cicloAtivo?.inicio) || CICLO_NOVO_INICIO;
+  const todosOsDias = gerarDiasUteisCiclo(cicloInicioGraf, cicloFimGraf);
   const labels = todosOsDias.map(d => fmtDt(d));
 
   // Montar acumulados usando producao_acoes (botões) como fonte principal
