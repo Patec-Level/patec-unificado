@@ -4013,9 +4013,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div class="tw" style="max-height:520px">
           <table>
             <thead><tr>
-              <th>Analista</th><th>Fila Level Board</th><th>SLA</th>
+              <th>Analista</th><th>Origem</th><th>Fila Level Board</th><th>SLA</th>
               <th>RC</th><th>Item RC</th><th>Oportunidade</th><th>Item OP</th>
-              <th>Status Tratamento</th><th>Envio</th><th>Prazo Retorno</th><th>Finalizado</th>
+              <th>Status Tratamento</th><th>Envio</th><th>Prazo Retorno</th><th>Histórico de Cobrança</th><th>Finalizado</th>
             </tr></thead>
             <tbody id="gov-tbody-concluidos"></tbody>
           </table>
@@ -14462,6 +14462,11 @@ async function govSalvarCampo(chave, campo, valor, idx){
   if(campo === 'status') setTimeout(paAtualizarBacklogAuto, 300);
   if(!_govDados[chave]) _govDados[chave] = {};
   _govDados[chave][campo] = valor;
+  // Registrar origem quando finalizado é preenchido
+  if(campo === 'finalizado' && valor){
+    const cls = _classificarStatusMapa((_radarDados||[]).find(r=>govChave(r)===chave)?.analista_auto||'');
+    _govDados[chave]._origem = cls === 'Andamento' ? 'PATEC em Andamento' : (_moduloAtivo==='fast' ? 'PATEC Finalizado' : 'MAPA');
+  }
   // Re-renderizar só a linha para atualizar prazo e status
   const r = _radarDados[idx];
   if(!r) return;
@@ -14489,6 +14494,8 @@ async function govSalvarCampo(chave, campo, valor, idx){
     await db.collection('config').doc('gov_mapa_ts').set({ts: _tsAutoSave});
     localStorage.setItem(_lsMod('patec_gov_cache_saved_ts'), _tsAutoSave);
   } catch(e){ console.warn('govAutoSave:', e); }
+  // Se finalizou, re-renderizar aba Concluídos se estiver ativa
+  if(campo === 'finalizado' && _govTabAtiva === 'concluidos') govRenderConcluidos();
 }
 
 async function govSalvarLinha(chave, idx){
@@ -15830,6 +15837,11 @@ async function govBuscaSalvar(aba, chave, campo, valor){
     if(!_govDados[chave]) _govDados[chave] = {};
     _govDados[chave][campo] = valor;
     if(campo === 'status') setTimeout(paAtualizarBacklogAuto, 300);
+    // Registrar origem quando finalizado é preenchido
+    if(campo === 'finalizado' && valor){
+      const cls = _classificarStatusMapa((_radarDados||[]).find(r=>govChave(r)===chave)?.analista_auto||'');
+      _govDados[chave]._origem = cls === 'Andamento' ? 'PATEC em Andamento' : (_moduloAtivo==='fast' ? 'PATEC Finalizado' : 'MAPA');
+    }
     try{
       const db = getDB(); if(!db) return;
       await db.collection('gov_mapa').doc(chave.replace(/[|]/g,'_')).set({
@@ -15913,63 +15925,104 @@ function govRenderConcluidos(){
   const ct    = document.getElementById('gov-count-concluidos');
   if(!tbody) return;
 
-  // Buscar concluídos no MAPA (finalizado preenchido)
+  const rows = [];
+
+  // ── MAPA / PATEC Finalizado ──
   const dadosMapa = govFiltroMapaPadrao();
-  const concluidos = dadosMapa.filter(r => {
-    const chave = govChave(r);
-    return !!(_govDados[chave]?.finalizado);
-  });
-
-  // Todos os concluídos: do radar + da base embutida
-  const chavesRadar = new Set(dadosMapa.map(r=>govChave(r)));
-  const concBase = Object.entries(_govDados)
-    .filter(([k,v]) => v && v.finalizado && !chavesRadar.has(k))
-    .map(([k,v]) => ({chave:k, ...v}));
-
-  if(ct) ct.textContent = (concluidos.length + concBase.length) + ' item(ns) concluído(s)';
-
-  let html = '';
-
-  // Do radar
-  html += concluidos.map(r => {
+  dadosMapa.forEach(r => {
     const chave = govChave(r);
     const m = _govDados[chave]||{};
+    if(!m.finalizado) return;
     const prazo = govCalcPrazo(m.status||'', m.envio||'');
-    return `<tr>
-      <td style="font-size:11px">${r.analista||'—'}</td>
-      <td style="font-size:11px">${r.fila||'—'}</td>
-      <td style="text-align:center">${r.sla||'—'}</td>
-      <td style="font-weight:700;color:var(--az)">${r.rc||'—'}</td>
-      <td>${r.item_rc||'—'}</td>
-      <td>${r.num_oport||'—'}</td>
-      <td>${r.seq||'—'}</td>
-      <td>${m.status||'—'}</td>
-      <td>${m.envio||'—'}</td>
-      <td>${prazo||'—'}</td>
-      <td style="color:var(--vd);font-weight:700">${m.finalizado}</td>
-    </tr>`;
-  }).join('');
+    const origem = _moduloAtivo === 'fast' ? 'PATEC Finalizado' : 'MAPA';
+    rows.push({ origem, analista: r.analista||'—', fila: r.fila||'—', sla: r.sla||'—',
+      rc: r.rc||'—', item_rc: r.item_rc||'—', op: r.num_oport||'—', seq: r.seq||'—',
+      status: m.status||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado });
+  });
 
-  // Da base embutida (itens que não estão mais no radar)
-  html += concBase.map(item => {
-    const partes = (item.chave||'').split('|');
-    const prazo = govCalcPrazo(item.status||'', item.envio||'');
-    return `<tr>
-      <td style="font-size:11px;color:var(--tx2)">—</td>
-      <td style="font-size:11px;color:var(--tx2)">—</td>
-      <td style="text-align:center">—</td>
-      <td style="font-weight:700;color:var(--az)">${partes[0]||'—'}</td>
-      <td>${partes[1]||'—'}</td>
-      <td>${partes[2]||'—'}</td>
-      <td>${partes[3]||'—'}</td>
-      <td>${item.status||'—'}</td>
-      <td>${item.envio||'—'}</td>
-      <td>${prazo||'—'}</td>
-      <td style="color:var(--vd);font-weight:700">${item.finalizado}</td>
-    </tr>`;
-  }).join('');
+  // ── PATEC em Andamento ──
+  const dadosAnd = (_radarDados||[]).filter(r => _classificarStatusMapa(r.analista_auto) === 'Andamento');
+  dadosAnd.forEach(r => {
+    const chave = govChave(r);
+    const m = _govDados[chave]||{};
+    if(!m.finalizado) return;
+    const prazo = govCalcPrazo(m.status||'', m.envio||'');
+    rows.push({ origem: 'PATEC em Andamento', analista: r.analista||'—', fila: r.fila||'—', sla: r.sla||'—',
+      rc: r.rc||'—', item_rc: r.item_rc||'—', op: r.num_oport||'—', seq: r.seq||'—',
+      status: m.status||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado });
+  });
 
-  tbody.innerHTML = html || '<tr><td colspan="11" style="text-align:center;color:var(--tx2);padding:1.5rem">Nenhum item concluído ainda.</td></tr>';
+  // ── XGL ──
+  (_xglItens||[]).forEach(r => {
+    const chave = xglChave(r.rc, r.item, r.oport, r.itemop);
+    const m = _xglDados[chave]||{};
+    if(!m.finalizado) return;
+    const prazo = govCalcPrazo(m.status||'', m.envio||'');
+    rows.push({ origem: 'XGL', analista: r.analista||'—', fila: '—', sla: '—',
+      rc: r.rc||'—', item_rc: r.item||'—', op: r.oport||'—', seq: r.itemop||'—',
+      status: m.status||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado });
+  });
+
+  // ── Status B ──
+  const sbTodos = (_sbItens&&_sbItens.length) ? _sbItens : (_SB_BASE_ITENS||[]);
+  sbTodos.forEach(r => {
+    const chave = r.chave || sbChave(r.rc, r.seq, r.op, r.item);
+    const m = _sbDados[chave]||_SB_BASE_DADOS[chave]||{};
+    if(!m.finalizado) return;
+    const prazo = govCalcPrazo(m.status||'', m.envio||'');
+    rows.push({ origem: 'Status B', analista: r.analista||'—', fila: '—', sla: '—',
+      rc: r.rc||'—', item_rc: r.seq||'—', op: r.op||'—', seq: r.item||'—',
+      status: m.status||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado });
+  });
+
+  // ── Itens da base embutida que saíram do radar (só MAPA) ──
+  const chavesVivas = new Set([
+    ...dadosMapa.map(r=>govChave(r)),
+    ...dadosAnd.map(r=>govChave(r))
+  ]);
+  Object.entries(_govDados).forEach(([k,v]) => {
+    if(!v || !v.finalizado || chavesVivas.has(k)) return;
+    const partes = k.split('|');
+    const prazo = govCalcPrazo(v.status||'', v.envio||'');
+    rows.push({ origem: v._origem || 'MAPA', analista: '—', fila: '—', sla: '—',
+      rc: partes[0]||'—', item_rc: partes[1]||'—', op: partes[2]||'—', seq: partes[3]||'—',
+      status: v.status||'—', envio: v.envio||'—', prazo: prazo||'—', finalizado: v.finalizado });
+  });
+
+  // Ordenar por data de finalização desc
+  rows.sort((a,b) => (b.finalizado||'').localeCompare(a.finalizado||''));
+
+  if(ct) ct.textContent = rows.length + ' item(ns) concluído(s)';
+
+  const corOrigem = o => {
+    if(o==='PATEC Finalizado'||o==='MAPA') return 'var(--az)';
+    if(o==='PATEC em Andamento') return 'var(--am)';
+    if(o==='XGL') return 'var(--vd)';
+    if(o==='Status B') return 'var(--vm)';
+    return 'var(--tx2)';
+  };
+
+  tbody.innerHTML = rows.length ? rows.map(r => {
+    const acoesRC = _buscarAcoesRC(r.rc).filter(a => a.tratamento);
+    const tdCobranca = acoesRC.length
+      ? `<td style="text-align:center"><button onclick="abrirHistoricoCobranca('${r.rc}')" title="Ver histórico de cobrança" style="background:var(--amc);border:1.5px solid var(--am);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:var(--am);white-space:nowrap">💰 Cobrança (${acoesRC.length})</button></td>`
+      : `<td style="text-align:center;color:var(--tx2);font-size:11px">—</td>`;
+    return `<tr>
+    <td style="font-size:11px">${r.analista}</td>
+    <td style="font-size:11px;font-weight:700;color:${corOrigem(r.origem)}">${r.origem}</td>
+    <td style="font-size:11px">${r.fila}</td>
+    <td style="text-align:center">${r.sla}</td>
+    <td style="font-weight:700;color:var(--az)">${r.rc}</td>
+    <td>${r.item_rc}</td>
+    <td>${r.op}</td>
+    <td>${r.seq}</td>
+    <td>${r.status}</td>
+    <td>${r.envio?fmtBR(r.envio):r.envio}</td>
+    <td>${r.prazo?fmtBR(r.prazo):r.prazo}</td>
+    ${tdCobranca}
+    <td style="color:var(--vd);font-weight:700">${fmtBR(r.finalizado)}</td>
+  </tr>`;
+  }).join('') : '<tr><td colspan="13" style="text-align:center;color:var(--tx2);padding:1.5rem">Nenhum item concluído ainda.</td></tr>';
 }
 
 
