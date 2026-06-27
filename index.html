@@ -1403,6 +1403,19 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div style="font-size:11px;color:var(--tx2)" id="ciclo-datas-ativo"></div>
         </div>
 
+        <!-- AÇÃO RÁPIDA: ENCERRAR MAI/JUN E INICIAR JUN/JUL -->
+        <div id="ciclo-acao-rapida" class="cd" style="border-top:3px solid var(--vm);margin-bottom:1rem;display:none">
+          <div class="cd-t" style="color:var(--vm)">⚡ Ação Rápida — Encerrar Mai/Jun e Iniciar Jun/Jul 2026</div>
+          <div class="al al-r" style="margin-bottom:1rem">⚠️ Esta ação vai <strong>arquivar o Ciclo Mai/Jun 2026</strong> com data de encerramento 25/06/2026 e <strong>ativar o Ciclo Jun/Jul 2026</strong> (início 26/06/2026, fechamento previsto 25/07/2026). Confirme a meta antes de continuar.</div>
+          <div class="form-grid" style="margin-bottom:1rem">
+            <div class="field-wrap">
+              <span class="field-label">Meta do Jun/Jul 2026 (itens)</span>
+              <input type="number" id="acao-rapida-meta" placeholder="Ex: 2700" style="width:100%">
+            </div>
+          </div>
+          <button class="btn" style="background:var(--vm);color:#fff;font-weight:700;padding:9px 20px" onclick="cicloAcaoRapida()">⚡ Encerrar Mai/Jun e Iniciar Jun/Jul 2026</button>
+        </div>
+
         <!-- INICIAR NOVO CICLO (futuro) -->
         <div class="cd" style="border-top:3px solid var(--azm)">
           <div class="cd-t">🚀 Configurar próximo ciclo</div>
@@ -10925,15 +10938,18 @@ function initCicloADM(){
   const ciclo=_cicloAtivo||CICLO_ATUAL;
   const inicio=ciclo.inicio||CICLO_ATUAL.inicio;
 
-  // Aviso: ciclo antigo não encerrado
+  // Verificar se ciclo está pendente de encerramento
   const hoje=new Date().toISOString().split('T')[0];
   const pendente = ciclo.inicio < CICLO_NOVO_INICIO && ciclo.status !== 'fechado';
+
+  // Mostrar card de ação rápida se ciclo pendente
+  const cardAcao = document.getElementById('ciclo-acao-rapida');
+  if(cardAcao) cardAcao.style.display = pendente ? 'block' : 'none';
   const avisoEl = document.getElementById('ciclo-aviso-pendente');
   if(avisoEl){
     if(pendente){
       avisoEl.style.display='block';
-      avisoEl.innerHTML=`⚠️ <strong>Atenção:</strong> O ciclo <strong>${ciclo.nome}</strong> ainda não foi encerrado. 
-        Encerre-o abaixo antes de iniciar o <strong>Ciclo Jun/Jul 2026</strong>.`;
+      avisoEl.innerHTML=`⚠️ <strong>Atenção:</strong> O ciclo <strong>${ciclo.nome}</strong> ainda não foi encerrado. Use o botão abaixo para encerrar e iniciar o <strong>Ciclo Jun/Jul 2026</strong>.`;
     } else {
       avisoEl.style.display='none';
     }
@@ -11014,6 +11030,51 @@ async function cicloAtualizarPrevisto(novaData){
   _cicloAtivo.fim_previsto = novaData;
   await fbSet('config','ciclo_ativo', _cicloAtivo);
   initMetaGap();
+}
+
+async function cicloAcaoRapida(){
+  const meta = parseInt(document.getElementById('acao-rapida-meta')?.value||'0');
+  if(!meta){ alert('Informe a meta do Ciclo Jun/Jul 2026.'); return; }
+  if(!confirm(
+    'CONFIRMAR AÇÃO RÁPIDA\n\n' +
+    '1. Encerrar Ciclo Mai/Jun 2026 com data 25/06/2026\n' +
+    '2. Iniciar Ciclo Jun/Jul 2026 (26/06/2026 → 25/07/2026)\n' +
+    'Meta: ' + meta.toLocaleString('pt-BR') + ' itens\n\n' +
+    'Confirmar?'
+  )) return;
+  try{
+    const db = getDB(); if(!db){ alert('Firebase não conectado.'); return; }
+    // 1. Arquivar o ciclo atual como encerrado
+    const cicloAtual = _cicloAtivo || {};
+    const snapEnc = {
+      id: (cicloAtual.id||'maijun2026') + '_enc_' + Date.now(),
+      nome: cicloAtual.nome || 'Ciclo Mai/Jun 2026',
+      inicio: cicloAtual.inicio || '2026-05-26',
+      fim: '2026-06-25',
+      meta: cicloAtual.meta || 1980,
+      status: 'fechado',
+      ts_encerramento: new Date().toISOString(),
+      obs: 'Encerrado via ação rápida'
+    };
+    await db.collection('ciclos_encerrados').doc(snapEnc.id).set(snapEnc);
+    // 2. Ativar o novo ciclo Jun/Jul
+    const novoC = {
+      id: 'junjul2026',
+      nome: 'Ciclo Jun/Jul 2026',
+      inicio: '2026-06-26',
+      fim: '',
+      fim_previsto: '2026-07-25',
+      meta,
+      status: 'ativo',
+      ts_inicio: new Date().toISOString()
+    };
+    await db.collection('config').doc('ciclo_ativo').set(novoC);
+    _cicloAtivo = novoC;
+    localStorage.setItem(_lsMod('patec_meta'), String(meta));
+    initMetaGap();
+    initCicloADM();
+    alert('✅ Concluído!\n\nCiclo Mai/Jun 2026 arquivado.\nCiclo Jun/Jul 2026 ativado com meta de ' + meta.toLocaleString('pt-BR') + ' itens.');
+  } catch(e){ alert('Erro: ' + e.message); console.error(e); }
 }
 
 async function iniciarNovoCiclo(){
@@ -12574,6 +12635,35 @@ if(!_paHistorico.length){
   _paHistorico = [
     {dt:'2026-03-16', val:766, label:'Início do acompanhamento'},
     {dt:'2026-05-06', val:488, label:'Base do gráfico de medição'},
+    {dt:'2026-05-22', val:632, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-05-23', val:632, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-05-24', val:632, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-05-25', val:614, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-05-26', val:610, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-05-27', val:631, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-05-28', val:649, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-05-29', val:669, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-01', val:666, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-03', val:660, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-04', val:660, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-05', val:693, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-08', val:650, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-09', val:630, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-10', val:593, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-11', val:543, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-12', val:533, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-13', val:528, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-14', val:528, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-15', val:529, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-16', val:514, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-17', val:520, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-18', val:518, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-19', val:520, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-22', val:480, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-23', val:500, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-24', val:490, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-25', val:495, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-26', val:487, label:'Backlog Auto — AG. Tratamento'},
   ];
   localStorage.setItem(_lsMod('patec_pa_historico'), JSON.stringify(_paHistorico));
 }
