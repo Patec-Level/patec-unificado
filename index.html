@@ -4015,7 +4015,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <thead><tr>
               <th>Analista</th><th>Origem</th><th>Fila Level Board</th><th>SLA</th>
               <th>RC</th><th>Item RC</th><th>Oportunidade</th><th>Item OP</th>
-              <th>Status Tratamento</th><th>Envio</th><th>Prazo Retorno</th><th>Histórico de Cobrança</th><th>Finalizado</th>
+              <th>Status Tratamento</th><th>Envio</th><th>Prazo Retorno</th><th>Histórico</th><th>Histórico de Cobrança</th><th>Finalizado</th>
             </tr></thead>
             <tbody id="gov-tbody-concluidos"></tbody>
           </table>
@@ -14347,7 +14347,7 @@ function govRenderMapa(dados, tbodyId){
     console.log('[Status Mapa] Quantos passaram no filtro da tabela:', dados.length);
   }
 
-  tbody.innerHTML = dados.map((r, idx) => {
+  tbody.innerHTML = dados.filter(r => !(_govDados[govChave(r)]?.finalizado)).map((r, idx) => {
     const chave = govChave(r);
     const m = _govDados[chave] || {};
 
@@ -14828,7 +14828,7 @@ function xglRender(){
     <div class="kc"><div class="kn" style="color:var(--vd)">${xglConcluido}</div><div class="kl">Concluídos</div></div>
   `;
 
-  tbody.innerHTML = _xglItens.map((r, idx) => {
+  tbody.innerHTML = _xglItens.filter(r => !(_xglDados[xglChave(r.rc,r.item,r.oport,r.itemop)]?.finalizado)).map((r, idx) => {
     const chave = xglChave(r.rc, r.item, r.oport, r.itemop);
     const m = _xglDados[chave] || {};
 
@@ -16019,10 +16019,11 @@ function govRenderConcluidos(){
     <td>${r.status}</td>
     <td>${r.envio?fmtBR(r.envio):r.envio}</td>
     <td>${r.prazo?fmtBR(r.prazo):r.prazo}</td>
+    <td style="text-align:center"><button onclick="abrirHistoricoRC('${r.rc}')" title="Ver histórico de ações" style="background:var(--azc);border:1.5px solid var(--azm);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:var(--azm);white-space:nowrap">📋 Histórico</button></td>
     ${tdCobranca}
     <td style="color:var(--vd);font-weight:700">${fmtBR(r.finalizado)}</td>
   </tr>`;
-  }).join('') : '<tr><td colspan="13" style="text-align:center;color:var(--tx2);padding:1.5rem">Nenhum item concluído ainda.</td></tr>';
+  }).join('') : '<tr><td colspan="14" style="text-align:center;color:var(--tx2);padding:1.5rem">Nenhum item concluído ainda.</td></tr>';
 }
 
 
@@ -16399,7 +16400,7 @@ function sbRender(){
     <div class="kc"><div class="kn" style="color:var(--am)">${sbEmAberto}</div><div class="kl">Em Aberto<br><span style="font-size:10px;color:var(--vm);font-weight:600">${sbAtrasado} atrasado${sbAtrasado!==1?'s':''} · ${sbEmAberto-sbAtrasado} no prazo</span></div></div>
     <div class="kc"><div class="kn" style="color:var(--vd)">${sbConcluido}</div><div class="kl">Concluídos</div></div>
   `;
-  tbody.innerHTML = _sbItens.map((r, idx) => {
+  tbody.innerHTML = _sbItens.filter(r => !(_sbDados[sbChave(r.rc,r.seq,r.op,r.item)]?.finalizado)).map((r, idx) => {
     const chave = sbChave(r.rc, r.seq, r.op, r.item);
     const m = _sbDados[chave] || {};
     const statusAtual = m.status || '';
