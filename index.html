@@ -19046,6 +19046,38 @@ function q18Consultar(valor){
         style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid #0284c7;border-radius:8px;background:#fff">
     </div>
 
+    <!-- Campos Pedido (aparece só quando Pedido é selecionado) -->
+    <div id="acao-pedido-box" style="display:none;background:#f0fdf4;border:1px solid #16a34a;border-radius:10px;padding:.875rem;margin-bottom:.75rem">
+      <div style="font-size:11px;font-weight:700;color:#16a34a;margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.4px">🛒 Dados do Pedido</div>
+      <div style="display:flex;flex-direction:column;gap:.625rem">
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">📅 Negociação — Data da solicitação de desconto <span style="color:var(--vm)">*</span></div>
+          <input type="date" id="acao-pedido-negociacao"
+            style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid #16a34a;border-radius:8px;background:#fff">
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">🏭 Fornecedor <span style="font-size:10px;color:var(--tx2);font-weight:400">(opcional)</span></div>
+          <input type="text" id="acao-pedido-fornecedor" placeholder="Nome do fornecedor..."
+            style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:8px;background:#fff">
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">🔢 Fornecedor Ganhador ID SAP <span style="color:var(--vm)">*</span></div>
+          <input type="text" id="acao-pedido-id-sap" placeholder="Código SAP do fornecedor..."
+            style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid #16a34a;border-radius:8px;background:#fff">
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">📦 NM do Pedido <span style="color:var(--vm)">*</span></div>
+          <input type="text" id="acao-pedido-nm" placeholder="NM que vai para pedido..."
+            style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid #16a34a;border-radius:8px;background:#fff">
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">💬 Comentário para equipe de pedido <span style="color:var(--vm)">*</span></div>
+          <textarea id="acao-pedido-comentario" placeholder="Instruções e análise para a equipe de pedido..." rows="3"
+            style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid #16a34a;border-radius:8px;background:#fff;resize:vertical;font-family:inherit"></textarea>
+        </div>
+      </div>
+    </div>
+
     <!-- Observação -->
     <div style="margin-bottom:1rem">
       <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Observação (opcional)</div>
@@ -20791,6 +20823,10 @@ function prodAbrirModal(origem, tipo){
   const _dm0 = document.getElementById('acao-dev-motivo'); if(_dm0) _dm0.value = '';
   const _mdgBox0 = document.getElementById('acao-mdg-box'); if(_mdgBox0) _mdgBox0.style.display = 'none';
   const _mc0 = document.getElementById('acao-mdg-chamado'); if(_mc0) _mc0.value = '';
+  const _pedidoBox0 = document.getElementById('acao-pedido-box'); if(_pedidoBox0) _pedidoBox0.style.display = 'none';
+  ['acao-pedido-negociacao','acao-pedido-fornecedor','acao-pedido-id-sap','acao-pedido-nm','acao-pedido-comentario'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
   document.getElementById('acao-obs').value = '';
   document.getElementById('acao-erro').style.display = 'none';
   document.querySelectorAll('.acao-sel-btn').forEach(b=>b.classList.remove('selecionado'));
@@ -20906,6 +20942,15 @@ function acaoSelecionarConclusao(btn, conclusao){
   if(conclusao !== 'Devolução'){
     const _dc = document.getElementById('acao-dev-centro'); if(_dc) _dc.value = '';
     const _dm = document.getElementById('acao-dev-motivo'); if(_dm) _dm.value = '';
+  }
+  // Mostrar campos de Pedido apenas se Pedido selecionado
+  const _pedidoBox = document.getElementById('acao-pedido-box');
+  if(_pedidoBox) _pedidoBox.style.display = conclusao === 'Pedido' ? 'block' : 'none';
+  if(conclusao !== 'Pedido'){
+    ['acao-pedido-negociacao','acao-pedido-fornecedor','acao-pedido-id-sap','acao-pedido-nm','acao-pedido-comentario'].forEach(id=>{
+      const el = document.getElementById(id); if(el) el.value = '';
+    });
+  }
   } else {
     // Auto-preencher Centro a partir da coluna CENTRO da planilha (Radar), se disponível
     const _dcAuto = document.getElementById('acao-dev-centro');
@@ -20983,7 +21028,20 @@ async function prodConfirmarAcao(){
     if(!_devCentro){ errEl.textContent='Informe o Centro.'; errEl.style.display='block'; document.getElementById('acao-dev-centro')?.focus(); return; }
     if(!_devMotivo){ errEl.textContent='Selecione o Motivo da devolução.'; errEl.style.display='block'; document.getElementById('acao-dev-motivo')?.focus(); return; }
   }
-  // Capturar e validar número do chamado MDG
+  // Capturar e validar campos de Pedido
+  const _pedidoBoxEl = document.getElementById('acao-pedido-box');
+  const _pedidoVis   = _pedidoBoxEl && _pedidoBoxEl.style.display !== 'none';
+  const _pedidoNegociacao  = _pedidoVis ? (document.getElementById('acao-pedido-negociacao')?.value||'').trim() : '';
+  const _pedidoFornecedor  = _pedidoVis ? (document.getElementById('acao-pedido-fornecedor')?.value||'').trim() : '';
+  const _pedidoIdSap       = _pedidoVis ? (document.getElementById('acao-pedido-id-sap')?.value||'').trim() : '';
+  const _pedidoNm          = _pedidoVis ? (document.getElementById('acao-pedido-nm')?.value||'').trim() : '';
+  const _pedidoComentario  = _pedidoVis ? (document.getElementById('acao-pedido-comentario')?.value||'').trim() : '';
+  if(_pedidoVis){
+    if(!_pedidoNegociacao){ errEl.textContent='Informe a data de negociação (solicitação de desconto).'; errEl.style.display='block'; document.getElementById('acao-pedido-negociacao')?.focus(); return; }
+    if(!_pedidoIdSap){ errEl.textContent='Informe o Fornecedor Ganhador ID SAP.'; errEl.style.display='block'; document.getElementById('acao-pedido-id-sap')?.focus(); return; }
+    if(!_pedidoNm){ errEl.textContent='Informe o NM do Pedido.'; errEl.style.display='block'; document.getElementById('acao-pedido-nm')?.focus(); return; }
+    if(!_pedidoComentario){ errEl.textContent='Informe o comentário para a equipe de pedido.'; errEl.style.display='block'; document.getElementById('acao-pedido-comentario')?.focus(); return; }
+  }
   const _mdgBoxEl = document.getElementById('acao-mdg-box');
   const _mdgVis   = _mdgBoxEl && _mdgBoxEl.style.display !== 'none';
   const _mdgChamado = _mdgVis ? (document.getElementById('acao-mdg-chamado')?.value||'').trim() : '';
@@ -21017,6 +21075,7 @@ async function prodConfirmarAcao(){
     ...(_rcChavePre ? { rcChave: _rcChavePre, rc: _rcNumPre } : (_rcNumPre ? { rc: _rcNumPre } : {})),
     ...(_devVis ? { centro: _devCentro, motivo: _devMotivo } : {}),
     ...(_mdgVis && _mdgChamado ? { chamado_mdg: _mdgChamado } : {}),
+    ...(_pedidoVis ? { pedido_negociacao: _pedidoNegociacao, pedido_fornecedor: _pedidoFornecedor, pedido_id_sap: _pedidoIdSap, pedido_nm: _pedidoNm, pedido_comentario: _pedidoComentario } : {}),
     ...(_statusMapaAcao ? { statusMapa: _statusMapaAcao } : {})
   };
 
