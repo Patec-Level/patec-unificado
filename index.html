@@ -3826,15 +3826,15 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
       <!-- Abas -->
       <div class="stabs" style="margin-bottom:1rem">
-        <button class="stab active" onclick="govSetTab('mapa',this)">🗺 MAPA</button>
-        <button class="stab" id="gov-nav-andamento-btn" onclick="govSetTab('andamento',this)">⏳ PATEC em Andamento</button>
+        <button class="stab active" id="gov-nav-andamento-btn" onclick="govSetTab('andamento',this)">⏳ PATEC em Andamento</button>
+        <button class="stab" onclick="govSetTab('mapa',this)">🗺 PATEC Finalizado</button>
         <button class="stab" id="gov-nav-xgl-btn" onclick="govSetTab('xgl',this)">📋 XGL</button>
         <button class="stab" onclick="govSetTab('statusb',this)">📊 Status B</button>
         <button class="stab" onclick="govSetTab('concluidos',this)">✅ Concluídos</button>
       </div>
 
       <!-- ABA MAPA -->
-      <div id="gov-tab-mapa">
+      <div id="gov-tab-mapa" style="display:none">
         <!-- KPIs MAPA -->
         <div class="kgrid" id="gov-kpis" style="margin-bottom:1rem"></div>
 
@@ -3870,7 +3870,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       </div>
 
       <!-- ABA PATEC EM ANDAMENTO (exclusiva do ADLV) -->
-      <div id="gov-tab-andamento" style="display:none">
+      <div id="gov-tab-andamento">
         <div class="kgrid" id="gov-andamento-kpis" style="margin-bottom:1rem"></div>
         <div id="gov-andamento-sem-dados" style="text-align:center;padding:3rem;color:var(--tx2);font-size:13px;display:none">
           📡 Nenhum item em "Aguardar PATEC ser Finalizado" no momento.
@@ -14113,7 +14113,7 @@ function pcRenderFluxo(){
 // ════════════════════════════════════════════
 // GOVERNANÇA
 // ════════════════════════════════════════════
-let _govTabAtiva = 'mapa';
+let _govTabAtiva = 'andamento';
 let _govDados = {};
 let _govDadosCarregadoOK = false; // true só depois que fbCarregarGov() terminar com sucesso —
   // protege contra registrar "entradas" falsas no Plano de Ação quando o upload do Radar
@@ -14287,6 +14287,7 @@ async function govInicializar(){
   }
 
   govRenderMapa(dados);
+  govRenderAndamento();
 }
 
 // Lista padrão de itens do MAPA (Governança). No ADLV, continua exatamente
@@ -14997,7 +14998,7 @@ function govBuscarRC(rc){
     if(!statusDefault && GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase()))) statusDefault = 'AG. TRATAMENTO';
     const prazo = govCalcPrazo(statusDefault, m.envio||'');
     const status = govCalcStatus(prazo, m.finalizado||'');
-    resultados.push({aba:'MAPA', chave, analista:r.analista||'—', rc:r.rc, seq:r.seq, op:r.num_oport, item:r.item_rc,
+    resultados.push({aba:'MAPA', abaLabel:'🗺 PATEC Finalizado', chave, analista:r.analista||'—', rc:r.rc, seq:r.seq, op:r.num_oport, item:r.item_rc,
       status: statusDefault, envio:m.envio||'', prazo:prazo||'—', statusCalc:status, finalizado:m.finalizado||'',
       sla:r.sla||'—', fila:r.fila||'—', seguimento:r.seguimento||'—', cat_familia:r.cat_familia||'—', familia:r.familia||'—', tipo_familia:r.tipo_familia||'—', familia_lq:r.familia_lq||'—'});
   });
