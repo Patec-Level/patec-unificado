@@ -15274,23 +15274,21 @@ function govBuscarRC(rc){
   // PATEC EM ANDAMENTO (exclusiva do ADLV) — mesma aba ('MAPA') pra usar a
   // mesma estrutura de dados (_govDados) e ganhar o mesmo tratamento de
   // edição, comentário e "Registrar ação" que o MAPA já tem.
-  if(_moduloAtivo !== 'fast'){
-    const dadosAndamento = (_radarDados||[]).filter(r => {
-      const aa = (r.analista_auto||'').trim().toLowerCase();
-      return aa.includes('aguardar') && aa.includes('patec') && aa.includes('finalizado');
-    });
-    dadosAndamento.filter(r=>(r.rc||'').includes(rcBusca)).forEach(r=>{
-      const chave = govChave(r);
-      const m = _govDados[chave]||{};
-      let statusDefault = m.status || '';
-      if(!statusDefault && GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase()))) statusDefault = 'AG. TRATAMENTO';
-      const prazo = govCalcPrazo(statusDefault, m.envio||'');
-      const status = govCalcStatus(prazo, m.finalizado||'');
-      resultados.push({aba:'MAPA', abaLabel:'⏳ Em Andamento', chave, analista:r.analista||'—', rc:r.rc, seq:r.seq, op:r.num_oport, item:r.item_rc,
-        status: statusDefault, envio:m.envio||'', prazo:prazo||'—', statusCalc:status, finalizado:m.finalizado||'',
-        sla:r.sla||'—', fila:r.fila||'—', seguimento:r.seguimento||'—', cat_familia:r.cat_familia||'—', familia:r.familia||'—', tipo_familia:r.tipo_familia||'—', familia_lq:r.familia_lq||'—'});
-    });
-  }
+  const dadosAndamento = (_radarDados||[]).filter(r => {
+    const aa = (r.analista_auto||'').trim().toLowerCase();
+    return aa.includes('aguardar') && aa.includes('patec') && aa.includes('finalizado');
+  });
+  dadosAndamento.filter(r=>(r.rc||'').includes(rcBusca)).forEach(r=>{
+    const chave = govChave(r);
+    const m = _govDados[chave]||{};
+    let statusDefault = m.status || '';
+    if(!statusDefault && GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase()))) statusDefault = 'AG. TRATAMENTO';
+    const prazo = govCalcPrazo(statusDefault, m.envio||'');
+    const status = govCalcStatus(prazo, m.finalizado||'');
+    resultados.push({aba:'MAPA', abaLabel:'⏳ Em Andamento', chave, analista:r.analista||'—', rc:r.rc, seq:r.seq, op:r.num_oport, item:r.item_rc,
+      status: statusDefault, envio:m.envio||'', prazo:prazo||'—', statusCalc:status, finalizado:m.finalizado||'',
+      sla:r.sla||'—', fila:r.fila||'—', seguimento:r.seguimento||'—', cat_familia:r.cat_familia||'—', familia:r.familia||'—', tipo_familia:r.tipo_familia||'—', familia_lq:r.familia_lq||'—'});
+  });
 
   // XGL — deduplicar por chave antes de exibir (proteção contra duplicatas legadas na base)
   const _xglVistos = new Set();
