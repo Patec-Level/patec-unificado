@@ -14313,9 +14313,6 @@ function _classificarStatusMapa(analistaAuto){
 function govFiltroMapaPadrao(){
   return (_radarDados||[]).filter(r=>{
     const cls = _classificarStatusMapa(r.analista_auto);
-    if(_moduloAtivo === 'fast'){
-      return cls === 'Finalizado' || cls === 'Andamento';
-    }
     return cls === 'Finalizado';
   });
 }
@@ -14328,7 +14325,7 @@ function govRenderMapa(dados, tbodyId){
   // Cabeçalho "Status Mapa" e "Histórico de Cobrança" só aparecem no FAST
   // (só existem na tabela MAPA)
   const thStatusMapa = document.getElementById('gov-th-status-mapa');
-  if(thStatusMapa) thStatusMapa.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
+  if(thStatusMapa) thStatusMapa.style.display = 'none';
   const thCobranca = document.getElementById('gov-th-cobranca');
   if(thCobranca) thCobranca.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
   const thCobrancaAnd = document.getElementById('gov-th-cobranca-and');
@@ -14383,12 +14380,7 @@ function govRenderMapa(dados, tbodyId){
     // "Aguardar PATEC ser Finalizado" → "PATEC Em Andamento". Comparação
     // por palavra-chave (sem diferenciar maiúscula/minúscula) pra não
     // depender de bater a frase exata.
-    let tdStatusMapa = '';
-    if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
-      const cls = _classificarStatusMapa(r.analista_auto);
-      const statusMapaTxt = cls === 'Finalizado' ? 'PATEC Finalizado' : cls === 'Andamento' ? 'PATEC Em Andamento' : '—';
-      tdStatusMapa = `<td style="font-size:11px">${statusMapaTxt}</td>`;
-    }
+    const tdStatusMapa = '';
 
     // Coluna "Histórico de Cobrança" — exclusiva do FAST. Lista cada vez
     // que o Status de Tratamento foi alterado pra essa RC (data + etapa),
