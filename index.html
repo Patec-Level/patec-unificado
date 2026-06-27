@@ -3913,6 +3913,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Status</th>
                 <th>Ações</th>
                 <th id="gov-th-cobranca-and" style="display:none">Histórico de Cobrança</th>
+                <th id="gov-th-registrar-and" style="display:none">Registrar</th>
                 <th>Finalizado</th>
                 <th id="gov-th-nm-and" style="display:none">NM</th>
                 <th id="gov-th-tipo-aval-and" style="display:none">Tipo de Avaliação</th>
@@ -14559,6 +14560,8 @@ function govRenderMapa(dados, tbodyId){
   if(thCobranca) thCobranca.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
   const thCobrancaAnd = document.getElementById('gov-th-cobranca-and');
   if(thCobrancaAnd) thCobrancaAnd.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
+  const thRegistrarAnd = document.getElementById('gov-th-registrar-and');
+  if(thRegistrarAnd) thRegistrarAnd.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
   // Colunas extras FAST (NM, Tipo Avaliação, Grupo Mercadorias) — ambas as tabelas
   const isFast = _moduloAtivo === 'fast';
   const sfx = tbodyId === 'gov-mapa-tbody' ? '' : '-and';
@@ -14640,6 +14643,15 @@ function govRenderMapa(dados, tbodyId){
       <td style="text-align:center;font-size:11px;${govCorStatus(statusCalc)}">${statusCalc||'—'}</td>
       <td style="text-align:center"><button onclick="abrirHistoricoRC('${r.rc||''}')" title="Ver histórico de ações" style="background:var(--azc);border:1.5px solid var(--azm);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:var(--azm);white-space:nowrap">📋 Histórico</button></td>
       ${tdCobranca}
+      ${isFast ? `<td style="text-align:center">
+        <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center">
+          <button onclick="prodAbrirModalRC('${chave}','ag_parecer')" style="background:#ede9fe;border:1.5px solid #7c3aed;border-radius:6px;padding:2px 7px;cursor:pointer;font-size:10px;font-weight:700;color:#7c3aed">📝</button>
+          <button onclick="prodAbrirModalRC('${chave}','primeira_analise')" style="background:var(--azc);border:1.5px solid var(--azm);border-radius:6px;padding:2px 7px;cursor:pointer;font-size:10px;font-weight:700;color:var(--azm)">🔍</button>
+          <button onclick="prodAbrirModalRC('${chave}','em_tratativa')" style="background:var(--azc);border:1.5px solid var(--azm);border-radius:6px;padding:2px 7px;cursor:pointer;font-size:10px;font-weight:700;color:var(--azm)">⚙️</button>
+          <button onclick="prodAbrirModalRC('${chave}','status_b')" style="background:var(--vdc);border:1.5px solid var(--vd);border-radius:6px;padding:2px 7px;cursor:pointer;font-size:10px;font-weight:700;color:var(--vd)">✅</button>
+          <button onclick="prodAbrirModalRC('${chave}','outros')" style="background:var(--amc);border:1.5px solid var(--am);border-radius:6px;padding:2px 7px;cursor:pointer;font-size:10px;font-weight:700;color:var(--am)">📋</button>
+        </div>
+      </td>` : ''}
       <td style="font-size:11px">${finalizado?fmtBR(finalizado):'—'}</td>
       ${isFast?`<td style="font-size:11px;text-align:center">${r.nm||'—'}</td><td style="font-size:11px">${r.tipo_aval||'—'}</td><td style="font-size:11px">${r.grupo_merc||'—'}</td>`:''}
       <td style="font-size:11px;${corVal(r.validade)}">${r.validade||'—'}</td>
