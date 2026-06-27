@@ -9218,16 +9218,20 @@ async function expRelatorioPedidos(){
       const aba = d.aba || '';
       const temOport = aba === 'MAPA' && numOport;
 
-      // Buscar item_rc no _radarDados para cruzar com a oportunidade
+      // No radar: seq=Item RC, num_oport=Oportunidade, item_rc=Item OP
+      // A chave é RC|SEQ|NUM_OPORT — buscar no radar por RC + num_oport
       const radar = temOport
-        ? (_radarDados||[]).find(r => r.rc === rc && String(r.num_oport||'').trim() === numOport) || {}
+        ? (_radarDados||[]).find(r =>
+            String(r.rc||'').trim() === rc &&
+            String(r.num_oport||'').trim() === numOport
+          ) || {}
         : {};
 
       rows.push({
         'RC':                         rc,
         'Item RC':                    seq,
         'Oportunidade':               temOport ? numOport          : '',
-        'Item OP':                    temOport ? (radar.item_rc||'') : '',
+        'Item OP':                    temOport ? (radar.item_op||radar.item_rc||'') : '',
         'Analista':                   radar.analista || d.analista || '',
         'Fila Level Board':           radar.fila     || '',
         'SLA':                        radar.sla      || '',
@@ -10051,12 +10055,17 @@ async function radarOnFile(file){
       console.log('[RADAR] Coluna de urgência encontrada:', colUrg, '| valor exemplo:', colUrg ? raw[0][colUrg] : 'NÃO ENCONTRADA');
     }
 
+    const _radarCols = raw.length > 0 ? Object.keys(raw[0]) : [];
+    const _colN = _radarCols[13]; // Coluna N = Item OP
+    const _colM = _radarCols[12]; // Coluna M = Oportunidade
+    console.log('[RADAR] Col M='+_colM+' | N='+_colN);
     const rows=raw.filter(r=>r['RC']&&r['RC']!=='RC').map(r=>({
       analista_auto: String(r['STATUS MAPA ']||r['ANALISTA_AUTOMATICO']||'').trim(),
       rc:            String(r['RC']||'').trim(),
       seq:           String(r['SEQ']||'').trim(),
+      num_oport:     String(r['OPORTUNIDADE']||r['NUMERO_OPORTUNIDADE']||(_colM?r[_colM]:'')||'').trim(),
       item_rc:       String(r['Item da RC']||r['ITEM']||r['Item']||'').trim(),
-      num_oport:     String(r['OPORTUNIDADE']||r['NUMERO_OPORTUNIDADE']||'').trim(),
+      item_op:       String((_colN?r[_colN]:'')||r['Item']||r['ITEM']||'').trim(),
       sla:           Number(r['SLA']||r['SLA LevelBoard']||0),
       fila:          String(r['Fila ( esteira) ']||r['Fila ']||r['Fila']||'').trim(),
       analista:      String(r['Analista PATEC']||r['Analista ']||r['Analista']||'').trim(),
