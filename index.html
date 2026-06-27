@@ -1404,7 +1404,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         </div>
 
         <!-- AÇÃO RÁPIDA: ENCERRAR MAI/JUN E INICIAR JUN/JUL -->
-        <div id="ciclo-acao-rapida" class="cd" style="border-top:3px solid var(--vm);margin-bottom:1rem;display:none">
+        <div id="ciclo-acao-rapida" class="cd" style="border-top:3px solid var(--vm);margin-bottom:1rem">
           <div class="cd-t" style="color:var(--vm)">⚡ Ação Rápida — Encerrar Mai/Jun e Iniciar Jun/Jul 2026</div>
           <div class="al al-r" style="margin-bottom:1rem">⚠️ Esta ação vai <strong>arquivar o Ciclo Mai/Jun 2026</strong> com data de encerramento 25/06/2026 e <strong>ativar o Ciclo Jun/Jul 2026</strong> (início 26/06/2026, fechamento previsto 25/07/2026). Confirme a meta antes de continuar.</div>
           <div class="form-grid" style="margin-bottom:1rem">
@@ -6629,7 +6629,7 @@ function renderPainelEstrategico(){
   }
 
   const cicloFimGraf = _fimSalvo || CICLO_MAIJUN.fim_previsto;
-  const todosOsDias = gerarDiasUteisCiclo(CICLO_NOVO_INICIO, cicloFimGraf);
+  const todosOsDias = gerarDiasUteisCiclo('2026-05-26', cicloFimGraf);
   const labels = todosOsDias.map(d => fmtDt(d));
 
   // Montar acumulados usando producao_acoes (botões) como fonte principal
@@ -8114,7 +8114,7 @@ async function fbCarregarMapaDiario(){
     const db=getDB();if(!db)return;
     // Apenas ciclo atual — histórico de ciclos encerrados fica em ciclos_encerrados
     const snap=await db.collection('mapa_diario')
-      .where('data','>=',CICLO_NOVO_INICIO)
+      .where('data','>=','2026-05-26')
       .orderBy('data').get();
     mapaFirebase=snap.docs.map(d=>d.data());
     mapaAtualizarGlobais();
@@ -8135,7 +8135,7 @@ async function fbCarregarPCPDiario(){
     _pcpFirebaseOffline = false;
     // Carregar apenas do ciclo atual em diante (não recarrega histórico todo)
     const snap=await db.collection('pcp_diario')
-      .where('data','>=', CICLO_NOVO_INICIO)
+      .where('data','>=', '2026-05-26')
       .orderBy('data').get();
     if(snap.docs.length===0){
       pcpRecalcularTudo();
