@@ -3894,10 +3894,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Prazo Retorno</th>
                 <th>Status</th>
                 <th>Ações</th>
+                <th id="gov-th-cobranca-and" style="display:none">Histórico de Cobrança</th>
                 <th>Finalizado</th>
-                <th>Validade Proposta</th>
-                <th>Idas Mercado</th>
-                <th id="gov-th-nm-and" style="display:none">NM</th>
                 <th id="gov-th-tipo-aval-and" style="display:none">Tipo de Avaliação</th>
                 <th id="gov-th-grupo-merc-and" style="display:none">Grupo Mercadorias</th>
               </tr>
@@ -14329,7 +14327,9 @@ function govRenderMapa(dados, tbodyId){
   const thStatusMapa = document.getElementById('gov-th-status-mapa');
   if(thStatusMapa) thStatusMapa.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
   const thCobranca = document.getElementById('gov-th-cobranca');
-  if(thCobranca) thCobranca.style.display = (_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody') ? '' : 'none';
+  if(thCobranca) thCobranca.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
+  const thCobrancaAnd = document.getElementById('gov-th-cobranca-and');
+  if(thCobrancaAnd) thCobrancaAnd.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
   // Colunas extras FAST (NM, Tipo Avaliação, Grupo Mercadorias) — ambas as tabelas
   const isFast = _moduloAtivo === 'fast';
   const sfx = tbodyId === 'gov-mapa-tbody' ? '' : '-and';
@@ -14392,7 +14392,7 @@ function govRenderMapa(dados, tbodyId){
     // ex: "01.01.26 - Fornecedor, 04.01.26 - Fornecedor" — usado pra
     // acompanhar a regra de devolução por cobrança repetida.
     let tdCobranca = '';
-    if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
+    if(_moduloAtivo === 'fast'){
       const acoesRC = _buscarAcoesRC(r.rc).filter(a => a.tratamento);
       if(acoesRC.length){
         tdCobranca = `<td style="text-align:center"><button onclick="abrirHistoricoCobranca('${r.rc||''}')" title="Ver histórico de cobrança" style="background:var(--amc);border:1.5px solid var(--am);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:var(--am);white-space:nowrap">💰 Cobrança (${acoesRC.length})</button></td>`;
