@@ -1675,6 +1675,15 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <!-- ── RESULTADO DE MEDIÇÃO ── -->
       <div id="adm-resultado-medicao" class="adm-tab" style="display:none">
         <div class="al al-b" style="margin-bottom:1rem">ℹ Histórico completo de todos os ciclos encerrados. Clique em um ciclo para ver o detalhamento completo.</div>
+
+        <!-- GERENCIAR DOCUMENTOS FIREBASE -->
+        <div class="cd" style="border-top:3px solid var(--az);margin-bottom:1rem">
+          <div class="cd-t" style="color:var(--az)">🗄 Documentos no Firebase — ciclos_encerrados</div>
+          <div style="font-size:12px;color:var(--tx2);margin-bottom:.75rem">Lista todos os documentos salvos diretamente no Firebase. Use para excluir documentos com dados incorretos.</div>
+          <button class="btn btn-s" style="font-size:12px;padding:6px 14px;margin-bottom:1rem" onclick="fbListarCiclosEncerrados()">🔄 Carregar documentos do Firebase</button>
+          <div id="fb-ciclos-lista" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
+
         <div id="resultado-ciclos-lista" style="display:flex;flex-direction:column;gap:12px;margin-bottom:1rem"></div>
         <div id="resultado-ciclos-empty" class="al al-b">ℹ Nenhum ciclo encerrado ainda. Ao encerrar um ciclo em Gestão de Ciclos, ele aparece aqui.</div>
         <div id="resultado-detalhe" style="display:none;margin-top:1rem">
@@ -10990,21 +10999,19 @@ async function encerrarCicloConfirmar(){
   const inicio = ciclo.inicio || CICLO_ATUAL.inicio;
   const meta   = ciclo.meta   || CICLO_ATUAL.meta_ciclo;
 
-  // Buscar registros do período no Firebase diretamente (não depende do filtro de memória)
+  // Buscar registros do período no Firebase — apenas 'producoes' (tem f[])
+  // fechamento_dia tem estrutura diferente e não tem f[]
   let regsC = registros.filter(r => r.data >= inicio && r.data <= dtFech);
-  // Se poucos registros em memória, buscar do Firebase
   const db = getDB();
   if(db && regsC.length < 5){
     try{
-      const [snapP, snapF] = await Promise.all([
-        db.collection('producoes').where('data','>=',inicio).where('data','<=',dtFech).get(),
-        db.collection('fechamento_dia').where('data','>=',inicio).where('data','<=',dtFech).get().catch(()=>({docs:[]}))
-      ]);
-      const mapFb = {};
-      snapP.docs.forEach(d=>{ const r=d.data(); if(r.colab&&r.data) mapFb[r.colab+'|'+r.data]=r; });
-      snapF.docs.forEach(d=>{ const r=d.data(); if(r.colab&&r.data) mapFb[r.colab+'|'+r.data]=r; });
-      if(Object.keys(mapFb).length > regsC.length){
-        regsC = Object.values(mapFb).map(r=>({colab:r.colab,data:r.data,pres:r.presenca||r.pres||'Presente',f:r.f||Array(10).fill(0)}));
+      const snapP = await db.collection('producoes')
+        .where('data','>=',inicio).where('data','<=',dtFech).get();
+      if(snapP.docs.length > regsC.length){
+        regsC = snapP.docs.map(d => {
+          const r = d.data();
+          return { colab:r.colab, data:r.data, pres:r.pres||r.presenca||'Presente', f:r.f||Array(14).fill(0) };
+        });
       }
     }catch(e){ console.warn('Busca FB encerramento:', e); }
   }
@@ -11068,20 +11075,14 @@ async function cicloAcaoRapida(){
     const FIM_MAIJUN    = '2026-06-25';
     const META_MAIJUN   = 1980;
 
-    // Buscar registros do Mai/Jun diretamente do Firebase
-    alert('⏳ Buscando registros do período Mai/Jun no Firebase...');
-    const [snapP, snapF] = await Promise.all([
-      db.collection('producoes').where('data','>=',INICIO_MAIJUN).where('data','<=',FIM_MAIJUN).get(),
-      db.collection('fechamento_dia').where('data','>=',INICIO_MAIJUN).where('data','<=',FIM_MAIJUN).get().catch(()=>({docs:[]}))
-    ]);
-    const mapFb = {};
-    snapP.docs.forEach(d=>{ const r=d.data(); if(r.colab&&r.data) mapFb[r.colab+'|'+r.data]=r; });
-    snapF.docs.forEach(d=>{ const r=d.data(); if(r.colab&&r.data) mapFb[r.colab+'|'+r.data]=r; });
-    const regsC = Object.values(mapFb).map(r=>({
-      colab:r.colab, data:r.data,
-      pres:r.presenca||r.pres||'Presente',
-      f:r.f||Array(10).fill(0)
-    }));
+    // Buscar registros do Mai/Jun diretamente do Firebase — apenas 'producoes' (tem f[])
+    // fechamento_dia tem estrutura diferente (breakdown/composicao) e sobrescreveria o f[]
+    const snapP = await db.collection('producoes')
+      .where('data','>=',INICIO_MAIJUN).where('data','<=',FIM_MAIJUN).get();
+    const regsC = snapP.docs.map(d => {
+      const r = d.data();
+      return { colab:r.colab, data:r.data, pres:r.pres||r.presenca||'Presente', f:r.f||Array(14).fill(0) };
+    });
     const regsA = regsC.filter(r => r.pres !== 'Folga' && r.pres !== 'Férias');
     const dias  = [...new Set(regsA.map(r => r.data))].length;
     const total = regsA.reduce((s,r) => s + (r.f[0]||0) + (r.f[1]||0) + (r.f[2]||0), 0);
@@ -11157,6 +11158,46 @@ async function iniciarNovoCiclo(){
 
 
 // ── RESULTADO DE MEDIÇÃO ──
+async function fbListarCiclosEncerrados(){
+  const el = document.getElementById('fb-ciclos-lista');
+  if(!el) return;
+  el.innerHTML = '<div style="font-size:12px;color:var(--tx2)">⏳ Carregando...</div>';
+  try{
+    const db = getDB(); if(!db){ el.innerHTML='<div class="al al-r">Firebase não conectado.</div>'; return; }
+    const snap = await db.collection('ciclos_encerrados').get();
+    if(snap.empty){ el.innerHTML='<div class="al al-b">Nenhum documento encontrado em ciclos_encerrados.</div>'; return; }
+    el.innerHTML = snap.docs.map(doc => {
+      const d = doc.data();
+      const regs = d.n_registros || (d.registros||[]).length || 0;
+      const total = d.realizado || 0;
+      return `<div style="display:flex;align-items:center;justify-content:space-between;background:var(--cin);border:1px solid var(--brd);border-radius:8px;padding:.6rem 1rem;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--az)">${d.nome||doc.id}</div>
+          <div style="font-size:11px;color:var(--tx2)">${doc.id}</div>
+          <div style="font-size:11px;color:var(--tx2)">${d.inicio||'?'} → ${d.fim||'?'} · Realizado: ${total.toLocaleString('pt-BR')} · Registros: ${regs}</div>
+        </div>
+        <button class="btn btn-r" style="font-size:12px;padding:5px 12px" onclick="fbExcluirCicloEncerrado('${doc.id}', this)">🗑 Excluir</button>
+      </div>`;
+    }).join('');
+  }catch(e){ el.innerHTML='<div class="al al-r">Erro: '+e.message+'</div>'; }
+}
+
+async function fbExcluirCicloEncerrado(docId, btn){
+  if(!confirm('Excluir documento "'+docId+'" do Firebase?\n\nEsta ação é irreversível.')) return;
+  try{
+    const db = getDB(); if(!db) return;
+    btn.textContent = '⏳';
+    btn.disabled = true;
+    await db.collection('ciclos_encerrados').doc(docId).delete();
+    // Remover do array local também
+    ciclos_historico = ciclos_historico.filter(c => c.id !== docId);
+    localStorage.setItem(_lsMod('patec_ciclos_historico'), JSON.stringify(ciclos_historico));
+    btn.closest('div[style]').remove();
+    renderResultadoMedicao();
+    alert('✅ Documento "'+docId+'" excluído do Firebase.');
+  }catch(e){ alert('Erro: '+e.message); btn.textContent='🗑 Excluir'; btn.disabled=false; }
+}
+
 async function renderResultadoMedicao(){
   let ciclos=[...ciclos_historico];
   try{
