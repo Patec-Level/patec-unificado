@@ -5490,13 +5490,15 @@ function abrirHistoricoRC(rc){
     'primeira_analise': '🔍 1ª Análise',
     'em_tratativa':     '⚙️ Em Tratativa',
     'status_b':         '✅ Status B',
-    'outros':           '📋 Outros'
+    'outros':           '📋 Outros',
+    'ag_parecer':       '📝 Ag Parecer'
   };
   const corTipo = {
     'primeira_analise': 'var(--azm)',
     'em_tratativa':     'var(--azm)',
     'status_b':         'var(--vd)',
-    'outros':           'var(--am)'
+    'outros':           'var(--am)',
+    'ag_parecer':       'var(--roxo,#7c3aed)'
   };
 
   let conteudo = '';
@@ -5852,7 +5854,7 @@ function _semanaAtual(){
 function _contarAcoesSemana(colab, dias){
   const cache = window._prodAcoesCache || {};
   const TIPOS = ['primeira_analise','em_tratativa','status_b','outros'];
-  const LABEL = { primeira_analise:'1ª Análise', em_tratativa:'Em Tratativa', status_b:'Status B', outros:'Outros' };
+  const LABEL = { primeira_analise:'1ª Análise', em_tratativa:'Em Tratativa', status_b:'Status B', outros:'Outros', ag_parecer:'Ag Parecer' };
   const COR   = { primeira_analise:'var(--azm)', em_tratativa:'var(--azm)', status_b:'var(--vd)', outros:'var(--am)' };
   const porDia = {};
   let totalSem = 0;
@@ -8396,7 +8398,7 @@ async function zeroRtPreview(){
     // Formatar linha de detalhe por ação
     const fmtLinha = (a) => {
       const hr = a.ts ? new Date(a.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '??:??';
-      const tipoLabel = {primeira_analise:'1ª Análise',em_tratativa:'Em Tratativa',status_b:'Status B',outros:'Outros'}[a.tipo]||a.tipo;
+      const tipoLabel = {primeira_analise:'1ª Análise',em_tratativa:'Em Tratativa',status_b:'Status B',outros:'Outros',ag_parecer:'Ag Parecer'}[a.tipo]||a.tipo;
       return `<span style="font-family:monospace">${hr}</span> · ${tipoLabel} → ${a.conclusao||a.tratamento||'—'}`;
     };
 
@@ -13925,6 +13927,10 @@ function pcBuscarRCDetalhe(rc){
                 style="background:var(--vdc);border:1.5px solid var(--vd);border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:var(--vd);white-space:nowrap"
                 onmouseover="this.style.background='var(--vd)';this.style.color='#fff'"
                 onmouseout="this.style.background='var(--vdc)';this.style.color='var(--vd)'">✅ Status B</button>
+              <button onclick="prodAbrirModalRC('${chave}','ag_parecer')"
+                style="background:#ede9fe;border:1.5px solid #7c3aed;border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:#7c3aed;white-space:nowrap"
+                onmouseover="this.style.background='#7c3aed';this.style.color='#fff'"
+                onmouseout="this.style.background='#ede9fe';this.style.color='#7c3aed'">📝 Ag Parecer</button>
               <button onclick="prodAbrirModalRC('${chave}','outros')"
                 style="background:var(--amc);border:1.5px solid var(--am);border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:var(--am);white-space:nowrap"
                 onmouseover="this.style.background='var(--am)';this.style.color='#fff'"
@@ -15183,6 +15189,10 @@ function govBuscarRC(rc){
                 style="background:var(--vdc);border:1.5px solid var(--vd);border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:var(--vd);white-space:nowrap"
                 onmouseover="this.style.background='var(--vd)';this.style.color='#fff'"
                 onmouseout="this.style.background='var(--vdc)';this.style.color='var(--vd)'">✅ Status B</button>
+              <button onclick="prodAbrirModalRC('${r.chave}','ag_parecer')"
+                style="background:#ede9fe;border:1.5px solid #7c3aed;border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:#7c3aed;white-space:nowrap"
+                onmouseover="this.style.background='#7c3aed';this.style.color='#fff'"
+                onmouseout="this.style.background='#ede9fe';this.style.color='#7c3aed'">📝 Ag Parecer</button>
               <button onclick="prodAbrirModalRC('${r.chave}','outros')"
                 style="background:var(--amc);border:1.5px solid var(--am);border-radius:7px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:700;color:var(--am);white-space:nowrap"
                 onmouseover="this.style.background='var(--am)';this.style.color='#fff'"
@@ -20644,6 +20654,7 @@ const PROD_TIPO_LABELS = {
   'em_tratativa':     { label:'Em Tratativa', emoji:'⚙️', cor:'var(--azm)' },
   'status_b':         { label:'Status B', emoji:'✅', cor:'var(--vd)' },
   'outros':           { label:'Outros', emoji:'📋', cor:'var(--am)' },
+  'ag_parecer':       { label:'Ag Parecer', emoji:'📝', cor:'var(--roxo,#7c3aed)' },
 };
 
 function pcAbrirModalComRC(tipo){
