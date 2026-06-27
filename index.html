@@ -5262,17 +5262,18 @@ function go(id, el) {
   },50);
   if(id==='adm') setTimeout(paEntradaInitADM, 100);
   if(id==='pr-estrategico') setTimeout(()=>{
-    // Lazy: carregar desfechos se não tiver cache
-    // Limpar cache de desfecho se estiver vazio ou se o ciclo mudou
+    // Limpar cache de desfecho se estiver vazio ou se o ciclo mudou para Jun/Jul 2026
     try{
       const _cached = JSON.parse(localStorage.getItem(_lsMod('patec_desfecho_cache'))||'null');
       const _cacheCiclo = localStorage.getItem(_lsMod('patec_desfecho_cache_ciclo'))||'';
       const _cicloAtual = (_cicloAtivo?.inicio) || CICLO_NOVO_INICIO;
-      const _cicloMudou = _cacheCiclo !== _cicloAtual;
-      if(!_cached || Object.keys(_cached).length === 0 || _cicloMudou){
+      // Forçar limpeza se o cache tem dados do ciclo anterior (antes de 26/06)
+      const _cacheTemAntigos = _cached && Object.values(_cached).some(d => d.data && d.data < '2026-06-26');
+      if(!_cached || Object.keys(_cached).length === 0 || _cacheCiclo !== _cicloAtual || _cacheTemAntigos){
         localStorage.removeItem(_lsMod('patec_desfecho_cache'));
         localStorage.removeItem(_lsMod('patec_desfecho_cache_ts'));
-        if(_cicloMudou) localStorage.setItem(_lsMod('patec_desfecho_cache_ciclo'), _cicloAtual);
+        localStorage.setItem(_lsMod('patec_desfecho_cache_ciclo'), _cicloAtual);
+        console.log('[Desfechos] Cache limpo — ciclo mudou para', _cicloAtual);
       }
     }catch(e){}
     if(!Object.keys(_desfechoCache||{}).length) desfechoCarregarFirebase().then(()=>{ estRenderDevolucoes(); radarRenderDevolucoes(); estRenderDesfechoCards(); });
