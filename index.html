@@ -4361,7 +4361,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div class="cd" style="margin-bottom:1rem">
           <div class="cd-t" style="margin-bottom:.75rem">📋 Composição do dia</div>
           <!-- Linha 1: itens tratados -->
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1.25rem" id="fdia-breakdown"></div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:1.25rem" id="fdia-breakdown"></div>
           <!-- Linha 2: composição -->
           <div style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:.625rem;display:flex;align-items:center;gap:8px">
             <span style="flex:1;height:1px;background:var(--brd);display:inline-block"></span>
@@ -4441,8 +4441,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <table>
               <thead><tr>
                 <th>Data</th><th>Presença</th>
-                <th>1ª Anál.</th><th>Em Trat.</th><th>Status B</th><th>Outros</th>
-                <th>Forn.</th><th>Req.</th><th>MDG</th><th>Val.Thiago</th><th>XGL</th><th>Rep.</th><th>Pedidos</th><th>Dev.</th>
+                <th>1ª Anál.</th><th>Em Trat.</th><th>Status B</th><th>Ag Par.</th><th>Outros</th>
+                <th>Forn.</th><th>Req.</th><th>MDG</th><th>Val.Thiago</th><th>Parecerista</th><th>XGL</th><th>Rep.</th><th>Pedidos</th><th>Dev.</th>
                 <th>Total</th><th>%</th><th>Status</th>
               </tr></thead>
               <tbody id="fdia-hist-tbody"></tbody>
@@ -21540,6 +21540,10 @@ async function fdiaInicializar(){
       <div style="font-size:22px;font-weight:700;color:var(--vd)">${cnt.status_b}</div>
       <div style="font-size:10px;color:var(--tx2)">Status B</div>
     </div>
+    <div style="background:#ede9fe;border-radius:8px;padding:.625rem;text-align:center">
+      <div style="font-size:22px;font-weight:700;color:#7c3aed">${cnt.ag_parecer||0}</div>
+      <div style="font-size:10px;color:var(--tx2)">Ag Parecer</div>
+    </div>
     <div style="background:var(--amc);border-radius:8px;padding:.625rem;text-align:center">
       <div style="font-size:22px;font-weight:700;color:var(--am)">${cnt.outros}</div>
       <div style="font-size:10px;color:var(--tx2)">Outros</div>
@@ -21561,6 +21565,7 @@ async function fdiaInicializar(){
     compRow(cntComp.req,         'Requisitante') +
     compRow(cntComp.mdg,         'MDG') +
     compRow(cntComp.thiago,      'Validação Thiago') +
+    compRow(cntComp.parecerista||0, 'Parecerista') +
     compRow(cntComp.xgl,         'XGL') +
     compRow(cntComp.republicacao,'Republicação') +
     compRow(cntComp.pedido,      'RCs para Pedidos') +
@@ -21619,7 +21624,7 @@ async function fdiaInicializar(){
   try{
     const tbHist = document.getElementById('fdia-hist-tbody');
     if(tbHist){
-      tbHist.innerHTML='<tr><td colspan="17" style="text-align:center;color:var(--tx2);padding:1rem;font-size:12px">⏳ Carregando histórico...</td></tr>';
+      tbHist.innerHTML='<tr><td colspan="19" style="text-align:center;color:var(--tx2);padding:1rem;font-size:12px">⏳ Carregando histórico...</td></tr>';
       const _30diasAtras = new Date(); _30diasAtras.setDate(_30diasAtras.getDate()-30);
       const _dtMin = _30diasAtras.getFullYear()+'-'+String(_30diasAtras.getMonth()+1).padStart(2,'0')+'-'+String(_30diasAtras.getDate()).padStart(2,'0');
       const db = getDB();
@@ -21639,19 +21644,23 @@ async function fdiaInicializar(){
           const r=d.data();
           if(!r.data) return;
           // Montar array f[] compatível com o layout da tabela
+          const b = r.breakdown||{};
+          const c = r.composicao||{};
           const f = [
-            r.primeira_analise||0,  // f[0]
-            r.em_tratativa||0,      // f[1]
-            r.status_b||0,          // f[2]
-            r.forn||0,              // f[3]
-            r.req||0,               // f[4]
-            r.mdg||0,               // f[5]
-            r.thiago||0,            // f[6]
-            r.xgl||0,               // f[7]
-            r.republicacao||0,      // f[8]
-            r.pedido||0,            // f[9]
-            r.devolucao||0,         // f[10]
-            r.outros||0,            // f[11]
+            b.primeira_analise||r.primeira_analise||0,  // f[0]
+            b.em_tratativa||r.em_tratativa||0,           // f[1]
+            b.status_b||r.status_b||0,                   // f[2]
+            c.forn||r.forn||0,                           // f[3]
+            c.req||r.req||0,                             // f[4]
+            c.mdg||r.mdg||0,                             // f[5]
+            c.thiago||r.thiago||0,                       // f[6]
+            c.xgl||r.xgl||0,                             // f[7]
+            c.republicacao||r.republicacao||0,           // f[8]
+            c.pedido||r.pedido||0,                       // f[9]
+            c.devolucao||r.devolucao||0,                 // f[10]
+            b.outros||r.outros||0,                       // f[11]
+            b.ag_parecer||r.ag_parecer||0,               // f[12]
+            c.parecerista||r.parecerista||0,             // f[13]
           ];
           mapH[r.data] = { data:r.data, pres:r.presenca||'—', f, total:r.total||0, _origem:'fechamento_dia' };
         });
@@ -21663,12 +21672,12 @@ async function fdiaInicializar(){
           .sort((a,b) => b.data.localeCompare(a.data));
       }
       if(!histRegs.length){
-        tbHist.innerHTML='<tr><td colspan="17" style="text-align:center;color:var(--tx2);padding:1.5rem">Nenhum registro encontrado.</td></tr>';
+        tbHist.innerHTML='<tr><td colspan="19" style="text-align:center;color:var(--tx2);padding:1.5rem">Nenhum registro encontrado.</td></tr>';
       } else {
         const _semMetaH = (typeof COLABS_SEM_META_RT !== 'undefined') && COLABS_SEM_META_RT.includes(colab);
         tbHist.innerHTML = histRegs.map(r=>{
-          const f = [...(r.f||[])]; while(f.length<12) f.push(0);
-          const tot = _semMetaH ? f.reduce((s,v)=>s+v,0) : (f[0]||0)+(f[1]||0)+(f[2]||0);
+          const f = [...(r.f||[])]; while(f.length<14) f.push(0);
+          const tot = _semMetaH ? f.reduce((s,v)=>s+v,0) : (f[0]||0)+(f[1]||0)+(f[2]||0)+(f[12]||0);
           const pctH = metaVal>0 ? Math.round(tot/metaVal*100) : 0;
           const corPct = pctH>=100?'var(--vd)':pctH>=80?'var(--am)':'var(--vm)';
           let metaPill;
@@ -21687,11 +21696,13 @@ async function fdiaInicializar(){
             <td style="text-align:center;font-weight:600">${f[0]||'—'}</td>
             <td style="text-align:center;font-weight:600">${f[1]||'—'}</td>
             <td style="text-align:center;font-weight:600">${f[2]||'—'}</td>
+            <td style="text-align:center;font-weight:600;color:#7c3aed">${f[12]||'—'}</td>
             <td style="text-align:center;font-weight:600">${f[11]||'—'}</td>
             <td style="text-align:center">${f[3]||'—'}</td>
             <td style="text-align:center">${f[4]||'—'}</td>
             <td style="text-align:center">${f[5]||'—'}</td>
             <td style="text-align:center">${f[6]||'—'}</td>
+            <td style="text-align:center;color:#7c3aed">${f[13]||'—'}</td>
             <td style="text-align:center">${f[7]||'—'}</td>
             <td style="text-align:center">${f[8]||'—'}</td>
             <td style="text-align:center">${f[9]||'—'}</td>
@@ -21846,14 +21857,15 @@ async function fdiaSalvar(){
 
   // Composição — contagem dos tipos de conclusão
   const cntComp = {
-    pedido:       acoes.filter(a=>a.conclusao==='Pedido'||a.tratamento==='Pedido').length,
-    republicacao: acoes.filter(a=>a.conclusao==='Republicação'||a.tratamento==='Republicação').length,
-    xgl:          acoes.filter(a=>a.conclusao==='XGL'||a.tratamento==='XGL').length,
-    thiago:       acoes.filter(a=>a.conclusao==='Validação Thiago'||a.tratamento==='Validação Thiago'||a.conclusao==='VALIDAÇÃO DO THIAGO').length,
-    devolucao:    acoes.filter(a=>a.conclusao==='Devolução'||a.tratamento==='Devolução').length,
-    mdg:          acoes.filter(a=>a.conclusao==='MDG'||a.tratamento==='MDG').length,
-    forn:         acoes.filter(a=>a.conclusao==='Fornecedor'||a.tratamento==='Fornecedor'||a.conclusao==='FORNECEDOR').length,
-    req:          acoes.filter(a=>a.conclusao==='Requisitante'||a.tratamento==='Requisitante'||a.conclusao==='REQUISITANTE').length,
+    pedido:       acoes.filter(a=>!a.anulada&&(a.conclusao==='Pedido'||a.tratamento==='Pedido')).length,
+    republicacao: acoes.filter(a=>!a.anulada&&(a.conclusao==='Republicação'||a.tratamento==='Republicação')).length,
+    xgl:          acoes.filter(a=>!a.anulada&&(a.conclusao==='XGL'||a.tratamento==='XGL')).length,
+    thiago:       acoes.filter(a=>!a.anulada&&(a.conclusao==='Validação Thiago'||a.tratamento==='Validação Thiago'||a.conclusao==='VALIDAÇÃO DO THIAGO')).length,
+    devolucao:    acoes.filter(a=>!a.anulada&&(a.conclusao==='Devolução'||a.tratamento==='Devolução')).length,
+    mdg:          acoes.filter(a=>!a.anulada&&(a.conclusao==='MDG'||a.tratamento==='MDG')).length,
+    forn:         acoes.filter(a=>!a.anulada&&(a.conclusao==='Fornecedor'||a.tratamento==='Fornecedor'||a.conclusao==='FORNECEDOR')).length,
+    req:          acoes.filter(a=>!a.anulada&&(a.conclusao==='Requisitante'||a.tratamento==='Requisitante'||a.conclusao==='REQUISITANTE')).length,
+    parecerista:  acoes.filter(a=>!a.anulada&&(a.tratamento==='Parecerista'||a.tratamento==='PARECERISTA')).length,
   };
 
   const detalhe = _detalheRaw.trim();
@@ -21866,8 +21878,8 @@ async function fdiaSalvar(){
     metaAtingida: cnt.meta >= metaVal,
     motivo: _fdiaMotivo || '',
     detalhe, ts: new Date().toISOString(),
-    breakdown: { primeira_analise: cnt.primeira_analise, em_tratativa: cnt.em_tratativa, status_b: cnt.status_b, outros: cnt.outros },
-    composicao: cntComp
+    breakdown: { primeira_analise: cnt.primeira_analise, em_tratativa: cnt.em_tratativa, status_b: cnt.status_b, ag_parecer: cnt.ag_parecer, outros: cnt.outros },
+    composicao: { ...cntComp }
   };
 
   // Registro producao (histórico de produção) — mesma estrutura do salvarProducao()
@@ -21884,7 +21896,9 @@ async function fdiaSalvar(){
     cntComp.republicacao,  // pf8 — Republicação
     cntComp.pedido,        // pf9 — RCs para Pedidos
     cntComp.devolucao,     // pf10 — RCs para Devoluções
-    cnt.outros             // pf11 — Outros
+    cnt.outros,            // pf11 — Outros
+    cnt.ag_parecer,        // pf12 — Ag Parecer
+    cntComp.parecerista    // pf13 — Parecerista
   ];
   const regProd = {
     colab, data: hoje, pres: _fdiaPresenca,
