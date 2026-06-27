@@ -14168,7 +14168,8 @@ const GOV_PRAZOS_ADLV = {
   'FORNECEDOR': 2,
   'REQUISITANTE': 5,
   'VALIDAÇÃO DO THIAGO': 3,
-  'AG. TRATAMENTO': null, // sem prazo
+  'PARECERISTA': 5,
+  'AG. TRATAMENTO': null,
   'XGL BAIXO': 20,
   'XGL ALTO': 15
 };
@@ -14181,18 +14182,19 @@ const GOV_PRAZOS_FAST = {
   'FORNECEDOR': 2,
   'MDG': 4,
   'REQUISITANTE': 5,
+  'PARECERISTA': 5,
   'AG. TRATAMENTO': null
 };
 let GOV_PRAZOS = GOV_PRAZOS_ADLV; // valor inicial; _atualizarRegrasGovPorModulo() troca na hora certa
 
 const GOV_STATUS_OPCOES_ADLV = [
-  'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','VALIDAÇÃO DO THIAGO'
+  'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','VALIDAÇÃO DO THIAGO','PARECERISTA'
 ];
 const GOV_STATUS_OPCOES_FAST = [
-  'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','MDG EQUIPE SCOMP'
+  'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','MDG EQUIPE SCOMP','PARECERISTA'
 ];
 let GOV_STATUS_OPCOES = [
-  'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','VALIDAÇÃO DO THIAGO'
+  'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','VALIDAÇÃO DO THIAGO','PARECERISTA'
 ];
 const XGL_STATUS_OPCOES = [
   'AG. TRATAMENTO','FORNECEDOR','MDG','REQUISITANTE','VALIDAÇÃO DO THIAGO','XGL BAIXO','XGL ALTO'
@@ -18932,6 +18934,11 @@ function q18Consultar(valor){
           style="display:none;background:var(--cin);border:1.5px solid var(--brd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;transition:all .18s">
           <div style="font-size:20px;margin-bottom:4px">🗂</div>
           <div style="font-size:12px;font-weight:600;color:var(--tx)">MDG Equipe SCOMP</div>
+        </button>
+        <button class="acao-sel-btn" id="acao-btn-parecerista" onclick="acaoSelecionarTratamento(this,'Parecerista')"
+          style="background:#ede9fe;border:1.5px solid #7c3aed;border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;transition:all .18s">
+          <div style="font-size:20px;margin-bottom:4px">📝</div>
+          <div style="font-size:12px;font-weight:600;color:#7c3aed">Parecerista</div>
         </button>
         <button class="acao-sel-btn" onclick="acaoSelecionarTratamento(this,'Concluído')"
           style="background:var(--vdc);border:1.5px solid var(--vd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;grid-column:span 2;transition:all .18s">
