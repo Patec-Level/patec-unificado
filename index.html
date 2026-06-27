@@ -2956,7 +2956,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div class="field-wrap" style="min-width:180px">
             <span class="field-label">Ciclo</span>
             <select id="est-ciclo-sel" style="width:100%;font-size:12px;padding:5px 10px">
-              <option value="atual">Ciclo atual (a partir de 26/05)</option>
+              <option value="atual">Ciclo atual (a partir de 26/06)</option>
               <option value="custom">Período personalizado</option>
             </select>
           </div>
@@ -15556,20 +15556,31 @@ async function desfechoCarregarFirebase(){
       'republicação':'Republicação','republicacao':'Republicação','xgl':'XGL'
     };
 
+    const cicloInicioFiltro = (_cicloAtivo?.inicio) || CICLO_NOVO_INICIO;
+
     const normalizarDocs = (snap) => {
       const cache = {};
       snap.docs.forEach(d => {
         const data = d.data();
         const dataDoc = data.data || '';
         // Incluir: sem campo data (legado) OU data dentro do ciclo atual
-        if(!dataDoc || dataDoc >= CICLO_NOVO_INICIO){
+        if(!dataDoc || dataDoc >= cicloInicioFiltro){
           if(data.tipo) data.tipo = TIPO_NORM[(data.tipo||'').toLowerCase()] || data.tipo;
           cache[data.chave || d.id] = data;
         }
       });
-      console.log('normalizarDocs: total docs Firebase='+snap.docs.length+' | no ciclo='+Object.keys(cache).length);
+      console.log('normalizarDocs: total docs Firebase='+snap.docs.length+' | no ciclo='+Object.keys(cache).length+' (desde '+cicloInicioFiltro+')');
       return cache;
     };
+
+    // Invalidar cache localStorage se mudou o ciclo (início diferente)
+    const cacheCicloKey = _lsMod('patec_desfecho_cache_ciclo');
+    const cacheCicloSalvo = localStorage.getItem(cacheCicloKey)||'';
+    if(cacheCicloSalvo !== cicloInicioFiltro){
+      localStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem(CACHE_TS_KEY);
+      localStorage.setItem(cacheCicloKey, cicloInicioFiltro);
+    }
 
     // Sempre buscar do Firebase — sem depender do cache localStorage para exibição
     // (cache só serve para acelerar re-aberturas dentro de 30min COM dados)
