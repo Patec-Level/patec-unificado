@@ -15532,7 +15532,23 @@ function estRenderDesfechoCards(){
   const el = document.getElementById('est-desfecho-cards');
   if(!el) return;
 
-  const todos = Object.values(_desfechoCache);
+  // Filtrar pelo mesmo período do painel
+  const cicloSel = document.getElementById('est-ciclo-sel')?.value || 'atual';
+  const hoje = HOJE.toISOString().split('T')[0];
+  let dtDeFiltro, dtAteFiltro;
+  if(cicloSel === 'custom'){
+    dtDeFiltro  = document.getElementById('est-de')?.value  || '';
+    dtAteFiltro = document.getElementById('est-ate')?.value || hoje;
+  } else {
+    dtDeFiltro  = (_cicloAtivo?.inicio) || CICLO_NOVO_INICIO;
+    dtAteFiltro = hoje;
+  }
+
+  const todos = Object.values(_desfechoCache).filter(d => {
+    if(!d.data) return true; // legado sem data — incluir sempre
+    return d.data >= dtDeFiltro && d.data <= dtAteFiltro;
+  });
+
   const tipos = [
     { key:'Pedido',       label:'Pedidos',       emoji:'🛒', cor:'#1A4A8A', bg:'#EBF0FA' },
     { key:'Devolução',    label:'Devoluções',    emoji:'↩',  cor:'#D94040', bg:'#FDEAEA' },
@@ -15644,7 +15660,16 @@ function estRenderDevolucoes(){
     'Proposta vencida',
   ];
 
-  const devs = Object.values(_desfechoCache).filter(d => (d.tipo||'').toLowerCase() === 'devolução' || (d.tipo||'').toLowerCase() === 'devolucao');
+  // Filtrar pelo mesmo período do painel
+  const _cicloSelDev = document.getElementById('est-ciclo-sel')?.value || 'atual';
+  const _hojeDev = HOJE.toISOString().split('T')[0];
+  const _dtDeDev  = _cicloSelDev === 'custom' ? (document.getElementById('est-de')?.value||'') : ((_cicloAtivo?.inicio)||CICLO_NOVO_INICIO);
+  const _dtAteDev = _cicloSelDev === 'custom' ? (document.getElementById('est-ate')?.value||_hojeDev) : _hojeDev;
+  const devs = Object.values(_desfechoCache).filter(d => {
+    if((d.tipo||'').toLowerCase() !== 'devolução' && (d.tipo||'').toLowerCase() !== 'devolucao') return false;
+    if(!d.data) return true;
+    return d.data >= _dtDeDev && d.data <= _dtAteDev;
+  });
   if(!devs.length){ sec.style.display='none'; return; }
   sec.style.display='block';
 
