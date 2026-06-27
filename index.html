@@ -15545,7 +15545,7 @@ function estRenderDesfechoCards(){
   }
 
   const todos = Object.values(_desfechoCache).filter(d => {
-    if(!d.data) return true; // legado sem data — incluir sempre
+    if(!d.data) return false; // sem data = legado anterior ao ciclo, excluir
     return d.data >= dtDeFiltro && d.data <= dtAteFiltro;
   });
 
@@ -15577,15 +15577,15 @@ async function desfechoCarregarFirebase(){
       'republicação':'Republicação','republicacao':'Republicação','xgl':'XGL'
     };
 
-    const cicloInicioFiltro = (_cicloAtivo?.inicio) || CICLO_NOVO_INICIO;
+    const cicloInicioFiltro = (_cicloAtivo?.inicio) || CICLO_NOVO_INICIO || '2026-06-26';
 
     const normalizarDocs = (snap) => {
       const cache = {};
       snap.docs.forEach(d => {
         const data = d.data();
         const dataDoc = data.data || '';
-        // Incluir: sem campo data (legado) OU data dentro do ciclo atual
-        if(!dataDoc || dataDoc >= cicloInicioFiltro){
+        // Só incluir registros do ciclo atual em diante — sem data = legado, excluir também
+        if(dataDoc && dataDoc >= cicloInicioFiltro){
           if(data.tipo) data.tipo = TIPO_NORM[(data.tipo||'').toLowerCase()] || data.tipo;
           cache[data.chave || d.id] = data;
         }
@@ -15667,7 +15667,7 @@ function estRenderDevolucoes(){
   const _dtAteDev = _cicloSelDev === 'custom' ? (document.getElementById('est-ate')?.value||_hojeDev) : _hojeDev;
   const devs = Object.values(_desfechoCache).filter(d => {
     if((d.tipo||'').toLowerCase() !== 'devolução' && (d.tipo||'').toLowerCase() !== 'devolucao') return false;
-    if(!d.data) return true;
+    if(!d.data) return false; // sem data = legado, excluir
     return d.data >= _dtDeDev && d.data <= _dtAteDev;
   });
   if(!devs.length){ sec.style.display='none'; return; }
