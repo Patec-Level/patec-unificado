@@ -3862,6 +3862,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Finalizado</th>
                 <th>Validade Proposta</th>
                 <th>Idas Mercado</th>
+                <th id="gov-th-nm" style="display:none">NM</th>
+                <th id="gov-th-tipo-aval" style="display:none">Tipo de Avaliação</th>
+                <th id="gov-th-grupo-merc" style="display:none">Grupo Mercadorias</th>
               </tr>
             </thead>
             <tbody id="gov-mapa-tbody"></tbody>
@@ -3894,6 +3897,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Finalizado</th>
                 <th>Validade Proposta</th>
                 <th>Idas Mercado</th>
+                <th id="gov-th-nm-and" style="display:none">NM</th>
+                <th id="gov-th-tipo-aval-and" style="display:none">Tipo de Avaliação</th>
+                <th id="gov-th-grupo-merc-and" style="display:none">Grupo Mercadorias</th>
               </tr>
             </thead>
             <tbody id="gov-andamento-tbody"></tbody>
@@ -9975,6 +9981,9 @@ async function radarOnFile(file){
         return ''; // #N/A, vazio — não conta nem como Sim nem como Não
       })(),
       centro:        String(r['CENTRO']||r['Centro']||r['centro']||'').trim(),
+      nm:            (()=>{ const v=String(r['NM']||r['NM MATERIAL']||r['NM_MATERIAL']||'').trim(); return v.endsWith('.0')?v.slice(0,-2):v; })(),
+      tipo_aval:     (()=>{ const k=Object.keys(r).find(k=>k.toUpperCase().normalize('NFD').replace(/[0300-036f]/g,'').includes('TIPO')&&k.toUpperCase().normalize('NFD').replace(/[0300-036f]/g,'').includes('AVAL')); return k?String(r[k]||'').trim():''; })(),
+      grupo_merc:    (()=>{ const k=Object.keys(r).find(k=>k.toUpperCase().includes('GRUPO')&&k.toUpperCase().includes('MERC')); return k?String(r[k]||'').trim():''; })(),
       urgencia:      (()=>{
         // Busca resiliente: qualquer coluna cujo nome contenha "URGEN" (cobre URGENCIA, URGÊNCIA,
         // Urgencia, URGENCIA_NECESSIDADE, etc.) — não depende do nome exato da coluna
@@ -14217,12 +14226,6 @@ function govSetTab(aba, btn){
     alert('XGL é exclusivo do ADLV.');
     return;
   }
-  // Aba "PATEC em Andamento" é exclusiva do ADLV — no FAST, esses itens já
-  // aparecem misturados na MAPA com a coluna "Status Mapa"
-  if(aba === 'andamento' && _moduloAtivo === 'fast'){
-    alert('Essa aba é exclusiva do ADLV.');
-    return;
-  }
   _govTabAtiva = aba;
   document.querySelectorAll('.stabs .stab').forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
@@ -14327,6 +14330,13 @@ function govRenderMapa(dados, tbodyId){
   if(thStatusMapa) thStatusMapa.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
   const thCobranca = document.getElementById('gov-th-cobranca');
   if(thCobranca) thCobranca.style.display = (_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody') ? '' : 'none';
+  // Colunas extras FAST (NM, Tipo Avaliação, Grupo Mercadorias) — ambas as tabelas
+  const isFast = _moduloAtivo === 'fast';
+  const sfx = tbodyId === 'gov-mapa-tbody' ? '' : '-and';
+  ['nm','tipo-aval','grupo-merc'].forEach(id => {
+    const el = document.getElementById('gov-th-'+id+sfx);
+    if(el) el.style.display = isFast ? '' : 'none';
+  });
 
   if(_moduloAtivo === 'fast' && tbodyId === 'gov-mapa-tbody'){
     // Diagnóstico: mostra os valores de TODO o _radarDados (bruto), não só
@@ -14409,6 +14419,7 @@ function govRenderMapa(dados, tbodyId){
       <td style="font-size:11px">${finalizado?fmtBR(finalizado):'—'}</td>
       <td style="font-size:11px;${corVal(r.validade)}">${r.validade||'—'}</td>
       <td style="text-align:center">${r.idas||'—'}</td>
+      ${isFast?`<td style="font-size:11px;text-align:center">${r.nm||'—'}</td><td style="font-size:11px">${r.tipo_aval||'—'}</td><td style="font-size:11px">${r.grupo_merc||'—'}</td>`:''}
     </tr>`;
   }).join('');
 }
@@ -14419,7 +14430,6 @@ function govRenderMapa(dados, tbodyId){
 // template de linha da tabela MAPA (govRenderMapa), só muda o filtro e a
 // tabela de destino.
 function govRenderAndamento(){
-  if(_moduloAtivo === 'fast') return; // exclusiva do ADLV
   const dados = (_radarDados||[]).filter(r => _classificarStatusMapa(r.analista_auto) === 'Andamento');
 
   const semDados = document.getElementById('gov-andamento-sem-dados');
@@ -19254,7 +19264,7 @@ function _entrarNoApp(){
   // XGL (Governança), Tirar do Fluxo (Planilha Crítica), PATEC em
   // Andamento (Governança), a opção "XGL" no Concluído e "Validação Thiago"
   // são exclusivas do ADLV
-  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','adm-nav-pa-entradas-btn','gov-nav-xgl-btn','pc-nav-fluxo-btn','gov-nav-andamento-btn','acao-btn-xgl','acao-btn-validacao-thiago'].forEach(id=>{
+  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','adm-nav-pa-entradas-btn','gov-nav-xgl-btn','pc-nav-fluxo-btn','acao-btn-xgl','acao-btn-validacao-thiago'].forEach(id=>{
     const btnAdlv = document.getElementById(id);
     if(btnAdlv) btnAdlv.style.display = (_moduloAtivo==='fast') ? 'none' : '';
   });
