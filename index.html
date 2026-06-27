@@ -3825,12 +3825,21 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <div id="gov-prod-painel" style="display:none"></div>
 
       <!-- Abas -->
-      <div class="stabs" style="margin-bottom:1rem">
+      <div class="stabs" style="margin-bottom:1rem;display:flex;align-items:center;flex-wrap:wrap;gap:6px">
         <button class="stab active" id="gov-nav-andamento-btn" onclick="govSetTab('andamento',this)">⏳ PATEC em Andamento</button>
         <button class="stab" onclick="govSetTab('mapa',this)">🗺 PATEC Finalizado</button>
         <button class="stab" id="gov-nav-xgl-btn" onclick="govSetTab('xgl',this)">📋 XGL</button>
         <button class="stab" onclick="govSetTab('statusb',this)">📊 Status B</button>
         <button class="stab" onclick="govSetTab('concluidos',this)">✅ Concluídos</button>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;color:var(--tx2);white-space:nowrap">📋 Histórico RC:</span>
+          <input id="gov-hist-rc-input" type="text" placeholder="Nº da RC..."
+            style="font-size:12px;padding:5px 10px;border:1.5px solid var(--brd);border-radius:6px;width:150px;background:var(--bg);color:var(--tx)"
+            onkeydown="if(event.key==='Enter') abrirHistoricoRC(this.value.trim())"
+            oninput="this.value=this.value.replace(/\D/g,'')">
+          <button onclick="abrirHistoricoRC(document.getElementById('gov-hist-rc-input').value.trim())"
+            style="font-size:11px;padding:5px 12px;background:var(--azm);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;white-space:nowrap">Ver histórico</button>
+        </div>
       </div>
 
       <!-- ABA MAPA -->
@@ -4009,7 +4018,17 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
       <!-- ABA CONCLUÍDOS -->
       <div id="gov-tab-concluidos" style="display:none">
-        <div style="font-size:12px;font-weight:600;color:var(--vd);margin-bottom:.5rem" id="gov-count-concluidos"></div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:.75rem">
+          <div style="font-size:12px;font-weight:600;color:var(--vd)" id="gov-count-concluidos"></div>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+            <span style="font-size:12px;color:var(--tx2)">🔍 Filtrar por RC:</span>
+            <input id="conc-filtro-rc" type="text" placeholder="Digite o número da RC..."
+              style="font-size:12px;padding:5px 10px;border:1.5px solid var(--brd);border-radius:6px;width:190px;background:var(--bg);color:var(--tx)"
+              oninput="concFiltrarRC(this.value)">
+            <button onclick="document.getElementById('conc-filtro-rc').value='';concFiltrarRC('')"
+              style="font-size:11px;padding:4px 10px;background:var(--cin);border:1px solid var(--brd);border-radius:6px;cursor:pointer;color:var(--tx2)">✕ Limpar</button>
+          </div>
+        </div>
         <div class="tw" style="max-height:520px">
           <table>
             <thead><tr>
@@ -15920,6 +15939,26 @@ async function govCarregarBase(){
 
 
 // ── CONCLUÍDOS ──
+function concFiltrarRC(valor){
+  const filtro = (valor||'').trim().toLowerCase();
+  const rows = document.querySelectorAll('#gov-tbody-concluidos tr');
+  let visíveis = 0;
+  rows.forEach(tr => {
+    // RC está na 5ª célula (index 4)
+    const rc = (tr.cells[4]?.textContent||'').toLowerCase();
+    const mostrar = !filtro || rc.includes(filtro);
+    tr.style.display = mostrar ? '' : 'none';
+    if(mostrar) visíveis++;
+  });
+  const ct = document.getElementById('gov-count-concluidos');
+  if(ct){
+    const total = rows.length;
+    ct.textContent = filtro
+      ? `${visíveis} de ${total} item(ns) concluído(s) — filtrando por RC "${valor.trim()}"`
+      : `${total} item(ns) concluído(s)`;
+  }
+}
+
 function govRenderConcluidos(){
   const tbody = document.getElementById('gov-tbody-concluidos');
   const ct    = document.getElementById('gov-count-concluidos');
