@@ -10058,14 +10058,14 @@ async function radarOnFile(file){
     const _radarCols = raw.length > 0 ? Object.keys(raw[0]) : [];
     const _colN = _radarCols[13]; // Coluna N = Item OP
     const _colM = _radarCols[12]; // Coluna M = Oportunidade
-    console.log('[RADAR] Col M='+_colM+' | N='+_colN);
+    console.log('[RADAR] Todas colunas:', JSON.stringify(_radarCols));
     const rows=raw.filter(r=>r['RC']&&r['RC']!=='RC').map(r=>({
       analista_auto: String(r['STATUS MAPA ']||r['ANALISTA_AUTOMATICO']||'').trim(),
       rc:            String(r['RC']||'').trim(),
       seq:           String(r['SEQ']||'').trim(),
       num_oport:     String(r['OPORTUNIDADE']||r['NUMERO_OPORTUNIDADE']||(_colM?r[_colM]:'')||'').trim(),
-      item_rc:       String(r['Item da RC']||r['ITEM']||r['Item']||'').trim(),
-      item_op:       String((_colN?r[_colN]:'')||r['Item']||r['ITEM']||'').trim(),
+      item_rc:       String(r['Item da RC']||'').trim(),  // col L (SEQ) — não é a col N
+      item_op:       String(r['Item']||(_colN?r[_colN]:'')||'').trim(), // col N = Item OP
       sla:           Number(r['SLA']||r['SLA LevelBoard']||0),
       fila:          String(r['Fila ( esteira) ']||r['Fila ']||r['Fila']||'').trim(),
       analista:      String(r['Analista PATEC']||r['Analista ']||r['Analista']||'').trim(),
