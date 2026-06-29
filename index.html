@@ -12635,9 +12635,9 @@ function renderCascata(){
   const _diasParaZerarSem = _metaDiaCas > 0 ? Math.ceil(backlogAtual / _metaDiaCas) : 0;
   const _dtZerarSem = _diasParaZerarSem > 0 ? _calcDtFutura(backlogAtual, _diasParaZerarSem) : '—';
 
-  // Mesma regra do ADM (paAnalisar): saldoLiq>0 → data real; senão → 'Backlog crescendo'
-  const _diasParaZerarCom = _saldoLiqCas > 0 ? Math.ceil(backlogAtual / _saldoLiqCas) : 0;
-  const _dtZerarCom = _saldoLiqCas > 0 ? _calcDtFutura(backlogAtual, _diasParaZerarCom) : 'Backlog crescendo';
+  // Mesma regra do ADM: saldoLiq>0 → data pelo saldo; senão → data pela meta (sempre mostra data)
+  const _diasParaZerarCom = _saldoLiqCas > 0 ? Math.ceil(backlogAtual / _saldoLiqCas) : _diasParaZerarSem;
+  const _dtZerarCom = _calcDtFutura(backlogAtual, _diasParaZerarCom);
   const _subCom = _saldoLiqCas > 0 ? 'Saldo líquido: ' + _saldoLiqCas + '/dia' : 'Entradas > Saídas';
 
   const _diffKpi = backlogAtual - backlogBase;
@@ -12666,7 +12666,7 @@ function renderCascata(){
     </div>
     <div class="kc ${_saldoLiqCas>0?'warn':'bad'}">
       <div class="kc-l" style="text-transform:uppercase;letter-spacing:.4px;font-size:9px">📅 Conclusão com entradas (média ${_mediaEnt}/dia)</div>
-      <div class="${_saldoLiqCas>0?'kc-v xl':'kc-v'}" style="margin-top:4px;color:${_saldoLiqCas>0?'var(--am)':'var(--vm)'}">${_dtZerarCom}</div>
+      <div class="kc-v xl" style="margin-top:4px;color:${_saldoLiqCas>0?'var(--am)':'var(--vm)'}">${_dtZerarCom}</div>
       <div class="kc-s">${_subCom}</div>
     </div>
     <div class="kc" style="border-top-color:${_statusBdr}">
