@@ -5171,7 +5171,14 @@ function go(id, el) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.sb-it').forEach(i => i.classList.remove('active'));
   const page = document.getElementById('p-' + id);
-  if (page) page.classList.add('active');
+  if (page) {
+    page.classList.add('active');
+    // Forçar repaint — resolve bug de tela em branco ao voltar para a aba
+    requestAnimationFrame(() => {
+      page.style.opacity = '0.99';
+      requestAnimationFrame(() => { page.style.opacity = ''; });
+    });
+  }
   if (el) el.classList.add('active');
   const icons = {
     'vg-validade':'⏱',
