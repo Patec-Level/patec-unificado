@@ -5175,8 +5175,10 @@ function go(id, el) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.sb-it').forEach(i => i.classList.remove('active'));
   const page = document.getElementById('p-' + id);
+  console.log('[go] id='+id+' | page encontrada='+!!page+' | page.id='+(page?.id||'null'));
   if (page) {
     page.classList.add('active');
+    console.log('[go] active adicionado em '+page.id+' | classes='+page.className);
     requestAnimationFrame(() => {
       page.style.opacity = '0.99';
       requestAnimationFrame(() => { page.style.opacity = ''; });
