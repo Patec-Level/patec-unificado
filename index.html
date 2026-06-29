@@ -10612,19 +10612,19 @@ function _renderRadarCore(){
   const tipCrit = 'Regra: Estável < '+_limEstavel+'% | Alerta entre '+_limEstavel+'% e '+_limAlerta+'% | Crítico > '+_limAlerta+'% | Atual: '+pctCrit+'% ('+criticos+' de '+total+')';
 
   const linha1 = [
-    {label:'Total de RCs',   val:totalRCs,         cor:'var(--az)',  bg:'var(--azc)',  ico:'🗂'},
-    {label:'Maior SLA',      val:maiorSLA+' dias',  cor:'var(--vm)',  bg:'var(--vmc)',  ico:'⏱'},
-    {label:'Itens Críticos', val:criticos,          cor:'var(--vm)',  bg:'var(--vmc)',  ico:'🔴', tip:tipCrit},
-    {label:'Ag. Tratamento', val:agTrat,            cor:'var(--am)',  bg:'var(--amc)',  ico:'🕐'},
-    {label:'Em Tratativa',   val:emTrat,            cor:'var(--azm)', bg:'var(--azc)',  ico:'🔄'},
+    {label:'Total de RCs',   val:totalRCs,         cor:'var(--tx)',  bg:'#fff',  ico:'🗂'},
+    {label:'Maior SLA',      val:maiorSLA+' dias',  cor:'var(--tx)',  bg:'#fff',  ico:'⏱'},
+    {label:'Itens Críticos', val:criticos,          cor:'var(--tx)',  bg:'#fff',  ico:'🔴', tip:tipCrit},
+    {label:'Ag. Tratamento', val:agTrat,            cor:'var(--tx)',  bg:'#fff',  ico:'🕐'},
+    {label:'Em Tratativa',   val:emTrat,            cor:'var(--tx)',  bg:'#fff',  ico:'🔄'},
   ];
   const linha2 = [
-    {label:'Seg. Operacional', val:segOp,    cor:'var(--az)',  bg:'var(--azc)',  ico:'⚙️'},
-    {label:'Seg. Crítico',     val:segCrit,  cor:'var(--vm)',  bg:'var(--vmc)',  ico:'🔴'},
-    {label:'Página Amarela',   val:segPag,   cor:'var(--am)',  bg:'var(--amc)',  ico:'🟡'},
-    {label:'Seg. Estratégico', val:segEstr,  cor:'var(--vd)',  bg:'var(--vdc)',  ico:'🎯'},
-    {label:'PATEC Obrigatório',val:patecObr, cor:'var(--vd)',  bg:'var(--vdc)',  ico:'✅'},
-    {label:'PATEC ID Não',     val:patecNao, cor:'var(--tx2)', bg:'var(--cin)',  ico:'🚫'},
+    {label:'Seg. Operacional', val:segOp,    cor:'var(--tx)',  bg:'#fff',  ico:'⚙️'},
+    {label:'Seg. Crítico',     val:segCrit,  cor:'var(--tx)',  bg:'#fff',  ico:'🔴'},
+    {label:'Página Amarela',   val:segPag,   cor:'var(--tx)',  bg:'#fff',  ico:'🟡'},
+    {label:'Seg. Estratégico', val:segEstr,  cor:'var(--tx)',  bg:'#fff',  ico:'🎯'},
+    {label:'PATEC Obrigatório',val:patecObr, cor:'var(--tx)',  bg:'#fff',  ico:'✅'},
+    {label:'PATEC ID Não',     val:patecNao, cor:'var(--tx)',  bg:'#fff',  ico:'🚫'},
   ];
 
   const l1El = document.getElementById('radar-cards-l1');
@@ -10640,9 +10640,9 @@ function _renderRadarCore(){
   const urgMuitoAlto= rows.filter(d => normUrg(d.urgencia).includes('muito alt')).length;
 
   const linha3 = [
-    {label:'Urgência Muito Alta', val:urgMuitoAlto, cor:'var(--vm)', bg:'var(--vmc)', ico:'🔴'},
-    {label:'Urgência Alta',       val:urgAlto,      cor:'var(--am)', bg:'var(--amc)', ico:'🟠'},
-    {label:'Urgência Baixa',      val:urgBaixo,     cor:'var(--vd)', bg:'var(--vdc)', ico:'🟢'},
+    {label:'Urgência Muito Alta', val:urgMuitoAlto, cor:'var(--tx)', bg:'#fff', ico:'🔴'},
+    {label:'Urgência Alta',       val:urgAlto,      cor:'var(--tx)', bg:'#fff', ico:'🟠'},
+    {label:'Urgência Baixa',      val:urgBaixo,     cor:'var(--tx)', bg:'#fff', ico:'🟢'},
   ];
   const l3El = document.getElementById('radar-cards-l3');
   if(l3El) l3El.innerHTML = linha3.map(cardHTML).join('');
