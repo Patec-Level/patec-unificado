@@ -5196,7 +5196,10 @@ function go(id, el) {
   document.getElementById('ttl').textContent = titles[id] || labelSidebar || id;
   if(id==='pr-bancoferias'){ renderFerias(); renderBanco(); setTimeout(()=>{ fbCarregarBHE().then(()=>{ bheArquivarVencidos(); renderBHECards(); }); }, 100); }
   document.getElementById('sb').classList.remove('mob-open');
-  if(id==='vg-mercado') mktCarregarTudo();
+  if(id==='vg-mercado') {
+    // Mostrar tela imediatamente — recarregar dados só se não estiver carregando
+    if(!window._mktCarregando) mktCarregarTudo();
+  }
   if(id==='analista-auto') setTimeout(()=>{
     aaPublicoCarregar();
     // Lazy: carregar backlog e AA se não tiver cache
@@ -11942,14 +11945,21 @@ async function fetchRSS(feedUrl, count = 8) {
 
 // ── CARGA PRINCIPAL ──
 async function mktCarregarTudo() {
+  if(window._mktCarregando) return; // evitar chamadas duplas
+  window._mktCarregando = true;
   const el = id => document.getElementById(id);
   if(el('mkt-update-time')) el('mkt-update-time').textContent = 'Atualizando...';
   if(el('mkt-live-dot')) el('mkt-live-dot').style.background = 'var(--am)';
 
-  await Promise.allSettled([
-    mktCarregarCambio(),
-    mktCarregarPetroleo(),
-    mktCarregarTicker(),
+  // Timeout global de 12s para não ficar pendurado
+  const timeoutPromise = new Promise(resolve => setTimeout(resolve, 12000));
+  await Promise.race([
+    Promise.allSettled([
+      mktCarregarCambio(),
+      mktCarregarPetroleo(),
+      mktCarregarTicker(),
+    ]),
+    timeoutPromise
   ]);
 
   // Se mesmo após todas as tentativas o Brent não carregou, não deixar "Analisando..." para sempre
@@ -11971,6 +11981,7 @@ async function mktCarregarTudo() {
   // Reset timer
   if(_mktTimer) clearInterval(_mktTimer);
   _mktTimer = setInterval(mktCarregarTudo, 5 * 60 * 1000);
+  window._mktCarregando = false;
 }
 
 // Iniciar quando a aba for acessada (via go())
@@ -15609,8 +15620,8 @@ function estRenderDesfechoCards(){
   }
 
   const todos = Object.values(_desfechoCache).filter(d => {
-    if(!d.data) return false; // sem data = legado anterior ao ciclo, excluir
-    return d.data >= dtDeFiltro && d.data <= dtAteFiltro;
+    const _dISO = d._dataISO||d.data||''; if(!_dISO) return false;
+    return (d._dataISO||d.data||'') >= dtDeFiltro && (d._dataISO||d.data||'') <= dtAteFiltro;
   });
 
   const tipos = [
@@ -15647,14 +15658,17 @@ async function desfechoCarregarFirebase(){
       const cache = {};
       snap.docs.forEach(d => {
         const data = d.data();
-        const dataDoc = data.data || '';
-        // Só incluir registros do ciclo atual em diante — sem data = legado, excluir também
-        if(dataDoc && dataDoc >= cicloInicioFiltro){
-          if(data.tipo) data.tipo = TIPO_NORM[(data.tipo||'').toLowerCase()] || data.tipo;
-          cache[data.chave || d.id] = data;
+        // Normalizar o campo data para ISO (pode vir como DD/MM/YYYY ou YYYY-MM-DD)
+        let dataISO = data.data || '';
+        if(dataISO && dataISO.includes('/')) {
+          const p = dataISO.split('/');
+          dataISO = p[2]+'-'+p[1]+'-'+p[0]; // DD/MM/YYYY → YYYY-MM-DD
         }
+        if(data.tipo) data.tipo = TIPO_NORM[(data.tipo||'').toLowerCase()] || data.tipo;
+        data._dataISO = dataISO; // campo normalizado para filtros
+        cache[data.chave || d.id] = data;
       });
-      console.log('normalizarDocs: total docs Firebase='+snap.docs.length+' | no ciclo='+Object.keys(cache).length+' (desde '+cicloInicioFiltro+')');
+      console.log('normalizarDocs: total docs Firebase='+snap.docs.length+' | carregados='+Object.keys(cache).length);
       return cache;
     };
 
@@ -15731,8 +15745,8 @@ function estRenderDevolucoes(){
   const _dtAteDev = _cicloSelDev === 'custom' ? (document.getElementById('est-ate')?.value||_hojeDev) : _hojeDev;
   const devs = Object.values(_desfechoCache).filter(d => {
     if((d.tipo||'').toLowerCase() !== 'devolução' && (d.tipo||'').toLowerCase() !== 'devolucao') return false;
-    if(!d.data) return false; // sem data = legado, excluir
-    return d.data >= _dtDeDev && d.data <= _dtAteDev;
+    const _dISOd = d._dataISO||d.data||''; if(!_dISOd) return false;
+    return (d._dataISO||d.data||'') >= _dtDeDev && (d._dataISO||d.data||'') <= _dtAteDev;
   });
   if(!devs.length){ sec.style.display='none'; return; }
   sec.style.display='block';
