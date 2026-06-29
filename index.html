@@ -137,7 +137,8 @@ body{
 }
 
 /* ── PÁGINAS ── */
-.page{display:none}.page.active{display:block}
+.page{display:block;visibility:hidden;height:0;overflow:hidden;pointer-events:none}
+.page.active{visibility:visible;height:auto;overflow:visible;pointer-events:auto}
 
 /* ── KPI GRID ── */
 .kgrid{
