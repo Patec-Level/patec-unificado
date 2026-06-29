@@ -3280,9 +3280,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <!-- ABA: ABRIR PATEC (conteúdo movido da antiga página p-abrir-patec, intacto) -->
       <div id="pa-tab-abrirpatec" style="display:none">
 
-      <div class="al al-b" style="margin-bottom:1rem">
-        ℹ️ Esta aba usa os valores de <strong>Abrir ID Não (L7)</strong> e <strong>Abrir PATEC Obrigatório (L8)</strong> já lançados no Resumo do Dia. Entrada/Saída calculada pela diferença entre o valor de hoje e o valor do dia anterior.
-      </div>
+      <!-- banner info ocultado a pedido -->
 
       <!-- CARDS DO DIA (mesmo do Painel Estratégico / Plano de Ação) -->
       <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--azm)">
@@ -3307,7 +3305,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div style="display:flex;gap:8px">
             <button id="ap-btn-l8" class="btn btn-p" style="font-size:12px" onclick="apSelecionarIndicador('l8',this)">📦 Abrir PATEC Obrigatório</button>
             <button id="ap-btn-l7" class="btn btn-s" style="font-size:12px" onclick="apSelecionarIndicador('l7',this)">🆔 Abrir PATEC Idêntico Não</button>
-            <button id="ap-btn-total" class="btn btn-s" style="font-size:12px" onclick="apSelecionarIndicador('total',this)">📊 Total Combinado (L7+L8)</button>
+            <button id="ap-btn-total" class="btn btn-s" style="font-size:12px;display:none" onclick="apSelecionarIndicador('total',this)">📊 Total Combinado (L7+L8)</button>
           </div>
         </div>
       </div>
