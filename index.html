@@ -5197,8 +5197,9 @@ function go(id, el) {
   if(id==='pr-bancoferias'){ renderFerias(); renderBanco(); setTimeout(()=>{ fbCarregarBHE().then(()=>{ bheArquivarVencidos(); renderBHECards(); }); }, 100); }
   document.getElementById('sb').classList.remove('mob-open');
   if(id==='vg-mercado') {
-    // Mostrar tela imediatamente — recarregar dados só se não estiver carregando
-    if(!window._mktCarregando) mktCarregarTudo();
+    // Sempre recarregar ao navegar para esta tela — resetar guard antes
+    window._mktCarregando = false;
+    mktCarregarTudo();
   }
   if(id==='analista-auto') setTimeout(()=>{
     aaPublicoCarregar();
@@ -11980,7 +11981,7 @@ async function mktCarregarTudo() {
 
   // Reset timer
   if(_mktTimer) clearInterval(_mktTimer);
-  _mktTimer = setInterval(mktCarregarTudo, 5 * 60 * 1000);
+  _mktTimer = setInterval(()=>{ window._mktCarregando=false; mktCarregarTudo(); }, 5 * 60 * 1000);
   window._mktCarregando = false;
 }
 
