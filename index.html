@@ -12615,19 +12615,65 @@ function renderCascata(){
             <div style="font-size:9px;color:var(--tx2)">~${med}/dia líquido</div>`;
   })() : '';
 
+  // ── Calcular projeções de conclusão ──
+  const _metaDiaCas = metaDia > 0 ? metaDia : 30;
+  const _diasDecor = linhas.length;
+  const _mediaEnt  = _diasDecor > 0 ? Math.round(totalEntrada / _diasDecor) : 0;
+  const _saldoLiqCas = _metaDiaCas - _mediaEnt;
+
+  const _calcDtFutura = (base, diasNec) => {
+    if(diasNec <= 0) return '—';
+    const futuros = [];
+    let d = new Date((linhas[linhas.length-1]?.data || dtFim)+'T12:00:00');
+    while(futuros.length < diasNec + 120){
+      d.setDate(d.getDate()+1);
+      if(d.getDay()!==0&&d.getDay()!==6) futuros.push(d.toISOString().split('T')[0]);
+    }
+    return futuros[diasNec-1] ? futuros[diasNec-1].split('-').reverse().join('/') : '—';
+  };
+
+  const _diasParaZerarSem = _metaDiaCas > 0 ? Math.ceil(backlogAtual / _metaDiaCas) : 0;
+  const _dtZerarSem = _diasParaZerarSem > 0 ? _calcDtFutura(backlogAtual, _diasParaZerarSem) : '—';
+  const _dtZerarCom = _saldoLiqCas > 0 ? _calcDtFutura(backlogAtual, Math.ceil(backlogAtual / _saldoLiqCas)) : 'Backlog crescendo';
+
+  const _diffKpi = backlogAtual - backlogBase;
+  const _pctKpi  = backlogBase > 0 ? Math.abs(Math.round(_diffKpi/backlogBase*100)) : 0;
+  const _statusBg    = _diffKpi > 5 ? '#FDEAEA' : _diffKpi < -5 ? '#E6F7F1' : '#E8F0FB';
+  const _statusBdr   = _diffKpi > 5 ? '#ef9a9a' : _diffKpi < -5 ? '#a5d6a7' : '#90caf9';
+  const _statusIco   = _diffKpi > 5 ? '🔺' : _diffKpi < -5 ? '🔽' : '➡';
+  const _statusTxt   = _diffKpi > 5 ? 'BACKLOG CRESCENDO' : _diffKpi < -5 ? 'BACKLOG REDUZINDO' : 'BACKLOG ESTÁVEL';
+  const _statusCor   = _diffKpi > 5 ? '#C62828' : _diffKpi < -5 ? '#0E9E6A' : '#1A4A8A';
+  const _statusSub   = _diffKpi > 5 ? `+${_diffKpi} itens (+${_pctKpi}%) vs início` : _diffKpi < -5 ? `${_diffKpi} itens (${_pctKpi}%) vs início` : '';
+
   const kpiEl = document.getElementById('pa-kpis');
-  if(kpiEl) kpiEl.innerHTML=[
-    {label:`Backlog Inicial (${fmtDt(linhas[0]?.data||'')})`, val:backlogBase, cor:'var(--az)', bg:'var(--cin)', extra:'', ico:'📌'},
-    {label:`Backlog Atual (${fmtDt(linhas[linhas.length-1]?.data||dtFim)})`, val:backlogAtual, cor:backlogAtual<=backlogBase?'var(--vd)':'var(--vm)', bg:'var(--cin)', extra: tendHTML, ico:'📊'},
-    {label:'Total Saídas',    val:totalSaidas,    cor:'var(--vd)', bg:'var(--cin)', ico:'📤'},
-    {label:'Total Entradas',  val:totalEntrada||0, cor:'var(--am)', bg:'var(--cin)', ico:'📥'},
-    {label:'Redução líquida', val:(reducao>=0?'−':'+')+Math.abs(reducao), cor:reducao>=0?'var(--vd)':'var(--vm)', bg:'var(--cin)', ico:'📉'},
-  ].map(c=>`<div style="background:${c.bg};border-radius:10px;padding:.875rem;text-align:center;border:1px solid rgba(0,0,0,.06)">
-    ${c.ico?`<div style="font-size:16px;margin-bottom:4px">${c.ico}</div>`:''}
-    <div style="font-size:10px;font-weight:700;color:var(--tx2);margin-bottom:4px;line-height:1.3">${c.label}</div>
-    <div style="font-size:22px;font-weight:700;color:${c.cor};line-height:1">${c.val}</div>
-    ${c.extra||''}
-  </div>`).join('');
+  if(kpiEl) kpiEl.innerHTML = `
+    <div class="kc">
+      <div class="kc-v">${backlogBase}</div>
+      <div class="kc-l">Backlog Inicial (${fmtDt(linhas[0]?.data||'')})</div>
+    </div>
+    <div class="kc ${backlogAtual<=backlogBase?'ok':'bad'}">
+      <div class="kc-v">${backlogAtual}</div>
+      <div class="kc-l">Backlog Atual (${fmtDt(linhas[linhas.length-1]?.data||dtFim)})</div>
+      ${tendHTML}
+    </div>
+    <div class="kc ok" style="background:#E6F7F1;border-top-color:var(--vd)">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--vd);margin-bottom:4px">📅 Conclusão sem novas entradas</div>
+      <div style="font-size:20px;font-weight:700;color:var(--vd);line-height:1">${_dtZerarSem}</div>
+      <div class="kc-s">${_diasParaZerarSem} dias úteis</div>
+    </div>
+    <div class="kc" style="background:#FFF3E0;border-top-color:var(--am)">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--am);margin-bottom:4px">📅 Conclusão com entradas (média ${_mediaEnt}/dia)</div>
+      <div style="font-size:20px;font-weight:700;color:var(--am);line-height:1">${_dtZerarCom}</div>
+      <div class="kc-s">${_saldoLiqCas>0?'Saldo líquido: '+_saldoLiqCas+'/dia':'Entradas > Saídas'}</div>
+    </div>
+    <div class="kc" style="background:${_statusBg};border-top-color:${_statusBdr}">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--tx2);margin-bottom:8px">Status do Backlog</div>
+      <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.6);border-radius:20px;padding:3px 10px">
+        <span>${_statusIco}</span>
+        <span style="font-size:12px;font-weight:700;color:${_statusCor}">${_statusTxt}</span>
+      </div>
+      ${_statusSub ? `<div style="font-size:10px;color:${_statusCor};margin-top:4px">${_statusSub}</div>` : ''}
+    </div>`;
 
   // Projeção
   const diasRestantes = metaDia>0?Math.ceil(backlogAtual/metaDia):'—';
