@@ -12660,22 +12660,22 @@ function renderCascata(){
       ${tendHTML}
     </div>
     <div class="kc ok">
-      <div class="kc-l" style="text-transform:uppercase;letter-spacing:.4px;font-size:9px">📅 Conclusão sem novas entradas</div>
-      <div class="kc-v xl" style="margin-top:4px">${_dtZerarSem}</div>
+      <div class="kc-v xl">${_dtZerarSem}</div>
+      <div class="kc-l">Conclusão sem novas entradas</div>
       <div class="kc-s">${_diasParaZerarSem} dias úteis</div>
     </div>
     <div class="kc ${_saldoLiqCas>0?'warn':'bad'}">
-      <div class="kc-l" style="text-transform:uppercase;letter-spacing:.4px;font-size:9px">📅 Conclusão com entradas (média ${_mediaEnt}/dia)</div>
-      <div class="kc-v xl" style="margin-top:4px;color:${_saldoLiqCas>0?'var(--am)':'var(--vm)'}">${_dtZerarCom}</div>
+      <div class="kc-v xl" style="color:${_saldoLiqCas>0?'var(--am)':'var(--vm)'}">${_dtZerarCom}</div>
+      <div class="kc-l">Conclusão com entradas (média ${_mediaEnt}/dia)</div>
       <div class="kc-s">${_subCom}</div>
     </div>
     <div class="kc" style="border-top-color:${_statusBdr}">
-      <div class="kc-l" style="text-transform:uppercase;letter-spacing:.4px;font-size:9px">Status do Backlog</div>
-      <div style="display:inline-flex;align-items:center;gap:5px;margin-top:6px;background:var(--cin);border-radius:20px;padding:3px 10px">
+      <div style="display:inline-flex;align-items:center;gap:5px;background:var(--cin);border-radius:20px;padding:3px 10px;margin-bottom:6px">
         <span>${_statusIco}</span>
         <span style="font-size:12px;font-weight:700;color:${_statusCor}">${_statusTxt}</span>
       </div>
-      ${_statusSub ? `<div class="kc-s" style="color:${_statusCor};margin-top:4px">${_statusSub}</div>` : ''}
+      <div class="kc-l">Status do Backlog</div>
+      ${_statusSub ? `<div class="kc-s" style="color:${_statusCor}">${_statusSub}</div>` : ''}
     </div>`;
 
   // Projeção
