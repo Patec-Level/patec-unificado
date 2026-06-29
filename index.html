@@ -12634,16 +12634,19 @@ function renderCascata(){
 
   const _diasParaZerarSem = _metaDiaCas > 0 ? Math.ceil(backlogAtual / _metaDiaCas) : 0;
   const _dtZerarSem = _diasParaZerarSem > 0 ? _calcDtFutura(backlogAtual, _diasParaZerarSem) : '—';
-  const _dtZerarCom = _saldoLiqCas > 0 ? _calcDtFutura(backlogAtual, Math.ceil(backlogAtual / _saldoLiqCas)) : 'Backlog crescendo';
+
+  // Mesma regra do ADM (paAnalisar): saldoLiq>0 → data real; senão → 'Backlog crescendo'
+  const _diasParaZerarCom = _saldoLiqCas > 0 ? Math.ceil(backlogAtual / _saldoLiqCas) : 0;
+  const _dtZerarCom = _saldoLiqCas > 0 ? _calcDtFutura(backlogAtual, _diasParaZerarCom) : 'Backlog crescendo';
+  const _subCom = _saldoLiqCas > 0 ? 'Saldo líquido: ' + _saldoLiqCas + '/dia' : 'Entradas > Saídas';
 
   const _diffKpi = backlogAtual - backlogBase;
   const _pctKpi  = backlogBase > 0 ? Math.abs(Math.round(_diffKpi/backlogBase*100)) : 0;
-  const _statusBg    = _diffKpi > 5 ? '#FDEAEA' : _diffKpi < -5 ? '#E6F7F1' : '#E8F0FB';
-  const _statusBdr   = _diffKpi > 5 ? '#ef9a9a' : _diffKpi < -5 ? '#a5d6a7' : '#90caf9';
+  const _statusBdr   = _diffKpi > 5 ? 'var(--vm)' : _diffKpi < -5 ? 'var(--vd)' : 'var(--azm)';
   const _statusIco   = _diffKpi > 5 ? '🔺' : _diffKpi < -5 ? '🔽' : '➡';
   const _statusTxt   = _diffKpi > 5 ? 'BACKLOG CRESCENDO' : _diffKpi < -5 ? 'BACKLOG REDUZINDO' : 'BACKLOG ESTÁVEL';
-  const _statusCor   = _diffKpi > 5 ? '#C62828' : _diffKpi < -5 ? '#0E9E6A' : '#1A4A8A';
-  const _statusSub   = _diffKpi > 5 ? `+${_diffKpi} itens (+${_pctKpi}%) vs início` : _diffKpi < -5 ? `${_diffKpi} itens (${_pctKpi}%) vs início` : '';
+  const _statusCor   = _diffKpi > 5 ? 'var(--vm)' : _diffKpi < -5 ? 'var(--vd)' : 'var(--azm)';
+  const _statusSub   = _diffKpi !== 0 ? `${_diffKpi > 0 ? '+' : ''}${_diffKpi} itens (${_diffKpi > 0 ? '+' : ''}${_diffKpi > 0 ? _pctKpi : -_pctKpi}%) vs início` : '';
 
   const kpiEl = document.getElementById('pa-kpis');
   if(kpiEl) kpiEl.innerHTML = `
@@ -12656,23 +12659,23 @@ function renderCascata(){
       <div class="kc-l">Backlog Atual (${fmtDt(linhas[linhas.length-1]?.data||dtFim)})</div>
       ${tendHTML}
     </div>
-    <div class="kc ok" style="background:#E6F7F1;border-top-color:var(--vd)">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--vd);margin-bottom:4px">📅 Conclusão sem novas entradas</div>
-      <div style="font-size:20px;font-weight:700;color:var(--vd);line-height:1">${_dtZerarSem}</div>
+    <div class="kc ok">
+      <div class="kc-l" style="text-transform:uppercase;letter-spacing:.4px;font-size:9px">📅 Conclusão sem novas entradas</div>
+      <div class="kc-v xl" style="margin-top:4px">${_dtZerarSem}</div>
       <div class="kc-s">${_diasParaZerarSem} dias úteis</div>
     </div>
-    <div class="kc" style="background:#FFF3E0;border-top-color:var(--am)">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--am);margin-bottom:4px">📅 Conclusão com entradas (média ${_mediaEnt}/dia)</div>
-      <div style="font-size:20px;font-weight:700;color:var(--am);line-height:1">${_dtZerarCom}</div>
-      <div class="kc-s">${_saldoLiqCas>0?'Saldo líquido: '+_saldoLiqCas+'/dia':'Entradas > Saídas'}</div>
+    <div class="kc ${_saldoLiqCas>0?'warn':'bad'}">
+      <div class="kc-l" style="text-transform:uppercase;letter-spacing:.4px;font-size:9px">📅 Conclusão com entradas (média ${_mediaEnt}/dia)</div>
+      <div class="${_saldoLiqCas>0?'kc-v xl':'kc-v'}" style="margin-top:4px;color:${_saldoLiqCas>0?'var(--am)':'var(--vm)'}">${_dtZerarCom}</div>
+      <div class="kc-s">${_subCom}</div>
     </div>
-    <div class="kc" style="background:${_statusBg};border-top-color:${_statusBdr}">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--tx2);margin-bottom:8px">Status do Backlog</div>
-      <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.6);border-radius:20px;padding:3px 10px">
+    <div class="kc" style="border-top-color:${_statusBdr}">
+      <div class="kc-l" style="text-transform:uppercase;letter-spacing:.4px;font-size:9px">Status do Backlog</div>
+      <div style="display:inline-flex;align-items:center;gap:5px;margin-top:6px;background:var(--cin);border-radius:20px;padding:3px 10px">
         <span>${_statusIco}</span>
         <span style="font-size:12px;font-weight:700;color:${_statusCor}">${_statusTxt}</span>
       </div>
-      ${_statusSub ? `<div style="font-size:10px;color:${_statusCor};margin-top:4px">${_statusSub}</div>` : ''}
+      ${_statusSub ? `<div class="kc-s" style="color:${_statusCor};margin-top:4px">${_statusSub}</div>` : ''}
     </div>`;
 
   // Projeção
