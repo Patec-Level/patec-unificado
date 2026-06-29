@@ -6129,9 +6129,10 @@ function renderCardsDia(){
   const totGeralAnt = mapaAnt?(l3a+l4a+l5a+l6a+l7a+l8a):null;
 
   const cardHTML = (c, big=false) => `
-    <div style="background:${c.bg};border-radius:10px;padding:${big?'1rem 1.25rem':'.875rem'};border:1px solid rgba(0,0,0,.07);${big?'display:flex;flex-direction:column;justify-content:center':''}">
-      <div style="font-size:10px;font-weight:700;color:var(--tx2);margin-bottom:2px">${c.label}</div>
-      <div style="font-size:${big?'32':'26'}px;font-weight:700;color:${c.cor};line-height:1;margin-top:4px">${c.val}</div>
+    <div style="background:${c.bg};border-radius:10px;padding:${big?'1rem 1.25rem':'.875rem'};border:1px solid rgba(0,0,0,.07);text-align:center;${big?'display:flex;flex-direction:column;justify-content:center':''}">
+      ${c.ico?`<div style="font-size:16px;margin-bottom:4px">${c.ico}</div>`:''}
+      <div style="font-size:10px;font-weight:700;color:var(--tx2);margin-bottom:4px;line-height:1.3">${c.label}</div>
+      <div style="font-size:${big?'32':'26'}px;font-weight:700;color:${c.cor};line-height:1">${c.val}</div>
       ${varStr(c.val,c.ant)}
     </div>`;
 
@@ -6139,21 +6140,22 @@ function renderCardsDia(){
   if(cardsEl) cardsEl.innerHTML=`
     <div style="display:grid;grid-template-columns:repeat(5,1fr) 1.8fr;grid-template-rows:auto auto;gap:10px">
       <!-- Linha 1: 5 cards PATEC -->
-      ${cardHTML({label:'PATEC Finalizado',    val:l3, ant:l3a, cor:'#3266AD', bg:'#EBF0FA'})}
-      ${cardHTML({label:'Ag. PATEC Finalizar', val:l4, ant:l4a, cor:'#3266AD', bg:'#EBF0FA'})}
-      ${cardHTML({label:'100% Reprovado',      val:l5, ant:l5a, cor:'var(--vd)', bg:'var(--vdc)'})}
-      ${cardHTML({label:'PATEC Cancelado',     val:l6, ant:l6a, cor:'var(--vd)', bg:'var(--vdc)'})}
-      ${cardHTML({label:'Total PATEC',         val:totPatec, ant:totPatecAnt, cor:'var(--azm)', bg:'var(--azc)'})}
+      ${cardHTML({label:'PATEC Finalizado',    val:l3, ant:l3a, cor:'#3266AD', bg:'#fff', ico:'✅'})}
+      ${cardHTML({label:'Ag. PATEC Finalizar', val:l4, ant:l4a, cor:'#3266AD', bg:'#fff', ico:'⏳'})}
+      ${cardHTML({label:'100% Reprovado',      val:l5, ant:l5a, cor:'var(--vd)', bg:'#fff', ico:'❌'})}
+      ${cardHTML({label:'PATEC Cancelado',     val:l6, ant:l6a, cor:'var(--vd)', bg:'#fff', ico:'🚫'})}
+      ${cardHTML({label:'Total PATEC',         val:totPatec, ant:totPatecAnt, cor:'var(--azm)', bg:'#fff', ico:'📊'})}
       <!-- Total Geral: col 6, ocupa as 2 linhas -->
-      <div style="grid-column:6;grid-row:1/3;background:var(--cin);border-radius:10px;padding:1.25rem 1.5rem;border:1px solid rgba(0,0,0,.07);display:flex;flex-direction:column;justify-content:center">
+      <div style="grid-column:6;grid-row:1/3;background:#fff;border-radius:10px;padding:1.25rem 1.5rem;border:1px solid rgba(0,0,0,.07);display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center">
+        <div style="font-size:20px;margin-bottom:6px">🗂</div>
         <div style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:6px">Total Geral</div>
         <div style="font-size:38px;font-weight:700;color:var(--az);line-height:1">${totGeral}</div>
         ${varStr(totGeral,totGeralAnt)}
       </div>
       <!-- Linha 2: 3 cards Abrir -->
-      ${cardHTML({label:'Abrir ID Não',        val:l7, ant:l7a, cor:'var(--am)', bg:'var(--amc)'})}
-      ${cardHTML({label:'Abrir PATEC Obrig.',  val:l8, ant:l8a, cor:'var(--am)', bg:'var(--amc)'})}
-      ${cardHTML({label:'Total Abrir PATEC',        val:totAbrir, ant:totAbrirAnt, cor:'var(--am)', bg:'var(--amc)'})}
+      ${cardHTML({label:'Abrir ID Não',        val:l7, ant:l7a, cor:'var(--am)', bg:'#fff', ico:'🔓'})}
+      ${cardHTML({label:'Abrir PATEC Obrig.',  val:l8, ant:l8a, cor:'var(--am)', bg:'#fff', ico:'📦'})}
+      ${cardHTML({label:'Total Abrir PATEC',        val:totAbrir, ant:totAbrirAnt, cor:'var(--am)', bg:'#fff', ico:'📋'})}
     </div>`;
 
   // OBS (20/06): PATEC FINALIZADO (ESQ 2 da topbar/sidebar) NÃO sincroniza mais
@@ -6241,14 +6243,14 @@ function renderEstPCP(){
 
   const cards=[
     {label:'Análise',          sub:'1ª Análise + Tratativa + Status B + Outros', val:vAnalise,   ant:aAnalise,   cor:'var(--azm)', bg:'var(--azc)', isMeta:true},
-    {label:'Fornecedor',       sub:'',  val:vForn,      ant:aForn,      cor:'var(--az)',  bg:'var(--cin)'},
-    {label:'Requisitante',     sub:'',  val:vReq,       ant:aReq,       cor:'var(--az)',  bg:'var(--cin)'},
-    {label:'MDG',              sub:'',  val:vMDG,       ant:aMDG,       cor:'var(--az)',  bg:'var(--cin)'},
-    {label:'Val. Thiago',      sub:'',  val:vValThiago, ant:aValThiago, cor:'var(--az)',  bg:'var(--cin)'},
-    {label:'XGL',              sub:'',  val:vXGL,       ant:aXGL,       cor:'var(--az)',  bg:'var(--cin)'},
-    {label:'RCs Pedidos',      sub:'',  val:vPedidos,   ant:aPedidos,   cor:'var(--vd)', bg:'var(--vdc)'},
-    {label:'Republicação',     sub:'',  val:vRepub,     ant:aRepub,     cor:'var(--am)',  bg:'var(--amc)'},
-    {label:'RCs Devoluções',   sub:'',  val:vDevol,     ant:aDevol,     cor:'var(--vm)', bg:'var(--vmc)'},
+    {label:'Fornecedor',       sub:'',  val:vForn,      ant:aForn,      cor:'var(--az)',  bg:'#fff'},
+    {label:'Requisitante',     sub:'',  val:vReq,       ant:aReq,       cor:'var(--az)',  bg:'#fff'},
+    {label:'MDG',              sub:'',  val:vMDG,       ant:aMDG,       cor:'var(--az)',  bg:'#fff'},
+    {label:'Val. Thiago',      sub:'',  val:vValThiago, ant:aValThiago, cor:'var(--az)',  bg:'#fff'},
+    {label:'XGL',              sub:'',  val:vXGL,       ant:aXGL,       cor:'var(--az)',  bg:'#fff'},
+    {label:'RCs Pedidos',      sub:'',  val:vPedidos,   ant:aPedidos,   cor:'var(--vd)', bg:'#fff'},
+    {label:'Republicação',     sub:'',  val:vRepub,     ant:aRepub,     cor:'var(--am)',  bg:'#fff'},
+    {label:'RCs Devoluções',   sub:'',  val:vDevol,     ant:aDevol,     cor:'var(--vm)', bg:'#fff'},
   ];
 
   const META_DIA_EQUIPE = 90;
@@ -6299,9 +6301,10 @@ function renderEstPCP(){
 
   // Cards secundários: linha 2
   const cardsSecundarios = cards.filter(c=>!c.isMeta);
-  const cardHTML = c => `<div style="background:${c.bg};border-radius:10px;padding:.875rem;border:1px solid rgba(0,0,0,.07)">
-    <div style="font-size:10px;font-weight:700;color:var(--tx2);margin-bottom:2px">${c.label}</div>
-    <div style="font-size:26px;font-weight:700;color:${c.cor};line-height:1;margin-top:6px">${c.val}</div>
+  const cardHTML = c => `<div style="background:${c.bg};border-radius:10px;padding:.875rem;border:1px solid rgba(0,0,0,.07);text-align:center">
+    ${c.ico?`<div style="font-size:16px;margin-bottom:4px">${c.ico}</div>`:''}
+    <div style="font-size:10px;font-weight:700;color:var(--tx2);margin-bottom:4px;line-height:1.3">${c.label}</div>
+    <div style="font-size:26px;font-weight:700;color:${c.cor};line-height:1">${c.val}</div>
     ${varStr(c.val,c.ant)}
   </div>`;
 
@@ -12616,13 +12619,14 @@ function renderCascata(){
 
   const kpiEl = document.getElementById('pa-kpis');
   if(kpiEl) kpiEl.innerHTML=[
-    {label:`Backlog Inicial (${fmtDt(linhas[0]?.data||'')})`, val:backlogBase, cor:'var(--az)', bg:'var(--azc)', extra:''},
-    {label:`Backlog Atual (${fmtDt(linhas[linhas.length-1]?.data||dtFim)})`, val:backlogAtual, cor:backlogAtual<=backlogBase?'var(--vd)':'var(--vm)', bg:backlogAtual<=backlogBase?'var(--vdc)':'var(--vmc)', extra: tendHTML},
-    {label:'Total Saídas',    val:totalSaidas,    cor:'var(--vd)', bg:'var(--vdc)'},
-    {label:'Total Entradas',  val:totalEntrada||0, cor:'var(--am)', bg:'var(--amc)'},
-    {label:'Redução líquida', val:(reducao>=0?'−':'+')+Math.abs(reducao), cor:reducao>=0?'var(--vd)':'var(--vm)', bg:reducao>=0?'var(--vdc)':'var(--vmc)'},
+    {label:`Backlog Inicial (${fmtDt(linhas[0]?.data||'')})`, val:backlogBase, cor:'var(--az)', bg:'#fff', extra:'', ico:'📌'},
+    {label:`Backlog Atual (${fmtDt(linhas[linhas.length-1]?.data||dtFim)})`, val:backlogAtual, cor:backlogAtual<=backlogBase?'var(--vd)':'var(--vm)', bg:'#fff', extra: tendHTML, ico:'📊'},
+    {label:'Total Saídas',    val:totalSaidas,    cor:'var(--vd)', bg:'#fff', ico:'📤'},
+    {label:'Total Entradas',  val:totalEntrada||0, cor:'var(--am)', bg:'#fff', ico:'📥'},
+    {label:'Redução líquida', val:(reducao>=0?'−':'+')+Math.abs(reducao), cor:reducao>=0?'var(--vd)':'var(--vm)', bg:'#fff', ico:'📉'},
   ].map(c=>`<div style="background:${c.bg};border-radius:10px;padding:.875rem;text-align:center;border:1px solid rgba(0,0,0,.06)">
-    <div style="font-size:10px;font-weight:700;color:var(--tx2);margin-bottom:4px">${c.label}</div>
+    ${c.ico?`<div style="font-size:16px;margin-bottom:4px">${c.ico}</div>`:''}
+    <div style="font-size:10px;font-weight:700;color:var(--tx2);margin-bottom:4px;line-height:1.3">${c.label}</div>
     <div style="font-size:22px;font-weight:700;color:${c.cor};line-height:1">${c.val}</div>
     ${c.extra||''}
   </div>`).join('');
