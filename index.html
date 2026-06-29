@@ -137,8 +137,7 @@ body{
 }
 
 /* ── PÁGINAS ── */
-.page{display:block;visibility:hidden;height:0;overflow:hidden;pointer-events:none}
-.page.active{visibility:visible;height:auto;overflow:visible;pointer-events:auto}
+.page{display:none}.page.active{display:block}
 
 /* ── KPI GRID ── */
 .kgrid{
@@ -5216,7 +5215,13 @@ function go(id, el) {
   if(id==='vg-mercado') {
     // Sempre recarregar ao navegar para esta tela — resetar guard antes
     window._mktCarregando = false;
+    const ticker = document.getElementById('mkt-ticker');
+    if(ticker) ticker.style.animationPlayState = 'running';
     mktCarregarTudo();
+  } else {
+    // Pausar ticker ao sair da tela de mercado
+    const ticker = document.getElementById('mkt-ticker');
+    if(ticker) ticker.style.animationPlayState = 'paused';
   }
   if(id==='analista-auto') setTimeout(()=>{
     aaPublicoCarregar();
