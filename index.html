@@ -67,6 +67,7 @@ body{
   font-size:13px;color:var(--tx);
   background:var(--bg);
   display:flex;min-height:100vh;
+  overflow-x:hidden;
   -webkit-font-smoothing:antialiased;
 }
 
@@ -126,11 +127,13 @@ body{
   margin-left:var(--sw);
   flex:1;display:flex;flex-direction:column;
   min-width:0;min-height:100vh;
+  overflow-x:hidden;
 }
 .ct{
   padding:0.75rem 1.5rem 1.25rem;
   margin-top:var(--tbh);
   flex:1;width:100%;
+  overflow-x:hidden;
 }
 
 /* ── PÁGINAS ── */
@@ -5173,13 +5176,16 @@ function go(id, el) {
   const page = document.getElementById('p-' + id);
   if (page) {
     page.classList.add('active');
-    // Forçar repaint — resolve bug de tela em branco ao voltar para a aba
     requestAnimationFrame(() => {
       page.style.opacity = '0.99';
       requestAnimationFrame(() => { page.style.opacity = ''; });
     });
   }
   if (el) el.classList.add('active');
+  // Rolar para o topo ao trocar de aba
+  const mn = document.getElementById('mn');
+  if(mn) mn.scrollTop = 0;
+  window.scrollTo(0,0);
   const icons = {
     'vg-validade':'⏱',
 'pr-estrategico':'🎯','pr-equipe':'👥','pr-producao':'📋','pr-bancoferias':'🗓',
