@@ -753,166 +753,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       </div>
     </div>
 <!-- ══════════════════ POR COLABORADOR ══════════════════ -->
-    <!-- ══════════════════ VALIDADE ══════════════════ -->
-    <!-- ══════════════════════════════════════════
-         INTELIGÊNCIA DE MERCADO
-    ══════════════════════════════════════════ -->
-    <div id="p-vg-mercado" class="page active">
-
-      <!-- TOPBAR INFO (atualização) -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
-        <div>
-          <div style="font-size:11px;color:var(--tx2)">Fontes: G1 · Agência Brasil · UOL · O Globo · InfoMoney · Exame · Yahoo Finance · Brapi · AwesomeAPI</div>
-          <div style="font-size:10px;color:var(--tx2);margin-top:2px">Atualização automática a cada <strong>5 minutos</strong> · Apenas fontes de alto padrão jornalístico</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <div style="display:flex;align-items:center;gap:6px">
-            <div id="mkt-live-dot" style="width:8px;height:8px;border-radius:50%;background:var(--vd);animation:pulse-dot 2s infinite"></div>
-            <span style="font-size:11px;color:var(--vd);font-weight:600">AO VIVO</span>
-          </div>
-          <div id="mkt-update-time" style="font-size:11px;color:var(--tx2);background:var(--cin);padding:4px 12px;border-radius:20px">carregando...</div>
-          <button class="btn btn-s" style="font-size:11px;padding:5px 12px" onclick="mktCarregarTudo()">↻ Atualizar</button>
-        </div>
-      </div>
-
-      <!-- TICKER MANCHETES -->
-      <div id="mkt-ticker-wrap" style="background:var(--az);border-radius:8px;overflow:hidden;margin-bottom:1.5rem;height:38px;display:flex;align-items:center">
-        <div style="background:rgba(255,255,255,.15);padding:0 16px;height:100%;display:flex;align-items:center;font-size:10px;font-weight:700;color:#fff;letter-spacing:1px;white-space:nowrap;flex-shrink:0;gap:8px">
-          <span id="mkt-live-ticker-dot" style="width:6px;height:6px;border-radius:50%;background:#4FD4A0;animation:pulse-dot 2s infinite;display:inline-block"></span>
-          MANCHETES
-        </div>
-        <div style="overflow:hidden;flex:1;position:relative">
-          <div id="mkt-ticker" style="display:flex;gap:60px;white-space:nowrap;animation:mkt-scroll 90s linear infinite;font-size:12px;padding:0 24px;align-items:center">
-            <span style="color:rgba(255,255,255,.45);font-size:10px">Carregando manchetes...</span>
-          </div>
-        </div>
-        <div style="background:rgba(255,255,255,.08);padding:0 12px;height:100%;display:flex;align-items:center;font-size:10px;color:rgba(255,255,255,.45);white-space:nowrap;flex-shrink:0;cursor:pointer" onclick="mktCarregarTudo()" title="Atualizar">↻</div>
-      </div>
-
-      <!-- COTAÇÕES PRINCIPAIS -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:10px;margin-bottom:1.5rem">
-
-        <!-- USD/BRL -->
-        <div style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);border-top:3px solid #2563EB;box-shadow:0 1px 6px rgba(13,35,71,.06)">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
-            <span style="font-size:20px">🇺🇸</span>
-            <div>
-              <div style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:.5px;text-transform:uppercase">Dólar Americano</div>
-              <div style="font-size:9px;color:var(--tx2)">USD / BRL</div>
-            </div>
-          </div>
-          <div id="mkt-usd-val" style="font-size:28px;font-weight:700;color:var(--az);letter-spacing:-.5px;line-height:1">—</div>
-          <div id="mkt-usd-var" style="font-size:11px;font-weight:600;margin-top:4px">—</div>
-          <div id="mkt-usd-sub" style="font-size:9px;color:var(--tx2);margin-top:3px">AwesomeAPI · Banco Central BR</div>
-        </div>
-
-        <!-- EUR/BRL -->
-        <div style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);border-top:3px solid #7C3AED;box-shadow:0 1px 6px rgba(13,35,71,.06)">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
-            <span style="font-size:20px">🇪🇺</span>
-            <div>
-              <div style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:.5px;text-transform:uppercase">Euro</div>
-              <div style="font-size:9px;color:var(--tx2)">EUR / BRL</div>
-            </div>
-          </div>
-          <div id="mkt-eur-val" style="font-size:28px;font-weight:700;color:var(--az);letter-spacing:-.5px;line-height:1">—</div>
-          <div id="mkt-eur-var" style="font-size:11px;font-weight:600;margin-top:4px">—</div>
-          <div id="mkt-eur-sub" style="font-size:9px;color:var(--tx2);margin-top:3px">AwesomeAPI · Banco Central BR</div>
-        </div>
-
-        <!-- BRENT -->
-        <div style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);border-top:3px solid var(--vd);box-shadow:0 1px 6px rgba(13,35,71,.06)">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
-            <span style="font-size:20px">🛢️</span>
-            <div>
-              <div style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:.5px;text-transform:uppercase">Petróleo Brent</div>
-              <div style="font-size:9px;color:var(--tx2)">USD/barril · ICE Futures</div>
-            </div>
-          </div>
-          <div id="mkt-brent-val" style="font-size:28px;font-weight:700;color:var(--az);letter-spacing:-.5px;line-height:1">—</div>
-          <div id="mkt-brent-var" style="font-size:11px;font-weight:600;margin-top:4px">—</div>
-          <div id="mkt-brent-sub" style="font-size:9px;color:var(--tx2);margin-top:3px">Yahoo Finance · ICE</div>
-        </div>
-
-        <!-- WTI -->
-        <div style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);border-top:3px solid var(--am);box-shadow:0 1px 6px rgba(13,35,71,.06)">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
-            <span style="font-size:20px">⛽</span>
-            <div>
-              <div style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:.5px;text-transform:uppercase">Petróleo WTI</div>
-              <div style="font-size:9px;color:var(--tx2)">USD/barril · NYMEX</div>
-            </div>
-          </div>
-          <div id="mkt-wti-val" style="font-size:28px;font-weight:700;color:var(--az);letter-spacing:-.5px;line-height:1">—</div>
-          <div id="mkt-wti-var" style="font-size:11px;font-weight:600;margin-top:4px">—</div>
-          <div id="mkt-wti-sub" style="font-size:9px;color:var(--tx2);margin-top:3px">Yahoo Finance · NYMEX</div>
-        </div>
-
-        <!-- PETR4 -->
-        <div style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);border-top:3px solid var(--vm);box-shadow:0 1px 6px rgba(13,35,71,.06)">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
-            <span style="font-size:20px">🏭</span>
-            <div>
-              <div style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:.5px;text-transform:uppercase">Petrobras</div>
-              <div style="font-size:9px;color:var(--tx2)">PETR4 · B3</div>
-            </div>
-          </div>
-          <div id="mkt-petr-val" style="font-size:28px;font-weight:700;color:var(--az);letter-spacing:-.5px;line-height:1">—</div>
-          <div id="mkt-petr-var" style="font-size:11px;font-weight:600;margin-top:4px">—</div>
-          <div id="mkt-petr-sub" style="font-size:9px;color:var(--tx2);margin-top:3px">Yahoo Finance · B3</div>
-        </div>
-
-        <!-- SPREAD + BRL -->
-        <div style="background:var(--az);border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(26,74,138,.3);box-shadow:0 1px 6px rgba(13,35,71,.12);color:#fff">
-          <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,.5);letter-spacing:.5px;text-transform:uppercase;margin-bottom:.5rem">Brent em R$</div>
-          <div id="mkt-brent-brl" style="font-size:28px;font-weight:700;letter-spacing:-.5px;line-height:1">—</div>
-          <div style="font-size:10px;color:rgba(255,255,255,.5);margin-top:4px">Brent × USD/BRL</div>
-          <div style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid rgba(255,255,255,.12)">
-            <div style="font-size:9px;color:rgba(255,255,255,.45);margin-bottom:2px">Spread Brent-WTI</div>
-            <div id="mkt-spread" style="font-size:16px;font-weight:700">—</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ANÁLISE DE IMPACTO -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem">
-        <div id="mkt-card-br" style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);box-shadow:0 1px 6px rgba(13,35,71,.05)">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem">
-            <span style="font-size:22px">🇧🇷</span>
-            <div style="font-size:13px;font-weight:700;color:var(--az)">Impacto no Brasil</div>
-          </div>
-          <div id="mkt-txt-br" style="font-size:12px;color:var(--tx2);line-height:1.7">Carregando análise...</div>
-          <div id="mkt-tag-br" style="display:inline-block;margin-top:8px;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:600;background:var(--amc);color:var(--am)">Analisando</div>
-        </div>
-        <div id="mkt-card-am" style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);box-shadow:0 1px 6px rgba(13,35,71,.05)">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem">
-            <span style="font-size:22px">🌎</span>
-            <div style="font-size:13px;font-weight:700;color:var(--az)">Impacto nas Américas</div>
-          </div>
-          <div id="mkt-txt-am" style="font-size:12px;color:var(--tx2);line-height:1.7">Carregando análise...</div>
-          <div id="mkt-tag-am" style="display:inline-block;margin-top:8px;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:600;background:var(--cin);color:var(--tx2)">Analisando</div>
-        </div>
-        <div id="mkt-card-world" style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);box-shadow:0 1px 6px rgba(13,35,71,.05)">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem">
-            <span style="font-size:22px">🌍</span>
-            <div style="font-size:13px;font-weight:700;color:var(--az)">Impacto Global</div>
-          </div>
-          <div id="mkt-txt-world" style="font-size:12px;color:var(--tx2);line-height:1.7">Carregando análise...</div>
-          <div id="mkt-tag-world" style="display:inline-block;margin-top:8px;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:600;background:var(--cin);color:var(--tx2)">Analisando</div>
-        </div>
-      </div>
-
-      <!-- FONTE E DISCLAIMER -->
-      <div style="padding:.875rem 1.1rem;background:var(--cin);border-radius:8px;border:1px solid var(--brd);display:flex;align-items:flex-start;gap:10px">
-        <span style="font-size:16px;flex-shrink:0">ℹ️</span>
-        <div style="font-size:11px;color:var(--tx2);line-height:1.6">
-          <strong style="color:var(--tx)">Fontes utilizadas:</strong> G1/Globo, Agência Brasil (EBC/Governo Federal), UOL, O Globo, InfoMoney, Exame (manchetes do ticker), Yahoo Finance (cotações Brent/WTI), Brapi (PETR4), AwesomeAPI (câmbio baseado no Banco Central do Brasil).
-          Nenhum blog, site de terceiros ou fonte sem credencial jornalística reconhecida é utilizado.
-          Dados de mercado podem ter defasagem de até 15 minutos em relação ao tempo real das bolsas.
-        </div>
-      </div>
-    </div>
-
     <div id="p-vg-validade" class="page">
       <div class="al al-b">ℹ Regra: <strong>≤ 59 dias = dentro do prazo · 60–90 dias = próximo do vencimento · ≥ 91 dias = vencida</strong> · Cálculo: hoje − DATA_ENCERRAMENTO_OPORTUNIDADE (col AK do Level Board)</div>
       <div class="g2">
@@ -2884,6 +2724,167 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
   </div><!-- /p-adm -->
 
   </div><!-- /ct -->
+
+    <!-- ══════════════════ VALIDADE ══════════════════ -->
+    <!-- ══════════════════════════════════════════
+         INTELIGÊNCIA DE MERCADO
+    ══════════════════════════════════════════ -->
+    <div id="p-vg-mercado" class="page active" style="padding:0.75rem 1.5rem 1.25rem;margin-top:var(--tbh)">
+
+      <!-- TOPBAR INFO (atualização) -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:11px;color:var(--tx2)">Fontes: G1 · Agência Brasil · UOL · O Globo · InfoMoney · Exame · Yahoo Finance · Brapi · AwesomeAPI</div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:2px">Atualização automática a cada <strong>5 minutos</strong> · Apenas fontes de alto padrão jornalístico</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <div id="mkt-live-dot" style="width:8px;height:8px;border-radius:50%;background:var(--vd);animation:pulse-dot 2s infinite"></div>
+            <span style="font-size:11px;color:var(--vd);font-weight:600">AO VIVO</span>
+          </div>
+          <div id="mkt-update-time" style="font-size:11px;color:var(--tx2);background:var(--cin);padding:4px 12px;border-radius:20px">carregando...</div>
+          <button class="btn btn-s" style="font-size:11px;padding:5px 12px" onclick="mktCarregarTudo()">↻ Atualizar</button>
+        </div>
+      </div>
+
+      <!-- TICKER MANCHETES -->
+      <div id="mkt-ticker-wrap" style="background:var(--az);border-radius:8px;overflow:hidden;margin-bottom:1.5rem;height:38px;display:flex;align-items:center">
+        <div style="background:rgba(255,255,255,.15);padding:0 16px;height:100%;display:flex;align-items:center;font-size:10px;font-weight:700;color:#fff;letter-spacing:1px;white-space:nowrap;flex-shrink:0;gap:8px">
+          <span id="mkt-live-ticker-dot" style="width:6px;height:6px;border-radius:50%;background:#4FD4A0;animation:pulse-dot 2s infinite;display:inline-block"></span>
+          MANCHETES
+        </div>
+        <div style="overflow:hidden;flex:1;position:relative">
+          <div id="mkt-ticker" style="display:flex;gap:60px;white-space:nowrap;animation:mkt-scroll 90s linear infinite;font-size:12px;padding:0 24px;align-items:center">
+            <span style="color:rgba(255,255,255,.45);font-size:10px">Carregando manchetes...</span>
+          </div>
+        </div>
+        <div style="background:rgba(255,255,255,.08);padding:0 12px;height:100%;display:flex;align-items:center;font-size:10px;color:rgba(255,255,255,.45);white-space:nowrap;flex-shrink:0;cursor:pointer" onclick="mktCarregarTudo()" title="Atualizar">↻</div>
+      </div>
+
+      <!-- COTAÇÕES PRINCIPAIS -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:10px;margin-bottom:1.5rem">
+
+        <!-- USD/BRL -->
+        <div style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);border-top:3px solid #2563EB;box-shadow:0 1px 6px rgba(13,35,71,.06)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
+            <span style="font-size:20px">🇺🇸</span>
+            <div>
+              <div style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:.5px;text-transform:uppercase">Dólar Americano</div>
+              <div style="font-size:9px;color:var(--tx2)">USD / BRL</div>
+            </div>
+          </div>
+          <div id="mkt-usd-val" style="font-size:28px;font-weight:700;color:var(--az);letter-spacing:-.5px;line-height:1">—</div>
+          <div id="mkt-usd-var" style="font-size:11px;font-weight:600;margin-top:4px">—</div>
+          <div id="mkt-usd-sub" style="font-size:9px;color:var(--tx2);margin-top:3px">AwesomeAPI · Banco Central BR</div>
+        </div>
+
+        <!-- EUR/BRL -->
+        <div style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);border-top:3px solid #7C3AED;box-shadow:0 1px 6px rgba(13,35,71,.06)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
+            <span style="font-size:20px">🇪🇺</span>
+            <div>
+              <div style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:.5px;text-transform:uppercase">Euro</div>
+              <div style="font-size:9px;color:var(--tx2)">EUR / BRL</div>
+            </div>
+          </div>
+          <div id="mkt-eur-val" style="font-size:28px;font-weight:700;color:var(--az);letter-spacing:-.5px;line-height:1">—</div>
+          <div id="mkt-eur-var" style="font-size:11px;font-weight:600;margin-top:4px">—</div>
+          <div id="mkt-eur-sub" style="font-size:9px;color:var(--tx2);margin-top:3px">AwesomeAPI · Banco Central BR</div>
+        </div>
+
+        <!-- BRENT -->
+        <div style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);border-top:3px solid var(--vd);box-shadow:0 1px 6px rgba(13,35,71,.06)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
+            <span style="font-size:20px">🛢️</span>
+            <div>
+              <div style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:.5px;text-transform:uppercase">Petróleo Brent</div>
+              <div style="font-size:9px;color:var(--tx2)">USD/barril · ICE Futures</div>
+            </div>
+          </div>
+          <div id="mkt-brent-val" style="font-size:28px;font-weight:700;color:var(--az);letter-spacing:-.5px;line-height:1">—</div>
+          <div id="mkt-brent-var" style="font-size:11px;font-weight:600;margin-top:4px">—</div>
+          <div id="mkt-brent-sub" style="font-size:9px;color:var(--tx2);margin-top:3px">Yahoo Finance · ICE</div>
+        </div>
+
+        <!-- WTI -->
+        <div style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);border-top:3px solid var(--am);box-shadow:0 1px 6px rgba(13,35,71,.06)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
+            <span style="font-size:20px">⛽</span>
+            <div>
+              <div style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:.5px;text-transform:uppercase">Petróleo WTI</div>
+              <div style="font-size:9px;color:var(--tx2)">USD/barril · NYMEX</div>
+            </div>
+          </div>
+          <div id="mkt-wti-val" style="font-size:28px;font-weight:700;color:var(--az);letter-spacing:-.5px;line-height:1">—</div>
+          <div id="mkt-wti-var" style="font-size:11px;font-weight:600;margin-top:4px">—</div>
+          <div id="mkt-wti-sub" style="font-size:9px;color:var(--tx2);margin-top:3px">Yahoo Finance · NYMEX</div>
+        </div>
+
+        <!-- PETR4 -->
+        <div style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);border-top:3px solid var(--vm);box-shadow:0 1px 6px rgba(13,35,71,.06)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
+            <span style="font-size:20px">🏭</span>
+            <div>
+              <div style="font-size:10px;font-weight:700;color:var(--tx2);letter-spacing:.5px;text-transform:uppercase">Petrobras</div>
+              <div style="font-size:9px;color:var(--tx2)">PETR4 · B3</div>
+            </div>
+          </div>
+          <div id="mkt-petr-val" style="font-size:28px;font-weight:700;color:var(--az);letter-spacing:-.5px;line-height:1">—</div>
+          <div id="mkt-petr-var" style="font-size:11px;font-weight:600;margin-top:4px">—</div>
+          <div id="mkt-petr-sub" style="font-size:9px;color:var(--tx2);margin-top:3px">Yahoo Finance · B3</div>
+        </div>
+
+        <!-- SPREAD + BRL -->
+        <div style="background:var(--az);border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(26,74,138,.3);box-shadow:0 1px 6px rgba(13,35,71,.12);color:#fff">
+          <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,.5);letter-spacing:.5px;text-transform:uppercase;margin-bottom:.5rem">Brent em R$</div>
+          <div id="mkt-brent-brl" style="font-size:28px;font-weight:700;letter-spacing:-.5px;line-height:1">—</div>
+          <div style="font-size:10px;color:rgba(255,255,255,.5);margin-top:4px">Brent × USD/BRL</div>
+          <div style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid rgba(255,255,255,.12)">
+            <div style="font-size:9px;color:rgba(255,255,255,.45);margin-bottom:2px">Spread Brent-WTI</div>
+            <div id="mkt-spread" style="font-size:16px;font-weight:700">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ANÁLISE DE IMPACTO -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem">
+        <div id="mkt-card-br" style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);box-shadow:0 1px 6px rgba(13,35,71,.05)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem">
+            <span style="font-size:22px">🇧🇷</span>
+            <div style="font-size:13px;font-weight:700;color:var(--az)">Impacto no Brasil</div>
+          </div>
+          <div id="mkt-txt-br" style="font-size:12px;color:var(--tx2);line-height:1.7">Carregando análise...</div>
+          <div id="mkt-tag-br" style="display:inline-block;margin-top:8px;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:600;background:var(--amc);color:var(--am)">Analisando</div>
+        </div>
+        <div id="mkt-card-am" style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);box-shadow:0 1px 6px rgba(13,35,71,.05)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem">
+            <span style="font-size:22px">🌎</span>
+            <div style="font-size:13px;font-weight:700;color:var(--az)">Impacto nas Américas</div>
+          </div>
+          <div id="mkt-txt-am" style="font-size:12px;color:var(--tx2);line-height:1.7">Carregando análise...</div>
+          <div id="mkt-tag-am" style="display:inline-block;margin-top:8px;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:600;background:var(--cin);color:var(--tx2)">Analisando</div>
+        </div>
+        <div id="mkt-card-world" style="background:#fff;border-radius:12px;padding:1.1rem 1.25rem;border:1px solid rgba(221,227,238,.8);box-shadow:0 1px 6px rgba(13,35,71,.05)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem">
+            <span style="font-size:22px">🌍</span>
+            <div style="font-size:13px;font-weight:700;color:var(--az)">Impacto Global</div>
+          </div>
+          <div id="mkt-txt-world" style="font-size:12px;color:var(--tx2);line-height:1.7">Carregando análise...</div>
+          <div id="mkt-tag-world" style="display:inline-block;margin-top:8px;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:600;background:var(--cin);color:var(--tx2)">Analisando</div>
+        </div>
+      </div>
+
+      <!-- FONTE E DISCLAIMER -->
+      <div style="padding:.875rem 1.1rem;background:var(--cin);border-radius:8px;border:1px solid var(--brd);display:flex;align-items:flex-start;gap:10px">
+        <span style="font-size:16px;flex-shrink:0">ℹ️</span>
+        <div style="font-size:11px;color:var(--tx2);line-height:1.6">
+          <strong style="color:var(--tx)">Fontes utilizadas:</strong> G1/Globo, Agência Brasil (EBC/Governo Federal), UOL, O Globo, InfoMoney, Exame (manchetes do ticker), Yahoo Finance (cotações Brent/WTI), Brapi (PETR4), AwesomeAPI (câmbio baseado no Banco Central do Brasil).
+          Nenhum blog, site de terceiros ou fonte sem credencial jornalística reconhecida é utilizado.
+          Dados de mercado podem ter defasagem de até 15 minutos em relação ao tempo real das bolsas.
+        </div>
+      </div>
+    </div>
+
 
 
     <!-- ══════ LANÇAR PRODUÇÃO ══════ -->
