@@ -853,6 +853,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <div class="stabs" id="adm-tabs">
         <button class="stab active" onclick="setAdmTab('ciclos',this)">🔄 Gestão de Ciclos</button>
         <button class="stab" id="adm-nav-usuarios-btn" onclick="setAdmTab('usuarios',this)">👥 Usuários</button>
+        <button class="stab" id="adm-nav-online-btn" onclick="setAdmTab('online',this)">🕐 Último Acesso</button>
         <button class="stab" onclick="setAdmTab('rt-producao',this)">📡 Produção Tempo Real</button>
         <button class="stab" onclick="setAdmTab('metas',this)">🎯 Metas e Gap</button>
         <button class="stab" onclick="setAdmTab('meta-gap',this)">📌 Meta & Gap (Topbar)</button>
@@ -1050,6 +1051,17 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       </div>
 
       <!-- ── USUÁRIOS ── -->
+      <div id="adm-online" class="adm-tab" style="display:none">
+        <div class="cd">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+            <div class="cd-t" style="margin:0">🕐 Último Acesso</div>
+            <button class="btn btn-s" style="font-size:11px" onclick="admUltimoAcessoCarregar()">↺ Atualizar</button>
+          </div>
+          <div class="al al-b" style="margin-bottom:1rem">ℹ Mostra a última vez que cada pessoa entrou no sistema (sem monitoramento em tempo real). A bolinha verde indica acesso nos últimos 15 minutos.</div>
+          <div id="adm-acesso-lista"></div>
+        </div>
+      </div>
+
       <div id="adm-usuarios" class="adm-tab" style="display:none">
         <div class="cd">
           <div class="cd-t">👥 Gerenciar Usuários</div>
@@ -7872,6 +7884,12 @@ function setAdmTab(id,btn){
     alert('Apenas o administrador geral pode gerenciar usuários.');
     return;
   }
+  // "Último Acesso" expõe nome/e-mail de todos os usuários cadastrados —
+  // mesma sensibilidade da aba Usuários, mesma restrição.
+  if(id==='online' && !_isAdmGeral()){
+    alert('Apenas o administrador geral pode ver o último acesso dos usuários.');
+    return;
+  }
   // Testar E-mails, Apresentação, Apresentação 1 e Entradas Plano de Ação
   // são exclusivas do ADLV — dependem de listas de destinatários e dados
   // específicos do ADLV que não se aplicam ao FAST.
@@ -7880,6 +7898,7 @@ function setAdmTab(id,btn){
     return;
   }
   if(id==='ciclos') setTimeout(()=>{cicloCarregarAtivo().then(initCicloADM);},50);
+  if(id==='online') setTimeout(admUltimoAcessoCarregar,50);
   if(id==='resultado-medicao') setTimeout(renderResultadoMedicao,50);
   if(id==='radar-adm') setTimeout(radarInitADM,50);
   if(id==='pa-entradas') setTimeout(paEntradaInitADM,50);
@@ -20048,6 +20067,9 @@ async function authCarregarPerfil(user){
   }
 
   console.log('✓ Perfil carregado:', _authPerfil.perfil, _authPerfil.colabNome || _authPerfil.nome);
+
+  // Registrar timestamp de último acesso (sem heartbeat, só 1x por sessão)
+  _registrarUltimoAcesso(user);
 }
 
 function authMostrarLogin(){
@@ -20128,6 +20150,8 @@ function authMontarSidebar(emailParam){
   // cadastrar/liberar acesso de novos colaboradores.
   const _btnUsuarios = document.getElementById('adm-nav-usuarios-btn');
   if(_btnUsuarios) _btnUsuarios.style.display = isAdm ? '' : 'none';
+  const _btnOnline = document.getElementById('adm-nav-online-btn');
+  if(_btnOnline) _btnOnline.style.display = isAdm ? '' : 'none';
   console.log('✓ Sidebar montada — isAdm:', isAdm, '— email:', emailAtual);
 }
 
@@ -20220,6 +20244,86 @@ async function authLogout(){
 window._authFazerLoginReal  = authFazerLogin;
 window._authEsqueciSenhaReal= authEsqueciSenha;
 window._authLogoutReal      = authLogout;
+
+// ════════════════════════════════════════════════
+// ÚLTIMO ACESSO (login)
+// Sem heartbeat, sem leitura/escrita constante no Firestore: só grava
+// UMA VEZ por sessão (quando o login é confirmado) o timestamp de
+// acesso no próprio documento de usuarios/{uid}. O Firebase Auth já
+// disponibiliza isso em user.metadata.lastSignInTime mesmo quando a
+// sessão é restaurada automaticamente (senha salva) — não precisa a
+// pessoa digitar senha de novo pra esse dado existir.
+// ════════════════════════════════════════════════
+async function _registrarUltimoAcesso(user){
+  try{
+    if(!user) return;
+    const db = getDBUsuarios();
+    if(!db) return;
+    await db.collection('usuarios').doc(user.uid).set({
+      ultimoAcesso: firebase.firestore.FieldValue.serverTimestamp(),
+      ultimoAcessoLocal: new Date().toISOString()
+    }, {merge:true});
+  } catch(e){ /* silencioso — não pode travar o login por causa disso */ }
+}
+
+// ── Leitura no ADM: lista de usuários ordenada por último acesso ──
+async function admUltimoAcessoCarregar(){
+  const el = document.getElementById('adm-acesso-lista');
+  if(el) el.innerHTML = '<div style="font-size:12px;color:var(--tx2);padding:1rem;text-align:center">Carregando...</div>';
+  try{
+    const db = getDBUsuarios();
+    if(!db) return;
+    const snap = await db.collection('usuarios').get();
+    const users = snap.docs.map(d => ({uid:d.id, ...d.data()}));
+    users.sort((a,b) => {
+      const ta = a.ultimoAcesso?.toMillis ? a.ultimoAcesso.toMillis() : 0;
+      const tb = b.ultimoAcesso?.toMillis ? b.ultimoAcesso.toMillis() : 0;
+      return tb - ta; // mais recente primeiro
+    });
+    admUltimoAcessoRenderizar(users);
+  } catch(e){
+    console.warn('admUltimoAcessoCarregar:', e);
+    if(el) el.innerHTML = '<div style="font-size:12px;color:var(--vm)">⚠ Erro ao carregar.</div>';
+  }
+}
+
+function _fmtRelativo(ms){
+  if(!ms) return 'nunca acessou';
+  const diffMs = Date.now() - ms;
+  const min = Math.floor(diffMs/60000);
+  if(min < 1)   return 'agora mesmo';
+  if(min < 60)  return 'há ' + min + ' min';
+  const h = Math.floor(min/60);
+  if(h < 24)    return 'há ' + h + 'h';
+  const d = Math.floor(h/24);
+  if(d < 30)    return 'há ' + d + (d===1?' dia':' dias');
+  const dt = new Date(ms);
+  return dt.toLocaleDateString('pt-BR');
+}
+
+function admUltimoAcessoRenderizar(users){
+  const el = document.getElementById('adm-acesso-lista');
+  if(!el) return;
+  if(!users.length){
+    el.innerHTML = '<div style="font-size:12px;color:var(--tx2);padding:1rem;text-align:center">Nenhum usuário cadastrado.</div>';
+    return;
+  }
+  const agora = Date.now();
+  el.innerHTML = users.map(u => {
+    const ts = u.ultimoAcesso?.toMillis ? u.ultimoAcesso.toMillis() : 0;
+    const ativoRecente = ts && (agora - ts) < 15*60*1000; // ativo nos últimos 15min = "provavelmente online"
+    return `
+    <div style="display:flex;align-items:center;gap:10px;padding:.7rem .875rem;background:var(--cin);border-radius:9px;border:1px solid var(--brd);margin-bottom:6px">
+      <span style="width:9px;height:9px;border-radius:50%;background:${ativoRecente?'var(--vd)':'var(--brd)'};${ativoRecente?'box-shadow:0 0 0 3px var(--vdc)':''};flex-shrink:0"></span>
+      <div style="width:30px;height:30px;border-radius:50%;background:var(--azm);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${(u.nome||'?')[0].toUpperCase()}</div>
+      <div style="flex:1;min-width:160px">
+        <div style="font-size:12.5px;font-weight:700;color:var(--az)">${u.nome||'—'}</div>
+        <div style="font-size:10px;color:var(--tx2)">${u.email||''}</div>
+      </div>
+      <div style="text-align:right;font-size:11px;font-weight:600;color:${ativoRecente?'var(--vd)':'var(--tx2)'}">${_fmtRelativo(ts)}</div>
+    </div>`;
+  }).join('');
+}
 
 // ── Iniciar na carga ──
 document.addEventListener('DOMContentLoaded', ()=>{
