@@ -5536,6 +5536,51 @@ function _buscarAcoesRC(rc){
   });
 }
 
+// Rótulos amigáveis para os campos editáveis nas tabelas de Governança/XGL/Status B
+const _EDICAO_MANUAL_LABELS = {
+  analista:   'Analista',
+  status:     'Status Tratamento',
+  envio:      'Data de Envio',
+  finalizado: 'Data de Finalização'
+};
+
+// Registra no Histórico da RC quem alterou um campo direto pelo menu suspenso
+// (fora do fluxo de botões de produção). O "quem alterou" é SEMPRE amarrado
+// ao login atual (_authPerfil/colabLogado) — nunca ao analista responsável
+// pela RC, que pode ser uma pessoa diferente de quem está mexendo agora.
+async function _registrarEdicaoManual(chave, campo, valor){
+  try{
+    const colab = _authPerfil?.colabNome || colabLogado ||
+      (_authPerfil?.perfil==='adm' ? 'André' : null) ||
+      _authPerfil?.nome || null;
+    if(!colab || !chave) return;
+
+    const rc = String(chave).split('|')[0] || '';
+    if(!rc) return;
+
+    const _agora = new Date();
+    const data = _agora.getFullYear()+'-'+String(_agora.getMonth()+1).padStart(2,'0')+'-'+String(_agora.getDate()).padStart(2,'0');
+    const campoLabel = _EDICAO_MANUAL_LABELS[campo] || campo;
+    let valorFmt = valor;
+    if((campo==='envio'||campo==='finalizado') && valor) valorFmt = fmtBR(valor);
+
+    const registro = {
+      colab, data, ts: _agora.toISOString(),
+      tipo: 'edicao_manual', origem: 'edicao_manual',
+      rc, rcChave: chave,
+      campo: campoLabel, valor: valorFmt||''
+    };
+
+    const db = getDB();
+    if(db) await db.collection('producao_acoes').add(registro);
+
+    // Refletir imediatamente no cache local, pra aparecer no Histórico sem precisar recarregar
+    if(!window._prodAcoesCache) window._prodAcoesCache = {};
+    if(!window._prodAcoesCache[data]) window._prodAcoesCache[data] = [];
+    window._prodAcoesCache[data].push(registro);
+  } catch(e){ console.warn('_registrarEdicaoManual:', e); }
+}
+
 // FAST: conta quantas vezes cada "etapa" (tratamento: Fornecedor,
 // Requisitante, MDG, etc.) foi cobrada nessa RC, separado por Status Mapa
 // (Finalizado / Andamento) — usado pro contador visual na busca de RC e
@@ -5568,14 +5613,16 @@ function abrirHistoricoRC(rc){
     'em_tratativa':     '⚙️ Em Tratativa',
     'status_b':         '✅ Status B',
     'outros':           '📋 Outros',
-    'ag_parecer':       '📝 Ag Parecer'
+    'ag_parecer':       '📝 Ag Parecer',
+    'edicao_manual':    '✏️ Edição Manual'
   };
   const corTipo = {
     'primeira_analise': 'var(--azm)',
     'em_tratativa':     'var(--azm)',
     'status_b':         'var(--vd)',
     'outros':           'var(--am)',
-    'ag_parecer':       'var(--roxo,#7c3aed)'
+    'ag_parecer':       'var(--roxo,#7c3aed)',
+    'edicao_manual':    'var(--am)'
   };
 
   let conteudo = '';
@@ -5598,16 +5645,23 @@ function abrirHistoricoRC(rc){
           const tc = corTipo[a.tipo] || 'var(--tx)';
           const tratamento = a.tratamento ? `<span style="font-size:10px;background:var(--cin);border:1px solid var(--brd);border-radius:4px;padding:1px 6px;color:var(--tx2)">→ ${a.tratamento}</span>` : '';
           const conclusao  = a.conclusao  ? `<span style="font-size:10px;background:var(--vdc);border:1px solid var(--vd);border-radius:4px;padding:1px 6px;color:var(--vd)">${a.conclusao}</span>` : '';
+          // Edição manual (mudança direto no menu suspenso das tabelas): mostra o campo alterado e o novo valor
+          const edicaoCampo = (a.tipo==='edicao_manual' && a.campo) ? `<span style="font-size:10px;background:var(--amc);border:1px solid var(--am);border-radius:4px;padding:1px 6px;color:var(--am);font-weight:600">${a.campo} → ${a.valor||'—'}</span>` : '';
           const obs = a.obs ? `<div style="font-size:11px;color:var(--tx2);margin-top:4px;padding:4px 8px;background:#fff;border-radius:5px;border-left:2px solid var(--azm);font-style:italic">"${a.obs}"</div>` : '';
           const hora = a.ts ? new Date(a.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '';
+          // "Alterado por" — SEMPRE o login de quem fez a ação (não o analista responsável pela RC),
+          // destacado como badge à direita pra deixar claro quem mexeu, mesmo quando é diferente
+          // do dono da demanda.
+          const alteradoPor = `<span style="margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:var(--azm);background:#fff;border:1.5px solid var(--azm);border-radius:20px;padding:2px 10px;white-space:nowrap">👤 ${a.colab||'—'}</span>`;
           return `
             <div style="background:${idx===0?'var(--azc)':'#fff'};border:1px solid ${idx===0?'var(--azm)':'var(--brd)'};border-radius:8px;padding:.625rem .875rem">
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <span style="font-size:11px;font-weight:700;color:var(--tx2);min-width:75px">${fmtData(a.data)}${hora?' '+hora:''}</span>
-                <span style="font-size:11px;font-weight:700;color:var(--az)">${a.colab||'—'}</span>
                 <span style="font-size:11px;font-weight:700;color:${tc}">${tl}</span>
                 ${tratamento}
                 ${conclusao}
+                ${edicaoCampo}
+                ${alteradoPor}
               </div>
               ${obs}
             </div>`;
@@ -16403,6 +16457,7 @@ async function govBuscaSalvar(aba, chave, campo, valor){
         chave, analista: valor, ts: new Date().toISOString()
       });
     } catch(e){ console.warn('govBuscaSalvar analista:', e); }
+    _registrarEdicaoManual(chave, 'analista', valor);
     // Re-renderizar tabela correspondente
     if(aba==='MAPA') govRenderMapa(govFiltroMapaPadrao());
     if(aba==='XGL'){
@@ -16441,6 +16496,7 @@ async function govBuscaSalvar(aba, chave, campo, valor){
         ..._govDados[chave], chave, ts: new Date().toISOString()
       });
     } catch(e){ console.warn('govBuscaSalvar:', e); }
+    _registrarEdicaoManual(chave, campo, valor);
     // Sync: re-renderizar painel PC se visível
     const pcBuscaSync = document.getElementById('pc-busca');
     if(pcBuscaSync && pcBuscaSync.value) setTimeout(()=>pcBuscarRCDetalhe(pcBuscaSync.value),100);
@@ -16453,6 +16509,7 @@ async function govBuscaSalvar(aba, chave, campo, valor){
         ..._xglDados[chave], chave, ts: new Date().toISOString()
       });
     } catch(e){ console.warn('xglBuscaSalvar:', e); }
+    _registrarEdicaoManual(chave, campo, valor);
   } else if(aba === 'STATUS B'){
     if(!_sbDados[chave]) _sbDados[chave] = {};
     _sbDados[chave][campo] = valor;
@@ -16462,6 +16519,7 @@ async function govBuscaSalvar(aba, chave, campo, valor){
         ..._sbDados[chave], chave, ts: new Date().toISOString()
       });
     } catch(e){ console.warn('sbBuscaSalvar:', e); }
+    _registrarEdicaoManual(chave, campo, valor);
   }
 }
 
