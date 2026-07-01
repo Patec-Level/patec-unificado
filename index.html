@@ -14154,7 +14154,7 @@ function pcRenderTabela(aba, rows, campos, comExtra){
       `<td style="font-weight:700;color:var(--az)">${r.rc||'—'}</td>`,
       `<td>${r.seq||'—'}</td>`,
       `<td>${r.num_oport||'—'}</td>`,
-      `<td>${r.item_rc||'—'}</td>`,
+      `<td>${r.item_op||r.item_rc||'—'}</td>`,
     );
     if(comExtra) cells.push(`<td style="text-align:center;font-weight:600;color:${(r.patec_obrig||'').toLowerCase()==='sim'?'var(--vm)':'var(--tx2)'}">${r.patec_obrig||'—'}</td>`);
     if(comExtra && aba !== 'reprovado') cells.push(`<td style="${corValidade(r.validade)}">${r.validade||'—'}</td>`);
@@ -14280,7 +14280,7 @@ function pcBuscarRCDetalhe(rc){
           <td style="font-weight:700;color:var(--az)">${r.rc}</td>
           <td>${r.seq||'—'}</td>
           <td>${r.num_oport||'—'}</td>
-          <td>${r.item_rc||'—'}</td>
+          <td>${r.item_op||r.item_rc||'—'}</td>
           <td>
             <select style="font-size:11px;padding:2px 5px;min-width:150px"
               onchange="govBuscaSalvar('MAPA','${chave}','status',this.value)" id="pc-sel-status-${chaveId}">
@@ -14425,7 +14425,7 @@ function pcExportar(){
   const vencidos = filtrar(base.filter(r => (r.validade||'').toLowerCase().includes('vencid')));
   const wsV = XLSX.utils.aoa_to_sheet([
     ['Analista','Validade Proposta','SLA','RC','Item','Oportunidade','Item OP'],
-    ...vencidos.map(r=>[r.analista,r.validade,r.sla,r.rc,r.seq,r.num_oport,r.item_rc])
+    ...vencidos.map(r=>[r.analista,r.validade,r.sla,r.rc,r.seq,r.num_oport,r.item_op||r.item_rc])
   ]);
   XLSX.utils.book_append_sheet(wb, wsV, 'Vencido');
 
@@ -14433,7 +14433,7 @@ function pcExportar(){
   const reprovados = filtrar((_radarDados||[]).filter(r=>(r.analista_auto||'').trim()==='PATEC Finalizado sem fornecedores aprovados'));
   const wsR = XLSX.utils.aoa_to_sheet([
     ['Analista','Validade Proposta','SLA','Idas Mercado','RC','Item','Oportunidade','Item OP','PATEC Obrig.'],
-    ...reprovados.map(r=>[r.analista,r.validade,r.sla,r.idas,r.rc,r.seq,r.num_oport,r.item_rc,r.patec_obrig])
+    ...reprovados.map(r=>[r.analista,r.validade,r.sla,r.idas,r.rc,r.seq,r.num_oport,r.item_op||r.item_rc,r.patec_obrig])
   ]);
   XLSX.utils.book_append_sheet(wb, wsR, '100% Reprovado');
 
@@ -14446,7 +14446,7 @@ function pcExportar(){
   }));
   const wsC = XLSX.utils.aoa_to_sheet([
     ['Analista','Validade Proposta','SLA','Idas Mercado','RC','Item','Oportunidade','Item OP','PATEC Obrig.'],
-    ...criticos.map(r=>[r.analista,r.validade,r.sla,r.idas,r.rc,r.seq,r.num_oport,r.item_rc,r.patec_obrig])
+    ...criticos.map(r=>[r.analista,r.validade,r.sla,r.idas,r.rc,r.seq,r.num_oport,r.item_op||r.item_rc,r.patec_obrig])
   ]);
   XLSX.utils.book_append_sheet(wb, wsC, 'Itens Criticos');
 
@@ -14845,7 +14845,7 @@ function govRenderMapa(dados, tbodyId){
       <td style="font-weight:700;color:var(--az)">${r.rc||'—'}</td>
       <td>${r.seq||'—'}</td>
       <td>${r.num_oport||'—'}</td>
-      <td>${r.item_rc||'—'}</td>
+      <td>${r.item_op||r.item_rc||'—'}</td>
       <td style="font-size:11px">${statusAtual||'—'}</td>
       <td style="font-size:11px">${envio?fmtBR(envio):'—'}</td>
       <td style="text-align:center;font-size:11px;${prazo?'font-weight:600':'color:var(--tx2)'}">${prazo?fmtBR(prazo):'—'}</td>
@@ -15065,7 +15065,7 @@ async function govExportar(){
     const statusAtual = m.status || (GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase())) ? 'AG. TRATAMENTO' : '');
     const prazo = govCalcPrazo(statusAtual, m.envio||'');
     const statusCalc = govCalcStatus(prazo, m.finalizado||'');
-    wsMapa.push([r.analista,r.fila,r.validade,r.idas,r.sla,r.rc,r.item_rc,r.num_oport,r.seq,statusAtual,m.envio||'',prazo||'',statusCalc,m.finalizado||'',m.comentario||'']);
+    wsMapa.push([r.analista,r.fila,r.validade,r.idas,r.sla,r.rc,r.seq,r.num_oport,r.item_op||r.item_rc,statusAtual,m.envio||'',prazo||'',statusCalc,m.finalizado||'',m.comentario||'']);
   });
   const wsM = XLSX.utils.aoa_to_sheet(wsMapa);
   wsM['!cols'] = [{wch:14},{wch:18},{wch:14},{wch:8},{wch:6},{wch:12},{wch:8},{wch:14},{wch:8},{wch:20},{wch:12},{wch:12},{wch:16},{wch:12},{wch:30}];
@@ -15451,7 +15451,7 @@ function govBuscarRC(rc){
     if(!statusDefault && GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase()))) statusDefault = 'AG. TRATAMENTO';
     const prazo = govCalcPrazo(statusDefault, m.envio||'');
     const status = govCalcStatus(prazo, m.finalizado||'');
-    resultados.push({aba:'MAPA', abaLabel:'🗺 PATEC Finalizado', chave, analista:r.analista||'—', rc:r.rc, seq:r.seq, op:r.num_oport, item:r.item_rc,
+    resultados.push({aba:'MAPA', abaLabel:'🗺 PATEC Finalizado', chave, analista:r.analista||'—', rc:r.rc, seq:r.seq, op:r.num_oport, item:r.item_op||r.item_rc,
       status: statusDefault, envio:m.envio||'', prazo:prazo||'—', statusCalc:status, finalizado:m.finalizado||'',
       sla:r.sla||'—', fila:r.fila||'—', seguimento:r.seguimento||'—', cat_familia:r.cat_familia||'—', familia:r.familia||'—', tipo_familia:r.tipo_familia||'—', familia_lq:r.familia_lq||'—'});
   });
@@ -15470,7 +15470,7 @@ function govBuscarRC(rc){
     if(!statusDefault && GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase()))) statusDefault = 'AG. TRATAMENTO';
     const prazo = govCalcPrazo(statusDefault, m.envio||'');
     const status = govCalcStatus(prazo, m.finalizado||'');
-    resultados.push({aba:'MAPA', abaLabel:'⏳ Em Andamento', chave, analista:r.analista||'—', rc:r.rc, seq:r.seq, op:r.num_oport, item:r.item_rc,
+    resultados.push({aba:'MAPA', abaLabel:'⏳ Em Andamento', chave, analista:r.analista||'—', rc:r.rc, seq:r.seq, op:r.num_oport, item:r.item_op||r.item_rc,
       status: statusDefault, envio:m.envio||'', prazo:prazo||'—', statusCalc:status, finalizado:m.finalizado||'',
       sla:r.sla||'—', fila:r.fila||'—', seguimento:r.seguimento||'—', cat_familia:r.cat_familia||'—', familia:r.familia||'—', tipo_familia:r.tipo_familia||'—', familia_lq:r.familia_lq||'—'});
   });
@@ -16438,7 +16438,7 @@ function govRenderConcluidos(){
     const prazo = govCalcPrazo(m.status||'', m.envio||'');
     const origem = _moduloAtivo === 'fast' ? 'PATEC Finalizado' : 'PATEC Finalizado';
     rows.push({ origem, analista: r.analista||'—', fila: r.fila||'—', sla: r.sla||'—',
-      rc: r.rc||'—', item_rc: r.item_rc||'—', op: r.num_oport||'—', seq: r.seq||'—',
+      rc: r.rc||'—', item_rc: r.seq||'—', op: r.num_oport||'—', seq: r.item_op||r.item_rc||'—',
       status: m.status||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado });
   });
 
@@ -16450,7 +16450,7 @@ function govRenderConcluidos(){
     if(!m.finalizado) return;
     const prazo = govCalcPrazo(m.status||'', m.envio||'');
     rows.push({ origem: 'PATEC em Andamento', analista: r.analista||'—', fila: r.fila||'—', sla: r.sla||'—',
-      rc: r.rc||'—', item_rc: r.item_rc||'—', op: r.num_oport||'—', seq: r.seq||'—',
+      rc: r.rc||'—', item_rc: r.seq||'—', op: r.num_oport||'—', seq: r.item_op||r.item_rc||'—',
       status: m.status||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado });
   });
 
@@ -21683,7 +21683,7 @@ async function prodConfirmarAcao(){
               item: _itemNum,
               analista: _rowOrigem?.analista || colab || '',
               oport: _rowOrigem?.num_oport || '',
-              itemop: _rowOrigem?.item_rc || ''
+              itemop: _rowOrigem?.item_op || _rowOrigem?.item_rc || ''
             };
             const _xglItensNovos = [..._xglItensAtuais, _novoItemXgl];
             await _dbG.collection('config').doc('xgl_itens').set({ itens: _xglItensNovos }, {merge:true});
