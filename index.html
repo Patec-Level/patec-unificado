@@ -10273,6 +10273,14 @@ function rcqCampo(label,val){
     '<div style="font-size:10px;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:2px">'+label+'</div>'+
     '<div style="font-size:13px;font-weight:600;color:var(--tx)">'+val+'</div></div>';
 }
+function rcqDesfecho(chave){
+  try{
+    if(_desfechoCache && _desfechoCache[chave] && _desfechoCache[chave].tipo) return _desfechoCache[chave].tipo;
+    const g=(_govDados&&_govDados[chave]&&_govDados[chave].desfecho)||(typeof _xglDados!=='undefined'&&_xglDados[chave]&&_xglDados[chave].desfecho)||(typeof _sbDados!=='undefined'&&_sbDados[chave]&&_sbDados[chave].desfecho);
+    if(g&&g.tipo) return g.tipo;
+  }catch(e){}
+  return '';
+}
 function rcqLimpar(){
   const i=document.getElementById('rcqInput'); if(i) i.value='';
   const r=document.getElementById('rcqResultado'); if(r) r.innerHTML='';
@@ -10289,12 +10297,13 @@ async function rcqConsultar(){
     if(!_govDadosCarregadoOK) await govCarregarFirebase();
     if(!_xglItens || !_xglItens.length){ try{ await xglCarregarFirebase(); }catch(e){} }
     if(!_sbItens  || !_sbItens.length ){ try{ await sbCarregarFirebase();  }catch(e){} }
+    if(!_desfechoCache || !Object.keys(_desfechoCache).length){ try{ await desfechoCarregarFirebase(); }catch(e){} }
   }catch(e){ console.warn('rcqConsultar carga:', e); }
 
   const linhas=[];
   // ── MAPA (base do Radar + overlay da Governança) ──
   (_radarDados||[]).filter(r=>String(r.rc||'').trim()===rc).forEach(r=>{
-    const m=_govDados[govChave(r)]||{};
+    const chave=govChave(r); const m=_govDados[chave]||{};
     let statusTrat=m.status||'';
     if(!statusTrat && GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase()))) statusTrat='AG. TRATAMENTO';
     const envio=m.envio||'';
@@ -10304,21 +10313,23 @@ async function rcqConsultar(){
     let fase;
     if(finalizado) fase='Concluído';
     else { const cls=_classificarStatusMapa(r.analista_auto); fase = cls==='Finalizado'?'PATEC Finalizado':(cls==='Andamento'?'PATEC em Andamento':'PATEC (MAPA)'); }
-    linhas.push({fase, seq:r.seq||'—', op:r.num_oport||'—', item:r.item_op||r.item_rc||'—', statusTrat, prazo, statusCalc, finalizado});
+    linhas.push({fase, seq:r.seq||'—', op:r.num_oport||'—', item:r.item_op||r.item_rc||'—', statusTrat, prazo, statusCalc, finalizado, desfecho:rcqDesfecho(chave)});
   });
   // ── XGL ──
   (_xglItens||[]).filter(it=>String(it.rc||'').trim()===rc).forEach(it=>{
-    const m=(_xglDados&&_xglDados[xglChave(it.rc,it.item,it.oport,it.itemop)])||{};
+    const chave=xglChave(it.rc,it.item,it.oport,it.itemop);
+    const m=(_xglDados&&_xglDados[chave])||{};
     const statusTrat=m.status||''; const envio=m.envio||'';
     const prazo=govCalcPrazo(statusTrat,envio); const finalizado=m.finalizado||'';
-    linhas.push({fase:'XGL', seq:'—', op:it.oport||'—', item:it.item||it.itemop||'—', statusTrat, prazo, statusCalc:govCalcStatus(prazo,finalizado), finalizado});
+    linhas.push({fase:'XGL', seq:'—', op:it.oport||'—', item:it.item||it.itemop||'—', statusTrat, prazo, statusCalc:govCalcStatus(prazo,finalizado), finalizado, desfecho:rcqDesfecho(chave)});
   });
   // ── Status B ──
   (_sbItens||[]).filter(it=>String(it.rc||'').trim()===rc).forEach(it=>{
-    const m=(_sbDados&&_sbDados[sbChave(it.rc,it.seq,it.op,it.item)])||{};
+    const chave=sbChave(it.rc,it.seq,it.op,it.item);
+    const m=(_sbDados&&_sbDados[chave])||{};
     const statusTrat=m.status||''; const envio=m.envio||'';
     const prazo=govCalcPrazo(statusTrat,envio); const finalizado=m.finalizado||'';
-    linhas.push({fase:'Status B', seq:it.seq||'—', op:it.op||'—', item:it.item||'—', statusTrat, prazo, statusCalc:govCalcStatus(prazo,finalizado), finalizado});
+    linhas.push({fase:'Status B', seq:it.seq||'—', op:it.op||'—', item:it.item||'—', statusTrat, prazo, statusCalc:govCalcStatus(prazo,finalizado), finalizado, desfecho:rcqDesfecho(chave)});
   });
 
   if(!linhas.length){
@@ -10327,11 +10338,12 @@ async function rcqConsultar(){
   }
   const faseCor={'Concluído':'#16a34a','PATEC Finalizado':'#2563EB','PATEC em Andamento':'#d97706','XGL':'#7c3aed','Status B':'#0d9488','PATEC (MAPA)':'#64748b'};
   const chip=(t,c)=>'<span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;background:'+(c||'#888')+'22;color:'+(c||'#333')+';border:1px solid '+(c||'#ccc')+'55">'+t+'</span>';
+  const desfCor={'Pedido':'#16a34a','XGL':'#7c3aed','Devolução':'#dc2626','Republicação':'#2563EB'};
   const cards=linhas.map(l=>
     '<div style="border:1px solid var(--brd);border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">'+
-        '<div style="font-size:12px;color:var(--tx2)">SEQ <strong>'+rcqEsc(l.seq)+'</strong> · OP <strong>'+rcqEsc(l.op)+'</strong> · Item <strong>'+rcqEsc(l.item)+'</strong></div>'+
-        '<div><span style="font-size:10px;color:var(--tx2);margin-right:6px;text-transform:uppercase;letter-spacing:.5px;font-weight:700">Fase do PATEC</span>'+chip(rcqEsc(l.fase),faseCor[l.fase])+'</div>'+
+        '<div style="font-size:12px;color:var(--tx2)"><strong style="color:var(--az)">RC '+rcqEsc(rc)+'</strong> · SEQ <strong>'+rcqEsc(l.seq)+'</strong> · OP <strong>'+rcqEsc(l.op)+'</strong> · Item <strong>'+rcqEsc(l.item)+'</strong></div>'+
+        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:10px;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;font-weight:700">Fase do PATEC</span>'+chip(rcqEsc(l.fase),faseCor[l.fase])+((l.fase==='Concluído'&&l.desfecho)?('<span style="font-size:12px;color:var(--tx2);font-weight:700">→</span>'+chip(rcqEsc(l.desfecho),desfCor[l.desfecho]||'#64748b')):'')+'</div>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">'+
         rcqCampo('Status Tratamento', rcqEsc(l.statusTrat)||'—')+
