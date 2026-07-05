@@ -3128,6 +3128,22 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button class="btn btn-s" style="font-size:11px" onclick="renderRadarOperacional()">↺ Atualizar</button>
       </div>
 
+      <!-- CONSULTA DE STATUS DA RC (somente leitura) -->
+      <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--azm)">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:.6rem">
+          <div class="cd-t" style="margin:0">🔎 Consultar Status da RC</div>
+          <span style="font-size:11px;color:var(--tx2)">Somente consulta — não altera nenhum dado.</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="text" id="rcqInput" placeholder="Digite o número da RC..."
+            onkeydown="if(event.key==='Enter') rcqConsultar()"
+            style="font-size:13px;padding:7px 12px;border:1.5px solid var(--brd);border-radius:8px;min-width:220px;flex:1;max-width:320px;outline:none">
+          <button class="btn btn-p" style="font-size:12px" onclick="rcqConsultar()">🔍 Consultar</button>
+          <button class="btn btn-s" style="font-size:12px" onclick="rcqLimpar()">✕ Limpar</button>
+        </div>
+        <div id="rcqResultado" style="margin-top:1rem"></div>
+      </div>
+
       <!-- FILTROS -->
       <div class="cd" style="margin-bottom:1rem;padding:.875rem 1.1rem">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -10245,6 +10261,90 @@ async function fbCarregarRadar(){
 }
 
 // ── Upload ──
+// ════════════════════════════════════════════
+// CONSULTA DE STATUS DA RC — Radar Estratégico (SOMENTE LEITURA)
+// Não escreve nada: apenas lê Governança (MAPA/XGL/Status B) e reusa o
+// histórico existente (abrirHistoricoRC). Campos: Fase do PATEC,
+// Status Tratamento, Prazo Retorno e Status vêm dos dados da Governança.
+// ════════════════════════════════════════════
+function rcqEsc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/'/g,'&#39;'); }
+function rcqCampo(label,val){
+  return '<div style="background:var(--cin);border-radius:8px;padding:8px 10px">'+
+    '<div style="font-size:10px;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:2px">'+label+'</div>'+
+    '<div style="font-size:13px;font-weight:600;color:var(--tx)">'+val+'</div></div>';
+}
+function rcqLimpar(){
+  const i=document.getElementById('rcqInput'); if(i) i.value='';
+  const r=document.getElementById('rcqResultado'); if(r) r.innerHTML='';
+}
+async function rcqConsultar(){
+  const inp=document.getElementById('rcqInput');
+  const out=document.getElementById('rcqResultado');
+  if(!inp||!out) return;
+  const rc=String(inp.value||'').trim();
+  if(!rc){ out.innerHTML='<div style="font-size:12px;color:var(--tx2)">Digite uma RC para consultar.</div>'; return; }
+  out.innerHTML='<div style="font-size:12px;color:var(--tx2)">⏳ Carregando dados da Governança...</div>';
+  try{
+    if(!_radarDados || !_radarDados.length) await fbCarregarRadar();
+    if(!_govDadosCarregadoOK) await govCarregarFirebase();
+    if(!_xglItens || !_xglItens.length){ try{ await xglCarregarFirebase(); }catch(e){} }
+    if(!_sbItens  || !_sbItens.length ){ try{ await sbCarregarFirebase();  }catch(e){} }
+  }catch(e){ console.warn('rcqConsultar carga:', e); }
+
+  const linhas=[];
+  // ── MAPA (base do Radar + overlay da Governança) ──
+  (_radarDados||[]).filter(r=>String(r.rc||'').trim()===rc).forEach(r=>{
+    const m=_govDados[govChave(r)]||{};
+    let statusTrat=m.status||'';
+    if(!statusTrat && GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase()))) statusTrat='AG. TRATAMENTO';
+    const envio=m.envio||'';
+    const prazo=govCalcPrazo(statusTrat,envio);
+    const finalizado=m.finalizado||'';
+    const statusCalc=govCalcStatus(prazo,finalizado);
+    let fase;
+    if(finalizado) fase='Concluído';
+    else { const cls=_classificarStatusMapa(r.analista_auto); fase = cls==='Finalizado'?'PATEC Finalizado':(cls==='Andamento'?'PATEC em Andamento':'PATEC (MAPA)'); }
+    linhas.push({fase, seq:r.seq||'—', op:r.num_oport||'—', item:r.item_op||r.item_rc||'—', statusTrat, prazo, statusCalc, finalizado});
+  });
+  // ── XGL ──
+  (_xglItens||[]).filter(it=>String(it.rc||'').trim()===rc).forEach(it=>{
+    const m=(_xglDados&&_xglDados[xglChave(it.rc,it.item,it.oport,it.itemop)])||{};
+    const statusTrat=m.status||''; const envio=m.envio||'';
+    const prazo=govCalcPrazo(statusTrat,envio); const finalizado=m.finalizado||'';
+    linhas.push({fase:'XGL', seq:'—', op:it.oport||'—', item:it.item||it.itemop||'—', statusTrat, prazo, statusCalc:govCalcStatus(prazo,finalizado), finalizado});
+  });
+  // ── Status B ──
+  (_sbItens||[]).filter(it=>String(it.rc||'').trim()===rc).forEach(it=>{
+    const m=(_sbDados&&_sbDados[sbChave(it.rc,it.seq,it.op,it.item)])||{};
+    const statusTrat=m.status||''; const envio=m.envio||'';
+    const prazo=govCalcPrazo(statusTrat,envio); const finalizado=m.finalizado||'';
+    linhas.push({fase:'Status B', seq:it.seq||'—', op:it.op||'—', item:it.item||'—', statusTrat, prazo, statusCalc:govCalcStatus(prazo,finalizado), finalizado});
+  });
+
+  if(!linhas.length){
+    out.innerHTML='<div style="font-size:12px;color:var(--tx2);padding:1rem;text-align:center;background:var(--cin);border-radius:8px">⚫ Nenhum registro encontrado para a RC <strong>'+rcqEsc(rc)+'</strong> na Governança (MAPA / XGL / Status B).</div>';
+    return;
+  }
+  const faseCor={'Concluído':'#16a34a','PATEC Finalizado':'#2563EB','PATEC em Andamento':'#d97706','XGL':'#7c3aed','Status B':'#0d9488','PATEC (MAPA)':'#64748b'};
+  const chip=(t,c)=>'<span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;background:'+(c||'#888')+'22;color:'+(c||'#333')+';border:1px solid '+(c||'#ccc')+'55">'+t+'</span>';
+  const cards=linhas.map(l=>
+    '<div style="border:1px solid var(--brd);border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">'+
+        '<div style="font-size:12px;color:var(--tx2)">SEQ <strong>'+rcqEsc(l.seq)+'</strong> · OP <strong>'+rcqEsc(l.op)+'</strong> · Item <strong>'+rcqEsc(l.item)+'</strong></div>'+
+        '<div><span style="font-size:10px;color:var(--tx2);margin-right:6px;text-transform:uppercase;letter-spacing:.5px;font-weight:700">Fase do PATEC</span>'+chip(rcqEsc(l.fase),faseCor[l.fase])+'</div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">'+
+        rcqCampo('Status Tratamento', rcqEsc(l.statusTrat)||'—')+
+        rcqCampo('Prazo Retorno', l.prazo?fmtBR(l.prazo):'—')+
+        rcqCampo('Status', rcqEsc(l.statusCalc)||'—')+
+        rcqCampo('Finalizado', l.finalizado?fmtBR(l.finalizado):'—')+
+      '</div>'+
+    '</div>'
+  ).join('');
+  out.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--az);margin-bottom:8px">RC '+rcqEsc(rc)+' — '+linhas.length+' registro(s) na Governança</div>'+cards+
+    '<div style="margin-top:6px"><button class="btn btn-s" style="font-size:12px" onclick="abrirHistoricoRC(\''+rc.replace(/[^0-9A-Za-z]/g,'')+'\')">📋 Ver Histórico de movimentação / comentários</button></div>';
+}
+
 function radarOnDrop(e){
   e.preventDefault();
   document.getElementById('radar-uz')?.classList.remove('drag');
