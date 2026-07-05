@@ -3431,6 +3431,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             style="font-size:12px;font-weight:600;padding:6px 16px;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;background:transparent;color:var(--tx2);cursor:pointer">
             📊 Analista Completo
           </button>
+          <button id="aa-tab-btn-nm" onclick="aaSetTab('nm')"
+            style="font-size:12px;font-weight:600;padding:6px 16px;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;background:transparent;color:var(--tx2);cursor:pointer">
+            🧬 Análise NM
+          </button>
         </div>
       </div>
 
@@ -3585,6 +3589,53 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
       </div><!-- /aa-tab-completo -->
+
+      <!-- ABA: ANÁLISE NM -->
+      <div id="aa-tab-nm" style="display:none">
+        <div class="cd" style="margin-bottom:1rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--tx)">🧬 Análise NM — Cadastro / Atualização de Material</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:4px" id="aNmAA-info">Carregando...</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-s" style="font-size:11px" onclick="aNmAAAbrir()">↺ Recalcular</button>
+              <button class="btn btn-g" style="font-size:11px" onclick="aNmExportar()">📥 Exportar Excel</button>
+            </div>
+          </div>
+          <div class="al al-b" style="margin-top:10px;font-size:11px">
+            ⚠ <strong>Estimativa</strong> — considera o <strong>1º fornecedor apto</strong> de cada item e compara apenas <strong>fabricante</strong> e <strong>material/PN</strong> (ofertado × solicitado; coluna "Material idêntico" não é usada). A confirmação de NM Filho depende da comparação técnica completa (divergência adicional → XGL). O "Analista Automático" entra como sinal de reforço, não como critério. Alimentado pela planilha em <strong>ADM → Analista Completo</strong>.
+          </div>
+        </div>
+        <div class="kgrid" id="aNmAA-kpis" style="margin-bottom:1rem"></div>
+        <div class="cd" style="margin-bottom:1rem">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <div class="field-wrap" style="min-width:130px">
+              <span class="field-label">Visão</span>
+              <select id="aNmAA-f-modo" onchange="aNmAARender()" style="width:100%;font-size:12px;padding:5px 10px">
+                <option value="rc">1 linha por RC</option>
+                <option value="item">Detalhe por item</option>
+              </select>
+            </div>
+            <div class="field-wrap" style="min-width:240px">
+              <span class="field-label">Regra / Processo</span>
+              <select id="aNmAA-f-regra" onchange="aNmAARender()" style="width:100%;font-size:12px;padding:5px 10px"><option value="">Todas</option></select>
+            </div>
+            <div class="field-wrap" style="min-width:160px">
+              <span class="field-label">Buscar RC / Fornecedor</span>
+              <input type="text" id="aNmAA-f-busca" oninput="aNmAARender()" placeholder="RC, fornecedor..." style="width:100%;font-size:12px;padding:5px 10px">
+            </div>
+            <button class="btn btn-s" style="font-size:11px" onclick="aNmAALimpar()">✕ Limpar</button>
+          </div>
+        </div>
+        <div class="cd">
+          <div style="font-size:12px;font-weight:600;color:var(--az);margin-bottom:.5rem" id="aNmAA-count"></div>
+          <div id="aNmAA-sem-dados" style="text-align:center;padding:3rem;color:var(--tx2);font-size:13px;display:none">
+            📂 Nenhum dado. Acesse ADM → Analista Completo para subir a planilha.
+          </div>
+          <div class="tw" style="max-height:560px" id="aNmAA-tabela-wrap"></div>
+        </div>
+      </div><!-- /aa-tab-nm -->
 
     </div><!-- /p-analista-auto -->
 
@@ -18509,7 +18560,7 @@ function aNmExportar(){
 // ABAS ANALISTA AUTOMÁTICO
 // ════════════════════════════════════════════
 function aaSetTab(aba){
-  const tabs = ['pedido','completo'];
+  const tabs = ['pedido','completo','nm'];
   tabs.forEach(t=>{
     const el = document.getElementById('aa-tab-'+t);
     const btn = document.getElementById('aa-tab-btn-'+t);
@@ -18520,6 +18571,94 @@ function aaSetTab(aba){
     }
   });
   if(aba==='completo' && !_aacDados.length) aaCompletoCarregar();
+  if(aba==='nm') aNmAAAbrir();
+}
+
+// ── Análise NM dentro do Analista Automático (mesma lógica/compute; superfície própria) ──
+let _anmAAView=[];
+async function aNmAAAbrir(){
+  const info=document.getElementById('aNmAA-info');
+  if(info) info.textContent='⏳ Carregando dados...';
+  const ok=await _anmGarantirDados();
+  if(!ok){
+    if(info) info.textContent='⚠ Nenhuma planilha do Analista Completo encontrada. Suba em ADM → Analista Completo.';
+    const sd=document.getElementById('aNmAA-sem-dados'); if(sd) sd.style.display='block';
+    const tw=document.getElementById('aNmAA-tabela-wrap'); if(tw) tw.innerHTML='';
+    const kp=document.getElementById('aNmAA-kpis'); if(kp) kp.innerHTML='';
+    return;
+  }
+  _anmCalcular();
+  const sel=document.getElementById('aNmAA-f-regra');
+  if(sel){ const cur=sel.value; sel.innerHTML='<option value="">Todas</option>'+_ANM_CATS.map(c=>'<option value="'+c+'">'+c+'</option>').join(''); sel.value=cur; }
+  const nome=localStorage.getItem(_lsMod('patec_aa_upload_nome'))||'';
+  const ts=localStorage.getItem(_lsMod('patec_aa_upload_ts'));
+  if(info) info.textContent=(nome?nome+' · ':'')+_aacDados.length+' linhas · '+_anmPorRC.length+' RCs classificadas · '+_anmSemApto.length+' sem apto'+(ts?' · '+new Date(ts).toLocaleString('pt-BR'):'');
+  aNmAARender();
+}
+function aNmAALimpar(){ const s=document.getElementById('aNmAA-f-regra'); if(s)s.value=''; const b=document.getElementById('aNmAA-f-busca'); if(b)b.value=''; aNmAARender(); }
+function aNmAAFiltrarPor(idx){ const s=document.getElementById('aNmAA-f-regra'); if(s){ s.value=_ANM_CATS[idx]||''; aNmAARender(); } }
+function aNmAAVer(i){ const x=_anmAAView[i]; if(x && typeof aaCompletoVerRC==='function') aaCompletoVerRC(x.chave); }
+function aNmAARender(){
+  const modo=document.getElementById('aNmAA-f-modo')?document.getElementById('aNmAA-f-modo').value:'rc';
+  const fRegra=document.getElementById('aNmAA-f-regra')?document.getElementById('aNmAA-f-regra').value:'';
+  const fBusca=(document.getElementById('aNmAA-f-busca')?document.getElementById('aNmAA-f-busca').value:'').toLowerCase();
+  const wrap=document.getElementById('aNmAA-tabela-wrap');
+  const semd=document.getElementById('aNmAA-sem-dados');
+  const count=document.getElementById('aNmAA-count');
+  const dist={}; for(const x of _anmPorRC){ dist[x.cat]=(dist[x.cat]||0)+1; }
+  const kp=document.getElementById('aNmAA-kpis');
+  if(kp){
+    kp.innerHTML='<div class="kc"><div class="kn" style="color:var(--az)">'+_anmPorRC.length+'</div><div class="kl">RCs classificadas</div></div>'+
+      _ANM_CATS.map((c,idx)=>'<div class="kc" style="cursor:pointer" title="Filtrar" onclick="aNmAAFiltrarPor('+idx+')"><div class="kn" style="color:var(--tx)">'+(dist[c]||0)+'</div><div class="kl" style="font-size:9px;line-height:1.15">'+c+'</div></div>').join('');
+  }
+  const base = modo==='rc' ? _anmPorRC : _anmItens;
+  _anmAAView = base.filter(x=>{
+    if(fRegra && x.cat!==fRegra) return false;
+    if(fBusca && !String(x.rc).toLowerCase().includes(fBusca) && !String(x.forn).toLowerCase().includes(fBusca)) return false;
+    return true;
+  });
+  if(count) count.textContent=_anmAAView.length+' '+(modo==='rc'?'RC(s)':'item(ns)');
+  if(semd) semd.style.display = base.length ? 'none' : 'block';
+  const badge=c=>'<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:'+(_ANM_COR[c]||'#eee')+';color:#333">'+c+'</span>';
+  if(!wrap) return;
+  if(modo==='rc'){
+    wrap.innerHTML='<table><thead><tr>'+
+      '<th>RC</th><th>Nº itens</th><th>Itens (SEQ/OP)</th><th>OP / Item</th><th>Fornecedor</th>'+
+      '<th>Regra / Processo</th><th>Fabric. (Forn)</th><th>Fabric. (PB)</th><th>PN (Forn)</th><th>PN (PB)</th><th>Motivo</th><th></th>'+
+      '</tr></thead><tbody>'+_anmAAView.map((x,i)=>'<tr>'+
+        '<td style="font-weight:700;color:var(--az)">'+_anmEsc(x.rc)+'</td>'+
+        '<td style="text-align:center">'+x.nItens+(x.conflito?' ⚠':'')+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.itensTxt)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.op)+' / '+_anmEsc(x.iop)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.forn)+'</td>'+
+        '<td>'+badge(x.cat)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.ff)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.fp)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.pf)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.pp)+'</td>'+
+        '<td style="font-size:10px;max-width:280px">'+_anmEsc(x.motivo)+'</td>'+
+        '<td><button class="btn btn-s" style="font-size:10px;padding:2px 6px" onclick="aNmAAVer('+i+')">🔍</button></td>'+
+      '</tr>').join('')+'</tbody></table>';
+  } else {
+    wrap.innerHTML='<table><thead><tr>'+
+      '<th>RC</th><th>Item RC</th><th>OP</th><th>Item OP</th><th>Pos</th><th>Fornecedor</th>'+
+      '<th>Regra / Processo</th><th>Fabric. (Forn)</th><th>Fabric. (PB)</th><th>PN (Forn)</th><th>PN (PB)</th><th>Motivo</th><th></th>'+
+      '</tr></thead><tbody>'+_anmAAView.map((x,i)=>'<tr>'+
+        '<td style="font-weight:700;color:var(--az)">'+_anmEsc(x.rc)+'</td>'+
+        '<td style="text-align:center">'+_anmEsc(x.seq)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.op)+'</td>'+
+        '<td style="text-align:center">'+_anmEsc(x.iop)+'</td>'+
+        '<td style="text-align:center">'+_anmEsc(x.pos)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.forn)+'</td>'+
+        '<td>'+badge(x.cat)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.ff)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.fp)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.pf)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.pp)+'</td>'+
+        '<td style="font-size:10px;max-width:280px">'+_anmEsc(x.motivo)+'</td>'+
+        '<td><button class="btn btn-s" style="font-size:10px;padding:2px 6px" onclick="aNmAAVer('+i+')">🔍</button></td>'+
+      '</tr>').join('')+'</tbody></table>';
+  }
 }
 
 // ── TESTE RÁPIDO — digite testarAlertas() no console ──
