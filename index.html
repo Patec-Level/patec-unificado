@@ -871,6 +871,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button class="stab" onclick="setAdmTab('analista-upload',this)">📂 Upload Backlog</button>
         <button class="stab" onclick="setAdmTab('analista-auto',this)">📦 Analista Pedido</button>
         <button class="stab" onclick="setAdmTab('analista-completo-adm',this)">🤖 Analista Completo</button>
+        <button class="stab" onclick="setAdmTab('analise-nm',this)">🧬 Análise NM</button>
         <button class="stab" id="adm-nav-email-teste-btn" onclick="setAdmTab('email-teste',this)">📧 Testar E-mails</button>
         <button class="stab" id="adm-nav-apresentacao-btn" onclick="setAdmTab('apresentacao',this);admApresentacaoInit()">🖥️ Apresentação</button>
         <button class="stab" id="adm-nav-apresentacao1-btn" onclick="setAdmTab('apresentacao1',this);admApresentacao1Init()">📂 Apresentação 1</button>
@@ -2728,6 +2729,53 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               💾 Salvar no Firebase
             </button>
           </div>
+        </div>
+      </div>
+
+      <!-- ── ANÁLISE NM ── -->
+      <div id="adm-analise-nm" class="adm-tab" style="display:none">
+        <div class="cd" style="margin-bottom:1rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--tx)">🧬 Análise NM — Cadastro / Atualização de Material</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:4px" id="aNm-info">Carregando...</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-s" style="font-size:11px" onclick="aNmAbrir(true)">↺ Recalcular</button>
+              <button class="btn btn-g" style="font-size:11px" onclick="aNmExportar()">📥 Exportar Excel</button>
+            </div>
+          </div>
+          <div class="al al-b" style="margin-top:10px;font-size:11px">
+            ⚠ <strong>Estimativa</strong> — considera o <strong>1º fornecedor apto</strong> de cada item e compara apenas <strong>fabricante</strong> e <strong>material/PN</strong> (ofertado × solicitado; coluna "Material idêntico" não é usada). A confirmação de NM Filho depende da comparação técnica completa (divergência adicional → XGL). O "Analista Automático" entra como sinal de reforço, não como critério. Alimentado pela planilha em <strong>ADM → Analista Completo</strong>.
+          </div>
+        </div>
+        <div class="kgrid" id="aNm-kpis" style="margin-bottom:1rem"></div>
+        <div class="cd" style="margin-bottom:1rem">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <div class="field-wrap" style="min-width:130px">
+              <span class="field-label">Visão</span>
+              <select id="aNm-f-modo" onchange="aNmRender()" style="width:100%;font-size:12px;padding:5px 10px">
+                <option value="rc">1 linha por RC</option>
+                <option value="item">Detalhe por item</option>
+              </select>
+            </div>
+            <div class="field-wrap" style="min-width:240px">
+              <span class="field-label">Regra / Processo</span>
+              <select id="aNm-f-regra" onchange="aNmRender()" style="width:100%;font-size:12px;padding:5px 10px"><option value="">Todas</option></select>
+            </div>
+            <div class="field-wrap" style="min-width:160px">
+              <span class="field-label">Buscar RC / Fornecedor</span>
+              <input type="text" id="aNm-f-busca" oninput="aNmRender()" placeholder="RC, fornecedor..." style="width:100%;font-size:12px;padding:5px 10px">
+            </div>
+            <button class="btn btn-s" style="font-size:11px" onclick="aNmLimpar()">✕ Limpar</button>
+          </div>
+        </div>
+        <div class="cd">
+          <div style="font-size:12px;font-weight:600;color:var(--az);margin-bottom:.5rem" id="aNm-count"></div>
+          <div id="aNm-sem-dados" style="text-align:center;padding:3rem;color:var(--tx2);font-size:13px;display:none">
+            📂 Nenhum dado. Acesse ADM → Analista Completo para subir a planilha.
+          </div>
+          <div class="tw" style="max-height:560px" id="aNm-tabela-wrap"></div>
         </div>
       </div>
 
@@ -7959,6 +8007,7 @@ function setAdmTab(id,btn){
   if(id==='pa-entradas') setTimeout(paEntradaInitADM,50);
   if(id==='analista-upload') setTimeout(()=>{ bkAtualizarInfoFirebase(); },50);
   if(id==='q18-upload') setTimeout(()=>{ q18CarregarFirebase(); },50);
+  if(id==='analise-nm') setTimeout(()=>{ aNmAbrir(); },50);
   if(id==='analista-auto') setTimeout(()=>{ aaVerificarDados(); if(window._aaAptas) aaCarregarResultadoFirebase(); aaSetTab('pedido'); },50);
   if(id==='meta-gap') setTimeout(initMetaGapADM,50);
   if(id==='ferias-adm') setTimeout(renderFeriasForm,50);
@@ -18217,6 +18266,243 @@ function aaCompletoExportar(){
   ]);
   XLSX.utils.book_append_sheet(wb, ws, 'Analista Completo');
   XLSX.writeFile(wb, 'Analista_Completo_' + new Date().toLocaleDateString('pt-BR').split('/').join('-') + '.xlsx');
+}
+
+// ════════════════════════════════════════════
+// ANÁLISE NM — classificação de processo de cadastro/atualização de Material
+// Fonte: mesmos dados do Analista Completo (_aacDados / Firebase aa_completo).
+// Regras (sem "Material Idêntico"), comparando ofertado(fornecedor) x solicitado(petrobras):
+//   Fabricante DIF + PN DIF                       -> MDG Criar NM Filho (candidato)
+//   Fabricante IGUAL + PN distinto (sim <= 0.55)  -> XGL Criar NM Pai (candidato)
+//   Fabricante DIF + PN IGUAL                      -> MDG Correção de Fabricante
+//   Fabricante IGUAL + PN alta similaridade(>=.80) -> MDG Correção de PN
+//   Fabricante IGUAL + PN IGUAL                    -> Não enquadrado
+//   dados ausentes / similaridade intermediária    -> Ambíguo
+// 1º apto por item = menor POSICAO entre S=Aprovado e AA != "NÃO ANALISAR".
+// Consolida em 1 linha por RC (prioridade de desempate quando itens divergem).
+// ════════════════════════════════════════════
+const _ANM = {
+  R1:'MDG – Criar NM Filho (candidato)',
+  R2:'XGL – Criar NM Pai (candidato)',
+  R3:'MDG – Atualização/Correção de Fabricante',
+  R4:'MDG – Atualização/Correção de PN',
+  AMB:'Ambíguo – revisão manual',
+  NENQ:'Não enquadrado (fabricante e material/PN coincidentes)',
+  PED:'Pedido direto (sem processo de NM)'
+};
+const _ANM_CATS = [_ANM.R1,_ANM.R2,_ANM.R3,_ANM.R4,_ANM.AMB,_ANM.NENQ,_ANM.PED];
+const _ANM_COR = {};
+_ANM_COR[_ANM.R1]='#BDD7EE'; _ANM_COR[_ANM.R2]='#F8CBAD'; _ANM_COR[_ANM.R3]='#C6EFCE';
+_ANM_COR[_ANM.R4]='#D0E8E4'; _ANM_COR[_ANM.AMB]='#FFF2CC'; _ANM_COR[_ANM.NENQ]='#E7E6E6'; _ANM_COR[_ANM.PED]='#D9D9D9';
+const _ANM_PRIO = {};
+_ANM_PRIO[_ANM.R2]=1; _ANM_PRIO[_ANM.R1]=2; _ANM_PRIO[_ANM.R3]=3; _ANM_PRIO[_ANM.R4]=4;
+_ANM_PRIO[_ANM.AMB]=5; _ANM_PRIO[_ANM.NENQ]=6; _ANM_PRIO[_ANM.PED]=7;
+const _ANM_PLACE = new Set(['','—','0','ND','N/A','NA','#N/A','-','.','--','0.0','NAN','NONE','NULL']);
+
+function _anmPresent(v){ return !_ANM_PLACE.has(String(v==null?'':v).trim().toUpperCase()); }
+function _anmFabNorm(v){ return String(v||'').trim().toUpperCase().replace(/\s+/g,' '); }
+function _anmPnKey(v){ return String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+
+// Ratcliff-Obershelp (equivalente ao difflib.ratio do Python)
+function _anmRatio(a,b){
+  if(!a.length && !b.length) return 1;
+  if(!a.length || !b.length) return 0;
+  function longest(a,b){
+    let best={i:0,j:0,n:0}; const dp=new Array(b.length+1).fill(0);
+    for(let i=1;i<=a.length;i++){ let prev=0;
+      for(let j=1;j<=b.length;j++){ const tmp=dp[j];
+        if(a[i-1]===b[j-1]){ dp[j]=prev+1; if(dp[j]>best.n) best={i:i-dp[j],j:j-dp[j],n:dp[j]}; }
+        else dp[j]=0; prev=tmp; } }
+    return best;
+  }
+  function m(a,b){ if(!a.length||!b.length) return 0; const l=longest(a,b);
+    if(!l.n) return 0;
+    return l.n + m(a.slice(0,l.i),b.slice(0,l.j)) + m(a.slice(l.i+l.n),b.slice(l.j+l.n)); }
+  return 2*m(a,b)/(a.length+b.length);
+}
+function _anmSim(a,b){
+  if(!a||!b) return 0;
+  const r=_anmRatio(a,b);
+  const sh=a.length<=b.length?a:b, lo=a.length<=b.length?b:a;
+  const contain = lo.indexOf(sh)>=0 ? sh.length/lo.length : 0;
+  return Math.max(r,contain);
+}
+
+function _anmClassificar(r){
+  const ff=_g(r,'fab_forn'), fp=_g(r,'fab_pb'), pf=_g(r,'pn_forn'), pp=_g(r,'pn_pb');
+  const fok=_anmPresent(ff)&&_anmPresent(fp), pok=_anmPresent(pf)&&_anmPresent(pp);
+  if(!fok||!pok){
+    const miss=[]; if(!fok)miss.push('fabricante'); if(!pok)miss.push('material/PN');
+    return {cat:_ANM.AMB, motivo:'Dados de '+miss.join(' e ')+' ausentes/placeholder — comparação não confiável. Fab: "'+ff+'" vs "'+fp+'"; PN: "'+pf+'" vs "'+pp+'".'};
+  }
+  const fe=_anmFabNorm(ff)===_anmFabNorm(fp);
+  const ka=_anmPnKey(pf), kb=_anmPnKey(pp), pe=ka===kb;
+  if(fe&&pe) return {cat:_ANM.NENQ, motivo:'Fabricante e material/PN coincidentes ("'+ff+'" / "'+pf+'") — item já corresponde ao NM.'};
+  if(!fe&&pe) return {cat:_ANM.R3, motivo:'Fabricante diferente ("'+ff+'" vs "'+fp+'") com material/PN igual ("'+pf+'") → correção de fabricante.'};
+  if(fe&&!pe){
+    const sm=_anmSim(ka,kb);
+    const base='Fabricante igual ("'+ff+'") e material/PN diferente ("'+pf+'" vs "'+pp+'"; similaridade='+sm.toFixed(2)+').';
+    if(sm>=0.80) return {cat:_ANM.R4, motivo:base+' Alta similaridade (prefixo/sufixo/formatação) → correção de PN.'};
+    if(sm<=0.55) return {cat:_ANM.R2, motivo:base+' Material/PN totalmente distinto → criar NM Pai (XGL).'};
+    return {cat:_ANM.AMB, motivo:base+' Divergência intermediária — revisão manual.'};
+  }
+  return {cat:_ANM.R1, motivo:'Fabricante diferente ("'+ff+'" vs "'+fp+'") e material/PN diferente ("'+pf+'" vs "'+pp+'") → candidato a NM Filho.'};
+}
+
+let _anmItens=[]; let _anmPorRC=[]; let _anmSemApto=[]; let _anmView=[];
+
+async function _anmGarantirDados(){
+  if(_aacDados && _aacDados.length) return true;
+  const db=getDB(); if(!db) return false;
+  const meta=await db.collection('aa_completo').doc('aa_completo_meta').get();
+  if(!meta.exists) return false;
+  const chunks=meta.data().chunks||1; let rows=[];
+  for(let i=0;i<chunks;i++){ const d=await db.collection('aa_completo').doc('aa_completo_'+i).get(); if(d.exists) rows=rows.concat(d.data().rows||[]); }
+  _aacDados=rows; return rows.length>0;
+}
+
+function _anmCalcular(){
+  const grupos={};
+  for(const r of _aacDados){
+    const rc=_g(r,'rc'), seq=_g(r,'seq'), op=_g(r,'op'), iop=_g(r,'itemop');
+    const chave=[rc,seq,op,iop].map(v=>v==='—'?'':v).join('|');
+    (grupos[chave]=grupos[chave]||[]).push(r);
+  }
+  _anmItens=[]; _anmSemApto=[];
+  for(const chave in grupos){
+    const aptos=grupos[chave].filter(r=>{
+      const ap=_g(r,'aprovado').trim().toLowerCase();
+      const aa=_g(r,'aa').toLowerCase();
+      return ap==='aprovado' && !aa.includes('não analisar') && !aa.includes('nao analisar');
+    });
+    if(!aptos.length){ _anmSemApto.push(chave); continue; }
+    aptos.sort((a,b)=>((parseFloat(_g(a,'posicao'))||9999)-(parseFloat(_g(b,'posicao'))||9999)));
+    const r=aptos[0], aa=_g(r,'aa').toLowerCase();
+    let res;
+    if(aa.includes('seguir para pedido')||aa.startsWith('1º melhor')) res={cat:_ANM.PED, motivo:'1º apto marcado como pedido direto — segue para pedido, sem NM.'};
+    else res=_anmClassificar(r);
+    const p=chave.split('|');
+    _anmItens.push({rc:p[0],seq:p[1],op:p[2],iop:p[3],chave,pos:_g(r,'posicao'),forn:_g(r,'fornecedor'),
+      cat:res.cat,motivo:res.motivo,ff:_g(r,'fab_forn'),fp:_g(r,'fab_pb'),pf:_g(r,'pn_forn'),pp:_g(r,'pn_pb'),sinal:_g(r,'aa')});
+  }
+  const porRC={};
+  for(const it of _anmItens){ (porRC[it.rc]=porRC[it.rc]||[]).push(it); }
+  _anmPorRC=[];
+  for(const rc in porRC){
+    const its=porRC[rc];
+    const winner=its.slice().sort((a,b)=>((_ANM_PRIO[a.cat]||9)-(_ANM_PRIO[b.cat]||9))||String(a.seq).localeCompare(String(b.seq)))[0];
+    const itensTxt=its.slice().sort((a,b)=>String(a.seq).localeCompare(String(b.seq))).map(i=>i.seq+'/'+i.iop).join(', ');
+    const conflito=new Set(its.map(i=>i.cat)).size>1;
+    _anmPorRC.push(Object.assign({}, winner, {rc:rc, nItens:its.length, itensTxt:itensTxt, conflito:conflito}));
+  }
+  _anmPorRC.sort((a,b)=>String(a.rc).localeCompare(String(b.rc)));
+}
+
+async function aNmAbrir(recalc){
+  const info=document.getElementById('aNm-info');
+  if(info) info.textContent='⏳ Carregando dados...';
+  const ok=await _anmGarantirDados();
+  if(!ok){
+    if(info) info.textContent='⚠ Nenhuma planilha do Analista Completo encontrada. Suba em ADM → Analista Completo.';
+    const sd=document.getElementById('aNm-sem-dados'); if(sd) sd.style.display='block';
+    const tw=document.getElementById('aNm-tabela-wrap'); if(tw) tw.innerHTML='';
+    const kp=document.getElementById('aNm-kpis'); if(kp) kp.innerHTML='';
+    return;
+  }
+  _anmCalcular();
+  const sel=document.getElementById('aNm-f-regra');
+  if(sel){ const cur=sel.value; sel.innerHTML='<option value="">Todas</option>'+_ANM_CATS.map(c=>'<option value="'+c+'">'+c+'</option>').join(''); sel.value=cur; }
+  const nome=localStorage.getItem(_lsMod('patec_aa_upload_nome'))||'';
+  const ts=localStorage.getItem(_lsMod('patec_aa_upload_ts'));
+  if(info) info.textContent=(nome?nome+' · ':'')+_aacDados.length+' linhas · '+_anmPorRC.length+' RCs classificadas · '+_anmSemApto.length+' sem apto'+(ts?' · '+new Date(ts).toLocaleString('pt-BR'):'');
+  aNmRender();
+}
+
+function aNmLimpar(){ const s=document.getElementById('aNm-f-regra'); if(s)s.value=''; const b=document.getElementById('aNm-f-busca'); if(b)b.value=''; aNmRender(); }
+function aNmFiltrarPor(idx){ const s=document.getElementById('aNm-f-regra'); if(s){ s.value=_ANM_CATS[idx]||''; aNmRender(); } }
+function aNmVer(i){ const x=_anmView[i]; if(x && typeof aaCompletoVerRC==='function') aaCompletoVerRC(x.chave); }
+
+function _anmEsc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+function aNmRender(){
+  const modo=document.getElementById('aNm-f-modo') ? document.getElementById('aNm-f-modo').value : 'rc';
+  const fRegra=document.getElementById('aNm-f-regra') ? document.getElementById('aNm-f-regra').value : '';
+  const fBusca=(document.getElementById('aNm-f-busca') ? document.getElementById('aNm-f-busca').value : '').toLowerCase();
+  const wrap=document.getElementById('aNm-tabela-wrap');
+  const semd=document.getElementById('aNm-sem-dados');
+  const count=document.getElementById('aNm-count');
+  const dist={}; for(const x of _anmPorRC){ dist[x.cat]=(dist[x.cat]||0)+1; }
+  const kp=document.getElementById('aNm-kpis');
+  if(kp){
+    kp.innerHTML='<div class="kc"><div class="kn" style="color:var(--az)">'+_anmPorRC.length+'</div><div class="kl">RCs classificadas</div></div>'+
+      _ANM_CATS.map((c,idx)=>'<div class="kc" style="cursor:pointer" title="Filtrar" onclick="aNmFiltrarPor('+idx+')"><div class="kn" style="color:var(--tx)">'+(dist[c]||0)+'</div><div class="kl" style="font-size:9px;line-height:1.15">'+c+'</div></div>').join('');
+  }
+  const base = modo==='rc' ? _anmPorRC : _anmItens;
+  _anmView = base.filter(x=>{
+    if(fRegra && x.cat!==fRegra) return false;
+    if(fBusca && !String(x.rc).toLowerCase().includes(fBusca) && !String(x.forn).toLowerCase().includes(fBusca)) return false;
+    return true;
+  });
+  if(count) count.textContent=_anmView.length+' '+(modo==='rc'?'RC(s)':'item(ns)');
+  if(semd) semd.style.display = base.length ? 'none' : 'block';
+  const badge=c=>'<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:'+(_ANM_COR[c]||'#eee')+';color:#333">'+c+'</span>';
+  if(!wrap) return;
+  if(modo==='rc'){
+    wrap.innerHTML='<table><thead><tr>'+
+      '<th>RC</th><th>Nº itens</th><th>Itens (SEQ/OP)</th><th>OP / Item</th><th>Fornecedor</th>'+
+      '<th>Regra / Processo</th><th>Fabric. (Forn)</th><th>Fabric. (PB)</th><th>PN (Forn)</th><th>PN (PB)</th><th>Motivo</th><th></th>'+
+      '</tr></thead><tbody>'+_anmView.map((x,i)=>'<tr>'+
+        '<td style="font-weight:700;color:var(--az)">'+_anmEsc(x.rc)+'</td>'+
+        '<td style="text-align:center">'+x.nItens+(x.conflito?' ⚠':'')+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.itensTxt)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.op)+' / '+_anmEsc(x.iop)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.forn)+'</td>'+
+        '<td>'+badge(x.cat)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.ff)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.fp)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.pf)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.pp)+'</td>'+
+        '<td style="font-size:10px;max-width:280px">'+_anmEsc(x.motivo)+'</td>'+
+        '<td><button class="btn btn-s" style="font-size:10px;padding:2px 6px" onclick="aNmVer('+i+')">🔍</button></td>'+
+      '</tr>').join('')+'</tbody></table>';
+  } else {
+    wrap.innerHTML='<table><thead><tr>'+
+      '<th>RC</th><th>Item RC</th><th>OP</th><th>Item OP</th><th>Pos</th><th>Fornecedor</th>'+
+      '<th>Regra / Processo</th><th>Fabric. (Forn)</th><th>Fabric. (PB)</th><th>PN (Forn)</th><th>PN (PB)</th><th>Motivo</th><th></th>'+
+      '</tr></thead><tbody>'+_anmView.map((x,i)=>'<tr>'+
+        '<td style="font-weight:700;color:var(--az)">'+_anmEsc(x.rc)+'</td>'+
+        '<td style="text-align:center">'+_anmEsc(x.seq)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.op)+'</td>'+
+        '<td style="text-align:center">'+_anmEsc(x.iop)+'</td>'+
+        '<td style="text-align:center">'+_anmEsc(x.pos)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.forn)+'</td>'+
+        '<td>'+badge(x.cat)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.ff)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.fp)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.pf)+'</td>'+
+        '<td style="font-size:11px">'+_anmEsc(x.pp)+'</td>'+
+        '<td style="font-size:10px;max-width:280px">'+_anmEsc(x.motivo)+'</td>'+
+        '<td><button class="btn btn-s" style="font-size:10px;padding:2px 6px" onclick="aNmVer('+i+')">🔍</button></td>'+
+      '</tr>').join('')+'</tbody></table>';
+  }
+}
+
+function aNmExportar(){
+  if(!_anmPorRC.length){ alert('Nada para exportar. Abra o tópico Análise NM para recalcular.'); return; }
+  const clean=v=>v==='—'?'':v;
+  const wb=XLSX.utils.book_new();
+  const h1=['RC','Nº de itens da RC','Itens (SEQ/ITEM OP)','Oportunidade','Posição do fornecedor','Nome do fornecedor','Regra/Processo enquadrado (única por RC)','Motivo/Justificativa','Fabricante (Fornecedor)','Fabricante (Petrobras)','Material/PN (Fornecedor)','Material/PN (Petrobras)','Sinal – Analista Automático'];
+  const d1=[h1].concat(_anmPorRC.map(x=>[x.rc,x.nItens,x.itensTxt,x.op,x.pos,x.forn,x.cat,x.motivo,x.ff,x.fp,x.pf,x.pp,x.sinal].map(clean)));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(d1), 'Análise NM (por RC)');
+  const h2=['RC','Item da RC','Oportunidade','Item da OP','Posição do fornecedor','Nome do fornecedor','Regra/Processo enquadrado','Motivo/Justificativa','Fabricante (Fornecedor)','Fabricante (Petrobras)','Material/PN (Fornecedor)','Material/PN (Petrobras)','Sinal – Analista Automático'];
+  const d2=[h2].concat(_anmItens.slice().sort((a,b)=>String(a.rc).localeCompare(String(b.rc))||String(a.seq).localeCompare(String(b.seq))).map(x=>[x.rc,x.seq,x.op,x.iop,x.pos,x.forn,x.cat,x.motivo,x.ff,x.fp,x.pf,x.pp,x.sinal].map(clean)));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(d2), 'Detalhe por item');
+  const dist={}; for(const x of _anmPorRC) dist[x.cat]=(dist[x.cat]||0)+1;
+  const resumo=[['Resumo — Análise NM (1 regra por RC)'],['ESTIMATIVA — 1º fornecedor apto; comparação por fabricante e material/PN; sem coluna Material idêntico; confirmação de NM Filho depende de análise técnica completa (divergência → XGL).'],[],['RCs classificadas',_anmPorRC.length],['Itens 1º-apto',_anmItens.length],['Itens sem fornecedor apto',_anmSemApto.length],[],['Regra / Processo','RCs']].concat(_ANM_CATS.map(c=>[c,dist[c]||0]));
+  resumo.push([],['Prioridade de desempate (quando a RC tem itens em regras diferentes)']);
+  [_ANM.R2,_ANM.R1,_ANM.R3,_ANM.R4,_ANM.AMB,_ANM.NENQ,_ANM.PED].forEach((c,i)=>resumo.push([(i+1)+'º',c]));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumo), 'Resumo');
+  XLSX.writeFile(wb, 'Analise_NM_'+new Date().toLocaleDateString('pt-BR').split('/').join('-')+'.xlsx');
 }
 
 // ════════════════════════════════════════════
