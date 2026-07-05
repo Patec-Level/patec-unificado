@@ -2816,6 +2816,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div style="font-size:12px;font-weight:700;color:#dc2626;margin-bottom:.5rem">↩️ Motivos de Devolução</div>
           <div style="position:relative;height:340px"><canvas id="gca-chart-motivo"></canvas></div>
         </div>
+        <div class="cd" id="gca-tabela-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:.5rem">
+            <div style="font-size:12px;font-weight:700;color:var(--az)" id="gca-tabela-titulo">📋 Detalhe dos concluídos</div>
+            <span style="font-size:11px;color:var(--tx2)">Clique nos cards acima para filtrar por destino</span>
+          </div>
+          <div class="tw" style="max-height:480px" id="gca-tabela-wrap"></div>
+        </div>
       </div>
 
     </div><!-- /adm-painel -->
@@ -10427,18 +10434,18 @@ function _gcaDesf(chave){
 }
 function gcaColetarConcluidos(){
   const out=[]; const vistas=new Set();
-  const add=(origem,rc,chave,finalizado)=>{
+  const add=(origem,rc,chave,finalizado,seq,op,item)=>{
     if(!finalizado || vistas.has(chave)) return;
     vistas.add(chave);
     const d=_gcaDesf(chave);
     const centro=(d.centro && String(d.centro).trim()) || _gcaCentroRC(rc) || '—';
-    out.push({origem, rc:String(rc||'').trim(), chave, fin:_gcaNorm(finalizado), tipo:d.tipo||'', motivo:d.motivo||'', centro});
+    out.push({origem, rc:String(rc||'').trim(), chave, seq:seq||'—', op:op||'—', item:item||'—', fin:_gcaNorm(finalizado), tipo:d.tipo||'', motivo:d.motivo||'', centro});
   };
-  (typeof govFiltroMapaPadrao==='function'?govFiltroMapaPadrao():[]).forEach(r=>{ const k=govChave(r); add('PATEC Finalizado', r.rc, k, (_govDados[k]||{}).finalizado); });
-  (_radarDados||[]).filter(r=>_classificarStatusMapa(r.analista_auto)==='Andamento').forEach(r=>{ const k=govChave(r); add('PATEC em Andamento', r.rc, k, (_govDados[k]||{}).finalizado); });
-  (_xglItens||[]).forEach(r=>{ const k=xglChave(r.rc,r.item,r.oport,r.itemop); add('XGL', r.rc, k, ((typeof _xglDados!=='undefined'&&_xglDados[k])||{}).finalizado); });
-  ((_sbItens&&_sbItens.length)?_sbItens:[]).forEach(r=>{ const k=r.chave||sbChave(r.rc,r.seq,r.op,r.item); add('Status B', r.rc, k, ((typeof _sbDados!=='undefined'&&_sbDados[k])||{}).finalizado); });
-  Object.entries(_govDados||{}).forEach(([k,v])=>{ if(v&&v.finalizado&&!vistas.has(k)) add(v._origem||'PATEC Finalizado', k.split('|')[0], k, v.finalizado); });
+  (typeof govFiltroMapaPadrao==='function'?govFiltroMapaPadrao():[]).forEach(r=>{ const k=govChave(r); add('PATEC Finalizado', r.rc, k, (_govDados[k]||{}).finalizado, r.seq, r.num_oport, r.item_op||r.item_rc); });
+  (_radarDados||[]).filter(r=>_classificarStatusMapa(r.analista_auto)==='Andamento').forEach(r=>{ const k=govChave(r); add('PATEC em Andamento', r.rc, k, (_govDados[k]||{}).finalizado, r.seq, r.num_oport, r.item_op||r.item_rc); });
+  (_xglItens||[]).forEach(r=>{ const k=xglChave(r.rc,r.item,r.oport,r.itemop); add('XGL', r.rc, k, ((typeof _xglDados!=='undefined'&&_xglDados[k])||{}).finalizado, r.item, r.oport, r.itemop); });
+  ((_sbItens&&_sbItens.length)?_sbItens:[]).forEach(r=>{ const k=r.chave||sbChave(r.rc,r.seq,r.op,r.item); add('Status B', r.rc, k, ((typeof _sbDados!=='undefined'&&_sbDados[k])||{}).finalizado, r.seq, r.op, r.item); });
+  Object.entries(_govDados||{}).forEach(([k,v])=>{ if(v&&v.finalizado&&!vistas.has(k)){ const p=k.split('|'); add(v._origem||'PATEC Finalizado', p[0], k, v.finalizado, p[1], p[2], p[3]); } });
   return out;
 }
 async function gcaAbrir(){
@@ -10465,6 +10472,7 @@ function gcaLimpar(){
   ['gca-dt-ini','gca-dt-fim','gca-f-origem','gca-f-tipo'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
   gcaRender();
 }
+function gcaFiltrarTipo(t){ const e=document.getElementById('gca-f-tipo'); if(e){ e.value=t||''; } gcaRender(); const tw=document.getElementById('gca-tabela-card'); if(tw) tw.scrollIntoView({behavior:'smooth',block:'nearest'}); }
 function _gcaBar(canvasId, labels, data, titulo, cor){
   const el=document.getElementById(canvasId); if(!el || typeof Chart==='undefined') return;
   if(_gcaCharts[canvasId]){ try{ _gcaCharts[canvasId].destroy(); }catch(e){} }
@@ -10485,22 +10493,23 @@ function gcaRender(){
   const df=document.getElementById('gca-dt-fim')?document.getElementById('gca-dt-fim').value:'';
   const fo=document.getElementById('gca-f-origem')?document.getElementById('gca-f-origem').value:'';
   const ft=document.getElementById('gca-f-tipo')?document.getElementById('gca-f-tipo').value:'';
-  const dados=_gcaDados.filter(x=>{
+  const baseF=_gcaDados.filter(x=>{
     if((di||df) && !/^\d{4}-\d{2}-\d{2}$/.test(x.fin)) return false;
     if(di && x.fin < di) return false;
     if(df && x.fin > df) return false;
     if(fo && x.origem!==fo) return false;
-    if(ft && (x.tipo||'')!==ft) return false;
     return true;
   });
-  const cont=t=>dados.filter(x=>(x.tipo||'')===t).length;
+  const dados = ft ? baseF.filter(x=>(x.tipo||'')===ft) : baseF;
+  const cont=t=>baseF.filter(x=>(x.tipo||'')===t).length;
   const kp=document.getElementById('gca-kpis');
+  const _act=t=>(ft===t?';box-shadow:0 0 0 2px var(--az) inset':'');
   if(kp) kp.innerHTML=
-    '<div class="kc"><div class="kn" style="color:var(--az)">'+dados.length+'</div><div class="kl">Total concluídos</div></div>'+
-    '<div class="kc"><div class="kn" style="color:#16a34a">'+cont('Pedido')+'</div><div class="kl">Pedido</div></div>'+
-    '<div class="kc"><div class="kn" style="color:#7c3aed">'+cont('XGL')+'</div><div class="kl">XGL</div></div>'+
-    '<div class="kc"><div class="kn" style="color:#2563EB">'+cont('Republicação')+'</div><div class="kl">Republicação</div></div>'+
-    '<div class="kc"><div class="kn" style="color:#dc2626">'+cont('Devolução')+'</div><div class="kl">Devolução</div></div>';
+    '<div class="kc" style="cursor:pointer'+_act('')+'" title="Ver todos" onclick="gcaFiltrarTipo(\'\')"><div class="kn" style="color:var(--az)">'+baseF.length+'</div><div class="kl">Total concluídos</div></div>'+
+    '<div class="kc" style="cursor:pointer'+_act('Pedido')+'" title="Filtrar Pedido" onclick="gcaFiltrarTipo(\'Pedido\')"><div class="kn" style="color:#16a34a">'+cont('Pedido')+'</div><div class="kl">Pedido</div></div>'+
+    '<div class="kc" style="cursor:pointer'+_act('XGL')+'" title="Filtrar XGL" onclick="gcaFiltrarTipo(\'XGL\')"><div class="kn" style="color:#7c3aed">'+cont('XGL')+'</div><div class="kl">XGL</div></div>'+
+    '<div class="kc" style="cursor:pointer'+_act('Republicação')+'" title="Filtrar Republicação" onclick="gcaFiltrarTipo(\'Republicação\')"><div class="kn" style="color:#2563EB">'+cont('Republicação')+'</div><div class="kl">Republicação</div></div>'+
+    '<div class="kc" style="cursor:pointer'+_act('Devolução')+'" title="Filtrar Devolução" onclick="gcaFiltrarTipo(\'Devolução\')"><div class="kn" style="color:#dc2626">'+cont('Devolução')+'</div><div class="kl">Devolução</div></div>';
   const cnt=document.getElementById('gca-count');
   if(cnt) cnt.textContent=dados.length+' concluído(s) no período · '+([...new Set(dados.map(x=>x.centro))].filter(c=>c&&c!=='—').length)+' centro(s)';
   const porCentro={};
@@ -10516,6 +10525,29 @@ function gcaRender(){
     const mots=Object.entries(porMot).sort((a,b)=>b[1]-a[1]);
     _gcaBar('gca-chart-motivo', mots.map(e=>e[0]), mots.map(e=>e[1]), 'Motivos de Devolução ('+devs.length+' devolução(ões))', '#dc2626');
   } else if(wrapDev){ wrapDev.style.display='none'; }
+  // ── Tabela de detalhe (estilo Detalhe por item) ──
+  const twrap=document.getElementById('gca-tabela-wrap');
+  if(twrap){
+    const _corD={'Pedido':'#16a34a','XGL':'#7c3aed','Republicação':'#2563EB','Devolução':'#dc2626'};
+    const _esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    const _chip=(t)=> t?('<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:'+((_corD[t]||'#888'))+'22;color:'+((_corD[t]||'#555'))+'">'+_esc(t)+'</span>'):'—';
+    const linhas=dados.slice().sort((a,b)=>String(b.fin).localeCompare(String(a.fin)));
+    const tt=document.getElementById('gca-tabela-titulo');
+    if(tt) tt.textContent='📋 Detalhe dos concluídos'+(ft?(' — '+ft):'')+' ('+linhas.length+')';
+    twrap.innerHTML = linhas.length ? ('<table><thead><tr>'+
+      '<th>RC</th><th>Item RC</th><th>OP</th><th>Item OP</th><th>Origem</th><th>Destino</th><th>Centro</th><th>Motivo</th><th>Finalizado</th>'+
+      '</tr></thead><tbody>'+linhas.map(x=>'<tr>'+
+        '<td style="font-weight:700;color:var(--az)">'+_esc(x.rc)+'</td>'+
+        '<td style="text-align:center">'+_esc(x.seq)+'</td>'+
+        '<td>'+_esc(x.op)+'</td>'+
+        '<td style="text-align:center">'+_esc(x.item)+'</td>'+
+        '<td style="font-size:11px">'+_esc(x.origem)+'</td>'+
+        '<td>'+_chip(x.tipo)+'</td>'+
+        '<td style="text-align:center;font-weight:600">'+_esc(x.centro)+'</td>'+
+        '<td style="font-size:11px">'+(x.motivo?_esc(x.motivo):'—')+'</td>'+
+        '<td style="color:var(--vd);font-weight:700">'+(x.fin?fmtBR(x.fin):'—')+'</td>'+
+      '</tr>').join('')+'</tbody></table>') : '<div style="text-align:center;color:var(--tx2);padding:1.5rem;font-size:12px">Nenhum concluído no recorte selecionado.</div>';
+  }
 }
 
 function radarOnDrop(e){
