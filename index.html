@@ -867,6 +867,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button class="stab" onclick="setAdmTab('export-adm',this)">💾 Exportar</button>
         <button class="stab" onclick="setAdmTab('resultado-medicao',this)">📊 Resultado de Medição</button>
         <button class="stab" onclick="setAdmTab('radar-adm',this)">📡 Radar Estratégico</button>
+        <button class="stab" onclick="setAdmTab('analise-concluidos',this)">📊 Análise Concluídos</button>
         <button class="stab" id="adm-nav-pa-entradas-btn" onclick="setAdmTab('pa-entradas',this)">📥 Entradas Plano de Ação</button>
         <button class="stab" onclick="setAdmTab('analista-upload',this)">📂 Upload Backlog</button>
         <button class="stab" onclick="setAdmTab('analista-auto',this)">📦 Analista Pedido</button>
@@ -2776,6 +2777,44 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             📂 Nenhum dado. Acesse ADM → Analista Completo para subir a planilha.
           </div>
           <div class="tw" style="max-height:560px" id="aNm-tabela-wrap"></div>
+        </div>
+      </div>
+
+      <!-- ── ANÁLISE DE CONCLUÍDOS (GOVERNANÇA) ── -->
+      <div id="adm-analise-concluidos" class="adm-tab" style="display:none">
+        <div class="cd" style="margin-bottom:1rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--tx)">📊 Análise de Concluídos — Governança</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:4px" id="gca-info">Carregando...</div>
+            </div>
+            <button class="btn btn-s" style="font-size:11px" onclick="gcaAbrir()">↺ Recarregar</button>
+          </div>
+          <div style="font-size:11px;color:var(--tx2);margin-top:8px">Analisa os itens <strong>concluídos</strong> da Governança (PATEC Finalizado, PATEC em Andamento, XGL e Status B), cruzando com o desfecho registrado (destino) e o centro.</div>
+        </div>
+        <div class="cd" style="margin-bottom:1rem">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <div class="field-wrap" style="min-width:150px"><span class="field-label">Data início</span>
+              <input type="date" id="gca-dt-ini" onchange="gcaRender()" style="width:100%;font-size:12px;padding:5px 10px"></div>
+            <div class="field-wrap" style="min-width:150px"><span class="field-label">Data fim</span>
+              <input type="date" id="gca-dt-fim" onchange="gcaRender()" style="width:100%;font-size:12px;padding:5px 10px"></div>
+            <div class="field-wrap" style="min-width:180px"><span class="field-label">Origem (de qual aba)</span>
+              <select id="gca-f-origem" onchange="gcaRender()" style="width:100%;font-size:12px;padding:5px 10px"><option value="">Todas</option></select></div>
+            <div class="field-wrap" style="min-width:180px"><span class="field-label">Concluído (destino)</span>
+              <select id="gca-f-tipo" onchange="gcaRender()" style="width:100%;font-size:12px;padding:5px 10px">
+                <option value="">Todos</option><option>Pedido</option><option>XGL</option><option>Republicação</option><option>Devolução</option>
+              </select></div>
+            <button class="btn btn-s" style="font-size:11px" onclick="gcaLimpar()">✕ Limpar</button>
+          </div>
+        </div>
+        <div class="kgrid" id="gca-kpis" style="margin-bottom:1rem"></div>
+        <div class="cd" style="margin-bottom:1rem">
+          <div style="font-size:12px;font-weight:600;color:var(--az);margin-bottom:.5rem" id="gca-count"></div>
+          <div style="position:relative;height:340px"><canvas id="gca-chart-centro"></canvas></div>
+        </div>
+        <div class="cd" id="gca-dev-wrap" style="margin-bottom:1rem;display:none;border-top:3px solid #dc2626">
+          <div style="font-size:12px;font-weight:700;color:#dc2626;margin-bottom:.5rem">↩️ Motivos de Devolução</div>
+          <div style="position:relative;height:340px"><canvas id="gca-chart-motivo"></canvas></div>
         </div>
       </div>
 
@@ -8075,6 +8114,7 @@ function setAdmTab(id,btn){
   if(id==='analista-upload') setTimeout(()=>{ bkAtualizarInfoFirebase(); },50);
   if(id==='q18-upload') setTimeout(()=>{ q18CarregarFirebase(); },50);
   if(id==='analise-nm') setTimeout(()=>{ aNmAbrir(); },50);
+  if(id==='analise-concluidos') setTimeout(gcaAbrir,50);
   if(id==='analista-auto') setTimeout(()=>{ aaVerificarDados(); if(window._aaAptas) aaCarregarResultadoFirebase(); aaSetTab('pedido'); },50);
   if(id==='meta-gap') setTimeout(initMetaGapADM,50);
   if(id==='ferias-adm') setTimeout(renderFeriasForm,50);
@@ -10355,6 +10395,128 @@ async function rcqConsultar(){
   ).join('');
   out.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--az);margin-bottom:8px">RC '+rcqEsc(rc)+' — '+linhas.length+' registro(s) na Governança</div>'+cards+
     '<div style="margin-top:6px"><button class="btn btn-s" style="font-size:12px" onclick="abrirHistoricoRC(\''+rc.replace(/[^0-9A-Za-z]/g,'')+'\')">📋 Ver Histórico de movimentação / comentários</button></div>';
+}
+
+// ════════════════════════════════════════════
+// ANÁLISE DE CONCLUÍDOS — Governança (ADM)
+// Reúne concluídos (finalizado != vazio) de PATEC Finalizado, PATEC em
+// Andamento, XGL e Status B; cruza com o desfecho (_desfechoCache) para
+// destino (Pedido/XGL/Republicação/Devolução), centro e motivo.
+// ════════════════════════════════════════════
+const _gcaCharts = {};
+let _gcaDados = [];
+function _gcaNorm(v){
+  if(!v) return '';
+  v=String(v).trim();
+  const mm={Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+  let m=v.match(/^(\d{2})-([A-Za-z]{3})-(\d{2})$/); if(m){ return '20'+m[3]+'-'+(mm[m[2][0].toUpperCase()+m[2].slice(1).toLowerCase()]||'01')+'-'+m[1]; }
+  m=v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if(m){ return m[3]+'-'+m[2]+'-'+m[1]; }
+  if(/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0,10);
+  return v;
+}
+function _gcaCentroRC(rc){
+  const f=(_radarDados||[]).find(x=>String(x.rc||'').trim()===String(rc||'').trim() && x.centro);
+  return f?String(f.centro).trim():'';
+}
+function _gcaDesf(chave){
+  let d=(_desfechoCache&&_desfechoCache[chave])||null;
+  if(!d){
+    const g=(_govDados&&_govDados[chave]&&_govDados[chave].desfecho)||(typeof _xglDados!=='undefined'&&_xglDados[chave]&&_xglDados[chave].desfecho)||(typeof _sbDados!=='undefined'&&_sbDados[chave]&&_sbDados[chave].desfecho);
+    if(g) d=g;
+  }
+  return d||{};
+}
+function gcaColetarConcluidos(){
+  const out=[]; const vistas=new Set();
+  const add=(origem,rc,chave,finalizado)=>{
+    if(!finalizado || vistas.has(chave)) return;
+    vistas.add(chave);
+    const d=_gcaDesf(chave);
+    const centro=(d.centro && String(d.centro).trim()) || _gcaCentroRC(rc) || '—';
+    out.push({origem, rc:String(rc||'').trim(), chave, fin:_gcaNorm(finalizado), tipo:d.tipo||'', motivo:d.motivo||'', centro});
+  };
+  (typeof govFiltroMapaPadrao==='function'?govFiltroMapaPadrao():[]).forEach(r=>{ const k=govChave(r); add('PATEC Finalizado', r.rc, k, (_govDados[k]||{}).finalizado); });
+  (_radarDados||[]).filter(r=>_classificarStatusMapa(r.analista_auto)==='Andamento').forEach(r=>{ const k=govChave(r); add('PATEC em Andamento', r.rc, k, (_govDados[k]||{}).finalizado); });
+  (_xglItens||[]).forEach(r=>{ const k=xglChave(r.rc,r.item,r.oport,r.itemop); add('XGL', r.rc, k, ((typeof _xglDados!=='undefined'&&_xglDados[k])||{}).finalizado); });
+  ((_sbItens&&_sbItens.length)?_sbItens:[]).forEach(r=>{ const k=r.chave||sbChave(r.rc,r.seq,r.op,r.item); add('Status B', r.rc, k, ((typeof _sbDados!=='undefined'&&_sbDados[k])||{}).finalizado); });
+  Object.entries(_govDados||{}).forEach(([k,v])=>{ if(v&&v.finalizado&&!vistas.has(k)) add(v._origem||'PATEC Finalizado', k.split('|')[0], k, v.finalizado); });
+  return out;
+}
+async function gcaAbrir(){
+  const info=document.getElementById('gca-info');
+  if(info) info.textContent='⏳ Carregando concluídos...';
+  try{
+    if(!_radarDados || !_radarDados.length) await fbCarregarRadar();
+    if(!_govDadosCarregadoOK) await govCarregarFirebase();
+    if(!_xglItens || !_xglItens.length){ try{ await xglCarregarFirebase(); }catch(e){} }
+    if(!_sbItens  || !_sbItens.length ){ try{ await sbCarregarFirebase();  }catch(e){} }
+    if(!_desfechoCache || !Object.keys(_desfechoCache).length){ try{ await desfechoCarregarFirebase(); }catch(e){} }
+  }catch(e){ console.warn('gcaAbrir carga:', e); }
+  _gcaDados=gcaColetarConcluidos();
+  const datas=_gcaDados.map(x=>x.fin).filter(v=>/^\d{4}-\d{2}-\d{2}$/.test(v)).sort();
+  const di=document.getElementById('gca-dt-ini'), df=document.getElementById('gca-dt-fim');
+  if(di && !di.value && datas.length) di.value=datas[0];
+  if(df && !df.value && datas.length) df.value=datas[datas.length-1];
+  const so=document.getElementById('gca-f-origem');
+  if(so){ const cur=so.value; const origens=[...new Set(_gcaDados.map(x=>x.origem))].sort(); so.innerHTML='<option value="">Todas</option>'+origens.map(o=>'<option value="'+o+'">'+o+'</option>').join(''); so.value=cur; }
+  if(info) info.textContent=_gcaDados.length+' concluído(s) carregado(s) da Governança';
+  gcaRender();
+}
+function gcaLimpar(){
+  ['gca-dt-ini','gca-dt-fim','gca-f-origem','gca-f-tipo'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  gcaRender();
+}
+function _gcaBar(canvasId, labels, data, titulo, cor){
+  const el=document.getElementById(canvasId); if(!el || typeof Chart==='undefined') return;
+  if(_gcaCharts[canvasId]){ try{ _gcaCharts[canvasId].destroy(); }catch(e){} }
+  _gcaCharts[canvasId]=new Chart(el,{
+    type:'bar',
+    data:{ labels, datasets:[{ label:titulo, data, backgroundColor:cor+'cc', borderColor:cor, borderWidth:1, borderRadius:4, maxBarThickness:60 }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false},
+        title:{display:true, text:titulo, font:{size:13, weight:'700'}, color:'#0D2347'},
+        datalabels:{ anchor:'end', align:'end', color:'#333', font:{weight:'700', size:11}, formatter:v=>v||'' },
+        tooltip:{enabled:true} },
+      scales:{ y:{ beginAtZero:true, ticks:{ precision:0 } }, x:{ ticks:{ autoSkip:false, maxRotation:60, minRotation:0, font:{size:10} } } } },
+    plugins: (typeof ChartDataLabels!=='undefined' ? [ChartDataLabels] : [])
+  });
+}
+function gcaRender(){
+  const di=document.getElementById('gca-dt-ini')?document.getElementById('gca-dt-ini').value:'';
+  const df=document.getElementById('gca-dt-fim')?document.getElementById('gca-dt-fim').value:'';
+  const fo=document.getElementById('gca-f-origem')?document.getElementById('gca-f-origem').value:'';
+  const ft=document.getElementById('gca-f-tipo')?document.getElementById('gca-f-tipo').value:'';
+  const dados=_gcaDados.filter(x=>{
+    if((di||df) && !/^\d{4}-\d{2}-\d{2}$/.test(x.fin)) return false;
+    if(di && x.fin < di) return false;
+    if(df && x.fin > df) return false;
+    if(fo && x.origem!==fo) return false;
+    if(ft && (x.tipo||'')!==ft) return false;
+    return true;
+  });
+  const cont=t=>dados.filter(x=>(x.tipo||'')===t).length;
+  const kp=document.getElementById('gca-kpis');
+  if(kp) kp.innerHTML=
+    '<div class="kc"><div class="kn" style="color:var(--az)">'+dados.length+'</div><div class="kl">Total concluídos</div></div>'+
+    '<div class="kc"><div class="kn" style="color:#16a34a">'+cont('Pedido')+'</div><div class="kl">Pedido</div></div>'+
+    '<div class="kc"><div class="kn" style="color:#7c3aed">'+cont('XGL')+'</div><div class="kl">XGL</div></div>'+
+    '<div class="kc"><div class="kn" style="color:#2563EB">'+cont('Republicação')+'</div><div class="kl">Republicação</div></div>'+
+    '<div class="kc"><div class="kn" style="color:#dc2626">'+cont('Devolução')+'</div><div class="kl">Devolução</div></div>';
+  const cnt=document.getElementById('gca-count');
+  if(cnt) cnt.textContent=dados.length+' concluído(s) no período · '+([...new Set(dados.map(x=>x.centro))].filter(c=>c&&c!=='—').length)+' centro(s)';
+  const porCentro={};
+  dados.forEach(x=>{ const c=x.centro||'—'; porCentro[c]=(porCentro[c]||0)+1; });
+  const centros=Object.entries(porCentro).sort((a,b)=>b[1]-a[1]);
+  _gcaBar('gca-chart-centro', centros.map(e=>e[0]), centros.map(e=>e[1]), 'Volumetria de concluídos por Centro', '#2563EB');
+  const devs=dados.filter(x=>(x.tipo||'').toLowerCase().indexOf('devolu')>=0);
+  const wrapDev=document.getElementById('gca-dev-wrap');
+  if(devs.length){
+    if(wrapDev) wrapDev.style.display='';
+    const porMot={};
+    devs.forEach(x=>{ const mo=x.motivo||'(sem motivo informado)'; porMot[mo]=(porMot[mo]||0)+1; });
+    const mots=Object.entries(porMot).sort((a,b)=>b[1]-a[1]);
+    _gcaBar('gca-chart-motivo', mots.map(e=>e[0]), mots.map(e=>e[1]), 'Motivos de Devolução ('+devs.length+' devolução(ões))', '#dc2626');
+  } else if(wrapDev){ wrapDev.style.display='none'; }
 }
 
 function radarOnDrop(e){
@@ -16013,7 +16175,13 @@ function desfechoAbrir(aba, chave, valor){
   if(!el) return;
   // Reset form
   document.getElementById('desfecho-tipo').value = '';
-  document.getElementById('desfecho-centro').value = '';
+  // Centro automático: puxa o centro da RC (mesma fonte do Radar). Editável.
+  (function(){
+    let _c='';
+    try{ const _rc=String(chave||'').split('|')[0]; _c=(typeof _gcaCentroRC==='function'?(_gcaCentroRC(_rc)||''):''); }catch(e){}
+    const _inp=document.getElementById('desfecho-centro'); if(_inp) _inp.value=_c;
+    const _av=document.getElementById('desfecho-centro-auto'); if(_av) _av.style.display=_c?'block':'none';
+  })();
   document.getElementById('desfecho-motivo').value = '';
   document.getElementById('desfecho-obs').value = '';
   document.getElementById('desfecho-dev-campos').style.display = 'none';
@@ -16035,10 +16203,11 @@ async function desfechoSalvar(){
   erroEl.style.display = 'none';
 
   if(!tipo){ erroEl.textContent = 'Selecione o tipo de saída.'; erroEl.style.display='block'; return; }
+  // Centro agora é obrigatório para TODOS os desfechos (mesma regra da devolução).
+  const _centro = document.getElementById('desfecho-centro').value.trim();
+  if(!_centro){ erroEl.textContent = 'Informe o centro.'; erroEl.style.display='block'; return; }
   if(tipo === 'Devolução'){
-    const centro = document.getElementById('desfecho-centro').value.trim();
     const motivo = document.getElementById('desfecho-motivo').value;
-    if(!centro){ erroEl.textContent = 'Informe o centro.'; erroEl.style.display='block'; return; }
     if(!motivo){ erroEl.textContent = 'Selecione o motivo da devolução.'; erroEl.style.display='block'; return; }
   }
 
@@ -16051,7 +16220,7 @@ async function desfechoSalvar(){
   const tipoNorm = TIPO_MAP[tipo.toLowerCase()] || tipo;
   const desfecho = {
     tipo: tipoNorm,
-    centro: tipoNorm === 'Devolução' ? document.getElementById('desfecho-centro').value.trim() : '',
+    centro: document.getElementById('desfecho-centro').value.trim(),
     motivo: tipoNorm === 'Devolução' ? document.getElementById('desfecho-motivo').value : '',
     obs: document.getElementById('desfecho-obs').value.trim(),
     ts: new Date().toISOString()
@@ -20175,13 +20344,17 @@ function q18Consultar(valor){
     </div>
 
     <!-- Centro + Motivo (Devolução / Outros) -->
+    <!-- Centro — obrigatório para TODAS as conclusões (auto do Radar) -->
+    <div id="acao-centro-box" style="display:none;background:#eff6ff;border:1px solid rgba(37,99,235,.25);border-radius:10px;padding:.875rem;margin-bottom:.75rem">
+      <div style="font-size:11px;font-weight:700;color:#2563EB;margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.4px">🏭 Centro</div>
+      <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Centro <span style="color:var(--vm)">*</span></div>
+      <input type="text" id="acao-dev-centro" placeholder="Ex: 4142"
+        style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:8px;background:#fff">
+    </div>
+
+    <!-- Motivo — só Devolução -->
     <div id="acao-dev-box" style="display:none;background:var(--vmc);border:1px solid rgba(217,64,64,.2);border-radius:10px;padding:.875rem;margin-bottom:.75rem">
       <div style="font-size:11px;font-weight:700;color:var(--vm);margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.4px">↩ Dados da devolução</div>
-      <div style="margin-bottom:.625rem">
-        <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Centro <span style="color:var(--vm)">*</span></div>
-        <input type="text" id="acao-dev-centro" placeholder="Ex: 4142"
-          style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:8px;background:#fff">
-      </div>
       <div>
         <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Motivo da devolução <span style="color:var(--vm)">*</span></div>
         <select id="acao-dev-motivo" style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:8px;background:#fff">
@@ -20272,11 +20445,12 @@ function q18Consultar(valor){
           <option value="XGL">📦 XGL</option>
         </select>
       </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;margin-bottom:4px">Centro <span style="color:var(--vm)">*</span></div>
+        <input type="text" id="desfecho-centro" placeholder="Ex: 4142" style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:8px">
+        <div id="desfecho-centro-auto" style="font-size:10px;color:var(--vd);margin-top:3px;display:none">✓ Preenchido automaticamente pelo centro da RC — confira/edite se necessário.</div>
+      </div>
       <div id="desfecho-dev-campos" style="display:none;flex-direction:column;gap:.75rem;background:var(--vmc);border-radius:8px;padding:.875rem;border:1px solid rgba(217,64,64,.15)">
-        <div>
-          <div style="font-size:11px;font-weight:600;margin-bottom:4px">Centro <span style="color:var(--vm)">*</span></div>
-          <input type="text" id="desfecho-centro" placeholder="Ex: 4142" style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:8px">
-        </div>
         <div>
           <div style="font-size:11px;font-weight:600;margin-bottom:4px">Motivo da devolução <span style="color:var(--vm)">*</span></div>
           <select id="desfecho-motivo" style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:8px">
@@ -22066,6 +22240,7 @@ function prodAbrirModal(origem, tipo){
   document.getElementById('acao-selecao-atual').style.display = 'none';
   document.getElementById('acao-finalizado-box').style.display = 'none';
   document.getElementById('acao-dev-box').style.display = 'none';
+  const _cb0 = document.getElementById('acao-centro-box'); if(_cb0) _cb0.style.display = 'none';
   const _dc0 = document.getElementById('acao-dev-centro'); if(_dc0) _dc0.value = '';
   const _dm0 = document.getElementById('acao-dev-motivo'); if(_dm0) _dm0.value = '';
   const _mdgBox0 = document.getElementById('acao-mdg-box'); if(_mdgBox0) _mdgBox0.style.display = 'none';
@@ -22131,6 +22306,8 @@ function acaoSelecionarTratamento(btn, tratamento){
     // Mostrar campos de devolução se tipo do modal for 'outros'
     const _devBox = document.getElementById('acao-dev-box');
     if(_devBox) _devBox.style.display = _prodCtx.tipo === 'outros' ? 'block' : 'none';
+    const _centroBoxT = document.getElementById('acao-centro-box');
+    if(_centroBoxT) _centroBoxT.style.display = _prodCtx.tipo === 'outros' ? 'block' : 'none';
     if(_prodCtx.tipo !== 'outros' && document.getElementById('acao-dev-centro')) document.getElementById('acao-dev-centro').value = '';
     if(_prodCtx.tipo !== 'outros' && document.getElementById('acao-dev-motivo')) document.getElementById('acao-dev-motivo').value = '';
     // Mostrar campo de chamado se MDG selecionado
@@ -22183,13 +22360,15 @@ function acaoSelecionarConclusao(btn, conclusao){
     }
   }
 
-  // Mostrar campos de devolução apenas se Devolução selecionada
+  // Mostrar campos de devolução (motivo) apenas se Devolução selecionada
   const _devBoxC = document.getElementById('acao-dev-box');
   if(_devBoxC) _devBoxC.style.display = conclusao === 'Devolução' ? 'block' : 'none';
   if(conclusao !== 'Devolução'){
-    const _dc = document.getElementById('acao-dev-centro'); if(_dc) _dc.value = '';
     const _dm = document.getElementById('acao-dev-motivo'); if(_dm) _dm.value = '';
   }
+  // Centro é obrigatório para TODA conclusão — sempre visível
+  const _centroBoxC = document.getElementById('acao-centro-box');
+  if(_centroBoxC) _centroBoxC.style.display = 'block';
   // Mostrar campos de Pedido apenas se Pedido selecionado
   const _pedidoBox = document.getElementById('acao-pedido-box');
   if(_pedidoBox) _pedidoBox.style.display = conclusao === 'Pedido' ? 'block' : 'none';
@@ -22198,8 +22377,8 @@ function acaoSelecionarConclusao(btn, conclusao){
       const el = document.getElementById(id); if(el) el.value = '';
     });
   }
-  // Auto-preencher Centro a partir da coluna CENTRO da planilha (Radar), se disponível
-  if(conclusao === 'Devolução'){
+  // Auto-preencher Centro a partir da coluna CENTRO do Radar — para QUALQUER conclusão
+  {
     const _dcAuto = document.getElementById('acao-dev-centro');
     if(_dcAuto && !_dcAuto.value){
       try{
@@ -22228,6 +22407,7 @@ function acaoVoltarEstagio1(){
   document.getElementById('acao-estagio-1').style.display = 'block';
   document.getElementById('acao-finalizado-box').style.display = 'none';
   document.getElementById('acao-dev-box').style.display = 'none';
+  const _cbV = document.getElementById('acao-centro-box'); if(_cbV) _cbV.style.display = 'none';
   const _xglBoxV = document.getElementById('acao-xgl-nivel-box'); if(_xglBoxV) _xglBoxV.style.display = 'none';
   const _dcV = document.getElementById('acao-dev-centro'); if(_dcV) _dcV.value = '';
   const _dmV = document.getElementById('acao-dev-motivo'); if(_dmV) _dmV.value = '';
@@ -22268,13 +22448,13 @@ async function prodConfirmarAcao(){
   // Capturar centro+motivo se dev-box visível
   const _devBoxEl = document.getElementById('acao-dev-box');
   const _devVis   = _devBoxEl && _devBoxEl.style.display !== 'none';
-  const _devCentro = _devVis ? (document.getElementById('acao-dev-centro')?.value||'').trim() : '';
+  // Centro é obrigatório em TODA conclusão (mesma regra da devolução)
+  const _centroBoxEl = document.getElementById('acao-centro-box');
+  const _centroVis   = _centroBoxEl && _centroBoxEl.style.display !== 'none';
+  const _devCentro = (document.getElementById('acao-dev-centro')?.value||'').trim();
   const _devMotivo = _devVis ? (document.getElementById('acao-dev-motivo')?.value||'') : '';
-  // Validar campos de devolução obrigatórios
-  if(_devVis){
-    if(!_devCentro){ errEl.textContent='Informe o Centro.'; errEl.style.display='block'; document.getElementById('acao-dev-centro')?.focus(); return; }
-    if(!_devMotivo){ errEl.textContent='Selecione o Motivo da devolução.'; errEl.style.display='block'; document.getElementById('acao-dev-motivo')?.focus(); return; }
-  }
+  if(_centroVis && !_devCentro){ errEl.textContent='Informe o Centro.'; errEl.style.display='block'; document.getElementById('acao-dev-centro')?.focus(); return; }
+  if(_devVis && !_devMotivo){ errEl.textContent='Selecione o Motivo da devolução.'; errEl.style.display='block'; document.getElementById('acao-dev-motivo')?.focus(); return; }
   // Capturar e validar campos de Pedido
   const _pedidoBoxEl = document.getElementById('acao-pedido-box');
   const _pedidoVis   = _pedidoBoxEl && _pedidoBoxEl.style.display !== 'none';
@@ -22320,7 +22500,8 @@ async function prodConfirmarAcao(){
     origem: _prodCtx.origem,
     ts: new Date().toISOString(),
     ...(_rcChavePre ? { rcChave: _rcChavePre, rc: _rcNumPre } : (_rcNumPre ? { rc: _rcNumPre } : {})),
-    ...(_devVis ? { centro: _devCentro, motivo: _devMotivo } : {}),
+    ...(_devCentro ? { centro: _devCentro } : {}),
+    ...(_devVis && _devMotivo ? { motivo: _devMotivo } : {}),
     ...(_mdgVis && _mdgChamado ? { chamado_mdg: _mdgChamado } : {}),
     ...(_pedidoVis ? { pedido_negociacao: _pedidoNegociacao, pedido_fornecedor: _pedidoFornecedor, pedido_id_sap: _pedidoIdSap, pedido_nm: _pedidoNm, pedido_comentario: _pedidoComentario } : {}),
     ...(_statusMapaAcao ? { statusMapa: _statusMapaAcao } : {})
