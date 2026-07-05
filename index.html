@@ -2808,6 +2808,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
         <div class="kgrid" id="gca-kpis" style="margin-bottom:1rem"></div>
+        <div class="cd" id="gca-tabela-card" style="margin-bottom:1rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:.5rem">
+            <div style="font-size:12px;font-weight:700;color:var(--az)" id="gca-tabela-titulo">📋 Detalhe dos concluídos</div>
+            <span style="font-size:11px;color:var(--tx2)">Clique nos cards acima para filtrar por destino</span>
+          </div>
+          <div class="tw" style="max-height:480px" id="gca-tabela-wrap"></div>
+        </div>
         <div class="cd" style="margin-bottom:1rem">
           <div style="font-size:12px;font-weight:600;color:var(--az);margin-bottom:.5rem" id="gca-count"></div>
           <div style="position:relative;height:340px"><canvas id="gca-chart-centro"></canvas></div>
@@ -2815,13 +2822,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div class="cd" id="gca-dev-wrap" style="margin-bottom:1rem;display:none;border-top:3px solid #dc2626">
           <div style="font-size:12px;font-weight:700;color:#dc2626;margin-bottom:.5rem">↩️ Motivos de Devolução</div>
           <div style="position:relative;height:340px"><canvas id="gca-chart-motivo"></canvas></div>
-        </div>
-        <div class="cd" id="gca-tabela-card">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:.5rem">
-            <div style="font-size:12px;font-weight:700;color:var(--az)" id="gca-tabela-titulo">📋 Detalhe dos concluídos</div>
-            <span style="font-size:11px;color:var(--tx2)">Clique nos cards acima para filtrar por destino</span>
-          </div>
-          <div class="tw" style="max-height:480px" id="gca-tabela-wrap"></div>
         </div>
       </div>
 
