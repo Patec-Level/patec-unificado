@@ -4021,8 +4021,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div class="kgrid" id="sb-kpis" style="margin-bottom:1rem"></div>
 
         <!-- Botão adicionar -->
-        <div style="margin-bottom:.75rem;display:flex;gap:8px;align-items:center">
+        <div style="margin-bottom:.75rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <button class="btn btn-p" style="font-size:11px" onclick="sbAbrirModal()">＋ Adicionar item</button>
+          <button class="btn btn-g" style="font-size:11px" onclick="sbAbrirImport()">📤 Importar planilha</button>
         </div>
 
         <!-- Modal -->
@@ -4076,6 +4077,38 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <button class="btn btn-p" onclick="sbAdicionarItem()">💾 Salvar</button>
             </div>
             <span id="sb-modal-erro" style="font-size:11px;color:var(--vm);display:none;margin-top:.5rem"></span>
+          </div>
+        </div>
+
+        <!-- Modal IMPORTAR PLANILHA -->
+        <div id="sb-imp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center">
+          <div class="cd" style="width:560px;max-width:95vw;padding:1.5rem;position:relative;max-height:90vh;overflow:auto">
+            <div style="font-weight:700;font-size:14px;margin-bottom:.5rem">📤 Importar itens para o Status B</div>
+            <div style="font-size:11px;color:var(--tx2);margin-bottom:1rem;line-height:1.5">
+              Envie uma planilha <strong>.xlsx</strong>, <strong>.xls</strong> ou <strong>.csv</strong>. A 1ª aba é lida automaticamente.
+              Colunas esperadas (o nome pode variar): <strong>Analista</strong>, <strong>RC</strong> (obrigatória),
+              <strong>Item da RC</strong>, <strong>Oportunidade</strong> e <strong>Item da OP</strong>.
+              <br>Itens que <strong>já existem</strong> na base são <strong>mantidos como estão</strong> (mesmo status de tratamento e prazos da plataforma).
+              Itens <strong>novos</strong> entram com tratamento <strong>AG. TRATAMENTO</strong> e status <strong>AG. AÇÃO</strong>.
+            </div>
+
+            <div style="margin-bottom:.75rem">
+              <button class="btn btn-s" style="font-size:11px" onclick="sbBaixarModelo()">⬇️ Baixar modelo de planilha</button>
+            </div>
+
+            <div class="field-wrap" style="margin-bottom:.75rem">
+              <span class="field-label">Arquivo</span>
+              <input type="file" id="sb-imp-file" accept=".xlsx,.xls,.csv" onchange="sbImportFile(this)"
+                style="width:100%;font-size:12px;padding:5px 0">
+            </div>
+
+            <div id="sb-imp-preview" style="margin-bottom:.5rem"></div>
+
+            <div style="display:flex;gap:8px;margin-top:1rem;justify-content:flex-end">
+              <button class="btn btn-s" onclick="sbFecharImport()">Cancelar</button>
+              <button class="btn btn-p" id="sb-imp-confirmar" onclick="sbConfirmarImport()" disabled>💾 Importar</button>
+            </div>
+            <span id="sb-imp-erro" style="font-size:11px;color:var(--vm);display:none;margin-top:.5rem"></span>
           </div>
         </div>
 
@@ -17432,12 +17465,27 @@ async function sbCarregarFirebase(){
     // Carregar itens
     const docItens = await db.collection('config').doc('sb_itens').get();
     if(docItens.exists){
-      const fbItens = docItens.data().itens || [];
-      // Mesclar Firebase + base embutida (Firebase tem prioridade)
+      const fbItensRaw = docItens.data().itens || [];
+      // Remover duplicatas dentro do próprio Firebase (mantém a 1ª ocorrência de cada chave).
+      // CORREÇÃO (11/07): itens lançados manualmente podiam ficar repetidos na lista
+      // salva em config/sb_itens; o carregamento copiava tudo sem deduplicar.
+      const vistos = new Set();
+      const fbItens = [];
+      fbItensRaw.forEach(r => {
+        const k = sbChave(r.rc,r.seq,r.op,r.item);
+        if(!vistos.has(k)){ vistos.add(k); fbItens.push(r); }
+      });
+      _sbItens = [...fbItens];
+      // Auto-correção: se havia duplicata, regrava a lista limpa (1 escrita, só quando necessário)
+      if(fbItens.length !== fbItensRaw.length){
+        try{
+          await db.collection('config').doc('sb_itens').set({ itens:fbItens, dt:new Date().toISOString() });
+          console.log('Status B: '+(fbItensRaw.length-fbItens.length)+' duplicata(s) removida(s) do Firebase.');
+        }catch(e){ console.warn('sb dedup writeback:', e); }
+      }
+      // Mesclar base embutida (Firebase tem prioridade)
       // CORREÇÃO BUG (20/06): _SB_BASE_ITENS é uma base real do ADLV
       // embutida no código — só mescla quando o módulo ativo é o ADLV.
-      const vistos = new Set(fbItens.map(r => sbChave(r.rc,r.seq,r.op,r.item)));
-      _sbItens = [...fbItens];
       if(_moduloAtivo !== 'fast'){
         _SB_BASE_ITENS.forEach(r => {
           const k = sbChave(r.rc,r.seq,r.op,r.item);
@@ -17567,6 +17615,177 @@ async function sbAdicionarItem(){
   sbRender();
 }
 
+// ── IMPORTAÇÃO DE PLANILHA — STATUS B ──
+let _sbImpRows = [];
+
+function sbAbrirImport(){
+  _sbImpRows = [];
+  const inp = document.getElementById('sb-imp-file'); if(inp) inp.value = '';
+  const prev = document.getElementById('sb-imp-preview'); if(prev) prev.innerHTML = '';
+  const btn = document.getElementById('sb-imp-confirmar'); if(btn){ btn.disabled = true; btn.textContent = '💾 Importar'; }
+  const err = document.getElementById('sb-imp-erro'); if(err) err.style.display = 'none';
+  document.getElementById('sb-imp-modal').style.display = 'flex';
+}
+
+function sbFecharImport(){
+  document.getElementById('sb-imp-modal').style.display = 'none';
+  _sbImpRows = [];
+}
+
+// Normaliza datas vindas do Excel (Date, serial numérico, DD/MM/AAAA, AAAA-MM-DD) → AAAA-MM-DD
+function sbImpNormData(v){
+  if(v==null || v==='') return '';
+  if(v instanceof Date && !isNaN(v)){
+    return `${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}-${String(v.getDate()).padStart(2,'0')}`;
+  }
+  const s = String(v).trim();
+  let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if(m){ let [_,d,mo,y]=m; if(y.length===2) y='20'+y; return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+  if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)){ const [y,mo,d]=s.split('-'); return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+  if(/^\d+(\.\d+)?$/.test(s)){
+    const n = parseFloat(s);
+    if(n>25569 && n<60000){ const dt = new Date(Math.round((n-25569)*86400*1000)); return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth()+1).padStart(2,'0')}-${String(dt.getUTCDate()).padStart(2,'0')}`; }
+  }
+  return '';
+}
+
+function sbImportFile(inp){
+  const f = inp.files && inp.files[0]; if(!f) return;
+  const err = document.getElementById('sb-imp-erro'); err.style.display = 'none';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try{
+      const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      if(!rows.length){ err.textContent = 'Planilha vazia ou sem cabeçalho.'; err.style.display = 'block'; return; }
+
+      const parse = [];
+      rows.forEach(r => {
+        const keys = Object.keys(r);
+        const g  = ns => { for(const n of ns){ const k = keys.find(k => k.trim().toUpperCase() === n.toUpperCase()); if(k!==undefined) return r[k]; } return ''; };
+        const gs = ns => String(g(ns)??'').replace(/\.0$/,'').trim();
+
+        const rc = gs(['RC','NUMERO_RC','NÚMERO DA RC','Nº RC']);
+        if(!rc) return;
+        // Valores usados TAL COMO na planilha (sem defaults que alterem a chave),
+        // para que os itens já existentes casem exatamente com a base e sejam preservados.
+        const analista = gs(['ANALISTA','ANALISTA RESPONSAVEL','ANALISTA RESPONSÁVEL','RESPONSAVEL','RESPONSÁVEL']) || 'Lory';
+        const seq  = gs(['ITEM DA RC','ITEM_RC','ITEM RC','SEQ']);
+        const op   = gs(['OPORTUNIDADE','OP','NUMERO_OPORTUNIDADE','Nº OPORTUNIDADE']);
+        const item = gs(['ITEM DA OP','ITEM_OP','ITEM OP','ITEM_OPORTUNIDADE']);
+        // Status/Envio/Comentário são opcionais. Item novo entra sempre como AG. TRATAMENTO,
+        // o que faz a coluna Status exibir automaticamente "AG. AÇÃO".
+        let status = gs(['STATUS TRATAMENTO','STATUS_TRATAMENTO','STATUS','TRATAMENTO']).toUpperCase();
+        if(!status) status = 'AG. TRATAMENTO';
+        const envio = sbImpNormData(g(['ENVIO','DATA_ENVIO','DATA ENVIO','DATA DE ENVIO']));
+        const comentario = String(g(['COMENTARIO','COMENTÁRIO','OBS','OBSERVACAO','OBSERVAÇÃO'])??'').trim();
+
+        const chave = sbChave(rc, seq, op, item);
+        const dupExist = !!_sbItens.find(x => sbChave(x.rc,x.seq,x.op,x.item) === chave);
+        const dupSelf  = parse.some(p => p.chave === chave);
+        parse.push({ analista, rc, seq, op, item, status, envio, comentario, chave, dup: dupExist || dupSelf });
+      });
+
+      _sbImpRows = parse;
+      const novos = parse.filter(p => !p.dup);
+      const dups  = parse.filter(p => p.dup);
+
+      const prev = document.getElementById('sb-imp-preview');
+      if(!parse.length){
+        prev.innerHTML = '<div style="font-size:12px;color:var(--vm);padding:.5rem;background:var(--vmc);border-radius:6px">Nenhuma linha com RC encontrada. Verifique o cabeçalho da planilha.</div>';
+        document.getElementById('sb-imp-confirmar').disabled = true;
+        return;
+      }
+
+      const linhasPreview = parse.slice(0,8).map(p => `
+        <tr style="${p.dup?'opacity:.5':''}">
+          <td style="padding:2px 6px">${p.dup?'<span style="color:var(--tx2)">já existe</span>':'<span style="color:var(--vd);font-weight:700">novo</span>'}</td>
+          <td style="padding:2px 6px">${p.analista||'—'}</td>
+          <td style="padding:2px 6px;font-weight:600">${p.rc}</td>
+          <td style="padding:2px 6px">${p.seq||'—'}</td>
+          <td style="padding:2px 6px">${p.op||'—'}</td>
+          <td style="padding:2px 6px">${p.item||'—'}</td>
+          <td style="padding:2px 6px;font-size:10px">${p.dup?'<span style="color:var(--tx2)">mantido</span>':p.status}</td>
+        </tr>`).join('');
+
+      prev.innerHTML = `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:.5rem">
+          <span style="font-size:11px;font-weight:700;color:var(--vd);background:var(--vdc);padding:2px 10px;border-radius:20px">✅ ${novos.length} novo(s)</span>
+          <span style="font-size:11px;font-weight:700;color:var(--tx2);background:var(--cin);padding:2px 10px;border-radius:20px">↩️ ${dups.length} já existe(m)</span>
+          <span style="font-size:11px;font-weight:700;color:var(--az);background:var(--azc);padding:2px 10px;border-radius:20px">Σ ${parse.length} lida(s)</span>
+        </div>
+        <div style="max-height:180px;overflow:auto;border:1px solid var(--brd);border-radius:6px">
+          <table style="width:100%;font-size:11px;border-collapse:collapse">
+            <thead><tr style="background:var(--cin)">
+              <th style="padding:3px 6px;text-align:left">Situação</th><th style="padding:3px 6px;text-align:left">Analista</th><th style="padding:3px 6px;text-align:left">RC</th>
+              <th style="padding:3px 6px;text-align:left">Item RC</th><th style="padding:3px 6px;text-align:left">Oport.</th>
+              <th style="padding:3px 6px;text-align:left">Item OP</th><th style="padding:3px 6px;text-align:left">Tratamento</th>
+            </tr></thead>
+            <tbody>${linhasPreview}</tbody>
+          </table>
+        </div>
+        ${parse.length>8?`<div style="font-size:10px;color:var(--tx2);margin-top:4px">…e mais ${parse.length-8} linha(s).</div>`:''}`;
+
+      document.getElementById('sb-imp-confirmar').disabled = novos.length === 0;
+    } catch(ex){
+      err.textContent = 'Erro ao ler o arquivo: ' + ex.message; err.style.display = 'block';
+    }
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+async function sbConfirmarImport(){
+  const novos = _sbImpRows.filter(p => !p.dup);
+  if(!novos.length) return;
+  const btn = document.getElementById('sb-imp-confirmar');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Importando...'; }
+
+  // Atualiza estado local
+  novos.forEach(p => {
+    _sbItens.push({ rc:p.rc, seq:p.seq, op:p.op, item:p.item, analista:p.analista||'Lory' });
+    _sbDados[p.chave] = { status:p.status, envio:p.envio, finalizado:'', comentario:p.comentario };
+  });
+
+  // Persiste no Firebase
+  try{
+    const db = getDB();
+    if(db){
+      const docItens = await db.collection('config').doc('sb_itens').get();
+      const itensAtuais = docItens.exists ? (docItens.data().itens||[]) : [];
+      novos.forEach(p => itensAtuais.push({ rc:p.rc, seq:p.seq, op:p.op, item:p.item, analista:p.analista||'Lory' }));
+      await db.collection('config').doc('sb_itens').set({ itens:itensAtuais, dt:new Date().toISOString() });
+
+      // Grava os dados em lotes (batch), respeitando o limite de 500 ops do Firestore
+      for(let i=0; i<novos.length; i+=450){
+        const batch = db.batch();
+        novos.slice(i, i+450).forEach(p => {
+          const ref = db.collection('gov_sb').doc(p.chave.replace(/[|]/g,'_'));
+          batch.set(ref, { status:p.status, envio:p.envio, finalizado:'', comentario:p.comentario, chave:p.chave, ts:new Date().toISOString() });
+        });
+        await batch.commit();
+      }
+    }
+  } catch(e){ console.warn('sbConfirmarImport:', e); }
+
+  const total = novos.length;
+  sbFecharImport();
+  sbRender();
+
+  // Feedback visual reutilizando o status de exportação, se existir
+  if(typeof _expStatus === 'function') _expStatus(`✅ ${total} item(ns) importado(s) para o Status B.`, true);
+  else console.log(`✅ ${total} item(ns) importado(s) para o Status B.`);
+}
+
+// Gera um .xlsx de exemplo com os cabeçalhos aceitos
+function sbBaixarModelo(){
+  const cab = ['Analista','RC','Item da RC','Oportunidade','Item da OP'];
+  const exemplo = ['Lory','36415142','10','7004581075','1'];
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([cab, exemplo]);
+  XLSX.utils.book_append_sheet(wb, ws, 'Status B');
+  XLSX.writeFile(wb, 'modelo_status_b.xlsx');
+}
 
 // ── MODAL COMENTÁRIO STATUS B ──
 function sbAbrirComentario(chave){
