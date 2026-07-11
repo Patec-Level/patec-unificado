@@ -4088,8 +4088,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               Envie uma planilha <strong>.xlsx</strong>, <strong>.xls</strong> ou <strong>.csv</strong>. A 1ª aba é lida automaticamente.
               Colunas esperadas (o nome pode variar): <strong>Analista</strong>, <strong>RC</strong> (obrigatória),
               <strong>Item da RC</strong>, <strong>Oportunidade</strong> e <strong>Item da OP</strong>.
-              <br>Itens que <strong>já existem</strong> na base são <strong>mantidos como estão</strong> (mesmo status de tratamento e prazos da plataforma).
-              Itens <strong>novos</strong> entram com tratamento <strong>AG. TRATAMENTO</strong> e status <strong>AG. AÇÃO</strong>.
+              <br>Itens que <strong>já existem</strong> na base são <strong>mantidos como estão</strong> (mesmo status de tratamento e prazos da plataforma) e aparecem no preview como <strong>concluído</strong> ou <strong>em aberto</strong>, apenas para conferência.
+              Entre os itens <strong>novos</strong> (AG. TRATAMENTO → AG. AÇÃO) você marca no preview quais quer importar.
             </div>
 
             <div style="margin-bottom:.75rem">
@@ -17682,52 +17682,19 @@ function sbImportFile(inp){
         const comentario = String(g(['COMENTARIO','COMENTÁRIO','OBS','OBSERVACAO','OBSERVAÇÃO'])??'').trim();
 
         const chave = sbChave(rc, seq, op, item);
-        const dupExist = !!_sbItens.find(x => sbChave(x.rc,x.seq,x.op,x.item) === chave);
+        const existente = _sbItens.find(x => sbChave(x.rc,x.seq,x.op,x.item) === chave);
+        const dupExist = !!existente;
         const dupSelf  = parse.some(p => p.chave === chave);
-        parse.push({ analista, rc, seq, op, item, status, envio, comentario, chave, dup: dupExist || dupSelf });
+        // Classifica a duplicata: concluído / em aberto (na base) ou repetida na própria planilha
+        let dupTipo = '';
+        if(dupExist){ dupTipo = (_sbDados[chave] && _sbDados[chave].finalizado) ? 'concluido' : 'aberto'; }
+        else if(dupSelf){ dupTipo = 'repetida'; }
+        const dup = dupExist || dupSelf;
+        parse.push({ analista, rc, seq, op, item, status, envio, comentario, chave, dup, dupTipo, sel: !dup });
       });
 
       _sbImpRows = parse;
-      const novos = parse.filter(p => !p.dup);
-      const dups  = parse.filter(p => p.dup);
-
-      const prev = document.getElementById('sb-imp-preview');
-      if(!parse.length){
-        prev.innerHTML = '<div style="font-size:12px;color:var(--vm);padding:.5rem;background:var(--vmc);border-radius:6px">Nenhuma linha com RC encontrada. Verifique o cabeçalho da planilha.</div>';
-        document.getElementById('sb-imp-confirmar').disabled = true;
-        return;
-      }
-
-      const linhasPreview = parse.slice(0,8).map(p => `
-        <tr style="${p.dup?'opacity:.5':''}">
-          <td style="padding:2px 6px">${p.dup?'<span style="color:var(--tx2)">já existe</span>':'<span style="color:var(--vd);font-weight:700">novo</span>'}</td>
-          <td style="padding:2px 6px">${p.analista||'—'}</td>
-          <td style="padding:2px 6px;font-weight:600">${p.rc}</td>
-          <td style="padding:2px 6px">${p.seq||'—'}</td>
-          <td style="padding:2px 6px">${p.op||'—'}</td>
-          <td style="padding:2px 6px">${p.item||'—'}</td>
-          <td style="padding:2px 6px;font-size:10px">${p.dup?'<span style="color:var(--tx2)">mantido</span>':p.status}</td>
-        </tr>`).join('');
-
-      prev.innerHTML = `
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:.5rem">
-          <span style="font-size:11px;font-weight:700;color:var(--vd);background:var(--vdc);padding:2px 10px;border-radius:20px">✅ ${novos.length} novo(s)</span>
-          <span style="font-size:11px;font-weight:700;color:var(--tx2);background:var(--cin);padding:2px 10px;border-radius:20px">↩️ ${dups.length} já existe(m)</span>
-          <span style="font-size:11px;font-weight:700;color:var(--az);background:var(--azc);padding:2px 10px;border-radius:20px">Σ ${parse.length} lida(s)</span>
-        </div>
-        <div style="max-height:180px;overflow:auto;border:1px solid var(--brd);border-radius:6px">
-          <table style="width:100%;font-size:11px;border-collapse:collapse">
-            <thead><tr style="background:var(--cin)">
-              <th style="padding:3px 6px;text-align:left">Situação</th><th style="padding:3px 6px;text-align:left">Analista</th><th style="padding:3px 6px;text-align:left">RC</th>
-              <th style="padding:3px 6px;text-align:left">Item RC</th><th style="padding:3px 6px;text-align:left">Oport.</th>
-              <th style="padding:3px 6px;text-align:left">Item OP</th><th style="padding:3px 6px;text-align:left">Tratamento</th>
-            </tr></thead>
-            <tbody>${linhasPreview}</tbody>
-          </table>
-        </div>
-        ${parse.length>8?`<div style="font-size:10px;color:var(--tx2);margin-top:4px">…e mais ${parse.length-8} linha(s).</div>`:''}`;
-
-      document.getElementById('sb-imp-confirmar').disabled = novos.length === 0;
+      sbImpRenderPreview();
     } catch(ex){
       err.textContent = 'Erro ao ler o arquivo: ' + ex.message; err.style.display = 'block';
     }
@@ -17735,8 +17702,90 @@ function sbImportFile(inp){
   reader.readAsArrayBuffer(f);
 }
 
+// Renderiza o preview da importação com seleção linha a linha
+function sbImpRenderPreview(){
+  const prev = document.getElementById('sb-imp-preview');
+  if(!prev) return;
+  const parse = _sbImpRows || [];
+  if(!parse.length){
+    prev.innerHTML = '<div style="font-size:12px;color:var(--vm);padding:.5rem;background:var(--vmc);border-radius:6px">Nenhuma linha com RC encontrada. Verifique o cabeçalho da planilha.</div>';
+    sbImpAtualizarBotao();
+    return;
+  }
+  const novos    = parse.filter(p => !p.dup);
+  const concl    = parse.filter(p => p.dupTipo === 'concluido');
+  const abertos  = parse.filter(p => p.dupTipo === 'aberto');
+  const reps     = parse.filter(p => p.dupTipo === 'repetida');
+
+  const linhas = parse.map((p, idx) => {
+    const isNew = !p.dup;
+    let sit;
+    if(isNew)                       sit = '<span style="color:var(--vd);font-weight:700">novo</span>';
+    else if(p.dupTipo==='concluido')sit = '<span style="color:var(--az);font-weight:700">já existe — concluído</span>';
+    else if(p.dupTipo==='repetida') sit = '<span style="color:var(--am);font-weight:700">repetida na planilha</span>';
+    else                            sit = '<span style="color:var(--tx2);font-weight:600">já existe — em aberto</span>';
+    const chk = isNew
+      ? `<input type="checkbox" ${p.sel?'checked':''} onchange="sbImpToggle(${idx},this.checked)" style="cursor:pointer">`
+      : '<span style="color:var(--brd)">—</span>';
+    const trat = isNew ? p.status : (p.dupTipo==='concluido' ? 'concluído' : p.dupTipo==='repetida' ? '—' : 'mantido');
+    return `<tr style="${isNew?'':'opacity:.6'}">
+      <td style="padding:2px 6px;text-align:center">${chk}</td>
+      <td style="padding:2px 6px">${sit}</td>
+      <td style="padding:2px 6px">${p.analista||'—'}</td>
+      <td style="padding:2px 6px;font-weight:600">${p.rc}</td>
+      <td style="padding:2px 6px">${p.seq||'—'}</td>
+      <td style="padding:2px 6px">${p.op||'—'}</td>
+      <td style="padding:2px 6px">${p.item||'—'}</td>
+      <td style="padding:2px 6px;font-size:10px">${trat}</td>
+    </tr>`;
+  }).join('');
+
+  prev.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:.5rem">
+      <span style="font-size:11px;font-weight:700;color:var(--vd);background:var(--vdc);padding:2px 10px;border-radius:20px">✅ ${novos.length} novo(s)</span>
+      <span style="font-size:11px;font-weight:700;color:var(--az);background:var(--azc);padding:2px 10px;border-radius:20px">🔒 ${concl.length} concluído(s)</span>
+      <span style="font-size:11px;font-weight:700;color:var(--tx2);background:var(--cin);padding:2px 10px;border-radius:20px">↩️ ${abertos.length} em aberto</span>
+      ${reps.length?`<span style="font-size:11px;font-weight:700;color:var(--am);background:var(--amc);padding:2px 10px;border-radius:20px">⚠️ ${reps.length} repetida(s)</span>`:''}
+      <span style="font-size:11px;font-weight:700;color:var(--tx2);background:var(--cin);padding:2px 10px;border-radius:20px">Σ ${parse.length} lida(s)</span>
+    </div>
+    ${novos.length?`<div style="display:flex;gap:6px;margin-bottom:.4rem">
+      <button class="btn btn-s" style="font-size:10px" onclick="sbImpSelTodos(true)">☑ Selecionar novos</button>
+      <button class="btn btn-s" style="font-size:10px" onclick="sbImpSelTodos(false)">☐ Limpar seleção</button>
+    </div>`:''}
+    <div style="max-height:240px;overflow:auto;border:1px solid var(--brd);border-radius:6px">
+      <table style="width:100%;font-size:11px;border-collapse:collapse">
+        <thead><tr style="background:var(--cin)">
+          <th style="padding:3px 6px;text-align:center">✔</th>
+          <th style="padding:3px 6px;text-align:left">Situação</th><th style="padding:3px 6px;text-align:left">Analista</th><th style="padding:3px 6px;text-align:left">RC</th>
+          <th style="padding:3px 6px;text-align:left">Item RC</th><th style="padding:3px 6px;text-align:left">Oport.</th>
+          <th style="padding:3px 6px;text-align:left">Item OP</th><th style="padding:3px 6px;text-align:left">Tratamento</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>
+    <div style="font-size:10px;color:var(--tx2);margin-top:4px">Marque/desmarque os itens <strong>novos</strong> que deseja importar. Os já existentes (concluídos ou em aberto) são só para conferência e não entram de novo.</div>`;
+
+  sbImpAtualizarBotao();
+}
+
+function sbImpAtualizarBotao(){
+  const nSel = (_sbImpRows||[]).filter(p => !p.dup && p.sel).length;
+  const btn = document.getElementById('sb-imp-confirmar');
+  if(btn){ btn.disabled = nSel === 0; btn.textContent = nSel>0 ? `💾 Importar (${nSel})` : '💾 Importar'; }
+}
+
+function sbImpToggle(idx, checked){
+  if(_sbImpRows[idx] && !_sbImpRows[idx].dup) _sbImpRows[idx].sel = checked;
+  sbImpAtualizarBotao();
+}
+
+function sbImpSelTodos(sel){
+  (_sbImpRows||[]).forEach(p => { if(!p.dup) p.sel = sel; });
+  sbImpRenderPreview();
+}
+
 async function sbConfirmarImport(){
-  const novos = _sbImpRows.filter(p => !p.dup);
+  const novos = _sbImpRows.filter(p => !p.dup && p.sel);
   if(!novos.length) return;
   const btn = document.getElementById('sb-imp-confirmar');
   if(btn){ btn.disabled = true; btn.textContent = '⏳ Importando...'; }
