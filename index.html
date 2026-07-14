@@ -21234,11 +21234,17 @@ function _entrarNoApp(){
     colabLogado = colab;
     window.colabLogado = colab;
     prodCarregarHoje(colab).then(()=>prodRenderizarPaineis(colab)).catch(()=>{});
+    fdiaVerificarDiasEmAberto(colab).catch(()=>{}); // pré-carrega o gate de lançamento
   }
 }
 let _prodChartGov = null;
 let _prodChartPc  = null;
 let _fdiaChart    = null;
+// ── Fechamento retroativo obrigatório (dias em aberto) ──
+let _fdiaDataAlvo    = null;   // data-alvo do fechamento (null = hoje). Setada no fechamento retroativo.
+let _fdiaRetroArmado = false;  // flag one-shot: navegação p/ Fechamento veio do fluxo de pendência
+// window._fdiaDiasAbertos  = cache de dias com produção sem fechamento (['YYYY-MM-DD'] asc)
+// window._fdiaAbertoDia    = data local em que o cache foi calculado (p/ auto-refresh na virada do dia)
 
 // ── Inicializar Auth após Firebase SDK carregado ──
 async function authInit(){
@@ -22086,7 +22092,9 @@ function rtIniciarListener(){
         const acoes = snap.docs.map(d=>d.data());
         rtRenderizarMonitoramento(acoes, hoje);
         // Atualizar badges do colaborador logado
-        if(_authPerfil?.colabNome){
+        if(_authPerfil?.colabNome && !_fdiaDataAlvo){
+          // Durante o fechamento retroativo (_fdiaDataAlvo setado), NÃO sobrescrever
+          // _prodAcoesHoje — a tela está mostrando as ações do dia anterior.
           const minhas = acoes.filter(a=>a.colab===_authPerfil.colabNome);
           window._prodAcoesHoje = minhas;
           prodRenderizarPaineis(_authPerfil.colabNome);
@@ -22636,6 +22644,8 @@ function prodAbrirModal(origem, tipo){
   }
   // Garantir colabLogado sincronizado
   if(!colabLogado && colab) colabLogado = colab;
+  // GATE: se houver dia anterior com produção e SEM fechamento, bloqueia o lançamento
+  if(fdiaBloqueiaLancamento(colab)) return;
   // Pegar RC sendo buscada no momento
   const _rcBusca = ((document.getElementById('pc-busca')||{}).value ||
                    (document.getElementById('gov-busca-rc')||{}).value || '').trim();
@@ -23311,11 +23321,150 @@ function fdiaSelectMotivo(btn, motivo){
   _fdiaMotivo = motivo;
 }
 
+// ════════════════════════════════════════════
+// FECHAMENTO — DIAS EM ABERTO (fechamento retroativo obrigatório)
+// ════════════════════════════════════════════
+function _fdiaHojeLocal(){
+  const n = new Date();
+  return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+}
+function _fdiaDataEfetiva(){ return _fdiaDataAlvo || _fdiaHojeLocal(); }
+function _fdiaFmtBR(dataISO){
+  const p = String(dataISO||'').split('-');
+  return p.length===3 ? (p[2]+'/'+p[1]+'/'+p[0]) : String(dataISO||'—');
+}
+function _fdiaFmtLabelLongo(dataISO){
+  const partes = String(dataISO||'').split('-').map(Number);
+  const y=partes[0], m=partes[1], d=partes[2];
+  if(!y||!m||!d) return String(dataISO||'—');
+  return new Date(y, m-1, d).toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+}
+
+// Detecta dias (dentro do ciclo ativo) com produção lançada mas SEM fechamento registrado.
+// Guarda o resultado em window._fdiaDiasAbertos; o gate de lançamento lê esse cache.
+async function fdiaVerificarDiasEmAberto(colab){
+  const hoje = _fdiaHojeLocal();
+  try{
+    if(!colab){ window._fdiaDiasAbertos = []; window._fdiaAbertoDia = hoje; return []; }
+    const db = getDB(); if(!db){ window._fdiaDiasAbertos = []; window._fdiaAbertoDia = hoje; return []; }
+    const inicio = (typeof _cicloAtivo !== 'undefined' && _cicloAtivo && _cicloAtivo.inicio) ? _cicloAtivo.inicio
+                 : (typeof CICLO_NOVO_INICIO !== 'undefined' ? CICLO_NOVO_INICIO : '2026-06-26');
+    const [snapAcoes, snapFecha] = await Promise.all([
+      db.collection('producao_acoes').where('colab','==',colab).where('data','>=',inicio).get(),
+      db.collection('fechamento_dia').where('colab','==',colab).where('data','>=',inicio).get()
+    ]);
+    const diasComProd = new Set();
+    snapAcoes.forEach(doc=>{ const a=doc.data(); if(a.anulada) return; if(a.data && a.data < hoje) diasComProd.add(a.data); });
+    const diasFechados = new Set();
+    snapFecha.forEach(doc=>{ const f=doc.data(); if(f.data) diasFechados.add(f.data); });
+    const abertos = [...diasComProd].filter(d => !diasFechados.has(d)).sort();
+    window._fdiaDiasAbertos = abertos;
+    window._fdiaAbertoDia   = hoje;
+    if(abertos.length) console.warn('[Fechamento] Dias em aberto de '+colab+':', abertos);
+    return abertos;
+  } catch(e){
+    console.warn('fdiaVerificarDiasEmAberto:', e);
+    if(!Array.isArray(window._fdiaDiasAbertos)) window._fdiaDiasAbertos = [];
+    return window._fdiaDiasAbertos;
+  }
+}
+
+// Carrega ações de uma data específica para window._prodAcoesHoje (reaproveita todo o render do fechamento)
+async function prodCarregarData(colab, data){
+  try{
+    const db = getDB(); if(!db) return [];
+    const snap = await db.collection('producao_acoes').where('colab','==',colab).where('data','==',data).get();
+    window._prodAcoesHoje = snap.docs.map(d=>d.data());
+    return window._prodAcoesHoje;
+  } catch(e){ console.warn('prodCarregarData:', e); return window._prodAcoesHoje || []; }
+}
+
+// Gate chamado no início de todo lançamento de produção. Retorna true quando bloqueia.
+function fdiaBloqueiaLancamento(colab){
+  const hoje = _fdiaHojeLocal();
+  const abertos = window._fdiaDiasAbertos;
+  // Cache ausente ou de outro dia (virada da meia-noite) → recalcula em background (fail-open neste clique)
+  if(!Array.isArray(abertos) || window._fdiaAbertoDia !== hoje){
+    fdiaVerificarDiasEmAberto(colab).then(lst=>{
+      if(Array.isArray(lst) && lst.length){
+        if(typeof prodFecharModal === 'function') prodFecharModal();
+        fdiaAbrirModalPendencia(colab, lst);
+      }
+    }).catch(()=>{});
+    return false;
+  }
+  if(abertos.length){ fdiaAbrirModalPendencia(colab, abertos); return true; }
+  return false;
+}
+
+// Modal de pendência — obriga fechar o dia anterior antes de liberar o lançamento
+function fdiaAbrirModalPendencia(colab, abertos){
+  abertos = abertos || window._fdiaDiasAbertos || [];
+  if(!abertos.length) return;
+  const alvo = abertos[0]; // mais antigo primeiro
+  const restantes = abertos.length - 1;
+  let modal = document.getElementById('fdia-pendencia-modal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'fdia-pendencia-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem';
+    document.body.appendChild(modal);
+  }
+  const extra = restantes>0
+    ? '<div style="font-size:11px;color:var(--tx2);margin-top:10px">Há ainda <b>'+restantes+'</b> outro(s) dia(s) em aberto — você fechará um de cada vez, do mais antigo para o mais recente.</div>'
+    : '';
+  modal.innerHTML =
+    '<div class="cd" style="width:460px;max-width:96vw;padding:1.75rem;text-align:center;border-top:4px solid var(--vm)">'+
+      '<div style="font-size:34px;line-height:1;margin-bottom:.5rem">🔒</div>'+
+      '<div style="font-weight:700;font-size:16px;color:var(--vm);margin-bottom:.5rem">Feche o dia anterior primeiro</div>'+
+      '<div style="font-size:13px;color:var(--tx1,#333);line-height:1.55">Você não fechou o dia <b>'+_fdiaFmtLabelLongo(alvo)+'</b>.<br>É preciso fechar esse dia — informando a presença e a justificativa — para encerrar a produtividade dele e começar a contar a produtividade de hoje.</div>'+
+      extra+
+      '<div style="display:flex;gap:8px;margin-top:1.5rem;justify-content:center;flex-wrap:wrap">'+
+        '<button class="btn btn-p" style="background:var(--vd);font-size:13px;padding:9px 20px" onclick="fdiaFecharDiaRetroativo(\''+alvo+'\')">🔒 Fechar o dia '+_fdiaFmtBR(alvo)+' agora</button>'+
+        '<button class="btn btn-s" style="font-size:13px" onclick="fdiaFecharModalPendencia()">Agora não</button>'+
+      '</div>'+
+      '<div style="font-size:10px;color:var(--tx2);margin-top:12px">Enquanto o dia anterior não for fechado, o lançamento de produção fica bloqueado.</div>'+
+    '</div>';
+  modal.style.display = 'flex';
+}
+function fdiaFecharModalPendencia(){
+  const m = document.getElementById('fdia-pendencia-modal');
+  if(m) m.style.display = 'none';
+}
+
+// Entra no modo de fechamento retroativo p/ uma data e abre a página de Fechamento
+function fdiaFecharDiaRetroativo(data){
+  _fdiaDataAlvo    = data;
+  _fdiaRetroArmado = true;
+  fdiaFecharModalPendencia();
+  if(typeof go === 'function') go('fechamento-dia', null);
+  else setTimeout(fdiaInicializar, 50);
+}
+
+// Banner de aviso no topo da página de Fechamento quando em modo retroativo
+function _fdiaRenderBannerRetro(ehRetro, data){
+  let b = document.getElementById('fdia-banner-retro');
+  const painel = document.getElementById('fdia-painel');
+  if(ehRetro){
+    if(!b){
+      b = document.createElement('div');
+      b.id = 'fdia-banner-retro';
+      b.style.cssText = 'background:var(--amc,#fef3c7);border:1.5px solid var(--am,#d97706);border-radius:10px;padding:.8rem 1rem;margin-bottom:1rem;font-size:12px;color:#7c4a03;font-weight:600;line-height:1.5';
+      if(painel && painel.parentNode) painel.parentNode.insertBefore(b, painel);
+    }
+    b.innerHTML = '⚠ Você está fechando um <b>dia anterior</b>: '+_fdiaFmtLabelLongo(data)+'. Confirme a presença e a justificativa desse dia e finalize para liberar o lançamento de hoje.';
+    b.style.display = 'block';
+  } else if(b){
+    b.style.display = 'none';
+  }
+}
+
 async function fdiaInicializar(){
-  const hoje = new Date();
-  const label = hoje.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  const dataAlvo = _fdiaDataEfetiva();
+  const _ehRetro = !!_fdiaDataAlvo && dataAlvo !== _fdiaHojeLocal();
   const el = document.getElementById('fdia-data-label');
-  if(el) el.textContent = label;
+  if(el) el.textContent = _fdiaFmtLabelLongo(dataAlvo) + (_ehRetro ? ' — FECHAMENTO RETROATIVO' : '');
+  _fdiaRenderBannerRetro(_ehRetro, dataAlvo);
 
   const colab = _authPerfil?.colabNome || colabLogado;
   const semLogin = document.getElementById('fdia-sem-login');
@@ -23340,8 +23489,8 @@ async function fdiaInicializar(){
   const metaEl  = document.getElementById('fdia-meta');
   if(metaEl) metaEl.textContent = metaVal;
 
-  // Carregar ações do dia
-  await prodCarregarHoje(colab);
+  // Carregar ações do dia (data-alvo = hoje, ou o dia anterior no fechamento retroativo)
+  await prodCarregarData(colab, dataAlvo);
   const acoes = window._prodAcoesHoje || [];
   // Renderizar linha do tempo
   fdiaRenderLinhaTempo(colab);
@@ -23364,7 +23513,7 @@ async function fdiaInicializar(){
 
   // Modalidade
   const regs = (typeof registros !== 'undefined' ? registros : []);
-  const hoje2 = new Date().toISOString().split('T')[0];
+  const hoje2 = dataAlvo;
   const regHoje = regs.find(r=>r.colab===colab&&r.data===hoje2);
   if(mo) mo.textContent = regHoje?.pres || '—';
 
@@ -23583,8 +23732,7 @@ async function fdiaRenderLinhaTempo(colab){
   // Buscar ações do Firebase com docId
   try{
     const db = getDB(); if(!db){ el.innerHTML='<div style="text-align:center;color:var(--tx2);font-size:12px;padding:1rem">Firebase não disponível.</div>'; return; }
-    const _n = new Date();
-    const hoje = _n.getFullYear()+'-'+String(_n.getMonth()+1).padStart(2,'0')+'-'+String(_n.getDate()).padStart(2,'0');
+    const hoje = _fdiaDataEfetiva();
     const snap = await db.collection('producao_acoes').where('colab','==',colab).where('data','==',hoje).get();
     _fdiaAcoesDia = snap.docs.map(d=>({_docId:d.id,...d.data()}));
   } catch(e){ console.warn('fdiaRenderLinhaTempo:', e); _fdiaAcoesDia = window._prodAcoesHoje||[]; }
@@ -23676,8 +23824,7 @@ async function fdiaSalvar(){
   const metaVal = META_ANALISTA_RT[colab]||30;
   const acoes   = window._prodAcoesHoje||[];
   const cnt     = prodContarHoje(acoes);
-  const _hn = new Date();
-  const hoje = _hn.getFullYear()+'-'+String(_hn.getMonth()+1).padStart(2,'0')+'-'+String(_hn.getDate()).padStart(2,'0');
+  const hoje = _fdiaDataEfetiva(); // data-alvo (hoje, ou o dia anterior no fechamento retroativo)
 
   // Bloquear se modalidade não informada
   if(!_fdiaPresenca){
@@ -23796,6 +23943,24 @@ async function fdiaSalvar(){
   if(presCard) presCard.style.display = 'none';
   document.getElementById('fdia-ok').style.display = 'inline';
   setTimeout(()=>{ const el=document.getElementById('fdia-ok'); if(el)el.style.display='none'; }, 3000);
+
+  // ── Fechamento retroativo: tira o dia da lista de pendências e encadeia p/ o próximo ──
+  try{
+    if(_fdiaDataAlvo){
+      const fechado = _fdiaDataAlvo;
+      if(Array.isArray(window._fdiaDiasAbertos)){
+        window._fdiaDiasAbertos = window._fdiaDiasAbertos.filter(d => d !== fechado);
+      }
+      _fdiaDataAlvo = null;
+      const restam = window._fdiaDiasAbertos || [];
+      if(restam.length){
+        setTimeout(()=>fdiaAbrirModalPendencia(colab, restam), 900); // próximo dia em aberto
+      } else {
+        _fdiaRenderBannerRetro(false);
+        setTimeout(fdiaInicializar, 1000); // volta para a visão de hoje
+      }
+    }
+  } catch(e){ console.warn('fdiaSalvar retroativo:', e); }
 }
 
 // Hook no go() para inicializar painéis
@@ -23804,7 +23969,11 @@ if(_goOrig){
   window.go = function(id, el){
     _goOrig(id, el);
     if(id === 'governanca' || id === 'planilha-critica') setTimeout(prodInicializarPainel, 500);
-    if(id === 'fechamento-dia') setTimeout(fdiaInicializar, 200);
+    if(id === 'fechamento-dia'){
+      if(!_fdiaRetroArmado) _fdiaDataAlvo = null; // navegação normal → fecha HOJE
+      _fdiaRetroArmado = false;
+      setTimeout(fdiaInicializar, 200);
+    }
   };
 }
 
