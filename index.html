@@ -3947,6 +3947,33 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
 
+        <!-- Modal EDITAR item XGL (corrigir analista / RC / item) -->
+        <div id="xgl-edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center">
+          <div class="cd" style="width:380px;max-width:95vw;padding:1.5rem;position:relative">
+            <div style="font-weight:700;font-size:14px;margin-bottom:1rem">✏️ Editar item XGL</div>
+            <div style="display:flex;flex-direction:column;gap:.75rem">
+              <div class="field-wrap">
+                <span class="field-label">Analista</span>
+                <input type="text" id="xgl-edit-analista" placeholder="Nome do analista" style="width:100%;font-size:12px;padding:5px 10px">
+              </div>
+              <div class="field-wrap">
+                <span class="field-label">RC</span>
+                <input type="text" id="xgl-edit-rc" placeholder="Número da RC" style="width:100%;font-size:12px;padding:5px 10px">
+              </div>
+              <div class="field-wrap">
+                <span class="field-label">Item (SEQ)</span>
+                <input type="text" id="xgl-edit-item" placeholder="Ex: 10" style="width:100%;font-size:12px;padding:5px 10px">
+              </div>
+            </div>
+            <div id="xgl-edit-aviso" style="display:none;font-size:10px;color:var(--tx2);margin-top:.75rem;line-height:1.45;background:var(--amc,#fef3c7);border-radius:6px;padding:6px 8px"></div>
+            <div style="display:flex;gap:8px;margin-top:1.25rem;justify-content:flex-end">
+              <button class="btn btn-s" onclick="xglEditarFechar()">Cancelar</button>
+              <button class="btn btn-p" onclick="xglEditarSalvar()">💾 Salvar alterações</button>
+            </div>
+            <span id="xgl-edit-erro" style="font-size:11px;color:var(--vm);display:none;margin-top:.5rem"></span>
+          </div>
+        </div>
+
         <!-- Painel Devolução -->
         <div id="xgl-devolucao-painel" style="display:none;margin-bottom:1rem">
           <div class="cd" style="border-left:3px solid var(--vm)">
@@ -15725,6 +15752,7 @@ async function govExportar(){
 // GOVERNANÇA — XGL
 // ════════════════════════════════════════════
 let _xglItens  = []; // [{rc, item, oport, itemop}] — vem do upload
+let _xglRemovidos = []; // chaves de itens da BASE embutida que foram editados (RC/item) — impede que a versão antiga ressuscite no merge
 let _xglDados  = {}; // { 'RC|Item|OP|IOP': {status, envio, finalizado} } — dados manuais Firebase
 
 function xglChave(rc, item, oport, itemop){
@@ -15776,6 +15804,7 @@ async function xglSalvarItensFirebase(){
     const db = getDB(); if(!db) return;
     await db.collection('config').doc('xgl_itens').set({
       itens: _xglItens,
+      removidos: _xglRemovidos,
       dt: new Date().toISOString()
     });
     console.log('XGL itens salvos:', _xglItens.length);
@@ -15793,6 +15822,7 @@ async function xglCarregarFirebase(){
     // Carregar itens do Firebase e MESCLAR com base embutida
     const docItens = await db.collection('config').doc('xgl_itens').get();
     const fbItensRaw = (docItens.exists && docItens.data().itens) ? docItens.data().itens : [];
+    _xglRemovidos = (docItens.exists && Array.isArray(docItens.data().removidos)) ? docItens.data().removidos : [];
     // Deduplicar defensivamente — se uma race condition já tiver criado duplicata no passado,
     // ela é eliminada aqui silenciosamente (mantém a primeira ocorrência de cada chave)
     const _vistosFb = new Set();
@@ -15811,6 +15841,7 @@ async function xglCarregarFirebase(){
     if(_moduloAtivo !== 'fast'){
       _XGL_BASE_ITENS.forEach(r => {
         const k = xglChave(r.rc, r.item, r.oport||"", r.itemop||"");
+        if(_xglRemovidos.includes(k)) return; // item-base editado (RC/item corrigido) — não ressuscita
         if(!vistosXgl.has(k)){ _xglItens.push(r); vistosXgl.add(k); }
       });
     }
@@ -15900,7 +15931,7 @@ function xglRender(){
       <td style="font-size:11px">${envio?fmtBR(envio):'—'}</td>
       <td style="text-align:center;font-size:11px;${prazo?'font-weight:600':'color:var(--tx2)'}">${prazo?fmtBR(prazo):'—'}</td>
       <td style="text-align:center;font-size:11px;${govCorStatus(statusCalc)}">${statusCalc||'—'}</td>
-      <td style="text-align:center"><button onclick="abrirHistoricoRC('${r.rc||''}')" title="Ver histórico de ações" style="background:var(--azc);border:1.5px solid var(--azm);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:var(--azm);white-space:nowrap">📋 Histórico</button></td>
+      <td style="text-align:center;white-space:nowrap"><button onclick="xglEditarAbrir('${chave}')" title="Editar analista / RC / item" style="background:var(--amc,#fef3c7);border:1.5px solid var(--am,#d97706);border-radius:6px;padding:3px 7px;cursor:pointer;font-size:11px;margin-right:4px">✏️</button><button onclick="abrirHistoricoRC('${r.rc||''}')" title="Ver histórico de ações" style="background:var(--azc);border:1.5px solid var(--azm);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:var(--azm);white-space:nowrap">📋 Histórico</button></td>
       <td style="font-size:11px">${finalizado?fmtBR(finalizado):'—'}</td>
       <td>${mostrarConclusao?`<select style="font-size:11px;padding:2px 5px;min-width:110px"
           onchange="xglSalvarConclusao('${chave}',this.value,${idx})">
@@ -17432,6 +17463,99 @@ async function xglAdicionarItem(){
   } catch(e){ console.warn('xglAdicionarItem Firebase:', e); }
 
   xglFecharModal();
+  xglRender();
+}
+
+
+// ── EDITAR item XGL (corrigir analista / RC / item) ──
+let _xglEditChaveOriginal = null;
+
+function xglEditarAbrir(chave){
+  const it = (_xglItens||[]).find(r => xglChave(r.rc, r.item, r.oport, r.itemop) === chave);
+  if(!it){ alert('Item não encontrado.'); return; }
+  _xglEditChaveOriginal = chave;
+  const gv = id => document.getElementById(id);
+  if(gv('xgl-edit-analista')) gv('xgl-edit-analista').value = it.analista || '';
+  if(gv('xgl-edit-rc'))       gv('xgl-edit-rc').value       = it.rc || '';
+  if(gv('xgl-edit-item'))     gv('xgl-edit-item').value     = it.item || '';
+  const erro = gv('xgl-edit-erro'); if(erro) erro.style.display = 'none';
+  const aviso = gv('xgl-edit-aviso');
+  if(aviso){
+    aviso.innerHTML = 'Corrigir a <b>RC</b> ou o <b>item</b> preserva tudo que já foi registrado (status, prazo, finalização, comentário e histórico) — os dados são migrados para a chave nova automaticamente.';
+    aviso.style.display = 'block';
+  }
+  const modal = gv('xgl-edit-modal');
+  if(modal) modal.style.display = 'flex';
+}
+
+function xglEditarFechar(){
+  const modal = document.getElementById('xgl-edit-modal');
+  if(modal) modal.style.display = 'none';
+  _xglEditChaveOriginal = null;
+}
+
+async function xglEditarSalvar(){
+  const erroEl = document.getElementById('xgl-edit-erro');
+  const mostrarErro = msg => { if(erroEl){ erroEl.textContent = msg; erroEl.style.display = 'block'; } };
+  const analista = (document.getElementById('xgl-edit-analista')?.value||'').trim();
+  const rc       = (document.getElementById('xgl-edit-rc')?.value||'').trim();
+  const item     = ((document.getElementById('xgl-edit-item')?.value||'').trim()) || '10';
+
+  if(!rc){ mostrarErro('RC obrigatória.'); return; }
+
+  const chaveOriginal = _xglEditChaveOriginal;
+  const idxReal = (_xglItens||[]).findIndex(r => xglChave(r.rc, r.item, r.oport, r.itemop) === chaveOriginal);
+  if(idxReal < 0){ mostrarErro('Item não encontrado (recarregue a página).'); return; }
+
+  const original = _xglItens[idxReal];
+  const chaveNova = xglChave(rc, item, original.oport||'', original.itemop||'');
+
+  // Se a chave muda, não pode colidir com outro item já existente
+  if(chaveNova !== chaveOriginal){
+    const colide = (_xglItens||[]).some((r,i) => i !== idxReal && xglChave(r.rc, r.item, r.oport, r.itemop) === chaveNova);
+    if(colide){ mostrarErro('Já existe outro item com esta RC + Item.'); return; }
+  }
+
+  // 1) Atualiza o array em memória (mantém oport/itemop originais)
+  _xglItens[idxReal] = Object.assign({}, original, { analista: analista, rc: rc, item: item });
+
+  // 2) Migra os dados manuais (status/prazo/finalização/comentário) se a chave mudou
+  if(chaveNova !== chaveOriginal){
+    if(_xglDados[chaveOriginal]){
+      _xglDados[chaveNova] = Object.assign({}, _xglDados[chaveOriginal]);
+      delete _xglDados[chaveOriginal];
+    }
+    // Tombstone: se a versão antiga vinha da base embutida, impede que ela ressuscite no merge
+    const ehBase = (_XGL_BASE_ITENS||[]).some(b => xglChave(b.rc, b.item, b.oport||'', b.itemop||'') === chaveOriginal);
+    if(ehBase && !_xglRemovidos.includes(chaveOriginal)) _xglRemovidos.push(chaveOriginal);
+  }
+
+  // 3) Persiste no Firebase
+  try{
+    const db = getDB();
+    if(db){
+      // 3a) Regrava a lista completa de itens (+ removidos)
+      await xglSalvarItensFirebase();
+      // 3b) Se a chave mudou, migra o doc de dados manuais em gov_xgl
+      if(chaveNova !== chaveOriginal){
+        const idAntigo = chaveOriginal.replace(/[|]/g,'_');
+        const idNovo   = chaveNova.replace(/[|]/g,'_');
+        const dados = _xglDados[chaveNova] || {};
+        await db.collection('gov_xgl').doc(idNovo).set(Object.assign({}, dados, { chave: chaveNova, ts: new Date().toISOString() }), {merge:true});
+        await db.collection('gov_xgl').doc(idAntigo).delete().catch(()=>{});
+      }
+    }
+  } catch(e){ console.warn('xglEditarSalvar Firebase:', e); mostrarErro('Erro ao salvar: '+e.message); return; }
+
+  // 4) Registra no histórico quem editou
+  try{
+    if(typeof _registrarEdicaoManual === 'function'){
+      if(analista !== (original.analista||'')) _registrarEdicaoManual(chaveNova, 'analista', analista);
+      if(chaveNova !== chaveOriginal)          _registrarEdicaoManual(chaveNova, 'cadastro', 'RC/Item corrigidos (era '+chaveOriginal+')');
+    }
+  } catch(e){ console.warn('xglEditarSalvar histórico:', e); }
+
+  xglEditarFechar();
   xglRender();
 }
 
