@@ -6024,7 +6024,7 @@ async function renderAlertasPerf(){
   if(!el) return;
   el.innerHTML = '<div style="font-size:12px;color:var(--tx2)">⏳ Carregando fechamentos...</div>';
 
-  const COLABS_AN = (typeof COLABS!=='undefined' && COLABS.length ? COLABS : (window.COLABS||['Lory','Ludy','Wanessa'])).filter(c=>c!=='André');
+  const COLABS_AN = (typeof COLABS!=='undefined' && COLABS.length ? COLABS : (window.COLABS||['Lory','Ludy','Wanessa'])).filter(c=>c!=='André').filter(c=>_equipeVis(c,'hist'));
   const META = 30;
 
   const { resultado, dias } = await _buscarFechamentos5Dias(COLABS_AN);
@@ -6244,7 +6244,7 @@ function renderPerfSemanal(){
 
   if(lbl) lbl.textContent = `${fmtD(dias[0])} a ${fmtD(dias[4])}`;
 
-  const COLABS_ANALISTAS = (typeof COLABS!=='undefined' && COLABS.length ? COLABS : (window.COLABS||['Lory','Ludy','Wanessa'])).filter(c => c !== 'André');
+  const COLABS_ANALISTAS = (typeof COLABS!=='undefined' && COLABS.length ? COLABS : (window.COLABS||['Lory','Ludy','Wanessa'])).filter(c => c !== 'André').filter(c=>_equipeVis(c,'hist'));
   if(!COLABS_ANALISTAS.length){ el.innerHTML='<div style="font-size:12px;color:var(--tx2)">Nenhum colaborador carregado.</div>'; return; }
 
   // Calcular dados por analista
@@ -8218,7 +8218,7 @@ function setAdmTab(id,btn){
     const selDist = document.getElementById('dist-colab');
     if(selDist){
       selDist.innerHTML = '<option value="">Selecione...</option>';
-      COLABS.forEach(c => { const o=document.createElement('option'); o.textContent=c; selDist.appendChild(o); });
+      COLABS.filter(c=>_equipeVis(c,'hist')).forEach(c => { const o=document.createElement('option'); o.textContent=c; selDist.appendChild(o); });
     }
   },50);
   if(id==='export-adm') setTimeout(()=>{
@@ -22153,77 +22153,97 @@ async function equipeRtCarregar(){
   equipeAplicarListas();
 }
 
-function equipeAbrirEditor(){ _equipeEdit = null; equipeRenderEditor(); }
+function _equipeVis(nome, tipo){
+  try{
+    var mod = (_moduloAtivo==='fast') ? 'fast' : 'adlv';
+    var e = (_equipeRt[mod]||[]).find(function(x){ return x.nome && x.nome.toLowerCase()===String(nome).toLowerCase(); });
+    if(!e) return true;
+    return (tipo==='hist') ? (e.visHist!==false) : (e.visRT!==false);
+  }catch(err){ return true; }
+}
+
+async function equipeAbrirEditor(){
+  var host = document.getElementById('equipe-editor');
+  if(host) host.innerHTML = '<div style="font-size:12px;color:var(--tx2)">⏳ Carregando colaboradores cadastrados...</div>';
+  var mod = (_moduloAtivo==='fast') ? 'fast' : 'adlv';
+  var nomes = [];
+  try{
+    var db = getDB();
+    if(db){
+      var snap = await db.collection('usuarios').get();
+      snap.docs.forEach(function(d){
+        var u = d.data() || {};
+        var mods = Array.isArray(u.modulos) ? u.modulos : ['adlv'];
+        var cn = (u.colabNome||'').trim();
+        if(cn && mods.indexOf(mod) !== -1) nomes.push(cn);
+      });
+    }
+  }catch(e){ console.warn('equipe cadastrados:', e); }
+  // incluir também nomes já salvos na config (mesmo que não estejam mais cadastrados)
+  (_equipeRt[mod]||[]).forEach(function(x){ if(x && x.nome) nomes.push(x.nome); });
+  // dedup (case-insensitive) preservando o primeiro nome visto
+  var vistos = {}, ordenados = [];
+  nomes.forEach(function(n){ var k=n.toLowerCase(); if(!vistos[k]){ vistos[k]=1; ordenados.push(n); } });
+  ordenados.sort(function(a,b){ return a.localeCompare(b,'pt-BR'); });
+  // mesclar com settings salvos (meta, temMeta, visRT, visHist)
+  _equipeEdit = ordenados.map(function(n){
+    var s = (_equipeRt[mod]||[]).find(function(x){ return x.nome && x.nome.toLowerCase()===n.toLowerCase(); }) || {};
+    return {
+      nome: n,
+      meta: (s.meta!=null ? s.meta : 30),
+      temMeta: (s.temMeta!=null ? !!s.temMeta : true),
+      visRT: (s.visRT!==false),
+      visHist: (s.visHist!==false)
+    };
+  });
+  equipeRenderEditor();
+}
 
 function equipeRenderEditor(){
   var host = document.getElementById('equipe-editor');
   if(!host) return;
-  if(!_equipeEdit){
-    _equipeEdit = [];
-    ['adlv','fast'].forEach(function(mod){
-      (_equipeRt[mod]||[]).forEach(function(x){
-        _equipeEdit.push({ nome:x.nome||'', modulo:mod, meta:x.meta||0, temMeta:!!x.temMeta });
-      });
-    });
-  }
-  var rows = _equipeEdit.map(function(x,i){
+  var modLbl = (_moduloAtivo==='fast') ? 'FAST' : 'ADLV';
+  var lista = _equipeEdit || [];
+  var rows = lista.map(function(x,i){
     return '<tr>'
-      + '<td style="padding:4px"><input type="text" value="'+String(x.nome||'').replace(/"/g,'&quot;')+'" oninput="_equipeEdit['+i+'].nome=this.value" style="width:100%;padding:5px" placeholder="Ex: Fulano"></td>'
-      + '<td style="padding:4px"><select onchange="_equipeEdit['+i+'].modulo=this.value" style="width:100%;padding:5px">'
-        + '<option value="adlv"'+(x.modulo==='adlv'?' selected':'')+'>ADLV</option>'
-        + '<option value="fast"'+(x.modulo==='fast'?' selected':'')+'>FAST</option>'
-      + '</select></td>'
-      + '<td style="padding:4px;text-align:center"><input type="number" min="0" value="'+(x.meta||0)+'" oninput="_equipeEdit['+i+'].meta=parseInt(this.value)||0" style="width:80px;padding:5px"'+(x.temMeta?'':' disabled')+'></td>'
-      + '<td style="padding:4px;text-align:center"><input type="checkbox"'+(x.temMeta?' checked':'')+' onchange="_equipeEdit['+i+'].temMeta=this.checked;equipeRenderEditor()"></td>'
-      + '<td style="padding:4px;text-align:center"><button class="btn btn-r" style="padding:2px 9px;font-size:12px" onclick="_equipeEdit.splice('+i+',1);equipeRenderEditor()">✕</button></td>'
+      + '<td style="padding:6px 8px;font-weight:600">'+String(x.nome||'').replace(/</g,'&lt;')+'</td>'
+      + '<td style="padding:6px 8px;text-align:center"><input type="checkbox"'+(x.temMeta?' checked':'')+' onchange="_equipeEdit['+i+'].temMeta=this.checked;equipeRenderEditor()"></td>'
+      + '<td style="padding:6px 8px;text-align:center"><input type="number" min="0" value="'+(x.meta||0)+'" oninput="_equipeEdit['+i+'].meta=parseInt(this.value)||0" style="width:75px;padding:4px"'+(x.temMeta?'':' disabled')+'></td>'
+      + '<td style="padding:6px 8px;text-align:center"><input type="checkbox"'+(x.visRT?' checked':'')+' onchange="_equipeEdit['+i+'].visRT=this.checked"></td>'
+      + '<td style="padding:6px 8px;text-align:center"><input type="checkbox"'+(x.visHist?' checked':'')+' onchange="_equipeEdit['+i+'].visHist=this.checked"></td>'
     + '</tr>';
   }).join('');
-  if(!rows) rows = '<tr><td colspan="5" style="text-align:center;color:var(--tx2);padding:1rem">Nenhum colaborador. Clique em "Adicionar colaborador".</td></tr>';
+  if(!rows) rows = '<tr><td colspan="5" style="text-align:center;color:var(--tx2);padding:1rem">Nenhum colaborador cadastrado neste módulo (defina o colabNome do usuário na aba Usuários).</td></tr>';
   host.innerHTML =
-    '<div class="al al-b" style="margin-bottom:.75rem">ℹ Quem estiver nesta lista aparece na <strong>Produção em Tempo Real</strong>, nos <strong>Alertas de Performance</strong> e na <strong>Performance Semanal</strong>. O <em>Nome</em> precisa bater com o colabNome do usuário. Desmarcar <em>Meta individual</em> = contribui pra equipe sem meta diária própria (ex.: liderança).</div>'
+    '<div class="al al-b" style="margin-bottom:.75rem">ℹ Lista puxada automaticamente dos usuários cadastrados no módulo <strong>'+modLbl+'</strong> (pelo colabNome). Desmarcar <em>Tempo Real</em> ou <em>Histórico</em> só esconde a pessoa daquela tela — ela continua contando no total da equipe. <em>Meta individual</em> desmarcada = contribui sem meta diária própria (ex.: liderança).</div>'
     + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
     + '<thead><tr style="background:var(--cin)">'
-      + '<th style="text-align:left;padding:8px">Nome (= colabNome)</th>'
-      + '<th style="padding:8px;width:120px">Módulo</th>'
-      + '<th style="padding:8px;width:110px">Meta/dia</th>'
+      + '<th style="text-align:left;padding:8px">Colaborador</th>'
       + '<th style="padding:8px;width:120px">Meta individual</th>'
-      + '<th style="padding:8px;width:70px"></th>'
-    + '</tr></thead>'
-    + '<tbody>'+rows+'</tbody></table></div>'
+      + '<th style="padding:8px;width:100px">Meta/dia</th>'
+      + '<th style="padding:8px;width:130px">Ver em Tempo Real</th>'
+      + '<th style="padding:8px;width:130px">Ver no Histórico</th>'
+    + '</tr></thead><tbody>'+rows+'</tbody></table></div>'
     + '<div style="display:flex;gap:10px;margin-top:1rem;align-items:center;flex-wrap:wrap">'
-      + '<button class="btn btn-s" onclick="equipeAddLinha()">＋ Adicionar colaborador</button>'
       + '<button class="btn btn-g" onclick="equipeRtSalvar()">✓ Salvar equipe</button>'
+      + '<button class="btn btn-s" onclick="equipeAbrirEditor()">↺ Recarregar cadastrados</button>'
       + '<span id="equipe-ok" style="font-size:11px;color:var(--vd);font-weight:600;display:none">✓ Salvo! Já refletido nas telas.</span>'
     + '</div>';
 }
 
-function equipeAddLinha(){
-  if(!_equipeEdit) _equipeEdit = [];
-  _equipeEdit.push({ nome:'', modulo:(_moduloAtivo==='fast'?'fast':'adlv'), meta:30, temMeta:true });
-  equipeRenderEditor();
-}
-
 async function equipeRtSalvar(){
-  var limpo = (_equipeEdit||[]).filter(function(x){ return x && (x.nome||'').trim(); });
-  var vistos = {};
-  for(var i=0;i<limpo.length;i++){
-    var k = limpo[i].modulo + '|' + limpo[i].nome.trim().toLowerCase();
-    if(vistos[k]){ alert('Nome repetido no mesmo módulo: ' + limpo[i].nome); return; }
-    vistos[k] = 1;
-  }
-  var novo = { adlv:[], fast:[] };
-  limpo.forEach(function(x){
-    var alvo = (x.modulo==='fast') ? novo.fast : novo.adlv;
-    alvo.push({ nome:x.nome.trim(), meta:(x.temMeta ? (+x.meta||0) : 0), temMeta:!!x.temMeta });
+  var mod = (_moduloAtivo==='fast') ? 'fast' : 'adlv';
+  var lista = (_equipeEdit||[]).filter(function(x){ return x && (x.nome||'').trim(); }).map(function(x){
+    return { nome:x.nome.trim(), meta:(x.temMeta ? (+x.meta||0) : 0), temMeta:!!x.temMeta, visRT:(x.visRT!==false), visHist:(x.visHist!==false) };
   });
-  _equipeRt = novo;
+  if(!Array.isArray(_equipeRt.adlv)) _equipeRt.adlv = [];
+  if(!Array.isArray(_equipeRt.fast)) _equipeRt.fast = [];
+  _equipeRt[mod] = lista; // preserva o outro módulo
   var ok = false;
   try{ ok = await fbSet('config','equipe_rt', _equipeRt); }catch(e){ alert('Erro ao salvar: '+e.message); }
   equipeAplicarListas();
-  _equipeEdit = null;
   var okEl = document.getElementById('equipe-ok');
   if(okEl){ okEl.style.display='inline'; setTimeout(function(){ okEl.style.display='none'; }, 3000); }
-  // refletir imediatamente nas telas dependentes
   try{ if(typeof rtIniciarListener==='function') rtIniciarListener(); }catch(e){}
   try{ if(typeof renderDistribuicao==='function') renderDistribuicao(); }catch(e){}
   try{ if(typeof renderAlertasPerf==='function') renderAlertasPerf(); }catch(e){}
@@ -22338,7 +22358,7 @@ function rtRenderizarMonitoramento(acoes, hoje){
   // Cards por colaborador
   const cardsEl = document.getElementById('rt-cards');
   if(cardsEl){
-    cardsEl.innerHTML = COLABS_RT.map(colab=>{
+    cardsEl.innerHTML = COLABS_RT.filter(c=>_equipeVis(c,'rt')).map(colab=>{
       const p = porColab[colab];
       const semMeta = COLABS_SEM_META_RT.includes(colab);
       const meta = META_ANALISTA_RT[colab]||30;
@@ -22399,7 +22419,7 @@ function rtRenderizarMonitoramento(acoes, hoje){
       tbody.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--tx2);padding:1.5rem">Nenhuma ação registrada hoje</td></tr>';
     } else {
       // Agrupar e montar linha por colaborador
-      tbody.innerHTML = COLABS_RT.map(colab => {
+      tbody.innerHTML = COLABS_RT.filter(c=>_equipeVis(c,'rt')).map(colab => {
         const p = porColab[colab];
         if(p.total === 0) return `<tr style="opacity:.45">
           <td style="font-weight:600">${colab}</td>
@@ -22471,7 +22491,7 @@ async function fechCarregarHistorico(){
     COLABS_RT.forEach(c => porColab[c] = null);
     regs.forEach(r => { if(porColab[r.colab]!==undefined) porColab[r.colab] = r; });
 
-    gridEl.innerHTML = COLABS_RT.map(colab => {
+    gridEl.innerHTML = COLABS_RT.filter(c=>_equipeVis(c,'hist')).map(colab => {
       const r = porColab[colab];
       const semMeta = COLABS_SEM_META_RT.includes(colab);
       const meta = META_ANALISTA_RT[colab]||30;
@@ -22530,7 +22550,7 @@ async function fechCarregarHistorico(){
     // Tabela com todos os registros
     if(regs.length){
       tabelaWrap.style.display = 'block';
-      tbody.innerHTML = regs.sort((a,b)=>a.colab>b.colab?1:-1).map(r=>{
+      tbody.innerHTML = regs.filter(r=>_equipeVis(r.colab,'hist')).sort((a,b)=>a.colab>b.colab?1:-1).map(r=>{
         const semMeta = COLABS_SEM_META_RT.includes(r.colab);
         const meta = META_ANALISTA_RT[r.colab]||30;
         const bd = r.breakdown||{};
