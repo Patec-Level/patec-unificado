@@ -853,6 +853,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <div class="stabs" id="adm-tabs">
         <button class="stab active" onclick="setAdmTab('ciclos',this)">🔄 Gestão de Ciclos</button>
         <button class="stab" id="adm-nav-usuarios-btn" onclick="setAdmTab('usuarios',this)">👥 Usuários</button>
+        <button class="stab" id="adm-nav-equipe-btn" onclick="setAdmTab('equipe',this)">🧑‍🤝‍🧑 Equipe (Metas RT)</button>
         <button class="stab" id="adm-nav-online-btn" onclick="setAdmTab('online',this)">🕐 Último Acesso</button>
         <button class="stab" onclick="setAdmTab('rt-producao',this)">📡 Produção Tempo Real</button>
         <button class="stab" onclick="setAdmTab('metas',this)">🎯 Metas e Gap</button>
@@ -1123,6 +1124,14 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             Carregando... <button class="btn btn-s" style="font-size:10px;margin-left:8px" onclick="window._db ? usrCarregarLista() : location.reload()">↺ Atualizar</button>
           </div>
           <div id="usr-lista"></div>
+        </div>
+      </div>
+
+      <!-- ── EQUIPE (METAS RT) ── -->
+      <div id="adm-equipe" class="adm-tab" style="display:none">
+        <div class="cd">
+          <div class="cd-t">🧑‍🤝‍🧑 Equipe — quem aparece em RT, Alertas e Performance Semanal</div>
+          <div id="equipe-editor"></div>
         </div>
       </div>
 
@@ -6204,16 +6213,16 @@ function _semanaAtual(){
 
 function _contarAcoesSemana(colab, dias){
   const cache = window._prodAcoesCache || {};
-  const TIPOS = ['primeira_analise','em_tratativa','status_b','outros'];
+  const TIPOS = ['primeira_analise','em_tratativa','status_b','ag_parecer','outros'];
   const LABEL = { primeira_analise:'1ª Análise', em_tratativa:'Em Tratativa', status_b:'Status B', outros:'Outros', ag_parecer:'Ag Parecer' };
-  const COR   = { primeira_analise:'var(--azm)', em_tratativa:'var(--azm)', status_b:'var(--vd)', outros:'var(--am)' };
+  const COR   = { primeira_analise:'var(--azm)', em_tratativa:'var(--azm)', status_b:'var(--vd)', ag_parecer:'var(--roxo,#7c3aed)', outros:'var(--am)' };
   const porDia = {};
   let totalSem = 0;
-  const comp = { primeira_analise:0, em_tratativa:0, status_b:0, outros:0 };
+  const comp = { primeira_analise:0, em_tratativa:0, status_b:0, ag_parecer:0, outros:0 };
 
   dias.forEach(d => {
     const acoes = (cache[d]||[]).filter(a => !a.anulada && (!colab || a.colab===colab));
-    const tot = acoes.length;
+    const tot = acoes.filter(a => ['primeira_analise','em_tratativa','status_b','ag_parecer'].includes(a.tipo)).length;
     porDia[d] = tot;
     totalSem += tot;
     acoes.forEach(a => { if(comp[a.tipo]!==undefined) comp[a.tipo]++; });
@@ -6521,7 +6530,7 @@ function renderEstPCP(){
   const somaFAnt = (idx) => regsEstAnt.reduce((s,r)=>s+(r.f[idx]||0),0);
 
   // Análise = pf0+pf1+pf2+pf11 (1ªAnalise+Tratativa+StatusB+Outros)
-  const vAnalise   = somaF(0)+somaF(1)+somaF(2)+somaF(11);
+  const vAnalise   = somaF(0)+somaF(1)+somaF(2)+somaF(12);
   const vForn      = somaF(3);
   const vReq       = somaF(4);
   const vMDG       = somaF(5);
@@ -6531,7 +6540,7 @@ function renderEstPCP(){
   const vPedidos   = somaF(9);
   const vDevol     = somaF(10);
 
-  const aAnalise   = dtAnt?somaFAnt(0)+somaFAnt(1)+somaFAnt(2)+somaFAnt(11):null;
+  const aAnalise   = dtAnt?somaFAnt(0)+somaFAnt(1)+somaFAnt(2)+somaFAnt(12):null;
   const aForn      = dtAnt?somaFAnt(3):null;
   const aReq       = dtAnt?somaFAnt(4):null;
   const aMDG       = dtAnt?somaFAnt(5):null;
@@ -6542,7 +6551,7 @@ function renderEstPCP(){
   const aDevol     = dtAnt?somaFAnt(10):null;
 
   const cards=[
-    {label:'Análise',          sub:'1ª Análise + Tratativa + Status B + Outros', val:vAnalise,   ant:aAnalise,   cor:'var(--azm)', bg:'var(--azc)', isMeta:true},
+    {label:'Análise',          sub:'1ª Análise + Tratativa + Status B + Ag Parecer', val:vAnalise,   ant:aAnalise,   cor:'var(--azm)', bg:'var(--azc)', isMeta:true},
     {label:'Fornecedor',       sub:'',  val:vForn,      ant:aForn,      cor:'var(--az)',  bg:'var(--cin)'},
     {label:'Requisitante',     sub:'',  val:vReq,       ant:aReq,       cor:'var(--az)',  bg:'var(--cin)'},
     {label:'MDG',              sub:'',  val:vMDG,       ant:aMDG,       cor:'var(--az)',  bg:'var(--cin)'},
@@ -6562,7 +6571,7 @@ function renderEstPCP(){
   let diasMeta=0, diasAbaixo=0;
   diasUnicos.forEach(d=>{
     const regsD = diasCiclo.filter(r=>r.data===d);
-    const totD  = regsD.reduce((s,r)=>s+(r.f[0]||0)+(r.f[1]||0)+(r.f[2]||0),0);
+    const totD  = regsD.reduce((s,r)=>s+(r.f[0]||0)+(r.f[1]||0)+(r.f[2]||0)+(r.f[12]||0),0);
     if(totD>=META_DIA_EQUIPE) diasMeta++; else diasAbaixo++;
   });
 
@@ -6572,7 +6581,7 @@ function renderEstPCP(){
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
       <div style="flex:1">
         <div style="font-size:10px;font-weight:700;color:var(--tx2);margin-bottom:4px">ANÁLISE DO DIA</div>
-        <div style="font-size:11px;color:var(--tx2);margin-bottom:6px">1ª Análise + Tratativa + Status B + Outros</div>
+        <div style="font-size:11px;color:var(--tx2);margin-bottom:6px">1ª Análise + Tratativa + Status B + Ag Parecer</div>
         <div style="font-size:42px;font-weight:700;color:${metaOk?'var(--vd)':'var(--vm)'};line-height:1">${vAnalise}</div>
         ${varStr(vAnalise,aAnalise)}
       </div>
@@ -6655,7 +6664,7 @@ function distCalc(colab, de, ate){
   const regs=registros.filter(r=>r.colab===colab&&r.data>=de&&r.data<=ate&&r.pres!=='Folga'&&r.pres!=='Férias');
   const soma=i=>regs.reduce((s,r)=>s+(r.f[i]||0),0);
   const dias=[...new Set(regs.map(r=>r.data))].length;
-  const analise=soma(0)+soma(1)+soma(2)+soma(11);
+  const analise=soma(0)+soma(1)+soma(2)+soma(12);
   return{
     dias,
     analise, tratativa:soma(1), pf0:soma(0), pf2:soma(2), pf11:soma(11),
@@ -6971,7 +6980,7 @@ function renderPainelEstrategico(){
   const labels = todosOsDias.map(d => fmtDt(d));
 
   // Montar acumulados usando producao_acoes (botões) como fonte principal
-  // Gráfico Produção: primeira_analise + em_tratativa + status_b + outros
+  // Gráfico Produção: primeira_analise + em_tratativa + status_b + ag_parecer
   // Gráfico Mapa:     primeira_analise + em_tratativa (apenas)
   // Saídas:           f3+f4+f5+f6 do pcpData (Pedidos+Devoluções+Repub+XGL)
   const _cache = window._prodAcoesCache || {};
@@ -6995,7 +7004,7 @@ function renderPainelEstrategico(){
       const acoesDia = cacheDisponivel ? (_cache[dt] || []) : [];
 
       const prod_total = acoesDia.filter(a =>
-        a.tipo==='primeira_analise'||a.tipo==='em_tratativa'||a.tipo==='status_b'||a.tipo==='outros'
+        a.tipo==='primeira_analise'||a.tipo==='em_tratativa'||a.tipo==='status_b'||a.tipo==='ag_parecer'
       ).length;
       const mapa_total = acoesDia.filter(a =>
         a.tipo==='primeira_analise'||a.tipo==='em_tratativa'
@@ -7134,8 +7143,8 @@ const COLABS_SEM_META_ADLV = ['André','Ajuda de outros times'];
 const COLABS_SEM_META_FAST = ['Herina','Aline','Priscila','Ajuda de outros times']; // admins do FAST sem meta individual
 let COLABS_SEM_META = (_moduloAtivo === 'fast') ? COLABS_SEM_META_FAST : COLABS_SEM_META_ADLV;
 
-const COLABS_ADLV = ['André','Lory','Ludy','Wanessa']; // Aline transferida Mai/2026
-const COLABS_FAST = ['Herina','Aline','Priscila','Claudio','Indaia','Camila'];
+let COLABS_ADLV = ['André','Lory','Ludy','Wanessa']; // Aline transferida Mai/2026
+let COLABS_FAST = ['Herina','Aline','Priscila','Claudio','Indaia','Camila'];
 let COLABS = (_moduloAtivo === 'fast') ? COLABS_FAST : COLABS_ADLV;
 
 function _atualizarColabsPorModulo(){
@@ -8165,6 +8174,10 @@ function setAdmTab(id,btn){
     alert('Apenas o administrador geral pode ver o último acesso dos usuários.');
     return;
   }
+  if(id==='equipe' && !_isAdmGeral()){
+    alert('Apenas o administrador geral pode editar a equipe e as metas.');
+    return;
+  }
   // Testar E-mails, Apresentação, Apresentação 1 e Entradas Plano de Ação
   // são exclusivas do ADLV — dependem de listas de destinatários e dados
   // específicos do ADLV que não se aplicam ao FAST.
@@ -8174,6 +8187,7 @@ function setAdmTab(id,btn){
   }
   if(id==='ciclos') setTimeout(()=>{cicloCarregarAtivo().then(initCicloADM);},50);
   if(id==='online') setTimeout(admUltimoAcessoCarregar,50);
+  if(id==='equipe') setTimeout(equipeAbrirEditor,50);
   if(id==='resultado-medicao') setTimeout(renderResultadoMedicao,50);
   if(id==='radar-adm') setTimeout(radarInitADM,50);
   if(id==='pa-entradas') setTimeout(paEntradaInitADM,50);
@@ -9366,7 +9380,7 @@ function pcpCalcDia(dt){
   const regs = registros.filter(r=>r.data===dt&&r.pres!=='Folga'&&r.pres!=='Férias');
   const soma = (idx) => regs.reduce((s,r)=>s+(r.f[idx]||0),0);
 
-  const f1_antigo = soma(0)+soma(1)+soma(2);
+  const f1_antigo = soma(0)+soma(1)+soma(2)+soma(12);
   const f2_antigo = soma(5);
   const f6_antigo = soma(7);
   const f3_antigo = soma(9);
@@ -9384,7 +9398,7 @@ function pcpCalcDia(dt){
   const contAcao = (tipo) => acoes.filter(a=>a.tipo===tipo).length;
   const contComp = (comp) => acoes.filter(a=>a.tratamento===comp||a.conclusao===comp).length;
 
-  const f1_novo = contAcao('primeira_analise') + contAcao('em_tratativa') + contAcao('status_b');
+  const f1_novo = contAcao('primeira_analise') + contAcao('em_tratativa') + contAcao('status_b') + contAcao('ag_parecer');
   const f2_novo = contComp('MDG');
   const f6_novo = contComp('XGL');
   const f3_novo = contComp('Pedido');
@@ -11623,7 +11637,7 @@ function initCicloADM(){
   const meta=ciclo.meta||CICLO_MAIJUN.meta;
   const regsA=registros.filter(r=>r.data>=inicio&&r.pres!=='Folga'&&r.pres!=='Férias');
   const dias=[...new Set(regsA.map(r=>r.data))].length;
-  const total=regsA.reduce((s,r)=>s+(r.f[0]||0)+(r.f[1]||0)+(r.f[2]||0),0);
+  const total=regsA.reduce((s,r)=>s+(r.f[0]||0)+(r.f[1]||0)+(r.f[2]||0)+(r.f[12]||0),0);
   const pct=meta>0?Math.round(total/meta*100):0;
   const med=dias>0?Math.round(total/dias):0;
   el('ciclo-nome-ativo').textContent=ciclo.nome;
@@ -12023,7 +12037,7 @@ function _renderResultadoColab(c){
   regs.forEach(r=>{
     if(!acum[r.colab])acum[r.colab]={tot:0,dias:0,meta:0};
     if(r.pres!=='Folga'&&r.pres!=='Férias'){
-      const t=(r.f[0]||0)+(r.f[1]||0)+(r.f[2]||0);
+      const t=(r.f[0]||0)+(r.f[1]||0)+(r.f[2]||0)+(r.f[12]||0);
       acum[r.colab].tot+=t;acum[r.colab].dias++;
       if(t>=getMeta())acum[r.colab].meta++;
     }
@@ -21210,6 +21224,7 @@ function _entrarNoApp(){
     fbCarregarTudo().then(()=>{
       initMetaGap();
       aaCarregarResultadoFirebase();
+      if(typeof equipeRtCarregar === 'function') equipeRtCarregar().catch(e=>console.warn('equipeRtCarregar (login):', e));
       // Recalcula o painel do dia (renderCardsDia, dentro de renderPainelEstrategico)
       // para refletir o ciclo ativo correto.
       if(typeof cicloCarregarAtivo === 'function'){
@@ -22066,16 +22081,156 @@ async function usrSalvarPerms(uid, nome){
 // PRODUÇÃO EM TEMPO REAL — onSnapshot
 // ══════════════════════════════════════════════════════
 
-const META_ANALISTA_RT_ADLV = { 'Lory':30, 'Ludy':30, 'Wanessa':30 }; // André não tem meta individual
-const META_ANALISTA_RT_FAST = { 'Claudio':30, 'Indaia':30, 'Camila':30 }; // ajustável depois pelo André
+let META_ANALISTA_RT_ADLV = { 'Lory':30, 'Ludy':30, 'Wanessa':30 }; // André não tem meta individual
+let META_ANALISTA_RT_FAST = { 'Claudio':30, 'Indaia':30, 'Camila':30 }; // ajustável depois pelo André
 let META_ANALISTA_RT = (_moduloAtivo === 'fast') ? META_ANALISTA_RT_FAST : META_ANALISTA_RT_ADLV;
 const META_EQUIPE_RT = 90; // meta das 3 analistas/colaboradoras
-const COLABS_RT_ADLV = ['André','Lory','Ludy','Wanessa'];
-const COLABS_RT_FAST = ['Herina','Aline','Priscila','Claudio','Indaia','Camila'];
+let COLABS_RT_ADLV = ['André','Lory','Ludy','Wanessa'];
+let COLABS_RT_FAST = ['Herina','Aline','Priscila','Claudio','Indaia','Camila'];
 let COLABS_RT = (_moduloAtivo === 'fast') ? COLABS_RT_FAST : COLABS_RT_ADLV;
-const COLABS_SEM_META_RT_ADLV = ['André']; // contribui para equipe mas sem meta diária individual
-const COLABS_SEM_META_RT_FAST = ['Herina','Aline','Priscila'];
+let COLABS_SEM_META_RT_ADLV = ['André']; // contribui para equipe mas sem meta diária individual
+let COLABS_SEM_META_RT_FAST = ['Herina','Aline','Priscila'];
 let COLABS_SEM_META_RT = (_moduloAtivo === 'fast') ? COLABS_SEM_META_RT_FAST : COLABS_SEM_META_RT_ADLV;
+
+// ══════════════════════════════════════════════════════
+// EQUIPE EDITÁVEL (RT / Alertas / Performance Semanal)
+// Fonte de verdade: config/equipe_rt no Firebase. Semeado
+// com os valores fixos atuais na primeira carga. Quem estiver
+// aqui aparece sozinho na Produção em Tempo Real, nos Alertas
+// de Performance e na Performance Semanal da Equipe.
+// ══════════════════════════════════════════════════════
+let _equipeRt = {
+  adlv: [
+    { nome:'André',   meta:0,  temMeta:false },
+    { nome:'Lory',    meta:30, temMeta:true },
+    { nome:'Ludy',    meta:30, temMeta:true },
+    { nome:'Wanessa', meta:30, temMeta:true }
+  ],
+  fast: [
+    { nome:'Herina',   meta:0,  temMeta:false },
+    { nome:'Aline',    meta:0,  temMeta:false },
+    { nome:'Priscila', meta:0,  temMeta:false },
+    { nome:'Claudio',  meta:30, temMeta:true },
+    { nome:'Indaia',   meta:30, temMeta:true },
+    { nome:'Camila',   meta:30, temMeta:true }
+  ]
+};
+let _equipeEdit = null; // rascunho do editor (null = reconstruir a partir de _equipeRt)
+
+function equipeAplicarListas(){
+  try{
+    ['adlv','fast'].forEach(function(mod){
+      var lista = (_equipeRt[mod]||[]).filter(function(x){ return x && (x.nome||'').trim(); });
+      var nomes = lista.map(function(x){ return x.nome.trim(); });
+      var meta = {};
+      lista.forEach(function(x){ if(x.temMeta && (+x.meta)>0) meta[x.nome.trim()] = (+x.meta); });
+      var semMeta = lista.filter(function(x){ return !x.temMeta; }).map(function(x){ return x.nome.trim(); });
+      if(mod==='adlv'){
+        COLABS_ADLV = nomes; COLABS_RT_ADLV = nomes;
+        META_ANALISTA_RT_ADLV = meta; COLABS_SEM_META_RT_ADLV = semMeta;
+      } else {
+        COLABS_FAST = nomes; COLABS_RT_FAST = nomes;
+        META_ANALISTA_RT_FAST = meta; COLABS_SEM_META_RT_FAST = semMeta;
+      }
+    });
+    if(typeof _atualizarColabsPorModulo === 'function') _atualizarColabsPorModulo();
+  } catch(e){ console.warn('equipeAplicarListas:', e); }
+}
+
+async function equipeRtCarregar(){
+  try{
+    var saved = await fbGet('config','equipe_rt');
+    if(saved && (Array.isArray(saved.adlv) || Array.isArray(saved.fast))){
+      _equipeRt = {
+        adlv: Array.isArray(saved.adlv) ? saved.adlv : _equipeRt.adlv,
+        fast: Array.isArray(saved.fast) ? saved.fast : _equipeRt.fast
+      };
+    } else {
+      // primeira vez — semear no Firebase com os valores atuais
+      try{ await fbSet('config','equipe_rt', _equipeRt); }catch(e2){}
+    }
+  } catch(e){ console.warn('equipeRtCarregar:', e); }
+  equipeAplicarListas();
+}
+
+function equipeAbrirEditor(){ _equipeEdit = null; equipeRenderEditor(); }
+
+function equipeRenderEditor(){
+  var host = document.getElementById('equipe-editor');
+  if(!host) return;
+  if(!_equipeEdit){
+    _equipeEdit = [];
+    ['adlv','fast'].forEach(function(mod){
+      (_equipeRt[mod]||[]).forEach(function(x){
+        _equipeEdit.push({ nome:x.nome||'', modulo:mod, meta:x.meta||0, temMeta:!!x.temMeta });
+      });
+    });
+  }
+  var rows = _equipeEdit.map(function(x,i){
+    return '<tr>'
+      + '<td style="padding:4px"><input type="text" value="'+String(x.nome||'').replace(/"/g,'&quot;')+'" oninput="_equipeEdit['+i+'].nome=this.value" style="width:100%;padding:5px" placeholder="Ex: Fulano"></td>'
+      + '<td style="padding:4px"><select onchange="_equipeEdit['+i+'].modulo=this.value" style="width:100%;padding:5px">'
+        + '<option value="adlv"'+(x.modulo==='adlv'?' selected':'')+'>ADLV</option>'
+        + '<option value="fast"'+(x.modulo==='fast'?' selected':'')+'>FAST</option>'
+      + '</select></td>'
+      + '<td style="padding:4px;text-align:center"><input type="number" min="0" value="'+(x.meta||0)+'" oninput="_equipeEdit['+i+'].meta=parseInt(this.value)||0" style="width:80px;padding:5px"'+(x.temMeta?'':' disabled')+'></td>'
+      + '<td style="padding:4px;text-align:center"><input type="checkbox"'+(x.temMeta?' checked':'')+' onchange="_equipeEdit['+i+'].temMeta=this.checked;equipeRenderEditor()"></td>'
+      + '<td style="padding:4px;text-align:center"><button class="btn btn-r" style="padding:2px 9px;font-size:12px" onclick="_equipeEdit.splice('+i+',1);equipeRenderEditor()">✕</button></td>'
+    + '</tr>';
+  }).join('');
+  if(!rows) rows = '<tr><td colspan="5" style="text-align:center;color:var(--tx2);padding:1rem">Nenhum colaborador. Clique em "Adicionar colaborador".</td></tr>';
+  host.innerHTML =
+    '<div class="al al-b" style="margin-bottom:.75rem">ℹ Quem estiver nesta lista aparece na <strong>Produção em Tempo Real</strong>, nos <strong>Alertas de Performance</strong> e na <strong>Performance Semanal</strong>. O <em>Nome</em> precisa bater com o colabNome do usuário. Desmarcar <em>Meta individual</em> = contribui pra equipe sem meta diária própria (ex.: liderança).</div>'
+    + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
+    + '<thead><tr style="background:var(--cin)">'
+      + '<th style="text-align:left;padding:8px">Nome (= colabNome)</th>'
+      + '<th style="padding:8px;width:120px">Módulo</th>'
+      + '<th style="padding:8px;width:110px">Meta/dia</th>'
+      + '<th style="padding:8px;width:120px">Meta individual</th>'
+      + '<th style="padding:8px;width:70px"></th>'
+    + '</tr></thead>'
+    + '<tbody>'+rows+'</tbody></table></div>'
+    + '<div style="display:flex;gap:10px;margin-top:1rem;align-items:center;flex-wrap:wrap">'
+      + '<button class="btn btn-s" onclick="equipeAddLinha()">＋ Adicionar colaborador</button>'
+      + '<button class="btn btn-g" onclick="equipeRtSalvar()">✓ Salvar equipe</button>'
+      + '<span id="equipe-ok" style="font-size:11px;color:var(--vd);font-weight:600;display:none">✓ Salvo! Já refletido nas telas.</span>'
+    + '</div>';
+}
+
+function equipeAddLinha(){
+  if(!_equipeEdit) _equipeEdit = [];
+  _equipeEdit.push({ nome:'', modulo:(_moduloAtivo==='fast'?'fast':'adlv'), meta:30, temMeta:true });
+  equipeRenderEditor();
+}
+
+async function equipeRtSalvar(){
+  var limpo = (_equipeEdit||[]).filter(function(x){ return x && (x.nome||'').trim(); });
+  var vistos = {};
+  for(var i=0;i<limpo.length;i++){
+    var k = limpo[i].modulo + '|' + limpo[i].nome.trim().toLowerCase();
+    if(vistos[k]){ alert('Nome repetido no mesmo módulo: ' + limpo[i].nome); return; }
+    vistos[k] = 1;
+  }
+  var novo = { adlv:[], fast:[] };
+  limpo.forEach(function(x){
+    var alvo = (x.modulo==='fast') ? novo.fast : novo.adlv;
+    alvo.push({ nome:x.nome.trim(), meta:(x.temMeta ? (+x.meta||0) : 0), temMeta:!!x.temMeta });
+  });
+  _equipeRt = novo;
+  var ok = false;
+  try{ ok = await fbSet('config','equipe_rt', _equipeRt); }catch(e){ alert('Erro ao salvar: '+e.message); }
+  equipeAplicarListas();
+  _equipeEdit = null;
+  var okEl = document.getElementById('equipe-ok');
+  if(okEl){ okEl.style.display='inline'; setTimeout(function(){ okEl.style.display='none'; }, 3000); }
+  // refletir imediatamente nas telas dependentes
+  try{ if(typeof rtIniciarListener==='function') rtIniciarListener(); }catch(e){}
+  try{ if(typeof renderDistribuicao==='function') renderDistribuicao(); }catch(e){}
+  try{ if(typeof renderAlertasPerf==='function') renderAlertasPerf(); }catch(e){}
+  try{ if(typeof renderPerfSemanal==='function') renderPerfSemanal(); }catch(e){}
+  if(!ok) alert('Salvo localmente, mas houve falha ao gravar no Firebase. Confira a conexão e salve de novo.');
+}
+
 
 function rtIniciarListener(){
   try{
@@ -22127,7 +22282,7 @@ function rtRenderizarMonitoramento(acoes, hoje){
 
   // Agrupar ações por colaborador
   const porColab = {};
-  COLABS_RT.forEach(c => porColab[c] = { primeira_analise:0, em_tratativa:0, status_b:0, outros:0, total:0, ultimaAcao:null, acoes:[] });
+  COLABS_RT.forEach(c => porColab[c] = { primeira_analise:0, em_tratativa:0, status_b:0, ag_parecer:0, outros:0, total:0, ultimaAcao:null, acoes:[] });
 
   acoes.forEach(a => {
     if(!porColab[a.colab]) return;
@@ -22145,14 +22300,14 @@ function rtRenderizarMonitoramento(acoes, hoje){
   const totalEquipe = COLABS_RT.reduce((s,c)=> {
     const p = porColab[c];
     const semMetaC = COLABS_SEM_META_RT.includes(c);
-    return s + (semMetaC ? (p?.total||0) : (p?.primeira_analise||0) + (p?.em_tratativa||0) + (p?.status_b||0));
+    return s + (semMetaC ? (p?.total||0) : (p?.primeira_analise||0) + (p?.em_tratativa||0) + (p?.status_b||0) + (p?.ag_parecer||0));
   }, 0);
   const pctEq = META_EQUIPE_RT>0 ? Math.min(100,Math.round(totalEquipe/META_EQUIPE_RT*100)) : 0;
   const comMeta = COLABS_RT.filter(c=>!COLABS_SEM_META_RT.includes(c));
   const bateramMeta = comMeta.filter(c=>{
     const meta = META_ANALISTA_RT[c]||30;
     const p = porColab[c];
-    return (p.primeira_analise+p.em_tratativa+p.status_b) >= meta;
+    return (p.primeira_analise+p.em_tratativa+p.status_b+p.ag_parecer) >= meta;
   }).length;
   const ativos = COLABS_RT.filter(c=>porColab[c].total>0).length;
   const faltam = Math.max(0, META_EQUIPE_RT - totalEquipe);
@@ -22187,7 +22342,7 @@ function rtRenderizarMonitoramento(acoes, hoje){
       const p = porColab[colab];
       const semMeta = COLABS_SEM_META_RT.includes(colab);
       const meta = META_ANALISTA_RT[colab]||30;
-      const resultado = semMeta ? p.total : (p.primeira_analise + p.em_tratativa + p.status_b);
+      const resultado = semMeta ? p.total : (p.primeira_analise + p.em_tratativa + p.status_b + p.ag_parecer);
       const pctC = Math.min(100, Math.round(resultado/meta*100));
       const cor = semMeta ? (resultado>=meta?'var(--vd)':resultado>=meta*.8?'var(--am)':'var(--azm)') : resultado>=meta?'var(--vd)':resultado>=meta*.8?'var(--am)':resultado>0?'var(--vm)':'var(--brd)';
       const ativo = p.total > 0;
@@ -22259,7 +22414,7 @@ function rtRenderizarMonitoramento(acoes, hoje){
 
         const semMeta = COLABS_SEM_META_RT.includes(colab);
         const meta = META_ANALISTA_RT[colab]||30;
-        const resultado = semMeta ? p.total : (p.primeira_analise + p.em_tratativa + p.status_b);
+        const resultado = semMeta ? p.total : (p.primeira_analise + p.em_tratativa + p.status_b + p.ag_parecer);
         const ok = resultado >= meta;
         const horario = p.ultimaAcao ? new Date(p.ultimaAcao).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
         const cor = ok ? 'var(--vd)' : resultado >= meta*.8 ? 'var(--am)' : 'var(--vm)';
@@ -22365,7 +22520,7 @@ async function fechCarregarHistorico(){
               <div style="font-weight:700;color:var(--vd)">${bd.status_b||0}</div><div style="color:var(--tx2)">Status B</div>
             </div>
             <div style="text-align:center;background:var(--amc);border-radius:5px;padding:3px">
-              <div style="font-weight:700;color:var(--am)">${bd.outros||0}</div><div style="color:var(--tx2)">Outros</div>
+              <div style="font-weight:700;color:#7c3aed">${bd.ag_parecer||0}</div><div style="color:var(--tx2)">Ag Parec.</div>
             </div>
           </div>
           ${r.motivo?`<div style="margin-top:.5rem;font-size:10px;background:var(--amc);color:var(--am);padding:4px 8px;border-radius:5px">⚠ ${r.motivo}${r.detalhe?' — '+r.detalhe:''}</div>`:''}
@@ -23162,7 +23317,7 @@ async function prodCarregarHistorico(colab, dias=7){
     snap.docs.forEach(doc=>{
       const r=doc.data();
       if(r.anulada) return;
-      const contaMeta = semMeta || ['primeira_analise','em_tratativa','status_b'].includes(r.tipo);
+      const contaMeta = semMeta || ['primeira_analise','em_tratativa','status_b','ag_parecer'].includes(r.tipo);
       if(contaMeta && hist[r.data]!==undefined) hist[r.data]++;
     });
     return hist;
@@ -23176,7 +23331,7 @@ function prodContarHoje(acoes){
     if(cnt[r.tipo]!==undefined) cnt[r.tipo]++;
     cnt.total++;
   });
-  cnt.meta = cnt.primeira_analise + cnt.em_tratativa + cnt.status_b;
+  cnt.meta = cnt.primeira_analise + cnt.em_tratativa + cnt.status_b + cnt.ag_parecer;
   return cnt;
 }
 
