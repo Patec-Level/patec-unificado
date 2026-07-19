@@ -13593,7 +13593,7 @@ function setPaAdmTab(id, btn){
   });
   document.querySelectorAll('#adm-pa-entradas .stab').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
-  if(id==='historico') paHistoricoRenderADM();
+  if(id==='historico') paHistoricoCarregarFirebase().then(paHistoricoRenderADM).catch(()=>paHistoricoRenderADM());
 }
 
 function paHistoricoRenderADM(){
@@ -18269,7 +18269,7 @@ async function mapaSalvarComentario(){
 // ════════════════════════════════════════════
 // BACKLOG AUTOMÁTICO — AG. TRATAMENTO DO MAPA
 // ════════════════════════════════════════════
-function paAtualizarBacklogAuto(){
+async function paAtualizarBacklogAuto(){
   if(!_radarDados || !_radarDados.length) return;
 
   // Contar Ag. Tratamento — MESMA lógica de _backlogRealRadar (renderCascata)
@@ -18284,9 +18284,24 @@ function paAtualizarBacklogAuto(){
   const _hAuto = new Date();
   const hoje = _hAuto.getFullYear()+'-'+String(_hAuto.getMonth()+1).padStart(2,'0')+'-'+String(_hAuto.getDate()).padStart(2,'0');
 
-  // Criar marco do dia APENAS no primeiro upload (travado depois, igual _paEntradas).
-  // Isso preserva o valor do dia para comparação no gráfico de cascata, mesmo que
-  // status mudem ao longo do dia.
+  const db = getDB();
+
+  // CORREÇÃO (bug do ciclo bagunçado): antes de gravar, MESCLAR com o que já
+  // está no Firebase. Sem isso, um upload feito sem ter aberto o Plano de Ação
+  // usava um _paHistorico incompleto (só embutidos + hoje) e o .set() APAGAVA
+  // os marcos dos dias intermediários já salvos. Agora nada é perdido.
+  if(db){
+    try{
+      const doc = await db.collection('config').doc('pa_historico').get();
+      const listaFB = (doc.exists && doc.data().lista) ? doc.data().lista : [];
+      const mapa = {};
+      (_paHistorico||[]).forEach(m => { if(m && m.dt) mapa[m.dt] = m; }); // memória/local
+      listaFB.forEach(m => { if(m && m.dt) mapa[m.dt] = m; });            // Firebase prevalece por data
+      _paHistorico = Object.values(mapa);
+    }catch(e){ console.warn('paAtualizarBacklogAuto merge:', e); }
+  }
+
+  // Criar marco do dia APENAS no primeiro upload (travado depois).
   const idxExist = _paHistorico.findIndex(h => h.dt === hoje && h.label && h.label.includes('Auto'));
   if(idxExist >= 0){
     console.log('PA Histórico: marco de hoje ('+hoje+') já registrado em '+_paHistorico[idxExist].val+'. Mantendo (travado).');
@@ -18299,14 +18314,11 @@ function paAtualizarBacklogAuto(){
   _paHistorico.sort((a,b) => a.dt.localeCompare(b.dt));
   localStorage.setItem(_lsMod('patec_pa_historico'), JSON.stringify(_paHistorico));
 
-  // Salvar no Firebase
-  const db = getDB();
   if(db){
     db.collection('config').doc('pa_historico').set({
       lista: _paHistorico, ts: new Date().toISOString()
     }).then(() => {
       console.log('✓ Backlog auto atualizado:', totalAgTrat, 'itens AG. TRATAMENTO em', hoje);
-      // Atualizar gráfico se estiver visível
       if(typeof renderCascata === 'function') renderCascata();
       if(typeof paHistoricoRender === 'function') paHistoricoRender();
     }).catch(e => console.warn('paAtualizarBacklogAuto:', e));
