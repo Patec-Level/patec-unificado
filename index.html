@@ -4653,6 +4653,18 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
 
+        <!-- Folga (autoatendimento) -->
+        <div class="cd" id="fdia-card-folga" style="margin-bottom:1rem;background:var(--amc,#fff8e1);border:1.5px solid var(--am)">
+          <div class="cd-t" style="margin-bottom:.4rem">🌴 Teve folga em algum dia?</div>
+          <div style="font-size:12px;color:var(--tx2);margin-bottom:.75rem">Marque o dia de folga. Ele não conta na sua meta e não fica pendente.</div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <input type="date" id="fdia-folga-data" style="padding:8px;border:1px solid var(--brd);border-radius:8px">
+            <button class="btn btn-p" style="background:var(--am);font-size:13px" onclick="fdiaMarcarFolga()">🌴 Registrar folga</button>
+            <span id="fdia-folga-ok" style="font-size:11px;color:var(--vd);font-weight:600;display:none">✓ Folga registrada!</span>
+          </div>
+          <div id="fdia-folga-erro" style="font-size:11px;color:var(--vm);font-weight:600;display:none;margin-top:8px"></div>
+        </div>
+
         <!-- Modalidade — obrigatória antes de finalizar -->
         <div class="cd" id="fdia-card-pres" style="margin-bottom:1rem">
           <div class="cd-t" style="margin-bottom:.75rem">📍 Onde você trabalhou hoje?</div>
@@ -6013,7 +6025,7 @@ async function _buscarFechamentos5Dias(colabs){
       .where('data','>=',dias[0]).where('data','<=',dias[4]).get();
     snap.forEach(doc => {
       const f = doc.data();
-      if(resultado[f.colab] && f.data) resultado[f.colab][f.data] = f.total || 0;
+      if(resultado[f.colab] && f.data) resultado[f.colab][f.data] = (f.presenca==='Folga'||f.presenca==='Férias') ? 'FOLGA' : (f.total || 0);
     });
   } catch(e){ console.warn('alertas perf:', e); }
   return { resultado, dias };
@@ -6039,13 +6051,13 @@ async function renderAlertasPerf(){
     // Dias sem fechamento (null) são ignorados — não quebram nem contam a sequência
     let consecutivos = 0;
     for(let i=dias.length-1;i>=0;i--){
-      if(vals[i]===null) continue; // sem dado = pula, não interrompe a sequência
+      if(vals[i]===null||vals[i]==='FOLGA') continue; // sem dado/folga = pula, não interrompe a sequência
       if(vals[i] < META) consecutivos++;
       else break;
     }
 
     // Média dos dias com fechamento
-    const comDados = vals.filter(v=>v!==null);
+    const comDados = vals.filter(v=>v!==null && v!=='FOLGA');
     const media = comDados.length ? Math.round(comDados.reduce((a,b)=>a+b,0)/comDados.length) : null;
     const pctMedia = media !== null ? Math.round(media/META*100) : null;
 
@@ -6097,10 +6109,10 @@ async function renderAlertasPerf(){
           <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px">
             ${c.dias.map((d,i) => {
               const v = c.vals[i];
-              const cor2 = v===null?'var(--tx2)':v>=META?'var(--vd)':v>=META*.7?'var(--am)':'var(--vm)';
-              const bg  = v===null?'var(--cin)':v>=META?'rgba(76,175,80,.12)':v>=META*.7?'rgba(192,122,18,.12)':'rgba(217,64,64,.1)';
+              const cor2 = (v===null||v==='FOLGA')?'var(--tx2)':v>=META?'var(--vd)':v>=META*.7?'var(--am)':'var(--vm)';
+              const bg  = v==='FOLGA'?'rgba(192,122,18,.12)':v===null?'var(--cin)':v>=META?'rgba(76,175,80,.12)':v>=META*.7?'rgba(192,122,18,.12)':'rgba(217,64,64,.1)';
               return `<div style="text-align:center;background:${bg};border-radius:5px;padding:3px 2px">
-                <div style="font-size:11px;font-weight:700;color:${cor2}">${v!==null?v:'—'}</div>
+                <div style="font-size:11px;font-weight:700;color:${cor2}">${v==='FOLGA'?'🌴':(v!==null?v:'—')}</div>
                 <div style="font-size:9px;color:var(--tx2)">${fmtD(d)}</div>
               </div>`;
             }).join('')}
@@ -6121,14 +6133,14 @@ async function renderFdiaAlertaIndividual(colab){
 
   let consecutivos = 0;
   for(let i=dias.length-1;i>=0;i--){
-    if(vals[i]===null) continue; // sem dado = pula, não interrompe a sequência
+    if(vals[i]===null||vals[i]==='FOLGA') continue; // sem dado/folga = pula, não interrompe a sequência
     if(vals[i] < META) consecutivos++;
     else break;
   }
 
   if(consecutivos < 1){ el.style.display='none'; return; }
 
-  const comDados = vals.filter(v=>v!==null);
+  const comDados = vals.filter(v=>v!==null && v!=='FOLGA');
   const media = comDados.length ? Math.round(comDados.reduce((a,b)=>a+b,0)/comDados.length) : null;
   const pct = media !== null ? Math.round(media/META*100) : null;
   const fmtD = d => { const [,m,dd]=d.split('-'); return `${dd}/${m}`; };
@@ -6187,10 +6199,10 @@ async function renderFdiaAlertaIndividual(colab){
           <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:.625rem">
             ${dias.map((d,i) => {
               const v = vals[i];
-              const c2 = v===null?'var(--tx2)':v>=META?'var(--vd)':v>=META*.7?'var(--am)':'var(--vm)';
-              const b2 = v===null?'var(--cin)':v>=META?'rgba(76,175,80,.12)':v>=META*.7?'rgba(192,122,18,.12)':'rgba(217,64,64,.1)';
+              const c2 = (v===null||v==='FOLGA')?'var(--tx2)':v>=META?'var(--vd)':v>=META*.7?'var(--am)':'var(--vm)';
+              const b2 = v==='FOLGA'?'rgba(192,122,18,.12)':v===null?'var(--cin)':v>=META?'rgba(76,175,80,.12)':v>=META*.7?'rgba(192,122,18,.12)':'rgba(217,64,64,.1)';
               return `<div style="text-align:center;background:${b2};border-radius:5px;padding:3px 2px">
-                <div style="font-size:12px;font-weight:700;color:${c2}">${v!==null?v:'—'}</div>
+                <div style="font-size:12px;font-weight:700;color:${c2}">${v==='FOLGA'?'🌴':(v!==null?v:'—')}</div>
                 <div style="font-size:9px;color:var(--tx2)">${fmtD(d)}</div>
               </div>`;
             }).join('')}
@@ -6228,6 +6240,21 @@ function _contarAcoesSemana(colab, dias){
     acoes.forEach(a => { if(comp[a.tipo]!==undefined) comp[a.tipo]++; });
   });
 
+  // Fim de semana (sáb/dom após a sexta): produção conta no total, sem coluna própria
+  try{
+    const _ult = dias[dias.length-1];
+    if(_ult){
+      const _base = new Date(_ult+'T12:00:00');
+      for(let _k=1;_k<=2;_k++){
+        const _w = new Date(_base); _w.setDate(_w.getDate()+_k);
+        const _iso = _w.getFullYear()+'-'+String(_w.getMonth()+1).padStart(2,'0')+'-'+String(_w.getDate()).padStart(2,'0');
+        const _ac = (cache[_iso]||[]).filter(a => !a.anulada && (!colab || a.colab===colab));
+        totalSem += _ac.filter(a => ['primeira_analise','em_tratativa','status_b','ag_parecer'].includes(a.tipo)).length;
+        _ac.forEach(a => { if(comp[a.tipo]!==undefined) comp[a.tipo]++; });
+      }
+    }
+  }catch(e){}
+
   return { porDia, totalSem, comp, LABEL, COR };
 }
 
@@ -6250,9 +6277,10 @@ function renderPerfSemanal(){
   // Calcular dados por analista
   const dados = COLABS_ANALISTAS.map(c => {
     const { porDia, totalSem, comp, LABEL, COR } = _contarAcoesSemana(c, dias);
-    const metaSem = META_DIA * dias.length;
-    const pct = Math.round(totalSem/metaSem*100);
-    return { colab:c, porDia, totalSem, metaSem, pct, comp, LABEL, COR };
+    const folgaSet = _diasFolga(c, dias);
+    const metaSem = META_DIA * ((dias.filter(d=>_fdiaEhDiaUtil(d) && !folgaSet.has(d)).length) || 1);
+    const pct = metaSem>0 ? Math.round(totalSem/metaSem*100) : 0;
+    return { colab:c, porDia, totalSem, metaSem, pct, comp, LABEL, COR, folgaSet };
   }).sort((a,b) => b.totalSem - a.totalSem);
 
   // Cor da célula por dia
@@ -6296,14 +6324,14 @@ function renderPerfSemanal(){
           ${dados.map(d=>`
             <tr>
               <td style="font-weight:600">${d.colab}</td>
-              ${dias.map(dia=>`<td style="text-align:center;font-size:13px;${corCelula(d.porDia[dia]||0)}">${d.porDia[dia]||0}</td>`).join('')}
+              ${dias.map(dia=>`<td style="text-align:center;font-size:13px;${(d.folgaSet&&d.folgaSet.has(dia))?'color:var(--am);font-weight:700':corCelula(d.porDia[dia]||0)}">${(d.folgaSet&&d.folgaSet.has(dia))?'🌴':(d.porDia[dia]||0)}</td>`).join('')}
               <td style="text-align:center;font-weight:700;font-size:14px;color:${d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)'}">${d.totalSem}</td>
               <td style="text-align:center;color:var(--tx2)">${d.metaSem}</td>
               <td style="text-align:center;font-weight:700;color:${d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)'}">${d.pct}%</td>
             </tr>`).join('')}
           <tr style="background:var(--cin);border-top:2px solid var(--brd)">
             <td style="font-weight:700;color:var(--tx2)">Meta/dia</td>
-            ${dias.map(()=>`<td style="text-align:center;color:var(--tx2);font-size:11px">${META_DIA}</td>`).join('')}
+            ${dias.map(d=>`<td style="text-align:center;color:var(--tx2);font-size:11px">${_fdiaEhDiaUtil(d)?META_DIA:'—'}</td>`).join('')}
             <td></td><td></td><td></td>
           </tr>
         </tbody>
@@ -6337,8 +6365,9 @@ function renderFdiaSemana(colab){
   const META_DIA = 30;
 
   const { porDia, totalSem, comp, LABEL, COR } = _contarAcoesSemana(colab, dias);
-  const metaSem = META_DIA * dias.length;
-  const pct = Math.round(totalSem/metaSem*100);
+  const _folgaSetInd = _diasFolga(colab, dias);
+  const metaSem = META_DIA * ((dias.filter(d=>_fdiaEhDiaUtil(d) && !_folgaSetInd.has(d)).length) || 1);
+  const pct = metaSem>0 ? Math.round(totalSem/metaSem*100) : 0;
   const hoje = new Date().toISOString().split('T')[0];
 
   if(lbl) lbl.textContent = `${fmtD(dias[0])} a ${fmtD(dias[4])}`;
@@ -6853,7 +6882,24 @@ function renderPainelEstrategico(){
 
   // Analisado = f1 (PATEC Fin/Parada = 1ª Análise + Tratativa + StatusB)
   // Saída = f3+f4+f5+f6 (Pedidos+Devol+Repub+XGL)
-  const totalAnalis = diasComProd.reduce((s,r)=>s+(r.f1||0),0);
+  const _prodFDSPeriodo = () => {
+    let tot=0;
+    try{
+      const cch = window._prodAcoesCache || {};
+      Object.keys(cch).forEach(function(d){
+        if(d < dtDe || d > dtAte || d > hoje) return;
+        if(_fdiaEhDiaUtil(d)) return;               // só fim de semana/feriado
+        if(diasComProd.find(r=>r.data===d)) return; // já contado no pcpData → não duplicar
+        (cch[d]||[]).forEach(function(a){
+          if(a.anulada) return;
+          if(a.tipo==='primeira_analise'||a.tipo==='em_tratativa'||a.tipo==='status_b'||a.tipo==='ag_parecer') tot++;
+        });
+      });
+    }catch(e){}
+    return tot;
+  };
+  const prodFDS = _prodFDSPeriodo();
+  const totalAnalis = diasComProd.reduce((s,r)=>s+(r.f1||0),0) + prodFDS;
   const totalPed = diasComProd.reduce((s,r)=>s+(r.f3||0),0);
   const totalDev = diasComProd.reduce((s,r)=>s+(r.f4||0),0);
   const totalRep = diasComProd.reduce((s,r)=>s+(r.f5||0),0);
@@ -6874,7 +6920,8 @@ function renderPainelEstrategico(){
   const totalMapaAn = totalAnalis;
 
   // ── Cards de análise ──
-  const progAcumTotal = nDias * META_EQUIPE;
+  const nDiasUteis = dias.filter(d=>_fdiaEhDiaUtil(d)).length;
+  const progAcumTotal = nDiasUteis * META_EQUIPE;
   const gap = totalAnalis - progAcumTotal;
   const gapStr = (gap>=0?'+':'')+gap.toLocaleString('pt-BR');
   const gapCor = gap>=0?'var(--vd)':'var(--vm)';
@@ -6990,10 +7037,29 @@ function renderPainelEstrategico(){
   let acumProg = 0;
 
   todosOsDias.forEach((dt, i) => {
-    acumProg += META_EQUIPE;
+    if(_fdiaEhDiaUtil(dt)) acumProg += META_EQUIPE;
     progAcum.push(acumProg);
 
     if(dt <= hoje){
+      // Fim de semana desde o último dia útil → produção embutida neste ponto
+      if(i>0){
+        let _cur = new Date(todosOsDias[i-1]+'T12:00:00'); _cur.setDate(_cur.getDate()+1);
+        const _fimW = new Date(dt+'T12:00:00');
+        while(_cur < _fimW){
+          const _iso = _cur.getFullYear()+'-'+String(_cur.getMonth()+1).padStart(2,'0')+'-'+String(_cur.getDate()).padStart(2,'0');
+          if(_iso <= hoje && !_fdiaEhDiaUtil(_iso)){
+            const _rW = diasComProd.find(r=>r.data===_iso);
+            const _cW = renderPainelEstrategico._cacheCarregado && _cache[_iso] !== undefined;
+            const _aW = _cW ? (_cache[_iso]||[]) : [];
+            const _pW = _aW.filter(a=>!a.anulada&&(a.tipo==='primeira_analise'||a.tipo==='em_tratativa'||a.tipo==='status_b'||a.tipo==='ag_parecer')).length;
+            const _mW = _aW.filter(a=>!a.anulada&&(a.tipo==='primeira_analise'||a.tipo==='em_tratativa')).length;
+            const _fbW = _rW ? (_rW.f1||0) : 0;
+            acumReal += (_cW && _pW>0) ? _pW : _fbW;
+            acumMapa += (_cW && _mW>0) ? _mW : _fbW;
+          }
+          _cur.setDate(_cur.getDate()+1);
+        }
+      }
       const reg = diasComProd.find(r => r.data === dt);
       const saidas = reg ? (reg.f3||0)+(reg.f4||0)+(reg.f5||0)+(reg.f6||0) : 0;
 
@@ -21246,11 +21312,35 @@ function _entrarNoApp(){
 
   const colab = _authPerfil?.colabNome || colabLogado;
   if(colab){
-    colabLogado = colab;
-    window.colabLogado = colab;
-    prodCarregarHoje(colab).then(()=>prodRenderizarPaineis(colab)).catch(()=>{});
-    fdiaVerificarDiasEmAberto(colab).catch(()=>{}); // pré-carrega o gate de lançamento
+    _fdiaLoginTravaCheck(colab);
+  } else {
+    // Login automático: o perfil (colabNome) pode ainda estar carregando do
+    // Firestore em segundo plano. Espera ele chegar e então aplica a trava,
+    // pra a mensagem aparecer mesmo com sessão já salva.
+    let _tentTrava = 0;
+    const _ivTrava = setInterval(function(){
+      const c = (_authPerfil && _authPerfil.colabNome) ? _authPerfil.colabNome : colabLogado;
+      if(c){ clearInterval(_ivTrava); _fdiaLoginTravaCheck(c); }
+      else if(++_tentTrava >= 20){ clearInterval(_ivTrava); } // ~10s e desiste
+    }, 500);
   }
+}
+
+// Aplica a verificação de dias em aberto + trava para o colaborador logado.
+// Extraído para poder ser chamado tanto na entrada quanto após o perfil
+// carregar (login automático).
+function _fdiaLoginTravaCheck(colab){
+  if(!colab) return;
+  colabLogado = colab;
+  window.colabLogado = colab;
+  prodCarregarHoje(colab).then(()=>prodRenderizarPaineis(colab)).catch(()=>{});
+  fdiaVerificarDiasEmAberto(colab).then(function(abertos){
+    // trava forte no login: só vale p/ quem tem meta individual (líder fica livre)
+    if(Array.isArray(abertos) && abertos.length && (typeof COLABS_SEM_META_RT==='undefined' || !COLABS_SEM_META_RT.includes(colab))){
+      if(typeof prodFecharModal==='function') prodFecharModal();
+      fdiaAbrirModalPendencia(colab, abertos);
+    }
+  }).catch(()=>{}); // pré-carrega + aplica o gate de lançamento
 }
 let _prodChartGov = null;
 let _prodChartPc  = null;
@@ -23469,6 +23559,58 @@ async function prodInicializarPainel(){
 // ══════════════════════════════════════════════════════
 
 let _fdiaMotivo = '';
+// Dias de folga/férias do colaborador na semana (do histórico de fechamentos)
+function _diasFolga(colab, dias){
+  const set = new Set();
+  try{
+    (typeof registros!=='undefined'?registros:[]).forEach(function(r){
+      if(r && r.colab===colab && (r.pres==='Folga'||r.pres==='Férias') && dias.indexOf(r.data)!==-1) set.add(r.data);
+    });
+  }catch(e){}
+  return set;
+}
+
+// Autoatendimento: o colaborador marca um dia como folga (não conta na meta, não fica pendente)
+async function fdiaMarcarFolga(){
+  const colab = (_authPerfil && _authPerfil.colabNome) ? _authPerfil.colabNome : (typeof colabLogado!=='undefined'?colabLogado:'');
+  const erroEl = document.getElementById('fdia-folga-erro');
+  const okEl   = document.getElementById('fdia-folga-ok');
+  const _erro = function(m){ if(erroEl){ erroEl.textContent=m; erroEl.style.display='block'; } };
+  if(erroEl) erroEl.style.display='none';
+  const data = (document.getElementById('fdia-folga-data')||{}).value || '';
+  if(!colab){ _erro('Não identifiquei o colaborador logado.'); return; }
+  if(!data){ _erro('Escolha a data da folga.'); return; }
+  const hoje = _fdiaHojeLocal();
+  if(data > hoje){ _erro('Não dá para marcar folga em uma data futura.'); return; }
+  const inicio = (typeof _cicloAtivo!=='undefined' && _cicloAtivo && _cicloAtivo.inicio) ? _cicloAtivo.inicio
+               : (typeof CICLO_NOVO_INICIO!=='undefined' ? CICLO_NOVO_INICIO : '2026-06-26');
+  if(data < inicio){ _erro('Essa data é anterior ao ciclo atual.'); return; }
+  if(typeof _fdiaEhDiaUtil==='function' && !_fdiaEhDiaUtil(data)){ _erro('Esse dia já é fim de semana/feriado — não precisa marcar folga.'); return; }
+  try{
+    const db = getDB(); if(!db){ _erro('Sem conexão com o banco.'); return; }
+    const snap = await db.collection('fechamento_dia').where('colab','==',colab).where('data','==',data).get();
+    if(snap && !snap.empty){ _erro('Esse dia já foi fechado/registrado.'); return; }
+    const metaVal = (typeof META_ANALISTA_RT!=='undefined' && META_ANALISTA_RT[colab]) ? META_ANALISTA_RT[colab] : 30;
+    const regFecha = {
+      colab, data, total:0, meta:metaVal, pct:0,
+      presenca:'Folga', metaAtingida:true, motivo:'', detalhe:'', ts:new Date().toISOString(),
+      breakdown:{ primeira_analise:0, em_tratativa:0, status_b:0, ag_parecer:0, outros:0 },
+      composicao:{}
+    };
+    const regProd = { colab, data, pres:'Folga', f:[0,0,0,0,0,0,0,0,0,0,0,0,0,0], justif:'' };
+    await db.collection('fechamento_dia').add(regFecha);
+    await db.collection('producoes').add(regProd);
+    // memória + limpa eventual pendência
+    if(typeof registros!=='undefined'){
+      const idx = registros.findIndex(function(r){ return r.colab===colab && r.data===data; });
+      if(idx>=0) registros[idx]=regProd; else registros.push(regProd);
+    }
+    if(Array.isArray(window._fdiaDiasAbertos)) window._fdiaDiasAbertos = window._fdiaDiasAbertos.filter(function(d){ return d!==data; });
+    if(okEl){ okEl.style.display='inline'; setTimeout(function(){ okEl.style.display='none'; }, 3000); }
+    const inp = document.getElementById('fdia-folga-data'); if(inp) inp.value='';
+  }catch(e){ _erro('Erro ao registrar: '+e.message); }
+}
+
 let _fdiaPresenca = '';
 
 function fdiaSelecionarPres(valor, btn){
@@ -23517,6 +23659,15 @@ function _fdiaFmtLabelLongo(dataISO){
 
 // Detecta dias (dentro do ciclo ativo) com produção lançada mas SEM fechamento registrado.
 // Guarda o resultado em window._fdiaDiasAbertos; o gate de lançamento lê esse cache.
+// Dia útil = seg-sex E não-feriado (usa GOV_FERIADOS). Data construída local (evita bug de fuso).
+function _fdiaEhDiaUtil(iso){
+  try{
+    var pt = String(iso).split('-');
+    var dow = new Date(+pt[0], (+pt[1])-1, +pt[2]).getDay();
+    return dow !== 0 && dow !== 6 && (typeof GOV_FERIADOS === 'undefined' || !GOV_FERIADOS.includes(iso));
+  }catch(e){ return true; }
+}
+
 async function fdiaVerificarDiasEmAberto(colab){
   const hoje = _fdiaHojeLocal();
   try{
@@ -23532,7 +23683,7 @@ async function fdiaVerificarDiasEmAberto(colab){
     snapAcoes.forEach(doc=>{ const a=doc.data(); if(a.anulada) return; if(a.data && a.data < hoje) diasComProd.add(a.data); });
     const diasFechados = new Set();
     snapFecha.forEach(doc=>{ const f=doc.data(); if(f.data) diasFechados.add(f.data); });
-    const abertos = [...diasComProd].filter(d => !diasFechados.has(d)).sort();
+    const abertos = [...diasComProd].filter(d => !diasFechados.has(d) && _fdiaEhDiaUtil(d)).sort();
     window._fdiaDiasAbertos = abertos;
     window._fdiaAbertoDia   = hoje;
     if(abertos.length) console.warn('[Fechamento] Dias em aberto de '+colab+':', abertos);
@@ -23573,11 +23724,24 @@ function fdiaBloqueiaLancamento(colab){
 }
 
 // Modal de pendência — obriga fechar o dia anterior antes de liberar o lançamento
+// Trava forte ativa? (colab com meta individual E com dia(s) em aberto)
+function _fdiaTravaAtiva(){
+  try{
+    var c = (typeof _authPerfil!=='undefined' && _authPerfil && _authPerfil.colabNome) ? _authPerfil.colabNome
+          : (typeof colabLogado!=='undefined' ? colabLogado : '');
+    if(!c) return false;
+    if((typeof COLABS_SEM_META_RT !== 'undefined') && COLABS_SEM_META_RT.includes(c)) return false; // líder/sem meta fica livre
+    return Array.isArray(window._fdiaDiasAbertos) && window._fdiaDiasAbertos.length > 0;
+  }catch(e){ return false; }
+}
+
 function fdiaAbrirModalPendencia(colab, abertos){
   abertos = abertos || window._fdiaDiasAbertos || [];
   if(!abertos.length) return;
   const alvo = abertos[0]; // mais antigo primeiro
   const restantes = abertos.length - 1;
+  // hard = colab tem meta individual → trava total (sem escapar)
+  const hard = !((typeof COLABS_SEM_META_RT !== 'undefined') && COLABS_SEM_META_RT.includes(colab));
   let modal = document.getElementById('fdia-pendencia-modal');
   if(!modal){
     modal = document.createElement('div');
@@ -23596,9 +23760,9 @@ function fdiaAbrirModalPendencia(colab, abertos){
       extra+
       '<div style="display:flex;gap:8px;margin-top:1.5rem;justify-content:center;flex-wrap:wrap">'+
         '<button class="btn btn-p" style="background:var(--vd);font-size:13px;padding:9px 20px" onclick="fdiaFecharDiaRetroativo(\''+alvo+'\')">🔒 Fechar o dia '+_fdiaFmtBR(alvo)+' agora</button>'+
-        '<button class="btn btn-s" style="font-size:13px" onclick="fdiaFecharModalPendencia()">Agora não</button>'+
+        (hard ? '' : '<button class="btn btn-s" style="font-size:13px" onclick="fdiaFecharModalPendencia()">Agora não</button>')+
       '</div>'+
-      '<div style="font-size:10px;color:var(--tx2);margin-top:12px">Enquanto o dia anterior não for fechado, o lançamento de produção fica bloqueado.</div>'+
+      '<div style="font-size:10px;color:var(--tx2);margin-top:12px">'+(hard ? 'Você só poderá usar o sistema depois de fechar os dias em aberto.' : 'Enquanto o dia anterior não for fechado, o lançamento de produção fica bloqueado.')+'</div>'+
     '</div>';
   modal.style.display = 'flex';
 }
@@ -24142,6 +24306,12 @@ async function fdiaSalvar(){
 const _goOrig = typeof go === 'function' ? go : null;
 if(_goOrig){
   window.go = function(id, el){
+    // TRAVA: dia anterior em aberto → só permite a tela de Fechamento do Dia
+    if(id !== 'fechamento-dia' && typeof _fdiaTravaAtiva==='function' && _fdiaTravaAtiva()){
+      if(typeof prodFecharModal==='function') prodFecharModal();
+      fdiaAbrirModalPendencia((typeof _authPerfil!=='undefined'&&_authPerfil&&_authPerfil.colabNome)||colabLogado, window._fdiaDiasAbertos);
+      return;
+    }
     _goOrig(id, el);
     if(id === 'governanca' || id === 'planilha-critica') setTimeout(prodInicializarPainel, 500);
     if(id === 'fechamento-dia'){
