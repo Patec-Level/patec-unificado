@@ -18304,7 +18304,10 @@ async function paAtualizarBacklogAuto(){
   // Criar marco do dia APENAS no primeiro upload (travado depois).
   const idxExist = _paHistorico.findIndex(h => h.dt === hoje && h.label && h.label.includes('Auto'));
   if(idxExist >= 0){
-    console.log('PA Histórico: marco de hoje ('+hoje+') já registrado em '+_paHistorico[idxExist].val+'. Mantendo (travado).');
+    // Marco do dia é gravado UMA VEZ por dia (no 1º upload) e fica fixo.
+    // O valor vem do MESMO Ag. Tratamento do Radar, então bate com o card.
+    // Se precisar corrigir, dá pra editar na aba ADM.
+    console.log('PA Histórico: marco de hoje ('+hoje+') já registrado em '+_paHistorico[idxExist].val+' — mantido (1x por dia).');
   } else {
     _paHistorico.push({ dt: hoje, val: totalAgTrat, label: 'Backlog Auto — AG. Tratamento' });
     console.log('✓ PA Histórico: novo marco do dia '+hoje+' = '+totalAgTrat+' (Ag. Tratamento)');
