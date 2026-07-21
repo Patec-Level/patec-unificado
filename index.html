@@ -6526,10 +6526,20 @@ function renderEstPCP(){
   const lbl=document.getElementById('est-pcp-label');
   if(lbl) lbl.textContent=fmtDt(dt);
 
-  const reg=pcpData.find(r=>r.data===dt);
+  let reg=pcpData.find(r=>r.data===dt);
   const emptyEl=document.getElementById('est-pcp-empty');
   const cardsEl=document.getElementById('est-pcp-cards');
   const totalEl=document.getElementById('est-pcp-total');
+
+  // Fallback: se o dia não está no pcpData mas há produção real (registros/ações),
+  // calcula na hora. pcpCalcDia também dispara a carga das ações do dia (async),
+  // e pcpCarregarAcoesDia re-renderiza esta tela ao concluir.
+  if(!reg && typeof pcpCalcDia==='function'){
+    const calc=pcpCalcDia(dt);
+    if(calc && ((calc.f1||0)+(calc.f2||0)+(calc.f3||0)+(calc.f4||0)+(calc.f5||0)+(calc.f6||0))>0){
+      reg={data:dt, f1:calc.f1, f2:calc.f2, f6:calc.f6, f3:calc.f3, f4:calc.f4, f5:calc.f5};
+    }
+  }
 
   if(!reg){
     if(emptyEl)emptyEl.style.display='block';
@@ -9502,6 +9512,7 @@ async function pcpCarregarAcoesDia(dt){
     // Re-renderizar Painel Estratégico se estiver aberto
     if(document.getElementById('p-pr-estrategico')?.classList.contains('active')){
       try{ renderPainelEstrategico(); } catch(e){}
+      try{ if(typeof renderEstPCP==='function') renderEstPCP(); } catch(e){}
     }
     // Re-renderizar análise PCP se estiver aberta
     if(document.getElementById('adm-pcp-adm')?.style.display !== 'none'){
