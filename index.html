@@ -5156,9 +5156,9 @@ async function fbCarregarTudo(){
   // Prioridade: fechamento_dia > producoes > producao (mais recente prevalece)
   try{
     const [snapAntiga, snapNova, snapFecha] = await Promise.all([
-      db.collection('producao').where('data','>=', '2026-05-26').get(),
-      db.collection('producoes').where('data','>=', '2026-05-26').get(),
-      db.collection('fechamento_dia').where('data','>=', '2026-05-26').get().catch(()=>({docs:[]}))
+      db.collection('producao').where('data','>=', '2026-05-26').get().catch(e=>{ console.warn('query producao falhou:', e.code||e.message||e); return {docs:[], size:0}; }),
+      db.collection('producoes').where('data','>=', '2026-05-26').get().catch(e=>{ console.warn('query producoes falhou:', e.code||e.message||e); return {docs:[], size:0}; }),
+      db.collection('fechamento_dia').where('data','>=', '2026-05-26').get().catch(e=>{ console.warn('query fechamento_dia falhou:', e.code||e.message||e); return {docs:[], size:0}; })
     ]);
     const map = {};
     // Primeiro carrega os antigos
