@@ -6526,22 +6526,22 @@ function renderEstPCP(){
   const lbl=document.getElementById('est-pcp-label');
   if(lbl) lbl.textContent=fmtDt(dt);
 
-  let reg=pcpData.find(r=>r.data===dt);
+  const reg=pcpData.find(r=>r.data===dt);
   const emptyEl=document.getElementById('est-pcp-empty');
   const cardsEl=document.getElementById('est-pcp-cards');
   const totalEl=document.getElementById('est-pcp-total');
 
-  // Fallback: se o dia não está no pcpData mas há produção real (registros/ações),
-  // calcula na hora. pcpCalcDia também dispara a carga das ações do dia (async),
-  // e pcpCarregarAcoesDia re-renderiza esta tela ao concluir.
-  if(!reg && typeof pcpCalcDia==='function'){
-    const calc=pcpCalcDia(dt);
-    if(calc && ((calc.f1||0)+(calc.f2||0)+(calc.f3||0)+(calc.f4||0)+(calc.f5||0)+(calc.f6||0))>0){
-      reg={data:dt, f1:calc.f1, f2:calc.f2, f6:calc.f6, f3:calc.f3, f4:calc.f4, f5:calc.f5};
-    }
+  // Garante que as ações do dia estejam carregadas (fonte real da produção,
+  // usada quando o dia não tem fechamento em registros). pcpCarregarAcoesDia
+  // re-renderiza esta tela ao concluir a carga async.
+  if(window._prodAcoesCache && window._prodAcoesCache[dt]===undefined && typeof pcpCarregarAcoesDia==='function'){
+    pcpCarregarAcoesDia(dt);
   }
+  const _acoesDia = (window._prodAcoesCache && Array.isArray(window._prodAcoesCache[dt])) ? window._prodAcoesCache[dt] : [];
+  const _temReg = registros.some(r=>r.data===dt&&r.pres!=='Folga'&&r.pres!=='Férias');
 
-  if(!reg){
+  // Vazio só se NÃO há fechamento (registros) NEM ações pro dia
+  if(!reg && !_temReg && _acoesDia.length===0){
     if(emptyEl)emptyEl.style.display='block';
     if(cardsEl)cardsEl.innerHTML='';
     if(totalEl)totalEl.style.display='none';
@@ -6563,7 +6563,20 @@ function renderEstPCP(){
   };
 
   // Buscar dados individuais por colaborador para o dia (do array registros)
-  const regsEstDia = registros.filter(r=>r.data===dt&&r.pres!=='Folga'&&r.pres!=='Férias');
+  let regsEstDia = registros.filter(r=>r.data===dt&&r.pres!=='Folga'&&r.pres!=='Férias');
+  // Dia sem fechamento em registros, mas com ações: monta um registro sintético
+  // a partir das ações reais pra Análise PCP mostrar a produção do dia.
+  if(regsEstDia.length===0 && _acoesDia.length){
+    const cnt=(pred)=>_acoesDia.filter(a=>!a.anulada&&pred(a)).length;
+    const comp=(nome)=>_acoesDia.filter(a=>!a.anulada&&(a.tratamento===nome||a.conclusao===nome)).length;
+    const _f=Array(13).fill(0);
+    _f[0]=cnt(a=>a.tipo==='primeira_analise'); _f[1]=cnt(a=>a.tipo==='em_tratativa');
+    _f[2]=cnt(a=>a.tipo==='status_b'); _f[12]=cnt(a=>a.tipo==='ag_parecer'); _f[11]=cnt(a=>a.tipo==='outros');
+    _f[3]=comp('Fornecedor'); _f[4]=comp('Requisitante'); _f[5]=comp('MDG');
+    _f[6]=comp('Val. Thiago')+comp('Thiago'); _f[7]=comp('XGL');
+    _f[8]=comp('Republicação'); _f[9]=comp('Pedido'); _f[10]=comp('Devolução');
+    regsEstDia = [{colab:'(ações)', data:dt, pres:'', f:_f}];
+  }
   const somaF = (idx) => regsEstDia.reduce((s,r)=>s+(r.f[idx]||0),0);
   const regsEstAnt = dtAnt?registros.filter(r=>r.data===dtAnt&&r.pres!=='Folga'&&r.pres!=='Férias'):[];
   const somaFAnt = (idx) => regsEstAnt.reduce((s,r)=>s+(r.f[idx]||0),0);
@@ -9506,7 +9519,11 @@ async function pcpCarregarAcoesDia(dt){
     const db = getDB(); if(!db) return;
     const snap = await db.collection('producao_acoes').where('data','==',dt).get();
     if(!window._prodAcoesCache) window._prodAcoesCache = {};
-    window._prodAcoesCache[dt] = snap.docs.map(d=>d.data());
+    const _novasAc = snap.docs.map(d=>d.data());
+    // não zera o cache do dia se a query vier vazia (evita apagar ações já carregadas por falha)
+    if(_novasAc.length || !Array.isArray(window._prodAcoesCache[dt]) || !window._prodAcoesCache[dt].length){
+      window._prodAcoesCache[dt] = _novasAc;
+    }
     // Recalcular PCP do dia
     pcpAtualizarRegistroDia(dt);
     // Re-renderizar Painel Estratégico se estiver aberto
@@ -21797,10 +21814,15 @@ async function _carregarCacheProducaoEAtualizarPCP(){
   try{
     const db = getDB(); if(!db) return;
     const hoje = new Date().toISOString().split('T')[0];
-    const h7 = new Date(); h7.setDate(h7.getDate()-7);
-    const de7 = h7.toISOString().split('T')[0];
+    // Carrega as ações desde o INÍCIO DO CICLO (não só 7 dias) — assim a Análise
+    // PCP consegue mostrar a produção de qualquer dia do ciclo, inclusive dias
+    // que não foram fechados. Antes eram só 7 dias e o dia na borda (ex.: 14/07)
+    // caía fora por causa do fuso (toISOString em UTC).
+    const _iniCiclo = (typeof _cicloAtivo!=='undefined' && _cicloAtivo && _cicloAtivo.inicio) ? _cicloAtivo.inicio
+                    : (typeof CICLO_NOVO_INICIO!=='undefined' ? CICLO_NOVO_INICIO
+                       : (function(){ const h=new Date(); h.setDate(h.getDate()-40); return h.toISOString().split('T')[0]; })());
     const snap = await db.collection('producao_acoes')
-      .where('data','>=',de7).get();
+      .where('data','>=',_iniCiclo).get();
     window._prodAcoesCache = {};
     snap.docs.forEach(d=>{
       const a = d.data();
