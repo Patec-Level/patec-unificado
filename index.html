@@ -23690,14 +23690,17 @@ async function fdiaVerificarDiasEmAberto(colab){
     const db = getDB(); if(!db){ window._fdiaDiasAbertos = []; window._fdiaAbertoDia = hoje; return []; }
     const inicio = (typeof _cicloAtivo !== 'undefined' && _cicloAtivo && _cicloAtivo.inicio) ? _cicloAtivo.inicio
                  : (typeof CICLO_NOVO_INICIO !== 'undefined' ? CICLO_NOVO_INICIO : '2026-06-26');
+    // Filtra só por colab no Firebase (índice automático) e aplica a data no
+    // cliente — assim NÃO precisa de índice composto (colab+data) no Firestore,
+    // que era o erro "The query requires an index" que quebrava a trava.
     const [snapAcoes, snapFecha] = await Promise.all([
-      db.collection('producao_acoes').where('colab','==',colab).where('data','>=',inicio).get(),
-      db.collection('fechamento_dia').where('colab','==',colab).where('data','>=',inicio).get()
+      db.collection('producao_acoes').where('colab','==',colab).get().catch(e=>{ console.warn('q producao_acoes:', e.code||e.message||e); return {forEach:()=>{}}; }),
+      db.collection('fechamento_dia').where('colab','==',colab).get().catch(e=>{ console.warn('q fechamento_dia(colab):', e.code||e.message||e); return {forEach:()=>{}}; })
     ]);
     const diasComProd = new Set();
-    snapAcoes.forEach(doc=>{ const a=doc.data(); if(a.anulada) return; if(a.data && a.data < hoje) diasComProd.add(a.data); });
+    snapAcoes.forEach(doc=>{ const a=doc.data(); if(a.anulada) return; if(a.data && a.data >= inicio && a.data < hoje) diasComProd.add(a.data); });
     const diasFechados = new Set();
-    snapFecha.forEach(doc=>{ const f=doc.data(); if(f.data) diasFechados.add(f.data); });
+    snapFecha.forEach(doc=>{ const f=doc.data(); if(f.data && f.data >= inicio) diasFechados.add(f.data); });
     const abertos = [...diasComProd].filter(d => !diasFechados.has(d) && _fdiaEhDiaUtil(d)).sort();
     window._fdiaDiasAbertos = abertos;
     window._fdiaAbertoDia   = hoje;
