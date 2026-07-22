@@ -6832,38 +6832,9 @@ function renderPainelEstrategico(){
   const label = document.getElementById('est-hoje-label');
   if(label) label.textContent = fmtDt(hoje);
 
-  // Carregar cache de producao_acoes do ciclo inteiro (apenas uma vez)
-  if(!renderPainelEstrategico._cacheCarregado){
-    renderPainelEstrategico._cacheCarregado = true;
-    (async () => {
-      // Aguarda autenticação estar completamente propagada antes de ler
-      // — evita "Missing or insufficient permissions" em chamadas precoces
-      if(!firebase.auth().currentUser){
-        await new Promise(resolve => {
-          const unsub = firebase.auth().onAuthStateChanged(user => {
-            if(user){ unsub(); resolve(); }
-          });
-        });
-      }
-      const db = getDB(); if(!db) return;
-      if(!window._prodAcoesCache) window._prodAcoesCache = {};
-      try {
-        const snap = await db.collection('producao_acoes')
-          .where('data','>=', (_cicloAtivo?.inicio||CICLO_NOVO_INICIO)).get();
-        snap.docs.forEach(d => {
-          const a = d.data();
-          if(!window._prodAcoesCache[a.data]) window._prodAcoesCache[a.data] = [];
-          if(!window._prodAcoesCache[a.data].find(x => x.ts===a.ts && x.colab===a.colab))
-            window._prodAcoesCache[a.data].push(a);
-        });
-        console.log('✓ Cache ciclo carregado:', snap.docs.length, 'ações');
-        // Re-renderizar gráficos apenas (não o painel inteiro)
-        const ctx1 = document.getElementById('est-chart-prod');
-        const ctx2 = document.getElementById('est-chart-mapa');
-        if(ctx1 || ctx2) renderPainelEstrategico();
-      } catch(e){ console.warn('cache ciclo:', e); }
-    })().catch(()=>{});
-  }
+  // Garante o cache de producao_acoes do ciclo (robusto: re-tenta se falhar).
+  // A carga, ao concluir, re-renderiza este painel automaticamente.
+  if(!window._prodCacheOK && typeof _garantirCacheAcoes==='function') _garantirCacheAcoes();
 
   // ── Cards de desfecho (Pedido/Devolução/Republicação/XGL) ──
   estRenderDesfechoCards();
@@ -7072,7 +7043,7 @@ function renderPainelEstrategico(){
           const _iso = _cur.getFullYear()+'-'+String(_cur.getMonth()+1).padStart(2,'0')+'-'+String(_cur.getDate()).padStart(2,'0');
           if(_iso <= hoje && !_fdiaEhDiaUtil(_iso)){
             const _rW = diasComProd.find(r=>r.data===_iso);
-            const _cW = renderPainelEstrategico._cacheCarregado && _cache[_iso] !== undefined;
+            const _cW = window._prodCacheOK && _cache[_iso] !== undefined;
             const _aW = _cW ? (_cache[_iso]||[]) : [];
             const _pW = _aW.filter(a=>!a.anulada&&(a.tipo==='primeira_analise'||a.tipo==='em_tratativa'||a.tipo==='status_b'||a.tipo==='ag_parecer')).length;
             const _mW = _aW.filter(a=>!a.anulada&&(a.tipo==='primeira_analise'||a.tipo==='em_tratativa')).length;
@@ -7089,7 +7060,7 @@ function renderPainelEstrategico(){
       // Usar producao_acoes se cache já foi carregado para este dia
       // _cache[dt] === undefined → ainda não carregado → usar pcpData fallback
       // _cache[dt] === [] (array vazio) → carregado mas sem ações → usar pcpData fallback
-      const cacheDisponivel = renderPainelEstrategico._cacheCarregado && _cache[dt] !== undefined;
+      const cacheDisponivel = window._prodCacheOK && _cache[dt] !== undefined;
       const acoesDia = cacheDisponivel ? (_cache[dt] || []) : [];
 
       const prod_total = acoesDia.filter(a =>
@@ -7297,6 +7268,7 @@ function _atualizarColabsPorModulo(){
   // aqui também por segurança, mesmo já tendo corrigido o ponto onde ela é
   // carregada pra nunca mais rodar com o módulo errado.
   window._prodAcoesCache = {};
+  window._prodCacheOK = false; // força recarregar o cache no módulo novo
 }
 
 BANCO_HE = COLABS.map(c => ({ colab: c, periodos: [] })); // inicializa BANCO_HE
@@ -8823,6 +8795,7 @@ function _sincronizarRegistrosComAcoes(){
 }
 
 function filtrarHistProd(modo){
+  if(!window._prodCacheOK && typeof _garantirCacheAcoes==='function') _garantirCacheAcoes();
   if(typeof _sincronizarRegistrosComAcoes==='function') _sincronizarRegistrosComAcoes();
   let regs=[];
   if(modo==='all'){regs=[...registros];}
@@ -21848,33 +21821,55 @@ document.addEventListener('DOMContentLoaded', ()=>{
 // confirmado (chamada em _entrarNoApp()), então getDB() sempre aponta pro
 // banco certo.
 async function _carregarCacheProducaoEAtualizarPCP(){
+  // Guard de concorrência: evita duas leituras simultâneas do ciclo
+  if(window._prodCacheLoading) return;
+  window._prodCacheLoading = true;
   try{
-    const db = getDB(); if(!db) return;
-    const hoje = new Date().toISOString().split('T')[0];
-    // Carrega as ações desde o INÍCIO DO CICLO (não só 7 dias) — assim a Análise
-    // PCP consegue mostrar a produção de qualquer dia do ciclo, inclusive dias
-    // que não foram fechados. Antes eram só 7 dias e o dia na borda (ex.: 14/07)
-    // caía fora por causa do fuso (toISOString em UTC).
+    const db = getDB(); if(!db){ window._prodCacheLoading = false; return; }
+    // Aguarda a auth propagar antes de ler (evita 'insufficient permissions'
+    // em leitura precoce). Timeout de segurança pra nunca travar pra sempre.
+    if(typeof firebase!=='undefined' && firebase.auth && !firebase.auth().currentUser){
+      await new Promise(function(resolve){
+        var t = setTimeout(resolve, 4000);
+        var unsub = firebase.auth().onAuthStateChanged(function(u){ if(u){ clearTimeout(t); unsub(); resolve(); } });
+      });
+    }
+    // Carrega as ações desde o INÍCIO DO CICLO — assim a Análise PCP e o
+    // Histórico mostram qualquer dia do ciclo, inclusive dias não fechados.
     const _iniCiclo = (typeof _cicloAtivo!=='undefined' && _cicloAtivo && _cicloAtivo.inicio) ? _cicloAtivo.inicio
                     : (typeof CICLO_NOVO_INICIO!=='undefined' ? CICLO_NOVO_INICIO
                        : (function(){ const h=new Date(); h.setDate(h.getDate()-40); return h.toISOString().split('T')[0]; })());
     const snap = await db.collection('producao_acoes')
       .where('data','>=',_iniCiclo).get();
-    window._prodAcoesCache = {};
-    snap.docs.forEach(d=>{
+    // MERGE (não apaga): se a leitura falhar antes daqui, o cache anterior é
+    // preservado; e não descarta as ações de hoje que o listener RT já colocou.
+    if(!window._prodAcoesCache) window._prodAcoesCache = {};
+    snap.docs.forEach(function(d){
       const a = d.data();
       if(!window._prodAcoesCache[a.data]) window._prodAcoesCache[a.data] = [];
-      window._prodAcoesCache[a.data].push(a);
+      if(!window._prodAcoesCache[a.data].find(function(x){ return x.ts===a.ts && x.colab===a.colab; }))
+        window._prodAcoesCache[a.data].push(a);
     });
-    // Recalcular PCP dos últimos 7 dias
-    Object.keys(window._prodAcoesCache).forEach(dt => pcpAtualizarRegistroDia(dt));
+    window._prodCacheOK = true; // só marca sucesso quando a query REALMENTE volta
+    Object.keys(window._prodAcoesCache).forEach(function(dt){ pcpAtualizarRegistroDia(dt); });
     console.log('✓ Cache producao_acoes carregado ['+(_moduloAtivo||'adlv').toUpperCase()+']:', snap.docs.length, 'ações');
     if(typeof _sincronizarRegistrosComAcoes==='function'){ const _a=_sincronizarRegistrosComAcoes(); if(_a>0) console.log('✓ registros sincronizado com ações: +'+_a+' entradas (dias sem fechamento)'); }
-    // Se o Histórico da Produção estiver aberto, re-renderiza (as ações podem ter chegado depois da tela montar)
+    // Re-renderiza as telas que dependem do cache, se estiverem abertas
     try{ const _hp=document.getElementById('adm-hist-prod'); if(_hp && _hp.style.display!=='none' && typeof filtrarHistProd==='function') filtrarHistProd('all'); }catch(e){}
-    // Idem Painel Estratégico (cards + contador de ciclo leem registros)
     try{ const _pe=document.getElementById('p-pr-estrategico'); if(_pe && _pe.classList.contains('active') && typeof renderPainelEstrategico==='function') renderPainelEstrategico(); }catch(e){}
   } catch(e){ console.warn('Cache producao_acoes:', e); }
+  finally { window._prodCacheLoading = false; }
+}
+
+// Garante que o cache de ações do ciclo esteja carregado. Se ainda não veio
+// (timing do boot) ou a leitura anterior falhou (cota), dispara a carga; ao
+// concluir, a própria _carregarCacheProducaoEAtualizarPCP re-renderiza as telas.
+function _garantirCacheAcoes(){
+  try{
+    if(window._prodCacheOK) return;
+    if(window._prodCacheLoading) return;
+    if(typeof _carregarCacheProducaoEAtualizarPCP==='function') _carregarCacheProducaoEAtualizarPCP();
+  }catch(e){ console.warn('_garantirCacheAcoes:', e); }
 }
 
 // ══════════════════════════════════════════════════════
@@ -24417,4 +24412,24 @@ if(_goOrig){
 
 // Adicionar Fechamento do Dia ao PERMS_SIDEBAR e navegação
 PERMS_SIDEBAR['fechamento-dia'] = { icon:'🔒', label:'Fechamento do Dia', mod:'EXECUÇÃO' };
+
+// ══════════════════════════════════════════════════════
+// Selo de versão — identifica máquina rodando arquivo antigo (cache do navegador).
+// Se dois PCs mostram selos diferentes, o do selo mais antigo precisa de Ctrl+Shift+R.
+// ══════════════════════════════════════════════════════
+window.APP_VERSION = 'v2026.07.22-1';
+(function(){
+  try{
+    var add = function(){
+      if(!document.body || document.getElementById('app-version-badge')) return;
+      var b = document.createElement('div');
+      b.id = 'app-version-badge';
+      b.textContent = window.APP_VERSION;
+      b.title = 'Versão do app. Se estiver diferente em outro PC, dê Ctrl+Shift+R lá.';
+      b.style.cssText = 'position:fixed;right:6px;bottom:5px;z-index:99999;font:10px/1.2 monospace;color:#7a869a;background:rgba(255,255,255,.6);padding:2px 6px;border-radius:6px;opacity:.55;user-select:text;cursor:default';
+      document.body.appendChild(b);
+    };
+    if(document.body) add(); else document.addEventListener('DOMContentLoaded', add);
+  }catch(e){}
+})();
 </script>
