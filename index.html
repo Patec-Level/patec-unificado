@@ -16127,7 +16127,7 @@ function xglRender(){
       <td style="font-size:11px">${envio?fmtBR(envio):'—'}</td>
       <td style="text-align:center;font-size:11px;${prazo?'font-weight:600':'color:var(--tx2)'}">${prazo?fmtBR(prazo):'—'}</td>
       <td style="text-align:center;font-size:11px;${govCorStatus(statusCalc)}">${statusCalc||'—'}</td>
-      <td style="text-align:center;white-space:nowrap"><button onclick="xglEditarAbrir('${chave}')" title="Editar analista / RC / item" style="background:var(--amc,#fef3c7);border:1.5px solid var(--am,#d97706);border-radius:6px;padding:3px 7px;cursor:pointer;font-size:11px;margin-right:4px">✏️</button><button onclick="abrirHistoricoRC('${r.rc||''}')" title="Ver histórico de ações" style="background:var(--azc);border:1.5px solid var(--azm);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:var(--azm);white-space:nowrap">📋 Histórico</button></td>
+      <td style="text-align:center;white-space:nowrap"><button onclick="xglEditarAbrir('${chave}')" title="Editar analista / RC / item" style="background:var(--amc,#fef3c7);border:1.5px solid var(--am,#d97706);border-radius:6px;padding:3px 7px;cursor:pointer;font-size:11px;margin-right:4px">✏️</button><button onclick="abrirHistoricoRC('${r.rc||''}')" title="Ver histórico de ações" style="background:var(--azc);border:1.5px solid var(--azm);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:var(--azm);white-space:nowrap">📋 Histórico</button>${(_authPerfil&&_authPerfil.perfil==='adm')?`<button onclick="xglDeletarItem('${chave}')" title="Excluir item da XGL" style="background:var(--vmc,#fee2e2);border:1.5px solid var(--vm,#dc2626);border-radius:6px;padding:3px 7px;cursor:pointer;font-size:12px;margin-left:4px">🗑️</button>`:''}</td>
       <td style="font-size:11px">${finalizado?fmtBR(finalizado):'—'}</td>
       <td>${mostrarConclusao?`<select style="font-size:11px;padding:2px 5px;min-width:110px"
           onchange="xglSalvarConclusao('${chave}',this.value,${idx})">
@@ -17665,6 +17665,41 @@ async function xglAdicionarItem(){
 
 // ── EDITAR item XGL (corrigir analista / RC / item) ──
 let _xglEditChaveOriginal = null;
+
+async function xglDeletarItem(chave){
+  // Exclusão de item da XGL. Só o líder/admin vê o botão (gate no render).
+  const it = (_xglItens||[]).find(r => xglChave(r.rc, r.item, r.oport, r.itemop) === chave);
+  if(!it){ alert('Item não encontrado (recarregue a página).'); return; }
+  const ok = confirm(
+    'Excluir este item da XGL?\n\n' +
+    'RC ' + (it.rc||'—') + '  ·  item ' + (it.item||'—') + (it.analista ? ('  ·  '+it.analista) : '') + '\n\n' +
+    'Remove o item e todos os dados registrados (status, prazo, finalização, comentário). Não dá pra desfazer.'
+  );
+  if(!ok) return;
+
+  // 1) Remove do array em memória
+  const idxReal = (_xglItens||[]).findIndex(r => xglChave(r.rc, r.item, r.oport, r.itemop) === chave);
+  if(idxReal >= 0) _xglItens.splice(idxReal, 1);
+
+  // 2) Tombstone: se veio da base embutida, impede que ressuscite no merge
+  const ehBase = (_XGL_BASE_ITENS||[]).some(b => xglChave(b.rc, b.item, b.oport||'', b.itemop||'') === chave);
+  if(ehBase && !_xglRemovidos.includes(chave)) _xglRemovidos.push(chave);
+
+  // 3) Remove os dados manuais da memória
+  if(_xglDados[chave]) delete _xglDados[chave];
+
+  // 4) Persiste no Firebase (lista + removidos) e apaga o doc de dados manuais
+  try{
+    await xglSalvarItensFirebase();
+    const db = getDB();
+    if(db) await db.collection('gov_xgl').doc(chave.replace(/[|]/g,'_')).delete().catch(()=>{});
+  } catch(e){ console.warn('xglDeletarItem Firebase:', e); alert('Erro ao excluir: ' + (e && e.message || e)); return; }
+
+  // 5) Trilha de auditoria (quem excluiu) — vai pro Histórico da RC, igual às edições
+  try{ if(typeof _registrarEdicaoManual === 'function') _registrarEdicaoManual(chave, 'cadastro', 'Item excluído da XGL'); }catch(e){}
+
+  xglRender();
+}
 
 function xglEditarAbrir(chave){
   const it = (_xglItens||[]).find(r => xglChave(r.rc, r.item, r.oport, r.itemop) === chave);
