@@ -8350,6 +8350,7 @@ function setAdmTab(id,btn){
     const fEl = document.getElementById('fech-filtro-data');
     if(fEl && !fEl.value) fEl.value = hoje;
     setTimeout(()=>{ if(typeof fechCarregarHistorico==='function') fechCarregarHistorico(); }, 300);
+    setTimeout(()=>{ if(typeof filtrarHistProd==='function') filtrarHistProd('all'); }, 350);
   }
   document.querySelectorAll('#adm-tabs .stab').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
@@ -8786,7 +8787,43 @@ function filtrarHistMapaCiclo(){
 }
 
 // ── HISTÓRICO PRODUÇÃO ──
+// Deriva entradas de `registros` a partir das AÇÕES (producao_acoes) para os
+// dias/colaboradores que NÃO têm fechamento. As ações são a fonte confiável da
+// produção; as coleções de fechamento às vezes vêm vazias e deixavam o
+// `registros` no embutido de maio. Idempotente (só adiciona o que falta).
+function _sincronizarRegistrosComAcoes(){
+  try{
+    if(typeof registros==='undefined' || !window._prodAcoesCache) return 0;
+    const existentes = new Set(registros.map(function(r){return r.colab+'|'+r.data;}));
+    let add=0;
+    Object.keys(window._prodAcoesCache).forEach(function(dt){
+      const acoes = window._prodAcoesCache[dt] || [];
+      const porColab = {};
+      acoes.forEach(function(a){ if(a && !a.anulada && a.colab){ (porColab[a.colab]=porColab[a.colab]||[]).push(a); } });
+      Object.keys(porColab).forEach(function(colab){
+        const key = colab+'|'+dt;
+        if(existentes.has(key)) return;
+        const as = porColab[colab];
+        const cnt=function(tp){ return as.filter(function(a){return a.tipo===tp;}).length; };
+        const comp=function(nome){ return as.filter(function(a){return a.tratamento===nome||a.conclusao===nome;}).length; };
+        const f=[ cnt('primeira_analise'), cnt('em_tratativa'), cnt('status_b'),
+                  comp('Fornecedor'), comp('Requisitante'), comp('MDG'),
+                  comp('Val. Thiago')+comp('Thiago'), comp('XGL'),
+                  comp('Republicação'), comp('Pedido'), comp('Devolução'),
+                  cnt('outros'), cnt('ag_parecer') ];
+        if(f.some(function(v){return v>0;})){
+          registros.push({colab:colab, data:dt, pres:'', f:f, justif:'', _daAcoes:true});
+          existentes.add(key); add++;
+        }
+      });
+    });
+    if(add>0 && typeof pcpRecalcularTudo==='function'){ try{ pcpRecalcularTudo(); }catch(e){} }
+    return add;
+  }catch(e){ console.warn('_sincronizarRegistrosComAcoes:', e); return 0; }
+}
+
 function filtrarHistProd(modo){
+  if(typeof _sincronizarRegistrosComAcoes==='function') _sincronizarRegistrosComAcoes();
   let regs=[];
   if(modo==='all'){regs=[...registros];}
   else {
@@ -21832,6 +21869,11 @@ async function _carregarCacheProducaoEAtualizarPCP(){
     // Recalcular PCP dos últimos 7 dias
     Object.keys(window._prodAcoesCache).forEach(dt => pcpAtualizarRegistroDia(dt));
     console.log('✓ Cache producao_acoes carregado ['+(_moduloAtivo||'adlv').toUpperCase()+']:', snap.docs.length, 'ações');
+    if(typeof _sincronizarRegistrosComAcoes==='function'){ const _a=_sincronizarRegistrosComAcoes(); if(_a>0) console.log('✓ registros sincronizado com ações: +'+_a+' entradas (dias sem fechamento)'); }
+    // Se o Histórico da Produção estiver aberto, re-renderiza (as ações podem ter chegado depois da tela montar)
+    try{ const _hp=document.getElementById('adm-hist-prod'); if(_hp && _hp.style.display!=='none' && typeof filtrarHistProd==='function') filtrarHistProd('all'); }catch(e){}
+    // Idem Painel Estratégico (cards + contador de ciclo leem registros)
+    try{ const _pe=document.getElementById('p-pr-estrategico'); if(_pe && _pe.classList.contains('active') && typeof renderPainelEstrategico==='function') renderPainelEstrategico(); }catch(e){}
   } catch(e){ console.warn('Cache producao_acoes:', e); }
 }
 
