@@ -10665,7 +10665,7 @@ async function rcqConsultar(){
         rcqCampo('Fila LevelBoard', rcqEsc(l.fila)||'—')+
         rcqCampo('Status Tratamento', rcqEsc(l.statusTrat)||'—')+
         rcqCampo('Prazo Retorno', l.prazo?fmtBR(l.prazo):'—')+
-        rcqCampo('Status', rcqEsc(l.statusCalc)||'—')+
+        rcqCampo('Status', (l.finalizado && l.desfecho) ? (rcqEsc(l.desfecho)||'—') : (rcqEsc(l.statusCalc)||'—'))+
         rcqCampo('Finalizado', l.finalizado?fmtBR(l.finalizado):'—')+
       '</div>'+
     '</div>'
