@@ -3761,8 +3761,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             </div>
           </div>
 
-          <!-- Velocímetro -->
-          <div style="display:flex;flex-direction:column;align-items:center;min-width:140px">
+          <!-- Velocímetros: individual + equipe -->
+          <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;justify-content:center">
+          <div style="display:flex;flex-direction:column;align-items:center;min-width:150px">
+            <span style="font-size:10px;font-weight:800;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1px">👤 Individual</span>
             <svg id="gov-velocimetro" viewBox="0 0 160 105" width="160" height="105" style="overflow:visible">
               <!-- Segmentos -->
               <path id="gov-seg-0" d="M28.0,77.7 A52,52 0 0,0 28.6,70.2 L40.5,72.0 A40,40 0 0,1 40.0,77.8 Z" fill="#E0E5EE"/>
@@ -3796,6 +3798,43 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <rect id="gov-vel-badge" x="53" y="86" width="54" height="17" rx="5" fill="#1A2D4F"/>
               <text id="gov-vel-pct" x="80" y="98" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">0%</text>
             </svg>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;min-width:150px">
+            <span style="font-size:10px;font-weight:800;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1px">👥 Equipe</span>
+            <svg id="goveq-velocimetro" viewBox="0 0 160 105" width="160" height="105" style="overflow:visible">
+              <!-- Segmentos -->
+              <path id="goveq-seg-0" d="M28.0,77.7 A52,52 0 0,0 28.6,70.2 L40.5,72.0 A40,40 0 0,1 40.0,77.8 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-1" d="M28.7,69.6 A52,52 0 0,0 30.4,62.2 L41.9,65.9 A40,40 0 0,1 40.5,71.5 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-2" d="M30.6,61.6 A52,52 0 0,0 33.5,54.7 L44.2,60.1 A40,40 0 0,1 42.0,65.4 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-3" d="M33.8,54.1 A52,52 0 0,0 37.7,47.7 L47.5,54.7 A40,40 0 0,1 44.5,59.6 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-4" d="M38.1,47.2 A52,52 0 0,0 43.0,41.5 L51.5,49.9 A40,40 0 0,1 47.8,54.3 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-5" d="M43.5,41.0 A52,52 0 0,0 49.2,36.1 L56.3,45.8 A40,40 0 0,1 51.9,49.5 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-6" d="M49.7,35.7 A52,52 0 0,0 56.1,31.8 L61.6,42.5 A40,40 0 0,1 56.7,45.5 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-7" d="M56.7,31.5 A52,52 0 0,0 63.6,28.6 L67.4,40.0 A40,40 0 0,1 62.1,42.2 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-8" d="M64.2,28.4 A52,52 0 0,0 71.6,26.7 L73.5,38.5 A40,40 0 0,1 67.9,39.9 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-9" d="M72.2,26.6 A52,52 0 0,0 79.7,26.0 L79.8,38.0 A40,40 0 0,1 74.0,38.5 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-10" d="M80.3,26.0 A52,52 0 0,0 87.8,26.6 L86.0,38.5 A40,40 0 0,1 80.2,38.0 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-11" d="M88.4,26.7 A52,52 0 0,0 95.8,28.4 L92.1,39.9 A40,40 0 0,1 86.5,38.5 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-12" d="M96.4,28.6 A52,52 0 0,0 103.3,31.5 L97.9,42.2 A40,40 0 0,1 92.6,40.0 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-13" d="M103.9,31.8 A52,52 0 0,0 110.3,35.7 L103.3,45.5 A40,40 0 0,1 98.4,42.5 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-14" d="M110.8,36.1 A52,52 0 0,0 116.5,41.0 L108.1,49.5 A40,40 0 0,1 103.7,45.8 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-15" d="M117.0,41.5 A52,52 0 0,0 121.9,47.2 L112.2,54.3 A40,40 0 0,1 108.5,49.9 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-16" d="M122.3,47.7 A52,52 0 0,0 126.2,54.1 L115.5,59.6 A40,40 0 0,1 112.5,54.7 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-17" d="M126.5,54.7 A52,52 0 0,0 129.4,61.6 L118.0,65.4 A40,40 0 0,1 115.8,60.1 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-18" d="M129.6,62.2 A52,52 0 0,0 131.3,69.6 L119.5,71.5 A40,40 0 0,1 118.1,65.9 Z" fill="#E0E5EE"/>
+              <path id="goveq-seg-19" d="M131.4,70.2 A52,52 0 0,0 132.0,77.7 L120.0,77.8 A40,40 0 0,1 119.5,72.0 Z" fill="#E0E5EE"/>
+              <!-- Agulha -->
+              <line id="goveq-vel-agulha" x1="80" y1="78" x2="80" y2="32"
+                stroke="#1A2D4F" stroke-width="2.5" stroke-linecap="round"
+                style="transform-origin:80px 78px;transform:rotate(-90deg);transition:transform .5s cubic-bezier(.4,0,.2,1)"/>
+              <!-- Pivot -->
+              <circle cx="80" cy="78" r="7" fill="#1A2D4F"/>
+              <circle cx="80" cy="78" r="3.5" fill="#fff"/>
+              <!-- Badge -->
+              <rect id="goveq-vel-badge" x="53" y="86" width="54" height="17" rx="5" fill="#1A2D4F"/>
+              <text id="goveq-vel-pct" x="80" y="98" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">0%</text>
+            </svg>
+          </div>
           </div>
 
         </div>
@@ -4206,8 +4245,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             </div>
           </div>
 
-          <!-- Velocímetro PC -->
-          <div style="display:flex;flex-direction:column;align-items:center;min-width:140px">
+          <!-- Velocímetros PC: individual + equipe -->
+          <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;justify-content:center">
+          <div style="display:flex;flex-direction:column;align-items:center;min-width:150px">
+            <span style="font-size:10px;font-weight:800;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1px">👤 Individual</span>
             <svg id="pc-velocimetro" viewBox="0 0 160 105" width="160" height="105" style="overflow:visible">
               <!-- Segmentos -->
               <path id="pc-seg-0" d="M28.0,77.7 A52,52 0 0,0 28.6,70.2 L40.5,72.0 A40,40 0 0,1 40.0,77.8 Z" fill="#E0E5EE"/>
@@ -4241,6 +4282,43 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <rect id="pc-vel-badge" x="53" y="86" width="54" height="17" rx="5" fill="#1A2D4F"/>
               <text id="pc-vel-pct" x="80" y="98" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">0%</text>
             </svg>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;min-width:150px">
+            <span style="font-size:10px;font-weight:800;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1px">👥 Equipe</span>
+            <svg id="pceq-velocimetro" viewBox="0 0 160 105" width="160" height="105" style="overflow:visible">
+              <!-- Segmentos -->
+              <path id="pceq-seg-0" d="M28.0,77.7 A52,52 0 0,0 28.6,70.2 L40.5,72.0 A40,40 0 0,1 40.0,77.8 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-1" d="M28.7,69.6 A52,52 0 0,0 30.4,62.2 L41.9,65.9 A40,40 0 0,1 40.5,71.5 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-2" d="M30.6,61.6 A52,52 0 0,0 33.5,54.7 L44.2,60.1 A40,40 0 0,1 42.0,65.4 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-3" d="M33.8,54.1 A52,52 0 0,0 37.7,47.7 L47.5,54.7 A40,40 0 0,1 44.5,59.6 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-4" d="M38.1,47.2 A52,52 0 0,0 43.0,41.5 L51.5,49.9 A40,40 0 0,1 47.8,54.3 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-5" d="M43.5,41.0 A52,52 0 0,0 49.2,36.1 L56.3,45.8 A40,40 0 0,1 51.9,49.5 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-6" d="M49.7,35.7 A52,52 0 0,0 56.1,31.8 L61.6,42.5 A40,40 0 0,1 56.7,45.5 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-7" d="M56.7,31.5 A52,52 0 0,0 63.6,28.6 L67.4,40.0 A40,40 0 0,1 62.1,42.2 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-8" d="M64.2,28.4 A52,52 0 0,0 71.6,26.7 L73.5,38.5 A40,40 0 0,1 67.9,39.9 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-9" d="M72.2,26.6 A52,52 0 0,0 79.7,26.0 L79.8,38.0 A40,40 0 0,1 74.0,38.5 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-10" d="M80.3,26.0 A52,52 0 0,0 87.8,26.6 L86.0,38.5 A40,40 0 0,1 80.2,38.0 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-11" d="M88.4,26.7 A52,52 0 0,0 95.8,28.4 L92.1,39.9 A40,40 0 0,1 86.5,38.5 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-12" d="M96.4,28.6 A52,52 0 0,0 103.3,31.5 L97.9,42.2 A40,40 0 0,1 92.6,40.0 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-13" d="M103.9,31.8 A52,52 0 0,0 110.3,35.7 L103.3,45.5 A40,40 0 0,1 98.4,42.5 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-14" d="M110.8,36.1 A52,52 0 0,0 116.5,41.0 L108.1,49.5 A40,40 0 0,1 103.7,45.8 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-15" d="M117.0,41.5 A52,52 0 0,0 121.9,47.2 L112.2,54.3 A40,40 0 0,1 108.5,49.9 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-16" d="M122.3,47.7 A52,52 0 0,0 126.2,54.1 L115.5,59.6 A40,40 0 0,1 112.5,54.7 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-17" d="M126.5,54.7 A52,52 0 0,0 129.4,61.6 L118.0,65.4 A40,40 0 0,1 115.8,60.1 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-18" d="M129.6,62.2 A52,52 0 0,0 131.3,69.6 L119.5,71.5 A40,40 0 0,1 118.1,65.9 Z" fill="#E0E5EE"/>
+              <path id="pceq-seg-19" d="M131.4,70.2 A52,52 0 0,0 132.0,77.7 L120.0,77.8 A40,40 0 0,1 119.5,72.0 Z" fill="#E0E5EE"/>
+              <!-- Agulha -->
+              <line id="pceq-vel-agulha" x1="80" y1="78" x2="80" y2="32"
+                stroke="#1A2D4F" stroke-width="2.5" stroke-linecap="round"
+                style="transform-origin:80px 78px;transform:rotate(-90deg);transition:transform .5s cubic-bezier(.4,0,.2,1)"/>
+              <!-- Pivot -->
+              <circle cx="80" cy="78" r="7" fill="#1A2D4F"/>
+              <circle cx="80" cy="78" r="3.5" fill="#fff"/>
+              <!-- Badge -->
+              <rect id="pceq-vel-badge" x="53" y="86" width="54" height="17" rx="5" fill="#1A2D4F"/>
+              <text id="pceq-vel-pct" x="80" y="98" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">0%</text>
+            </svg>
+          </div>
           </div>
 
         </div>
@@ -22506,6 +22584,8 @@ function rtRenderizarMonitoramento(acoes, hoje){
   }).length;
   const ativos = COLABS_RT.filter(c=>porColab[c].total>0).length;
   const faltam = Math.max(0, META_EQUIPE_RT - totalEquipe);
+  // Velocímetro da equipe (tempo real, mesma visão para todos os PCs)
+  if(typeof govAtualizarVelocimetroEquipe==='function') govAtualizarVelocimetroEquipe(totalEquipe, META_EQUIPE_RT);
 
   if(kpiEl) kpiEl.innerHTML = `
     <div class="kc ${totalEquipe>=META_EQUIPE_RT?'ok':totalEquipe>=META_EQUIPE_RT*.8?'warn':'bad'}">
@@ -23573,6 +23653,26 @@ function pcAtualizarVelocimetro(total, metaVal){
   agulha.style.transform = `rotate(${graus}deg)`;
   if(badge) badge.setAttribute('fill', cor);
   if(pctEl) pctEl.textContent = `${Math.round(ratio*100)}%`;
+}
+
+// Velocímetro genérico por prefixo (usado pelo de EQUIPE, espelhado em Gov e PC)
+function _velAtualizarPrefixo(prefix, total, metaVal){
+  const agulha = document.getElementById(prefix+'-vel-agulha');
+  const pctEl  = document.getElementById(prefix+'-vel-pct');
+  const badge  = document.getElementById(prefix+'-vel-badge');
+  if(!agulha) return;
+  const ratio = metaVal > 0 ? Math.min(1, total / metaVal) : 0;
+  const graus = -90 + ratio * 180;
+  const cor   = velAtualizarSegmentos(prefix, ratio);
+  agulha.style.transform = 'rotate(' + graus + 'deg)';
+  if(badge) badge.setAttribute('fill', cor);
+  if(pctEl) pctEl.textContent = Math.round(ratio*100) + '%';
+}
+// Velocímetro da EQUIPE — mesma fonte do card "Resultado equipe hoje" (tempo real).
+// Espelha em Governança (goveq) e Planilha Crítica (pceq); todos veem igual.
+function govAtualizarVelocimetroEquipe(total, metaVal){
+  _velAtualizarPrefixo('goveq', total, metaVal);
+  _velAtualizarPrefixo('pceq',  total, metaVal);
 }
 
 function prodRenderizarPaineis(colab){
