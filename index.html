@@ -1223,8 +1223,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
         <!-- VALIDAÇÃO DO CICLO ATUAL -->
         <div class="cd" style="border-top:3px solid var(--am);margin-bottom:1rem">
-          <div class="cd-t">📋 Validação — Ciclo Abr/Mai 2026 (27/04 a 25/05)</div>
-          <div class="al al-b" style="margin-bottom:1rem">
+          <div class="cd-t" id="enc-titulo">📋 Validação — Ciclo Abr/Mai 2026 (27/04 a 25/05)</div>
+          <div class="al al-b" style="margin-bottom:1rem" id="enc-subtitulo">
             ℹ Este ciclo está <strong>em validação</strong> — aberto para revisão e edição antes do fechamento. Os dados do dia 26/05 em diante já são contabilizados no novo ciclo automaticamente.
           </div>
           <div id="ciclo-resumo-enc" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:1rem;padding:1rem;background:var(--cin);border-radius:8px;border:1px solid var(--brd)">
@@ -1239,7 +1239,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div class="form-grid" style="margin-bottom:1rem">
             <div class="field-wrap">
               <span class="field-label">Data de encerramento (confirme ou ajuste)</span>
-              <input type="date" id="adm-ciclo-fechamento" value="2026-05-25" style="width:100%">
+              <input type="date" id="adm-ciclo-fechamento" style="width:100%">
             </div>
             <div class="field-wrap">
               <span class="field-label">Observação final</span>
@@ -1254,7 +1254,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
         <!-- CICLO ATUAL EM ANDAMENTO -->
         <div class="cd" style="border-top:3px solid var(--vd);margin-bottom:1rem">
-          <div class="cd-t">🟢 Ciclo em Andamento — Mai/Jun 2026 (26/05 →)</div>
+          <div class="cd-t" id="andamento-titulo">🟢 Ciclo em Andamento — Mai/Jun 2026 (26/05 →)</div>
           <div class="al al-b" style="margin-bottom:1rem">
             ℹ O novo ciclo já está contabilizando produção a partir de 26/05. O fechamento previsto é definido abaixo e usado em todas as projeções — mas você escolhe a data real quando encerrar.
           </div>
@@ -11948,8 +11948,15 @@ function initCicloADM(){
   if(el('enc-pct')){el('enc-pct').textContent=pct+'%';el('enc-pct').style.color=pct>=100?'var(--vd)':pct>=80?'var(--am)':'var(--vm)';}
   if(el('enc-dias'))el('enc-dias').textContent=dias;
   if(el('enc-media'))el('enc-media').textContent=med+'/dia';
+  // Rótulos dinâmicos: a tela reflete o CICLO ATIVO real (evita rótulos
+  // chumbados de meses anteriores) e a data de encerramento nasce no
+  // fechamento previsto do ciclo — não numa data velha.
+  const _fimPrev = ciclo.fim_previsto || ciclo.fim || CICLO_MAIJUN.fim_previsto;
+  if(el('enc-titulo')) el('enc-titulo').textContent = '📋 Validação — ' + (ciclo.nome||'Ciclo atual') + ' (' + fmtDt(inicio) + ' a ' + fmtDt(_fimPrev) + ')';
+  if(el('enc-subtitulo')) el('enc-subtitulo').innerHTML = 'ℹ Ciclo <strong>ativo</strong> — confira a data de encerramento abaixo (padrão: fechamento previsto ' + fmtDt(_fimPrev) + ') e encerre. A produção do dia seguinte já entra no próximo ciclo automaticamente.';
+  if(el('andamento-titulo')) el('andamento-titulo').textContent = '🟢 Ciclo em Andamento — ' + (ciclo.nome||'Ciclo atual') + ' (' + fmtDt(inicio) + ' →)';
   if(el('adm-ciclo-fechamento')&&!el('adm-ciclo-fechamento').value)
-    el('adm-ciclo-fechamento').value=HOJE.toISOString().split('T')[0];
+    el('adm-ciclo-fechamento').value = _fimPrev || HOJE.toISOString().split('T')[0];
 }
 
 async function encerrarCicloConfirmar(){
