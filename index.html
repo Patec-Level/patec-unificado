@@ -6897,8 +6897,11 @@ function estSalvarFim(){
 function estInitFim(){
   const hoje=HOJE.toISOString().split('T')[0];
   // Se o localStorage tem data do ciclo antigo (< hoje), limpar e usar novo ciclo
+  const _iniAtivoFim = (_cicloAtivo?.inicio) || CICLO_NOVO_INICIO;
   const savedRaw=localStorage.getItem(_lsMod('patec_fim_ciclo'))||'';
-  if(savedRaw && savedRaw < CICLO_NOVO_INICIO){
+  // Data salva de um ciclo ANTERIOR (fim <= início do ciclo ativo) fica
+  // obsoleta na virada → descarta pra puxar o fim previsto do ciclo novo.
+  if(savedRaw && savedRaw <= _iniAtivoFim){
     localStorage.removeItem(_lsMod('patec_fim_ciclo'));
   }
   const saved=localStorage.getItem(_lsMod('patec_fim_ciclo')) || (_cicloAtivo?.fim_previsto||'') || CICLO_MAIJUN.fim_previsto;
@@ -7006,7 +7009,7 @@ function renderPainelEstrategico(){
   // Meta e fim do ciclo Mai/Jun 2026 (fixos)
   const cicloMetaTotal = CICLO_MAIJUN.meta; // 1800
   const _fimInput = document.getElementById('est-fim-ciclo')?.value || '';
-  const _fimSalvo = (_fimInput && _fimInput >= CICLO_NOVO_INICIO) ? _fimInput : CICLO_MAIJUN.fim_previsto; // 2026-06-25
+  const _fimSalvo = (_fimInput && _fimInput > cicloInicio) ? _fimInput : ((_cicloAtivo?.fim_previsto && _cicloAtivo.fim_previsto > cicloInicio) ? _cicloAtivo.fim_previsto : CICLO_MAIJUN.fim_previsto);
   const _fimDate = new Date(_fimSalvo+'T12:00:00');
   // Contar apenas dias úteis (seg-sex) restantes até o fim do ciclo
   function contarDiasUteisAte(fimDt){
@@ -7097,8 +7100,15 @@ function renderPainelEstrategico(){
     return dias;
   }
 
-  const cicloFimGraf = _fimSalvo || CICLO_MAIJUN.fim_previsto;
   const cicloInicioGraf = (_cicloAtivo?.inicio) || CICLO_NOVO_INICIO;
+  // Blindagem da janela do gráfico: nunca inverter/esvaziar. Usa _fimSalvo se
+  // for depois do início; senão o fim previsto do ciclo ativo; senão projeta ~35 dias.
+  let cicloFimGraf = (_fimSalvo && _fimSalvo > cicloInicioGraf) ? _fimSalvo
+                   : ((_cicloAtivo?.fim_previsto && _cicloAtivo.fim_previsto > cicloInicioGraf) ? _cicloAtivo.fim_previsto : '');
+  if(!cicloFimGraf){
+    const _fd = new Date(cicloInicioGraf+'T12:00:00'); _fd.setDate(_fd.getDate()+35);
+    cicloFimGraf = _fd.getFullYear()+'-'+String(_fd.getMonth()+1).padStart(2,'0')+'-'+String(_fd.getDate()).padStart(2,'0');
+  }
   const todosOsDias = gerarDiasUteisCiclo(cicloInicioGraf, cicloFimGraf);
   const labels = todosOsDias.map(d => fmtDt(d));
 
