@@ -22055,11 +22055,14 @@ async function _carregarCacheProducaoEAtualizarPCP(){
         var unsub = firebase.auth().onAuthStateChanged(function(u){ if(u){ clearTimeout(t); unsub(); resolve(); } });
       });
     }
-    // Carrega as ações desde o INÍCIO DO CICLO — assim a Análise PCP e o
-    // Histórico mostram qualquer dia do ciclo, inclusive dias não fechados.
-    const _iniCiclo = (typeof _cicloAtivo!=='undefined' && _cicloAtivo && _cicloAtivo.inicio) ? _cicloAtivo.inicio
-                    : (typeof CICLO_NOVO_INICIO!=='undefined' ? CICLO_NOVO_INICIO
-                       : (function(){ const h=new Date(); h.setDate(h.getDate()-40); return h.toISOString().split('T')[0]; })());
+    // PISO FIXO (não perde sequência na virada de ciclo): carrega as ações
+    // desde CICLO_NOVO_INICIO OU o início do ciclo ativo — o que for MAIS
+    // ANTIGO. Assim, ao iniciar um ciclo novo (ex.: Jul/Ago em 26/07), os
+    // dias do ciclo anterior (Análise PCP + Histórico) continuam carregados
+    // e em sequência, inclusive dias não fechados.
+    const _PISO_ACOES = (typeof CICLO_NOVO_INICIO!=='undefined') ? CICLO_NOVO_INICIO : '2026-06-26';
+    const _iniAtivo = (typeof _cicloAtivo!=='undefined' && _cicloAtivo && _cicloAtivo.inicio) ? _cicloAtivo.inicio : _PISO_ACOES;
+    const _iniCiclo = (_iniAtivo < _PISO_ACOES) ? _iniAtivo : _PISO_ACOES;
     const snap = await db.collection('producao_acoes')
       .where('data','>=',_iniCiclo).get();
     // MERGE (não apaga): se a leitura falhar antes daqui, o cache anterior é
