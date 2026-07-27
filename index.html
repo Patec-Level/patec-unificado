@@ -2428,7 +2428,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:.75rem">
             <div>
               <div class="cd-t" style="margin:0">💾 Backup do Firebase</div>
-              <div style="font-size:11px;color:var(--tx2);margin-top:3px">Exporta todas as coleções em um arquivo JSON. Guarde em local seguro.</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:3px">Exporta ADLV + FAST (todas as coleções) num único JSON. Guarde em local seguro.</div>
             </div>
             <div style="font-size:11px;color:var(--tx2)" id="backup-ultimo">Nenhum backup realizado nesta sessão</div>
           </div>
@@ -2437,10 +2437,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <div style="background:var(--cin);border:1px solid var(--brd);border-radius:8px;padding:.75rem;display:flex;align-items:center;gap:10px">
               <span style="font-size:20px">🗄️</span>
               <div>
-                <div style="font-size:11px;font-weight:700;color:var(--az)">Backup Completo</div>
-                <div style="font-size:10px;color:var(--tx2)">Todas as coleções</div>
+                <div style="font-size:11px;font-weight:700;color:var(--az)">Backup TOTAL (ADLV + FAST)</div>
+                <div style="font-size:10px;color:var(--tx2)">Os 2 projetos · todas as coleções</div>
               </div>
-              <button class="btn btn-r" style="margin-left:auto;font-size:10px;padding:4px 10px" onclick="backupCompleto()">💾 Baixar</button>
+              <button class="btn btn-r" style="margin-left:auto;font-size:10px;padding:4px 10px" onclick="backupCompletoTotal()">💾 Baixar</button>
             </div>
             <div style="background:var(--cin);border:1px solid var(--brd);border-radius:8px;padding:.75rem;display:flex;align-items:center;gap:10px">
               <span style="font-size:20px">⚖️</span>
@@ -10008,7 +10008,7 @@ async function backupCompleto(){
   const db = getDB();
   if(!db){ alert('Firebase indisponível'); return; }
 
-  const COLECOES = ['gov_mapa','gov_xgl','gov_sb','fechamento_dia','producao_acoes','producao','producoes','ciclos_encerrados','config','usuarios','mapa_diario','pcp_diario','desfechos','gov_analista_overrides'];
+  const COLECOES = ['gov_mapa','gov_xgl','gov_sb','fechamento_dia','producao_acoes','producao','producoes','ciclos_encerrados','config','usuarios','mapa_diario','pcp_diario','desfechos','gov_analista_overrides','aa_completo'];
   const backup   = { gerado_em: new Date().toISOString(), versao: '1.0', colecoes: {} };
   const falhas = [];
   let i = 0;
@@ -10034,6 +10034,95 @@ async function backupCompleto(){
     ? `Último backup: ${new Date().toLocaleString('pt-BR')} · ${COLECOES.length - falhas.length}/${COLECOES.length} coleções OK (${falhas.length} falharam — veja o JSON)`
     : `Último backup: ${new Date().toLocaleString('pt-BR')} · ${COLECOES.length} coleções`;
   setTimeout(()=>{ const box=document.getElementById('backup-progress'); if(box) box.style.display='none'; }, falhas.length ? 6000 : 3000);
+}
+
+// ══════════════════════════════════════════
+// BACKUP TOTAL — ADLV + FAST num arquivo só
+// Lê os DOIS projetos Firebase (patec-dashboard + patec-fast) e todas as
+// coleções, INCLUINDO aa_completo. Autentica o FAST sob demanda (ele é um
+// projeto separado, só fica autenticado quando se entra no módulo). Se algo
+// não puder ser lido, AVISA em alto e bom som e deixa você decidir — nunca
+// baixa um parcial disfarçado de completo.
+// ══════════════════════════════════════════
+async function backupCompletoTotal(){
+  // Lista mestra: TODAS as coleções usadas no código (aa_completo incluído)
+  const COLECOES = ['gov_mapa','gov_xgl','gov_sb','fechamento_dia','producao_acoes','producao','producoes','ciclos_encerrados','config','usuarios','mapa_diario','pcp_diario','desfechos','gov_analista_overrides','aa_completo'];
+
+  const backup = { gerado_em:new Date().toISOString(), versao:'2.0', tipo:'completo_2_modulos', modulos:{} };
+  const falhas = [];
+
+  // ── ADLV (app '[DEFAULT]', já autenticado pelo login) ──
+  const dbAdlv = getDBModulo('adlv');
+  if(!dbAdlv){ alert('Firebase ADLV indisponível — backup cancelado. Recarregue a página e tente de novo.'); return; }
+  backup.modulos.adlv = { projeto:'patec-dashboard', colecoes:{} };
+  for(let i=0;i<COLECOES.length;i++){
+    const col = COLECOES[i];
+    _backupProgresso(Math.round(i/COLECOES.length*45), '⏳ [ADLV] Lendo '+col+'... ('+(i+1)+'/'+COLECOES.length+')');
+    const r = await _backupLerColecao(dbAdlv, col);
+    backup.modulos.adlv.colecoes[col] = r;
+    if(r.erro) falhas.push('ADLV/'+col+': '+r.erro);
+  }
+
+  // ── FAST (projeto separado patec-fast — precisa autenticar) ──
+  const temFast = (typeof _modulosPermitidos === 'function') ? _modulosPermitidos().includes('fast') : true;
+  if(!temFast){
+    backup.modulos.fast = { projeto:'patec-fast', pulado:'sem_acesso_ao_modulo' };
+  } else {
+    _backupProgresso(48, '⏳ Autenticando no FAST...');
+    let fastApp = firebase.apps.find(a => a.name === 'fastApp');
+    let fastAuthOk = !!(fastApp && fastApp.auth().currentUser);
+    if(!fastAuthOk){
+      let r = await _autenticarFast(); // usa a senha temporária do login, se ainda existir
+      if(!r.ok){
+        const senha = await _pedirSenhaModal('Confirme sua senha para incluir o FAST no backup:');
+        if(senha){ r = await _autenticarFast(senha); }
+      }
+      fastApp = firebase.apps.find(a => a.name === 'fastApp');
+      fastAuthOk = !!(r && r.ok && fastApp && fastApp.auth().currentUser);
+    }
+
+    if(fastAuthOk){
+      const dbFast = fastApp.firestore();
+      backup.modulos.fast = { projeto:'patec-fast', colecoes:{} };
+      for(let i=0;i<COLECOES.length;i++){
+        const col = COLECOES[i];
+        _backupProgresso(50 + Math.round(i/COLECOES.length*45), '⏳ [FAST] Lendo '+col+'... ('+(i+1)+'/'+COLECOES.length+')');
+        const r = await _backupLerColecao(dbFast, col);
+        backup.modulos.fast.colecoes[col] = r;
+        if(r.erro) falhas.push('FAST/'+col+': '+r.erro);
+      }
+    } else {
+      backup.modulos.fast = { projeto:'patec-fast', colecoes:{}, erro:'NAO_AUTENTICADO' };
+      falhas.push('FAST: não autenticado — NENHUM dado do FAST entrou no backup');
+    }
+  }
+
+  // ── Resultado: se algo falhou, avisa FORTE e deixa você decidir ──
+  const hoje = new Date().toISOString().split('T')[0];
+  if(falhas.length){
+    const fastForaTotal = backup.modulos.fast && backup.modulos.fast.erro === 'NAO_AUTENTICADO';
+    let msg = '⚠ ATENÇÃO: o backup NÃO ficou 100% completo.\n\nFalhas:\n· ' + falhas.join('\n· ') + '\n\n';
+    if(fastForaTotal){
+      msg += 'Os dados do FAST ficaram DE FORA. Recomendação segura: abra o módulo FAST (trocar de projeto) e rode o Backup TOTAL de novo — aí o FAST já está autenticado.\n\n';
+    }
+    msg += 'Baixar mesmo assim o que foi lido?\n(OK = baixar parcial · Cancelar = não baixar)';
+    if(!confirm(msg)){
+      _backupProgresso(100, '❌ Cancelado — backup estava incompleto, nada foi baixado.');
+      setTimeout(function(){ const box=document.getElementById('backup-progress'); if(box) box.style.display='none'; }, 5000);
+      const ul0 = document.getElementById('backup-ultimo');
+      if(ul0) ul0.textContent = '⚠ Último tentativa: ' + new Date().toLocaleString('pt-BR') + ' — CANCELADA (incompleta)';
+      return;
+    }
+  }
+
+  _backupProgresso(100, falhas.length ? '⚠ Backup PARCIAL — baixando...' : '✅ Backup TOTAL (ADLV + FAST) concluído! Baixando...');
+  _backupBaixar(backup, 'PATEC_Backup_TOTAL_' + hoje + '.json');
+
+  const ul = document.getElementById('backup-ultimo');
+  if(ul) ul.textContent = falhas.length
+    ? '⚠ Último backup: ' + new Date().toLocaleString('pt-BR') + ' · PARCIAL (' + falhas.length + ' falha(s) — veja o aviso e o JSON)'
+    : '✅ Último backup TOTAL: ' + new Date().toLocaleString('pt-BR') + ' · ADLV + FAST · ' + COLECOES.length + ' coleções cada';
+  setTimeout(function(){ const box=document.getElementById('backup-progress'); if(box) box.style.display='none'; }, falhas.length ? 9000 : 3500);
 }
 
 async function backupGovernanca(){
