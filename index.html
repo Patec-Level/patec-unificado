@@ -19930,7 +19930,15 @@ async function admApresentacaoGerar(){
   // ── Indicadores Críticos — base govItens por fila (mesma regra Radar) ──
   const _FILAS_AG  = ['patec','análise de oportunidade'];
   const _FILAS_EM  = ['item em parada','mdg'];
-  const agTrat     = govItens.filter(d=>_FILAS_AG.includes(normF2(d.fila))).length;
+  // Ag. Tratamento: MESMA base/filtro da cascata (_backlogRealRadarCont) —
+  // analista_auto EXATO 'Analisar PATEC Finalizado' + fila PATEC/Análise de
+  // Oportunidade. Antes usava govItens (govFiltroMapaPadrao → _classificarStatusMapa),
+  // que também classifica "PATEC Finalizado sem fornecedores" e "Analisar PATEC
+  // Cancelado" como Finalizado e inflava o número (667 vs 656 do backlog).
+  const agTrat     = (_radarDados||[]).filter(r=>
+    (r.analista_auto||'').trim()==='Analisar PATEC Finalizado' &&
+    _FILAS_AG.includes(normF2(r.fila))
+  ).length;
   const emTrat     = govItens.filter(d=>_FILAS_EM.includes(normF2(d.fila))).length;
   // Prazo — base govItens
   const govProxVenc = govItens.filter(r=>{ const v=Number(r.prazo_c||0); return v>=60&&v<=90; }).length;
