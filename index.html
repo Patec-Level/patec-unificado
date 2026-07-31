@@ -3148,6 +3148,30 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         </div>
       </div>
 
+      <!-- CONTADOR DE DESFECHOS POR DIA (Pedido/Republicação/XGL/Devolução) — fonte: Histórico da Produção -->
+      <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--az)">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:.875rem">
+          <div>
+            <div class="cd-t" style="margin:0">📊 Desfechos por dia — Pedido · Republicação · XGL · Devolução</div>
+            <div style="font-size:11px;color:var(--tx2);margin-top:3px">Itens finalizados por dia · segue o período do gráfico · use o filtro De/Até para ver datas específicas</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+            <div class="field-wrap" style="min-width:135px"><span class="field-label">De</span><input type="date" id="dfd-de" onchange="dfdFiltrar()" style="width:100%"></div>
+            <div class="field-wrap" style="min-width:135px"><span class="field-label">Até</span><input type="date" id="dfd-ate" onchange="dfdFiltrar()" style="width:100%"></div>
+            <button class="btn btn-s" style="font-size:11px;padding:6px 12px;align-self:flex-end" onclick="dfdFiltrar()">🔍 Filtrar</button>
+            <button class="btn btn-s" style="font-size:11px;padding:6px 12px;align-self:flex-end" onclick="dfdSeguirGrafico()">↺ Seguir gráfico</button>
+          </div>
+        </div>
+        <div id="dfd-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:1rem"></div>
+        <div class="tw">
+          <table>
+            <thead><tr><th>Data</th><th style="text-align:center">🛒 Pedido</th><th style="text-align:center">🔄 Republicação</th><th style="text-align:center">📦 XGL</th><th style="text-align:center">↩ Devolução</th><th style="text-align:center">Total</th></tr></thead>
+            <tbody id="dfd-tbody"></tbody>
+            <tfoot id="dfd-tfoot"></tfoot>
+          </table>
+        </div>
+      </div>
+
       <!-- FILTRO DE MEDIÇÃO — DEVOLUÇÕES -->
       <div id="est-dev-section" style="display:none">
         <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--vm)">
@@ -6926,6 +6950,9 @@ function renderPainelEstrategico(){
 
   // ── Cards de desfecho (Pedido/Devolução/Republicação/XGL) ──
   estRenderDesfechoCards();
+
+  // ── Contador de desfechos por dia (fonte: Histórico da Produção) ──
+  if(typeof renderDesfechosDia==='function') renderDesfechosDia();
 
   // ── Cards do dia — delegar para renderCardsDia ──
   renderCardsDia();
@@ -16724,6 +16751,126 @@ function estRenderDesfechoCards(){
     </div>`;
   }).join('');
 }
+
+// ── Contador de desfechos por dia (Pedido/Republicação/XGL/Devolução) ──
+// Fonte: registros (Histórico da Produção). Índices do array f:
+// XGL=f[7], Republicação=f[8], Pedido=f[9], Devolução=f[10]
+function renderDesfechosDia(){
+  const tb = document.getElementById('dfd-tbody');
+  if(!tb) return;
+  // Garante que registros esteja sincronizado com as ações (mesma base da aba Hist. Produção)
+  if(!window._prodCacheOK && typeof _garantirCacheAcoes==='function') _garantirCacheAcoes();
+  if(typeof _sincronizarRegistrosComAcoes==='function') _sincronizarRegistrosComAcoes();
+
+  // Data local (evita bug de fuso do toISOString após 21h)
+  const _n = new Date();
+  const hoje = _n.getFullYear()+'-'+String(_n.getMonth()+1).padStart(2,'0')+'-'+String(_n.getDate()).padStart(2,'0');
+
+  // Período: por PADRÃO acompanha o mesmo intervalo do gráfico do painel.
+  // Quando o usuário mexe no filtro (dfdFiltrar), _dfdManual=true e a escolha é mantida.
+  const _e1 = document.getElementById('dfd-de');
+  const _e2 = document.getElementById('dfd-ate');
+  if(!window._dfdManual){
+    const rg = _dfdRangeGrafico();
+    if(_e1) _e1.value = rg.de;
+    if(_e2) _e2.value = rg.ate;
+  }
+  let de  = (_e1 && _e1.value)  || '';
+  let ate = (_e2 && _e2.value) || '';
+  // Fallback caso ainda estejam vazios
+  if(!de){  de  = (_cicloAtivo && _cicloAtivo.inicio) || CICLO_NOVO_INICIO; if(_e1) _e1.value = de;  }
+  if(!ate){ ate = hoje; if(_e2) _e2.value = ate; }
+
+  // Agregar por dia a partir de registros
+  const porDia = {};
+  (registros||[]).forEach(function(r){
+    if(!r || !r.data) return;
+    if(r.data < de || r.data > ate) return;
+    const f = r.f || [];
+    const ped = (+f[9]||0), rep = (+f[8]||0), xgl = (+f[7]||0), dev = (+f[10]||0);
+    if(ped+rep+xgl+dev === 0) return; // ignora dias sem desfecho
+    if(!porDia[r.data]) porDia[r.data] = {ped:0,rep:0,xgl:0,dev:0};
+    porDia[r.data].ped += ped; porDia[r.data].rep += rep;
+    porDia[r.data].xgl += xgl; porDia[r.data].dev += dev;
+  });
+
+  const dias = Object.keys(porDia).sort();
+  let sPed=0, sRep=0, sXgl=0, sDev=0;
+
+  tb.innerHTML = dias.map(function(d){
+    const o = porDia[d];
+    sPed+=o.ped; sRep+=o.rep; sXgl+=o.xgl; sDev+=o.dev;
+    const tot = o.ped+o.rep+o.xgl+o.dev;
+    return '<tr><td>'+fmtDt(d)+'</td>'
+      + '<td style="text-align:center;color:#1A4A8A;font-weight:600">'+(o.ped||'—')+'</td>'
+      + '<td style="text-align:center;color:#C07A12;font-weight:600">'+(o.rep||'—')+'</td>'
+      + '<td style="text-align:center;color:#0E9E6A;font-weight:600">'+(o.xgl||'—')+'</td>'
+      + '<td style="text-align:center;color:#D94040;font-weight:600">'+(o.dev||'—')+'</td>'
+      + '<td style="text-align:center;font-weight:700">'+tot+'</td></tr>';
+  }).join('');
+
+  if(dias.length===0){
+    tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--tx2);padding:1rem">Nenhum desfecho no período selecionado.</td></tr>';
+  }
+
+  const grand = sPed+sRep+sXgl+sDev;
+  document.getElementById('dfd-tfoot').innerHTML =
+      '<tr style="border-top:2px solid var(--brd)"><td style="font-weight:700">TOTAL</td>'
+    + '<td style="text-align:center;font-weight:700;color:#1A4A8A">'+sPed+'</td>'
+    + '<td style="text-align:center;font-weight:700;color:#C07A12">'+sRep+'</td>'
+    + '<td style="text-align:center;font-weight:700;color:#0E9E6A">'+sXgl+'</td>'
+    + '<td style="text-align:center;font-weight:700;color:#D94040">'+sDev+'</td>'
+    + '<td style="text-align:center;font-weight:700">'+grand+'</td></tr>';
+
+  // Cards de soma
+  const cards = [
+    {emoji:'🛒', label:'Pedidos',       val:sPed,  cor:'#1A4A8A', bg:'#EBF0FA'},
+    {emoji:'🔄', label:'Republicações', val:sRep,  cor:'#C07A12', bg:'#FDF3E3'},
+    {emoji:'📦', label:'XGL',           val:sXgl,  cor:'#0E9E6A', bg:'#E6F7F1'},
+    {emoji:'↩',  label:'Devoluções',    val:sDev,  cor:'#D94040', bg:'#FDEAEA'},
+    {emoji:'Σ',  label:'Total geral',   val:grand, cor:'#5B21B6', bg:'#F1EAFB'}
+  ];
+  document.getElementById('dfd-cards').innerHTML = cards.map(function(c){
+    return '<div style="background:'+c.bg+';border-radius:8px;padding:.75rem;border:1px solid '+c.cor+'22;text-align:center">'
+      + '<div style="font-size:18px;margin-bottom:2px">'+c.emoji+'</div>'
+      + '<div style="font-size:22px;font-weight:700;color:'+(c.val>0?c.cor:'var(--tx2)')+'">'+c.val+'</div>'
+      + '<div style="font-size:10px;color:var(--tx2);margin-top:1px">'+c.label+'</div></div>';
+  }).join('');
+}
+
+// Intervalo atual do gráfico do Painel (mesma lógica de renderPainelEstrategico)
+function _dfdRangeGrafico(){
+  const _n = new Date();
+  const hoje = _n.getFullYear()+'-'+String(_n.getMonth()+1).padStart(2,'0')+'-'+String(_n.getDate()).padStart(2,'0');
+  const cicloSel = (document.getElementById('est-ciclo-sel')||{}).value || 'atual';
+  let de, ate;
+  if(cicloSel === 'custom'){
+    de  = (document.getElementById('est-de')||{}).value  || ((_cicloAtivo && _cicloAtivo.inicio) || CICLO_NOVO_INICIO);
+    ate = (document.getElementById('est-ate')||{}).value || hoje;
+  } else {
+    de  = (_cicloAtivo && _cicloAtivo.inicio) || CICLO_NOVO_INICIO;
+    ate = hoje;
+  }
+  return {de:de, ate:ate};
+}
+
+// Filtro manual: fixa a escolha do usuário até ele voltar a seguir o gráfico
+function dfdFiltrar(){
+  window._dfdManual = true;
+  renderDesfechosDia();
+}
+
+// Volta ao padrão: acompanha o período do gráfico do Painel
+function dfdSeguirGrafico(){
+  window._dfdManual = false;
+  const rg = _dfdRangeGrafico();
+  const e1 = document.getElementById('dfd-de');  if(e1) e1.value  = rg.de;
+  const e2 = document.getElementById('dfd-ate'); if(e2) e2.value = rg.ate;
+  renderDesfechosDia();
+}
+
+// compat: mantém o nome antigo
+function dfdLimpar(){ dfdSeguirGrafico(); }
 
 async function desfechoCarregarFirebase(){
   try{
