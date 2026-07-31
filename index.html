@@ -16781,7 +16781,23 @@ function renderDesfechosDia(){
   if(!de){  de  = (_cicloAtivo && _cicloAtivo.inicio) || CICLO_NOVO_INICIO; if(_e1) _e1.value = de;  }
   if(!ate){ ate = hoje; if(_e2) _e2.value = ate; }
 
-  // Agregar por dia a partir de registros
+  // Caminha até o dia útil mais próximo (dir=+1 próximo, -1 anterior)
+  const _dfdCaminhaUtil = function(iso, dir){
+    const pt = iso.split('-');
+    let d = new Date(+pt[0], (+pt[1])-1, +pt[2]);
+    let i2 = iso, guard = 0;
+    do{
+      d.setDate(d.getDate()+dir);
+      i2 = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      guard++;
+    } while(guard<40 && typeof _fdiaEhDiaUtil==='function' && !_fdiaEhDiaUtil(i2));
+    return i2;
+  };
+
+  // Agregar por dia a partir de registros.
+  // Produção em dia NÃO útil (fim de semana/feriado) é somada ao próximo dia útil;
+  // fallback para o dia útil anterior se o próximo cair fora do intervalo filtrado,
+  // pra não perder dado na borda.
   const porDia = {};
   (registros||[]).forEach(function(r){
     if(!r || !r.data) return;
@@ -16789,9 +16805,15 @@ function renderDesfechosDia(){
     const f = r.f || [];
     const ped = (+f[9]||0), rep = (+f[8]||0), xgl = (+f[7]||0), dev = (+f[10]||0);
     if(ped+rep+xgl+dev === 0) return; // ignora dias sem desfecho
-    if(!porDia[r.data]) porDia[r.data] = {ped:0,rep:0,xgl:0,dev:0};
-    porDia[r.data].ped += ped; porDia[r.data].rep += rep;
-    porDia[r.data].xgl += xgl; porDia[r.data].dev += dev;
+    let alvo = r.data;
+    if(typeof _fdiaEhDiaUtil==='function' && !_fdiaEhDiaUtil(r.data)){
+      let prox = _dfdCaminhaUtil(r.data, +1);
+      if(prox > ate) prox = _dfdCaminhaUtil(r.data, -1);
+      alvo = prox;
+    }
+    if(!porDia[alvo]) porDia[alvo] = {ped:0,rep:0,xgl:0,dev:0};
+    porDia[alvo].ped += ped; porDia[alvo].rep += rep;
+    porDia[alvo].xgl += xgl; porDia[alvo].dev += dev;
   });
 
   const dias = Object.keys(porDia).sort();
@@ -16822,6 +16844,28 @@ function renderDesfechosDia(){
     + '<td style="text-align:center;font-weight:700;color:#D94040">'+sDev+'</td>'
     + '<td style="text-align:center;font-weight:700">'+grand+'</td></tr>';
 
+  // Média por dia = total do card / nº de DIAS ÚTEIS no intervalo filtrado
+  // (inclui dias úteis zerados; sábados, domingos e feriados não entram no divisor)
+  let nDiasUteis = 0;
+  (function(){
+    if(!de || !ate) return;
+    const pa = de.split('-'), pb = ate.split('-');
+    let cur = new Date(+pa[0], (+pa[1])-1, +pa[2]);
+    const fim = new Date(+pb[0], (+pb[1])-1, +pb[2]);
+    let guard = 0;
+    while(cur <= fim && guard < 3660){
+      const iso = cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0');
+      const util = (typeof _fdiaEhDiaUtil==='function') ? _fdiaEhDiaUtil(iso) : (cur.getDay()!==0 && cur.getDay()!==6);
+      if(util) nDiasUteis++;
+      cur.setDate(cur.getDate()+1);
+      guard++;
+    }
+  })();
+  const _fmtMedia = function(v){
+    const m = nDiasUteis>0 ? (v/nDiasUteis) : 0;
+    return m.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1});
+  };
+
   // Cards de soma
   const cards = [
     {emoji:'🛒', label:'Pedidos',       val:sPed,  cor:'#1A4A8A', bg:'#EBF0FA'},
@@ -16834,7 +16878,8 @@ function renderDesfechosDia(){
     return '<div style="background:'+c.bg+';border-radius:8px;padding:.75rem;border:1px solid '+c.cor+'22;text-align:center">'
       + '<div style="font-size:18px;margin-bottom:2px">'+c.emoji+'</div>'
       + '<div style="font-size:22px;font-weight:700;color:'+(c.val>0?c.cor:'var(--tx2)')+'">'+c.val+'</div>'
-      + '<div style="font-size:10px;color:var(--tx2);margin-top:1px">'+c.label+'</div></div>';
+      + '<div style="font-size:10px;color:var(--tx2);margin-top:1px">'+c.label+'</div>'
+      + '<div style="font-size:10px;font-weight:600;color:'+c.cor+';margin-top:4px;padding-top:4px;border-top:1px solid '+c.cor+'22">média '+_fmtMedia(c.val)+'/dia</div></div>';
   }).join('');
 }
 
