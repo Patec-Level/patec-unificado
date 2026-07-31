@@ -3562,7 +3562,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
           <div class="field-wrap" style="min-width:200px">
             <span class="field-label">Regra</span>
-            <select id="aa-pub-filtro-regra" onchange="aaPublicoFiltrar()" style="width:100%;font-size:12px;padding:5px 10px">
+            <select id="aa-pub-filtro-regra" onchange="aaRegraSingleChange()" style="width:100%;font-size:12px;padding:5px 10px">
               <option value="">Todas</option>
               <option value="Regra 1">Regra 1 — Melhor Fornecedor Apto + Idêntico</option>
               <option value="Regra 2">Regra 2 — Anterior NÃO ANALISAR + Idêntico</option>
@@ -3578,7 +3578,50 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <input type="text" id="aa-pub-busca" oninput="aaPublicoFiltrar()" placeholder="Digite para filtrar..." style="width:100%;font-size:12px;padding:5px 10px">
           </div>
           <button class="btn btn-s" style="font-size:11px" onclick="aaPublicoLimparFiltros()">✕ Limpar filtros</button>
+          <!-- FILTRO DE COMBINAÇÃO DE REGRAS -->
+          <style>
+            #aa-pub-combo-dd summary::-webkit-details-marker{display:none}
+            #aa-pub-combo-dd summary::marker{content:''}
+            #aa-pub-combo-dd[open] > summary{border-color:var(--az);color:var(--az)}
+            .aa-combo-opt{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--tx);padding:4px 5px;cursor:pointer;border-radius:5px;white-space:nowrap}
+            .aa-combo-opt:hover{background:#eef3fb}
+            .aa-combo-opt input{margin:0}
+          </style>
+          <div class="field-wrap" style="min-width:220px;position:relative">
+            <span class="field-label">Combinação de regras</span>
+            <details id="aa-pub-combo-dd" style="width:100%">
+              <summary id="aa-pub-combo-sum" style="list-style:none;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--brd);border-radius:6px;background:#fff;user-select:none">Todas as regras ▾</summary>
+              <div style="position:absolute;z-index:40;margin-top:4px;background:#fff;border:1px solid var(--brd);border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.14);padding:8px;min-width:270px">
+                <div style="display:flex;gap:6px;margin-bottom:6px">
+                  <button type="button" class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="aaComboTodas(true)">Marcar todas</button>
+                  <button type="button" class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="aaComboTodas(false)">Limpar</button>
+                </div>
+              <label class="aa-combo-opt"><input type="checkbox" class="aa-combo-regra" value="Regra 1" onchange="aaComboMudou()"> Regra 1 — Melhor Fornecedor Apto + Idêntico</label>
+              <label class="aa-combo-opt"><input type="checkbox" class="aa-combo-regra" value="Regra 2" onchange="aaComboMudou()"> Regra 2 — Anterior NÃO ANALISAR + Idêntico</label>
+              <label class="aa-combo-opt"><input type="checkbox" class="aa-combo-regra" value="Regra 3" onchange="aaComboMudou()"> Regra 3 — NM Filho ⚠️ Verificar SAP</label>
+              <label class="aa-combo-opt"><input type="checkbox" class="aa-combo-regra" value="Regra 4" onchange="aaComboMudou()"> Regra 4 — Fabricante/PN sem informação</label>
+              <label class="aa-combo-opt"><input type="checkbox" class="aa-combo-regra" value="Regra 5" onchange="aaComboMudou()"> Regra 5 — Fabricante e PN Idênticos</label>
+              <label class="aa-combo-opt"><input type="checkbox" class="aa-combo-regra" value="Regra 6" onchange="aaComboMudou()"> Regra 6 — Sem Fabricante/PN + Idêntico</label>
+              <label class="aa-combo-opt"><input type="checkbox" class="aa-combo-regra" value="Regra 7" onchange="aaComboMudou()"> Regra 7 — NM Zerado + Idêntico</label>
+              </div>
+            </details>
+          </div>
         </div>
+      </div>
+
+      <!-- CARD SOMATÓRIA DA COMBINAÇÃO -->
+      <div class="cd" id="aa-pub-combo-card" style="margin-bottom:1rem;border-left:4px solid var(--az);display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:12px;font-weight:700;color:var(--tx)">🧮 Somatória da combinação</div>
+            <div style="font-size:11px;color:var(--tx2);margin-top:2px" id="aa-pub-combo-desc"></div>
+          </div>
+          <div style="display:flex;gap:22px;align-items:center">
+            <div style="text-align:center"><div style="font-size:24px;font-weight:800;color:var(--az)" id="aa-pub-combo-reg">0</div><div style="font-size:10px;color:var(--tx2)">Registros</div></div>
+            <div style="text-align:center"><div style="font-size:24px;font-weight:800;color:var(--vd)" id="aa-pub-combo-rc">0</div><div style="font-size:10px;color:var(--tx2)">RCs únicas</div></div>
+          </div>
+        </div>
+        <div id="aa-pub-combo-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"></div>
       </div>
 
       <!-- Tabela resultados -->
@@ -14766,14 +14809,27 @@ function aaPublicoPopularFiltros(){
 
 function aaPublicoFiltrar(){
   const fAn   = (document.getElementById('aa-pub-filtro-analista')?.value||'').toLowerCase();
-  const fRe   = (document.getElementById('aa-pub-filtro-regra')?.value||'').toLowerCase();
+  let   fRe   = (document.getElementById('aa-pub-filtro-regra')?.value||'').toLowerCase();
   const fBus  = (document.getElementById('aa-pub-busca')?.value||'').toLowerCase();
+
+  // Filtro de combinação (multi-regra). Quando há regras marcadas, ele PREVALECE
+  // sobre o select único e a combinação define quais regras entram.
+  const combSel = _aaComboRegras();
+  if(combSel.length){
+    fRe = '';
+    const rs = document.getElementById('aa-pub-filtro-regra'); if(rs) rs.value = '';
+  }
+  aaComboAtualizarLabel(combSel);
+
+  const _matchRegra = function(a){
+    if(combSel.length) return combSel.some(cr => (a.regra||'').toLowerCase().includes(cr));
+    return !fRe || (a.regra||'').toLowerCase().includes(fRe);
+  };
 
   const filtrados = _aaPub.filter(a=>{
     const matchAn  = !fAn  || (a.analista||'').toLowerCase().includes(fAn);
-    const matchRe  = !fRe  || (a.regra||'').toLowerCase().includes(fRe);
     const matchBus = !fBus || (a.rc||'').toLowerCase().includes(fBus) || (a.material||'').toLowerCase().includes(fBus) || (a.fornecedor||'').toLowerCase().includes(fBus);
-    return matchAn && matchRe && matchBus;
+    return matchAn && _matchRegra(a) && matchBus;
   });
 
   // KPIs
@@ -14788,6 +14844,36 @@ function aaPublicoFiltrar(){
   // Contagem
   const elCount = document.getElementById('aa-pub-count');
   if(elCount) elCount.textContent = filtrados.length + ' registro(s) — ' + rcUnicas.length + ' RC(s) únicas';
+
+  // ── Card somatória da combinação ──
+  const comboCard = document.getElementById('aa-pub-combo-card');
+  if(comboCard){
+    const TODAS = ['regra 1','regra 2','regra 3','regra 4','regra 5','regra 6','regra 7'];
+    const regrasAtivas = combSel.length ? combSel.slice() : TODAS;
+    // base p/ contagem por regra respeita analista + busca (mas não a própria regra)
+    const base = _aaPub.filter(a=>{
+      const mAn  = !fAn  || (a.analista||'').toLowerCase().includes(fAn);
+      const mBus = !fBus || (a.rc||'').toLowerCase().includes(fBus) || (a.material||'').toLowerCase().includes(fBus) || (a.fornecedor||'').toLowerCase().includes(fBus);
+      return mAn && mBus;
+    });
+    const corR = {'1':'var(--vd)','2':'var(--az)','3':'var(--vm)','4':'var(--am)','5':'var(--azm)','6':'var(--tx)','7':'var(--tx2)'};
+    const chips = regrasAtivas.map(function(cr){
+      const num = cr.replace('regra ','').trim();
+      const n = base.filter(a=>(a.regra||'').toLowerCase().includes(cr)).length;
+      const cor = corR[num]||'var(--tx)';
+      return '<span style="font-size:11px;font-weight:700;color:'+cor+';background:#f4f6fa;border:1px solid var(--brd);padding:3px 10px;border-radius:20px">Regra '+num+' · '+n+'</span>';
+    }).join('');
+    const _reg = document.getElementById('aa-pub-combo-reg');   if(_reg) _reg.textContent = filtrados.length;
+    const _rc  = document.getElementById('aa-pub-combo-rc');    if(_rc)  _rc.textContent  = rcUnicas.length;
+    const _ch  = document.getElementById('aa-pub-combo-chips'); if(_ch)  _ch.innerHTML   = chips;
+    const _ds  = document.getElementById('aa-pub-combo-desc');
+    if(_ds){
+      _ds.textContent = combSel.length
+        ? 'Regras selecionadas: ' + regrasAtivas.map(function(cr){return 'Regra '+cr.replace('regra ','').trim();}).join(', ')
+        : 'Nenhuma regra marcada — mostrando todas as 7 regras.';
+    }
+    comboCard.style.display = 'block';
+  }
 
   // Tabela
   const tbody = document.getElementById('aa-pub-tbody');
@@ -14818,7 +14904,35 @@ function aaPublicoFiltrar(){
 function aaPublicoLimparFiltros(){
   const ids = ['aa-pub-filtro-analista','aa-pub-filtro-regra','aa-pub-busca'];
   ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  document.querySelectorAll('.aa-combo-regra').forEach(function(c){ c.checked=false; });
   aaPublicoFiltrar();
+}
+
+// ── Filtro de combinação de regras (multi-seleção) ──
+function _aaComboRegras(){
+  return Array.from(document.querySelectorAll('.aa-combo-regra:checked'))
+              .map(function(c){ return (c.value||'').toLowerCase(); });
+}
+function aaComboMudou(){
+  // ao marcar qualquer regra na combinação, zera o select único p/ não conflitar
+  if(_aaComboRegras().length){ const rs=document.getElementById('aa-pub-filtro-regra'); if(rs) rs.value=''; }
+  aaPublicoFiltrar();
+}
+function aaComboTodas(marcar, skipFilter){
+  document.querySelectorAll('.aa-combo-regra').forEach(function(c){ c.checked = !!marcar; });
+  if(!skipFilter) aaPublicoFiltrar();
+}
+function aaRegraSingleChange(){
+  const v = (document.getElementById('aa-pub-filtro-regra')||{}).value||'';
+  if(v) aaComboTodas(false, true); // usar select único limpa a combinação
+  aaPublicoFiltrar();
+}
+function aaComboAtualizarLabel(combSel){
+  const sum = document.getElementById('aa-pub-combo-sum');
+  if(!sum) return;
+  const total = document.querySelectorAll('.aa-combo-regra').length || 7;
+  if(!combSel.length || combSel.length === total){ sum.textContent = 'Todas as regras ▾'; }
+  else { sum.textContent = combSel.length + (combSel.length===1?' regra selecionada ▾':' regras selecionadas ▾'); }
 }
 
 function aaPublicoAtualizar(){
