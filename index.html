@@ -3845,28 +3845,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         </div>
       </div>
 
-      <!-- ── Urgência por SLA (embutida na Governança) ── -->
-      <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--vm)">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;cursor:pointer" onclick="govUrgGovToggle()">
-          <div>
-            <div class="cd-t" style="margin:0">⏱️ Urgência por SLA <span id="gov-urggov-caret" style="font-size:11px;color:var(--tx2)">▾</span></div>
-            <div style="font-size:11px;color:var(--tx2);margin-top:2px">RCs da Governança — PATEC em Andamento, PATEC Finalizado, XGL e Status B — por faixa de SLA</div>
-          </div>
-        </div>
-        <div id="gov-urggov-wrap" style="margin-top:12px">
-          <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:1rem">
-            <span style="font-size:12px;font-weight:700;color:var(--az);align-self:center">🔎 Filtros</span>
-            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status Patec<div class="gov-ms" id="gov-urggov-ms-patec" style="position:relative;min-width:185px"></div></label>
-            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Fila Levelboard<div class="gov-ms" id="gov-urggov-ms-fila" style="position:relative;min-width:185px"></div></label>
-            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status<div class="gov-ms" id="gov-urggov-ms-status" style="position:relative;min-width:170px"></div></label>
-            <button id="gov-urggov-f-limpar" class="btn btn-s" style="font-size:11px;display:none" onclick="govUrgGovLimpar()">✕ Limpar filtros</button>
-          </div>
-          <div style="font-size:10px;color:var(--tx2);margin-bottom:1rem">Escolha um ou mais valores em cada filtro — dentro do filtro soma (OU), entre filtros combina (E).</div>
-          <div id="gov-urggov-cards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:1rem"></div>
-          <div id="gov-urggov-tabela"></div>
-        </div>
-      </div>
-
       <!-- Filtro de RC + Velocímetro -->
       <div class="cd" style="margin-bottom:1rem;padding:.875rem 1rem">
         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
@@ -15730,7 +15708,6 @@ function govMainTab(aba, btn){
   });
   if(aba==='sla')   _govUrgGarantirDados().then(govUrgSlaRender);
   if(aba==='prazo') _govUrgGarantirDados().then(govUrgPrazoRender);
-  if(aba==='gov')   _govUrgGarantirDados().then(govUrgGovRender);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -16145,52 +16122,6 @@ async function govInicializar(){
 
   govRenderMapa(dados);
   govRenderAndamento();
-  _govUrgGarantirDados().then(govUrgGovRender);
-}
-
-// ── Urgência por SLA embutida na aba Governança (reusa o motor das abas de urgência) ──
-let _govUrgGovBucket=null;
-function govUrgGovToggle(){
-  const w=document.getElementById('gov-urggov-wrap'); const c=document.getElementById('gov-urggov-caret');
-  if(!w) return; const vis=w.style.display!=='none'; w.style.display=vis?'none':''; if(c) c.textContent=vis?'▸':'▾';
-}
-function govUrgGovRender(){
-  const uni=_govUrgUniverso();
-  window._govUrgGovUni=uni;
-  _msInit('gov-urggov-ms-patec', ['PATEC em Andamento','PATEC Finalizado','XGL','Status B'], _govUrgGovAplicar, true);
-  _msInit('gov-urggov-ms-fila', _govUrgFilaOpcoes(uni.filter(function(it){ return _govUrgSlaFaixa(it.sla); })), _govUrgGovAplicar, true);
-  _msInit('gov-urggov-ms-status', ['Dentro do prazo','Atrasado','Ag. Ação','Concluído'], _govUrgGovAplicar, true);
-  _govUrgGovAplicar();
-}
-function _govUrgGovAplicar(){
-  const uni=window._govUrgGovUni||[];
-  const filt=_govUrgFiltrar(uni, _msGet('gov-urggov-ms-patec'), _msGet('gov-urggov-ms-fila'), _msGet('gov-urggov-ms-status'));
-  const g={max:[],alta:[],atencao:[]};
-  filt.forEach(function(it){ const f=_govUrgSlaFaixa(it.sla); if(f) g[f].push(it); });
-  window._govUrgGovGrupos=g;
-  _govUrgGovPintarCards();
-  _govUrgGovTabela();
-  const b=document.getElementById('gov-urggov-f-limpar'); if(b) b.style.display=_govUrgFiltrosAtivos(['gov-urggov-ms-patec','gov-urggov-ms-fila','gov-urggov-ms-status'])?'':'none';
-}
-function _govUrgGovPintarCards(){
-  const wrap=document.getElementById('gov-urggov-cards'); if(!wrap) return;
-  wrap.innerHTML=_govUrgCardsHtml(['max','alta','atencao'], _GOV_URG_SLA_META, window._govUrgGovGrupos||{}, _govUrgGovBucket, 'govUrgGovSelecionar');
-}
-function _govUrgGovTabela(){
-  const out=document.getElementById('gov-urggov-tabela'); if(!out) return;
-  if(!_govUrgGovBucket){ out.innerHTML='<div style="font-size:12px;color:var(--tx2);padding:1.25rem;text-align:center;background:var(--cin);border-radius:10px">Selecione um card acima para ver a relação das RCs.</div>'; return; }
-  const g=window._govUrgGovGrupos||{};
-  const itens=(g[_govUrgGovBucket]||[]).slice().sort(function(a,b){ return b.sla-a.sla; });
-  out.innerHTML=_govUrgTabelaHtml(itens, 'sla');
-}
-function govUrgGovSelecionar(k){
-  _govUrgGovBucket=(_govUrgGovBucket===k?null:k);
-  _govUrgGovPintarCards();
-  _govUrgGovTabela();
-}
-function govUrgGovLimpar(){
-  ['gov-urggov-ms-patec','gov-urggov-ms-fila','gov-urggov-ms-status'].forEach(function(id){ if(_govUrgMS[id]){ _govUrgMS[id].sel=new Set(); _msRender(id); } });
-  _govUrgGovAplicar();
 }
 
 // Lista padrão de itens do MAPA (Governança). No ADLV, continua exatamente
