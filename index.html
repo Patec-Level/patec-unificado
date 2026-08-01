@@ -3775,6 +3775,38 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <div style="display:flex;gap:0;margin-bottom:1.25rem;border-bottom:2px solid var(--brd)">
         <button id="gov-main-tab-gov" onclick="govMainTab('gov',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--azm);border-bottom:3px solid var(--azm);margin-bottom:-2px">⚖️ Governança</button>
         <button id="gov-main-tab-pc" onclick="govMainTab('pc',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">🔴 Planilha Crítica</button>
+        <button id="gov-main-tab-sla" onclick="govMainTab('sla',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">⏱️ Urgência por SLA</button>
+        <button id="gov-main-tab-prazo" onclick="govMainTab('prazo',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">📆 Urgência por Prazo da OP</button>
+      </div>
+
+      <!-- ── ABA: URGÊNCIA POR SLA ── -->
+      <div id="gov-main-content-sla" style="display:none">
+        <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--vm)">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div>
+              <div class="cd-t" style="margin:0">⏱️ Urgência por SLA</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:2px">Leitura da Governança — PATEC em Andamento, PATEC Finalizado, XGL e Status B. Clique num card para ver as RCs.</div>
+            </div>
+            <button class="btn btn-s" style="font-size:11px" onclick="_govUrgGarantirDados().then(govUrgSlaRender)">↺ Atualizar</button>
+          </div>
+        </div>
+        <div id="gov-urgsla-cards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:1rem"></div>
+        <div id="gov-urgsla-tabela"></div>
+      </div>
+
+      <!-- ── ABA: URGÊNCIA POR PRAZO DA OP ── -->
+      <div id="gov-main-content-prazo" style="display:none">
+        <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--vm)">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div>
+              <div class="cd-t" style="margin:0">📆 Urgência por Prazo da OP</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:2px">Prazo da oportunidade (coluna PRAZO) da planilha do Radar Estratégico. Clique num card para ver as RCs.</div>
+            </div>
+            <button class="btn btn-s" style="font-size:11px" onclick="_govUrgGarantirDados().then(govUrgPrazoRender)">↺ Atualizar</button>
+          </div>
+        </div>
+        <div id="gov-urgprazo-cards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:1rem"></div>
+        <div id="gov-urgprazo-tabela"></div>
       </div>
 
       <!-- ── ABA: GOVERNANÇA ── -->
@@ -15644,7 +15676,7 @@ function govCorStatus(status){
 
 function govMainTab(aba, btn){
   // Alternar entre abas principais: Governança e Planilha Crítica
-  ['gov','pc'].forEach(t => {
+  ['gov','pc','sla','prazo'].forEach(t => {
     const content = document.getElementById('gov-main-content-'+t);
     const tabBtn  = document.getElementById('gov-main-tab-'+t);
     if(content) content.style.display = t===aba ? '' : 'none';
@@ -15654,6 +15686,236 @@ function govMainTab(aba, btn){
       tabBtn.style.fontWeight = t===aba ? '700' : '600';
     }
   });
+  if(aba==='sla')   _govUrgGarantirDados().then(govUrgSlaRender);
+  if(aba==='prazo') _govUrgGarantirDados().then(govUrgPrazoRender);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  GOVERNANÇA — Abas de Urgência (SLA e Prazo da OP)
+// ═══════════════════════════════════════════════════════════════
+let _govUrgSlaBucket   = null;
+let _govUrgPrazoBucket = null;
+
+function _govUrgEsc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/'/g,'&#39;'); }
+
+// Garante que Radar, Governança, XGL e Status B estão carregados
+async function _govUrgGarantirDados(){
+  try{ if(!_radarDados||!_radarDados.length) await fbCarregarRadar(); }catch(e){}
+  try{ if(!_govDadosCarregadoOK) await govCarregarFirebase(); }catch(e){}
+  try{ if(!_xglItens||!_xglItens.length) await xglCarregarFirebase(); }catch(e){}
+  try{ if(!_sbItens||!_sbItens.length) await sbCarregarFirebase(); }catch(e){}
+}
+
+// Índice do Radar por RC e por RC|SEQ (para enriquecer XGL/Status B com SLA, Fila, Validade)
+function _govUrgRadarIndex(){
+  const byRc={}, byRcSeq={};
+  (_radarDados||[]).forEach(r=>{
+    const rc=String(r.rc||'').trim();
+    if(rc && !byRc[rc]) byRc[rc]=r;
+    const k=rc+'|'+String(r.seq||'').trim();
+    if(!byRcSeq[k]) byRcSeq[k]=r;
+  });
+  return {byRc:byRc, byRcSeq:byRcSeq};
+}
+
+// Status de tratamento (DENTRO DO PRAZO / ATRASADO / AG. AÇÃO / CONCLUÍDO)
+function _govUrgStatusTrat(m, fila){
+  const statusAtual=(m&&m.status) || (GOV_FILAS_AG.some(function(f){ return String(fila||'').toUpperCase().includes(f.toUpperCase()); })?'AG. TRATAMENTO':'');
+  return govCalcStatus(govCalcPrazo(statusAtual, (m&&m.envio)||''), (m&&m.finalizado)||'');
+}
+
+// Universo completo da Governança (Andamento + Finalizado + XGL + Status B), normalizado
+function _govUrgUniverso(){
+  const idx=_govUrgRadarIndex();
+  const out=[];
+  const enr=function(rc,seq){ return idx.byRcSeq[String(rc||'').trim()+'|'+String(seq||'').trim()] || idx.byRc[String(rc||'').trim()] || {}; };
+  const add=function(statusPatec, rc, itemRc, oport, itemOp, seqRadar, m){
+    if(!String(rc||'').trim()) return;
+    const rr=enr(rc, seqRadar);
+    out.push({
+      statusPatec: statusPatec,
+      fila:      rr.fila||'',
+      sla:       Number(rr.sla||0),
+      validade:  rr.validade||'',
+      prazoOp:   Number(rr.prazo_c||0),
+      rc:        String(rc||'').trim(),
+      itemRc:    String(itemRc||'').trim(),
+      oport:     String(oport||'').trim(),
+      itemOp:    String(itemOp||'').trim(),
+      statusTrat:_govUrgStatusTrat(m, rr.fila||'')
+    });
+  };
+  // PATEC Finalizado (radar classificado)
+  govFiltroMapaPadrao().forEach(function(r){ add('PATEC Finalizado', r.rc, r.item_rc||r.seq, r.num_oport, r.item_op||r.item_rc, r.seq, _govDados[govChave(r)]||{}); });
+  // PATEC em Andamento (radar classificado)
+  (_radarDados||[]).filter(function(r){ return _classificarStatusMapa(r.analista_auto)==='Andamento'; }).forEach(function(r){ add('PATEC em Andamento', r.rc, r.item_rc||r.seq, r.num_oport, r.item_op||r.item_rc, r.seq, _govDados[govChave(r)]||{}); });
+  // XGL
+  (_xglItens||[]).forEach(function(r){ const m=(typeof _xglDados!=='undefined'&&_xglDados[xglChave(r.rc,r.item)])||{}; add('XGL', r.rc, r.item, r.oport, r.itemop, r.item, m); });
+  // Status B
+  ((_sbItens&&_sbItens.length)?_sbItens:(_SB_BASE_ITENS||[])).forEach(function(r){ const ch=r.chave||sbChave(r.rc,r.seq,r.op,r.item); const m=(typeof _sbDados!=='undefined'&&_sbDados[ch])||(typeof _SB_BASE_DADOS!=='undefined'&&_SB_BASE_DADOS[ch])||{}; add('Status B', r.rc, r.seq, r.op, r.item, r.seq, m); });
+  return out;
+}
+
+// Faixas de SLA
+function _govUrgSlaFaixa(sla){
+  if(sla>=121) return 'max';       // urgência máxima
+  if(sla>=90)  return 'alta';      // 90–120 urgência alta
+  if(sla>=60)  return 'atencao';   // 60–89 atenção
+  return null;
+}
+// Faixas de Prazo da OP (sobreposição 80–89 resolvida a favor da máxima)
+function _govUrgPrazoFaixa(p){
+  if(p>=91) return 'vencida';      // ≥ 91 vencida
+  if(p>=80) return 'max';          // 80–90 urgência máxima
+  if(p>=60) return 'alta';         // 60–79 urgência alta
+  return null;
+}
+
+const _GOV_URG_SLA_META = {
+  max:     {t:'Urgência Máxima', s:'SLA ≥ 121 dias',  cor:'var(--vm)', bg:'var(--vmc)', ico:'🔴'},
+  alta:    {t:'Urgência Alta',   s:'SLA 90–120 dias', cor:'#C2410C',   bg:'#FFEAD9',    ico:'🟠'},
+  atencao: {t:'Atenção',         s:'SLA 60–89 dias',  cor:'var(--am)', bg:'var(--amc)', ico:'🟡'}
+};
+const _GOV_URG_PRAZO_META = {
+  vencida: {t:'Vencida',         s:'Prazo ≥ 91',  cor:'var(--vm)', bg:'var(--vmc)', ico:'⛔'},
+  max:     {t:'Urgência Máxima', s:'Prazo 80–90', cor:'#C2410C',   bg:'#FFEAD9',    ico:'🔴'},
+  alta:    {t:'Urgência Alta',   s:'Prazo 60–79', cor:'var(--am)', bg:'var(--amc)', ico:'🟠'}
+};
+
+// ── Componentes visuais compartilhados ──
+function _govUrgCorStatus(s){
+  if(s==='ATRASADO')        return 'color:var(--vm);font-weight:700';
+  if(s==='DENTRO DO PRAZO') return 'color:var(--vd);font-weight:700';
+  if(s==='CONCLUÍDO')       return 'color:var(--az);font-weight:700';
+  if(s==='AG. AÇÃO')        return 'color:var(--tx2);font-weight:600';
+  return 'color:var(--tx2)';
+}
+function _govUrgStatusLabel(s){
+  if(s==='DENTRO DO PRAZO') return 'Dentro do prazo';
+  if(s==='ATRASADO')        return 'Atrasado';
+  if(s==='AG. AÇÃO')        return 'Ag. Ação';
+  if(s==='CONCLUÍDO')       return 'Concluído';
+  return s||'—';
+}
+function _govUrgBadgePatec(sp){
+  const map={'PATEC em Andamento':{c:'var(--azm)',b:'var(--azc)'},'PATEC Finalizado':{c:'var(--vd)',b:'var(--vdc)'},'XGL':{c:'#7c3aed',b:'#ede9fe'},'Status B':{c:'var(--am)',b:'var(--amc)'}};
+  const m=map[sp]||{c:'var(--tx2)',b:'var(--cin)'};
+  return '<span style="font-size:10px;font-weight:700;color:'+m.c+';background:'+m.b+';padding:2px 8px;border-radius:20px;white-space:nowrap">'+_govUrgEsc(sp)+'</span>';
+}
+function _govUrgCardsHtml(ordem, meta, grupos, bucketAtivo, fnClick){
+  return ordem.map(function(k){
+    const m=meta[k]; const n=(grupos[k]||[]).length; const ativo=bucketAtivo===k;
+    return '<div onclick="'+fnClick+'(\''+k+'\')" style="cursor:pointer;flex:1;min-width:190px;border:2px solid '+(ativo?m.cor:'var(--brd)')+';border-radius:12px;padding:15px 18px;background:'+(ativo?m.bg:'#fff')+';transition:.15s;box-shadow:'+(ativo?'0 3px 12px rgba(0,0,0,.10)':'none')+'">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:17px">'+m.ico+'</span><span style="font-size:12px;font-weight:800;color:'+m.cor+';text-transform:uppercase;letter-spacing:.4px">'+m.t+'</span></div>'
+      +'<div style="font-size:34px;font-weight:800;color:'+m.cor+';line-height:1">'+n+'</div>'
+      +'<div style="font-size:11px;color:var(--tx2);font-weight:600;margin-top:4px">'+m.s+'</div>'
+      +'</div>';
+  }).join('');
+}
+function _govUrgTabelaHtml(itens, modo){
+  if(!itens || !itens.length) return '<div style="font-size:12px;color:var(--tx2);padding:1.5rem;text-align:center;background:var(--cin);border-radius:10px">Nenhuma RC nesta faixa.</div>';
+  const th='padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px;border-bottom:2px solid var(--brd);white-space:nowrap;background:var(--cin);position:sticky;top:0';
+  const td='padding:7px 10px;font-size:12px;color:var(--tx);border-bottom:1px solid var(--brd);white-space:nowrap';
+  const colPrazoTh = modo==='prazo' ? '<th style="'+th+'">Prazo OP</th>' : '';
+  let h='<div style="overflow-x:auto;border:1px solid var(--brd);border-radius:10px"><table style="border-collapse:collapse;width:100%;min-width:980px">';
+  h+='<thead><tr><th style="'+th+'">Status Patec</th><th style="'+th+'">Fila Levelboard</th><th style="'+th+'">SLA</th>'+colPrazoTh+'<th style="'+th+'">Validade da Proposta</th><th style="'+th+'">RC</th><th style="'+th+'">Item da RC</th><th style="'+th+'">Oportunidade</th><th style="'+th+'">Item OP</th><th style="'+th+'">Status</th></tr></thead><tbody>';
+  itens.forEach(function(it){
+    const colPrazoTd = modo==='prazo' ? '<td style="'+td+';font-weight:700">'+(it.prazoOp||'—')+'</td>' : '';
+    h+='<tr>'
+      +'<td style="'+td+'">'+_govUrgBadgePatec(it.statusPatec)+'</td>'
+      +'<td style="'+td+'">'+(_govUrgEsc(it.fila)||'—')+'</td>'
+      +'<td style="'+td+';font-weight:700">'+(it.sla||'—')+'</td>'
+      +colPrazoTd
+      +'<td style="'+td+'">'+(_govUrgEsc(it.validade)||'—')+'</td>'
+      +'<td style="'+td+';font-weight:700;color:var(--azm)">'+_govUrgEsc(it.rc)+'</td>'
+      +'<td style="'+td+'">'+(_govUrgEsc(it.itemRc)||'—')+'</td>'
+      +'<td style="'+td+'">'+(_govUrgEsc(it.oport)||'—')+'</td>'
+      +'<td style="'+td+'">'+(_govUrgEsc(it.itemOp)||'—')+'</td>'
+      +'<td style="'+td+';'+_govUrgCorStatus(it.statusTrat)+'">'+_govUrgStatusLabel(it.statusTrat)+'</td>'
+      +'</tr>';
+  });
+  h+='</tbody></table></div>';
+  h+='<div style="font-size:11px;color:var(--tx2);margin-top:8px">'+itens.length+' RC(s) nesta faixa.</div>';
+  return h;
+}
+
+// ── ABA: Urgência por SLA ──
+function _govUrgSlaPintarCards(){
+  const wrap=document.getElementById('gov-urgsla-cards'); if(!wrap) return;
+  wrap.innerHTML=_govUrgCardsHtml(['max','alta','atencao'], _GOV_URG_SLA_META, window._govUrgSlaGrupos||{}, _govUrgSlaBucket, 'govUrgSlaSelecionar');
+}
+function _govUrgSlaTabela(){
+  const out=document.getElementById('gov-urgsla-tabela'); if(!out) return;
+  if(!_govUrgSlaBucket){ out.innerHTML='<div style="font-size:12px;color:var(--tx2);padding:1.5rem;text-align:center;background:var(--cin);border-radius:10px">Selecione um card acima para ver a relação das RCs.</div>'; return; }
+  const g=window._govUrgSlaGrupos||{};
+  const itens=(g[_govUrgSlaBucket]||[]).slice().sort(function(a,b){ return b.sla-a.sla; });
+  out.innerHTML=_govUrgTabelaHtml(itens, 'sla');
+}
+function govUrgSlaRender(){
+  const uni=_govUrgUniverso();
+  const g={max:[],alta:[],atencao:[]};
+  uni.forEach(function(it){ const f=_govUrgSlaFaixa(it.sla); if(f) g[f].push(it); });
+  window._govUrgSlaGrupos=g;
+  _govUrgSlaPintarCards();
+  _govUrgSlaTabela();
+}
+function govUrgSlaSelecionar(k){
+  _govUrgSlaBucket = (_govUrgSlaBucket===k ? null : k);
+  _govUrgSlaPintarCards();
+  _govUrgSlaTabela();
+}
+
+// ── ABA: Urgência por Prazo da OP ──
+function _govUrgPrazoUniverso(){
+  const xglRc=new Set((_xglItens||[]).map(function(r){ return String(r.rc||'').trim(); }));
+  const sbRc =new Set(((_sbItens&&_sbItens.length)?_sbItens:(_SB_BASE_ITENS||[])).map(function(r){ return String(r.rc||'').trim(); }));
+  const out=[];
+  (_radarDados||[]).forEach(function(r){
+    const p=Number(r.prazo_c||0);
+    if(!_govUrgPrazoFaixa(p)) return;
+    const cls=_classificarStatusMapa(r.analista_auto);
+    let sp = cls==='Andamento'?'PATEC em Andamento' : (cls==='Finalizado'?'PATEC Finalizado':'');
+    const rc=String(r.rc||'').trim();
+    if(!sp){ if(xglRc.has(rc)) sp='XGL'; else if(sbRc.has(rc)) sp='Status B'; else sp='—'; }
+    const m=_govDados[govChave(r)]||{};
+    out.push({
+      statusPatec: sp,
+      fila:      r.fila||'',
+      sla:       Number(r.sla||0),
+      validade:  r.validade||'',
+      prazoOp:   p,
+      rc:        rc,
+      itemRc:    String(r.item_rc||r.seq||'').trim(),
+      oport:     String(r.num_oport||'').trim(),
+      itemOp:    String(r.item_op||'').trim(),
+      statusTrat:_govUrgStatusTrat(m, r.fila||'')
+    });
+  });
+  return out;
+}
+function _govUrgPrazoPintarCards(){
+  const wrap=document.getElementById('gov-urgprazo-cards'); if(!wrap) return;
+  wrap.innerHTML=_govUrgCardsHtml(['vencida','max','alta'], _GOV_URG_PRAZO_META, window._govUrgPrazoGrupos||{}, _govUrgPrazoBucket, 'govUrgPrazoSelecionar');
+}
+function _govUrgPrazoTabela(){
+  const out=document.getElementById('gov-urgprazo-tabela'); if(!out) return;
+  if(!_govUrgPrazoBucket){ out.innerHTML='<div style="font-size:12px;color:var(--tx2);padding:1.5rem;text-align:center;background:var(--cin);border-radius:10px">Selecione um card acima para ver a relação das RCs.</div>'; return; }
+  const g=window._govUrgPrazoGrupos||{};
+  const itens=(g[_govUrgPrazoBucket]||[]).slice().sort(function(a,b){ return b.prazoOp-a.prazoOp; });
+  out.innerHTML=_govUrgTabelaHtml(itens, 'prazo');
+}
+function govUrgPrazoRender(){
+  const uni=_govUrgPrazoUniverso();
+  const g={vencida:[],max:[],alta:[]};
+  uni.forEach(function(it){ const f=_govUrgPrazoFaixa(it.prazoOp); if(f) g[f].push(it); });
+  window._govUrgPrazoGrupos=g;
+  _govUrgPrazoPintarCards();
+  _govUrgPrazoTabela();
+}
+function govUrgPrazoSelecionar(k){
+  _govUrgPrazoBucket = (_govUrgPrazoBucket===k ? null : k);
+  _govUrgPrazoPintarCards();
+  _govUrgPrazoTabela();
 }
 
 function govSetTab(aba, btn){
