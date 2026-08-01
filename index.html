@@ -3790,6 +3790,21 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <button class="btn btn-s" style="font-size:11px" onclick="_govUrgGarantirDados().then(govUrgSlaRender)">↺ Atualizar</button>
           </div>
         </div>
+        <div class="cd" style="margin-bottom:1rem;padding:.75rem 1rem">
+          <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">
+            <span style="font-size:12px;font-weight:700;color:var(--az);align-self:center">🔎 Filtros</span>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status Patec
+              <select id="gov-urgsla-f-patec" onchange="_govUrgSlaAplicar()" style="font-size:12px;padding:5px 10px;border:1px solid var(--brd);border-radius:6px;background:#fff;color:var(--tx);min-width:160px"><option value="">Todos</option><option>PATEC em Andamento</option><option>PATEC Finalizado</option><option>XGL</option><option>Status B</option></select>
+            </label>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Fila Levelboard
+              <select id="gov-urgsla-f-fila" onchange="_govUrgSlaAplicar()" style="font-size:12px;padding:5px 10px;border:1px solid var(--brd);border-radius:6px;background:#fff;color:var(--tx);min-width:160px"><option value="">Todas as filas</option></select>
+            </label>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status
+              <select id="gov-urgsla-f-status" onchange="_govUrgSlaAplicar()" style="font-size:12px;padding:5px 10px;border:1px solid var(--brd);border-radius:6px;background:#fff;color:var(--tx);min-width:160px"><option value="">Todos</option><option>Dentro do prazo</option><option>Atrasado</option><option>Ag. Ação</option><option>Concluído</option></select>
+            </label>
+            <button id="gov-urgsla-f-limpar" class="btn btn-s" style="font-size:11px;display:none" onclick="govUrgSlaLimpar()">✕ Limpar filtros</button>
+          </div>
+        </div>
         <div id="gov-urgsla-cards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:1rem"></div>
         <div id="gov-urgsla-tabela"></div>
       </div>
@@ -3803,6 +3818,21 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <div style="font-size:11px;color:var(--tx2);margin-top:2px">Prazo da oportunidade (coluna PRAZO) da planilha do Radar Estratégico. Clique num card para ver as RCs.</div>
             </div>
             <button class="btn btn-s" style="font-size:11px" onclick="_govUrgGarantirDados().then(govUrgPrazoRender)">↺ Atualizar</button>
+          </div>
+        </div>
+        <div class="cd" style="margin-bottom:1rem;padding:.75rem 1rem">
+          <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">
+            <span style="font-size:12px;font-weight:700;color:var(--az);align-self:center">🔎 Filtros</span>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status Patec
+              <select id="gov-urgprazo-f-patec" onchange="_govUrgPrazoAplicar()" style="font-size:12px;padding:5px 10px;border:1px solid var(--brd);border-radius:6px;background:#fff;color:var(--tx);min-width:160px"><option value="">Todos</option><option>PATEC em Andamento</option><option>PATEC Finalizado</option><option>XGL</option><option>Status B</option></select>
+            </label>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Fila Levelboard
+              <select id="gov-urgprazo-f-fila" onchange="_govUrgPrazoAplicar()" style="font-size:12px;padding:5px 10px;border:1px solid var(--brd);border-radius:6px;background:#fff;color:var(--tx);min-width:160px"><option value="">Todas as filas</option></select>
+            </label>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status
+              <select id="gov-urgprazo-f-status" onchange="_govUrgPrazoAplicar()" style="font-size:12px;padding:5px 10px;border:1px solid var(--brd);border-radius:6px;background:#fff;color:var(--tx);min-width:160px"><option value="">Todos</option><option>Dentro do prazo</option><option>Atrasado</option><option>Ag. Ação</option><option>Concluído</option></select>
+            </label>
+            <button id="gov-urgprazo-f-limpar" class="btn btn-s" style="font-size:11px;display:none" onclick="govUrgPrazoLimpar()">✕ Limpar filtros</button>
           </div>
         </div>
         <div id="gov-urgprazo-cards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:1rem"></div>
@@ -15853,11 +15883,9 @@ function _govUrgSlaTabela(){
 }
 function govUrgSlaRender(){
   const uni=_govUrgUniverso();
-  const g={max:[],alta:[],atencao:[]};
-  uni.forEach(function(it){ const f=_govUrgSlaFaixa(it.sla); if(f) g[f].push(it); });
-  window._govUrgSlaGrupos=g;
-  _govUrgSlaPintarCards();
-  _govUrgSlaTabela();
+  window._govUrgSlaUni=uni;
+  _govUrgPreencherFila('gov-urgsla-f-fila', uni.filter(function(it){ return _govUrgSlaFaixa(it.sla); }));
+  _govUrgSlaAplicar();
 }
 function govUrgSlaSelecionar(k){
   _govUrgSlaBucket = (_govUrgSlaBucket===k ? null : k);
@@ -15906,17 +15934,71 @@ function _govUrgPrazoTabela(){
 }
 function govUrgPrazoRender(){
   const uni=_govUrgPrazoUniverso();
-  const g={vencida:[],max:[],alta:[]};
-  uni.forEach(function(it){ const f=_govUrgPrazoFaixa(it.prazoOp); if(f) g[f].push(it); });
-  window._govUrgPrazoGrupos=g;
-  _govUrgPrazoPintarCards();
-  _govUrgPrazoTabela();
+  window._govUrgPrazoUni=uni;
+  _govUrgPreencherFila('gov-urgprazo-f-fila', uni);
+  _govUrgPrazoAplicar();
 }
 function govUrgPrazoSelecionar(k){
   _govUrgPrazoBucket = (_govUrgPrazoBucket===k ? null : k);
   _govUrgPrazoPintarCards();
   _govUrgPrazoTabela();
 }
+
+// ── Filtros combinados (Status Patec × Fila Levelboard × Status) ──
+function _govUrgFilaOpcoes(itens){
+  const set=new Set();
+  itens.forEach(function(it){ const f=String(it.fila||'').trim(); if(f) set.add(f); });
+  return Array.from(set).sort(function(a,b){ return a.localeCompare(b,'pt-BR'); });
+}
+function _govUrgPreencherFila(selId, itens){
+  const sel=document.getElementById(selId); if(!sel) return;
+  const atual=sel.value;
+  const ops=_govUrgFilaOpcoes(itens);
+  sel.innerHTML='<option value="">Todas as filas</option>'+ops.map(function(f){ return '<option value="'+_govUrgEsc(f)+'">'+_govUrgEsc(f)+'</option>'; }).join('');
+  if(atual && ops.indexOf(atual)>=0) sel.value=atual;
+}
+function _govUrgFiltrar(itens, fPatec, fFila, fStatus){
+  return itens.filter(function(it){
+    if(fPatec  && it.statusPatec!==fPatec) return false;
+    if(fFila   && String(it.fila||'').trim()!==fFila) return false;
+    if(fStatus && _govUrgStatusLabel(it.statusTrat)!==fStatus) return false;
+    return true;
+  });
+}
+function _govUrgValor(id){ const e=document.getElementById(id); return e?(e.value||''):''; }
+function _govUrgFiltrosAtivos(pref){
+  return !!(_govUrgValor(pref+'-f-patec')||_govUrgValor(pref+'-f-fila')||_govUrgValor(pref+'-f-status'));
+}
+
+function _govUrgSlaAplicar(){
+  const uni=window._govUrgSlaUni||[];
+  const filt=_govUrgFiltrar(uni, _govUrgValor('gov-urgsla-f-patec'), _govUrgValor('gov-urgsla-f-fila'), _govUrgValor('gov-urgsla-f-status'));
+  const g={max:[],alta:[],atencao:[]};
+  filt.forEach(function(it){ const f=_govUrgSlaFaixa(it.sla); if(f) g[f].push(it); });
+  window._govUrgSlaGrupos=g;
+  _govUrgSlaPintarCards();
+  _govUrgSlaTabela();
+  const b=document.getElementById('gov-urgsla-f-limpar'); if(b) b.style.display=_govUrgFiltrosAtivos('gov-urgsla')?'':'none';
+}
+function govUrgSlaLimpar(){
+  ['gov-urgsla-f-patec','gov-urgsla-f-fila','gov-urgsla-f-status'].forEach(function(id){ const e=document.getElementById(id); if(e) e.value=''; });
+  _govUrgSlaAplicar();
+}
+function _govUrgPrazoAplicar(){
+  const uni=window._govUrgPrazoUni||[];
+  const filt=_govUrgFiltrar(uni, _govUrgValor('gov-urgprazo-f-patec'), _govUrgValor('gov-urgprazo-f-fila'), _govUrgValor('gov-urgprazo-f-status'));
+  const g={vencida:[],max:[],alta:[]};
+  filt.forEach(function(it){ const f=_govUrgPrazoFaixa(it.prazoOp); if(f) g[f].push(it); });
+  window._govUrgPrazoGrupos=g;
+  _govUrgPrazoPintarCards();
+  _govUrgPrazoTabela();
+  const b=document.getElementById('gov-urgprazo-f-limpar'); if(b) b.style.display=_govUrgFiltrosAtivos('gov-urgprazo')?'':'none';
+}
+function govUrgPrazoLimpar(){
+  ['gov-urgprazo-f-patec','gov-urgprazo-f-fila','gov-urgprazo-f-status'].forEach(function(id){ const e=document.getElementById(id); if(e) e.value=''; });
+  _govUrgPrazoAplicar();
+}
+
 
 function govSetTab(aba, btn){
   // Aba XGL é exclusiva do ADLV
