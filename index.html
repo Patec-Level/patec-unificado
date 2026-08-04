@@ -4604,9 +4604,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <!-- Coluna esquerda: filtros + KPIs -->
           <div style="flex:1;min-width:220px">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:.75rem">
-              <select id="pc-filtro-analista" onchange="pcFiltrar()" style="font-size:12px;padding:5px 10px;min-width:140px">
-                <option value="">Todos os analistas</option>
-              </select>
               <input type="text" id="pc-busca" placeholder="🔍 Buscar RC..." oninput="pcBuscaSincronizada(this.value)" style="font-size:12px;padding:5px 10px;min-width:160px;flex:1;max-width:260px">
               <button class="btn btn-s" style="font-size:11px" onclick="pcLimparFiltros()">✕ Limpar</button>
             </div>
@@ -4708,6 +4705,19 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <div id="pc-prod-painel" style="display:none"></div>
 
       <!-- Abas -->
+      <!-- Filtro de combinacao (Fila Levelboard x Status x Analista) -->
+      <div class="cd" style="margin-bottom:1rem;padding:.75rem 1rem">
+        <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;color:var(--az);align-self:center">🔎 Filtros</span>
+          <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Fila Levelboard<div class="gov-ms" id="gov-fpc-ms-fila" style="position:relative;min-width:185px"></div></label>
+          <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status<div class="gov-ms" id="gov-fpc-ms-status" style="position:relative;min-width:170px"></div></label>
+          <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Analista<div class="gov-ms" id="gov-fpc-ms-analista" style="position:relative;min-width:170px"></div></label>
+          <button id="gov-fpc-f-limpar" class="btn btn-s" style="font-size:11px;display:none" onclick="pcComboLimpar()">✕ Limpar filtros</button>
+          <div id="gov-fpc-f-count" style="margin-left:auto;background:var(--azc);border:1.5px solid var(--azm);border-radius:8px;padding:5px 16px;text-align:center;align-self:center;line-height:1.15"><div style="font-size:19px;font-weight:800;color:var(--azm)" id="gov-fpc-f-count-n">0</div><div style="font-size:9px;color:var(--tx2);font-weight:700;text-transform:uppercase;letter-spacing:.3px" id="gov-fpc-f-count-l">itens</div></div>
+        </div>
+        <div style="font-size:10px;color:var(--tx2);margin-top:6px">Escolha um ou mais valores em cada filtro — dentro do filtro soma (OU), entre filtros combina (E). Aplica a todas as abas abaixo; o card mostra a contagem da aba aberta.</div>
+      </div>
+
       <div class="stabs" id="pc-tabs" style="margin-bottom:1rem">
         <button class="stab active" onclick="pcSetTab('vencido',this)">⏰ Vencido</button>
         <button class="stab" onclick="pcSetTab('reprovado',this)">❌ 100% Reprovado</button>
@@ -15268,6 +15278,7 @@ function pcInicializar(){
     sel.innerHTML = '<option value="">Todos os analistas</option>' + analistas.map(a=>`<option value="${a}"${a===cur?' selected':''}>${a}</option>`).join('');
   }
   if(sel) sel.innerHTML = '<option value="">Todos</option>' + analistas.map(a=>`<option>${a}</option>`).join('');
+  _govFabInit('gov-fpc', _pcUniversoMeta(), pcFiltrar);
 
   // KPIs gerais
   const vencidos   = base.filter(r => (r.validade||'').toLowerCase().includes('vencida') || (r.validade||'').toLowerCase().includes('vencid'));
@@ -15320,6 +15331,40 @@ function pcGetReprovados(){
   });
 }
 
+// ── Filtro de combinacao da Planilha Critica (Fila x Status x Analista) ──
+// Reaproveita o motor _msInit/_govUrgMS. Aplica em todas as abas da PC.
+function _pcUniverso(){
+  return (_radarDados||[]).filter(function(r){
+    var s=(r.analista_auto||'').trim();
+    return s==='Analisar PATEC Finalizado' || s==='PATEC Finalizado sem fornecedores aprovados' || s==='Analisar PATEC Cancelado';
+  });
+}
+function _pcUniversoMeta(){
+  return _pcUniverso().map(function(r){
+    return { fila:String(r.fila||'').trim(), status:_govUrgStatusLabel(_govFabStatusMapa(r)), analista:String(r.analista||'').trim() };
+  });
+}
+function _pcComboMatch(r){
+  var aF=_msGet('gov-fpc-ms-fila'), aS=_msGet('gov-fpc-ms-status'), aA=_msGet('gov-fpc-ms-analista');
+  return _govUrgEmSet(aF, String(r.fila||'').trim())
+      && _govUrgEmSet(aS, _govUrgStatusLabel(_govFabStatusMapa(r)))
+      && _govUrgEmSet(aA, String(r.analista||'').trim());
+}
+function _pcComboAtivo(){ return _msGet('gov-fpc-ms-fila').length||_msGet('gov-fpc-ms-status').length||_msGet('gov-fpc-ms-analista').length; }
+function pcComboLimpar(){
+  ['gov-fpc-ms-fila','gov-fpc-ms-status','gov-fpc-ms-analista'].forEach(function(id){ if(_govUrgMS[id]){ _govUrgMS[id].sel=new Set(); _msRender(id); } });
+  pcFiltrar();
+}
+function _pcAtualizarCard(){
+  var el=document.getElementById('gov-fpc-f-count-n'); if(!el) return;
+  var ab=(typeof _pcTabAtiva!=='undefined'&&_pcTabAtiva)?_pcTabAtiva:'vencido';
+  var srcEl=document.getElementById('pc-count-'+ab);
+  var num='0'; if(srcEl){ var mm=String(srcEl.textContent||'').match(/\d+/); if(mm) num=mm[0]; }
+  el.textContent=num;
+  var lbl=document.getElementById('gov-fpc-f-count-l');
+  if(lbl){ var nomes={vencido:'Vencido',reprovado:'100% Reprovado',criticos:'Itens Criticos',fluxo:'Tirar do Fluxo',cancelado:'Cancelado',urgmuitoalta:'Urg. Muito Alta',urgalta:'Urg. Alta',urgbaixa:'Urg. Baixa'}; lbl.textContent='em '+(nomes[ab]||ab); }
+  var bl=document.getElementById('gov-fpc-f-limpar'); if(bl) bl.style.display=_pcComboAtivo()?'':'none';
+}
 function pcFiltrar(){
   const fAn  = (document.getElementById('pc-filtro-analista')?.value||'').toLowerCase();
   const fBus = (document.getElementById('pc-busca')?.value||'').toLowerCase();
@@ -15328,7 +15373,7 @@ function pcFiltrar(){
   const filtrar = (rows) => rows.filter(r => {
     const mAn  = !fAn  || (r.analista||'').toLowerCase().includes(fAn);
     const mBus = !fBus || (r.rc||'').toLowerCase().includes(fBus) || (r.num_oport||'').toLowerCase().includes(fBus);
-    return mAn && mBus;
+    return mAn && mBus && _pcComboMatch(r);
   });
 
   // VENCIDO: col J = 'Vencida' + col D = 'Analisar PATEC Finalizado'
@@ -15379,6 +15424,8 @@ function pcFiltrar(){
     return u === 'baixo' || u === 'baixa';
   }));
   pcRenderTabela('urgbaixa', urgBaixa, ['analista','validade','sla','rc','item_rc','num_oport','seq'], false);
+  if(_pcTabAtiva==='fluxo' && document.getElementById('pc-tbody-fluxo')) pcRenderFluxo();
+  _pcAtualizarCard();
 }
 
 function pcRenderTabela(aba, rows, campos, comExtra){
@@ -15636,6 +15683,7 @@ function pcSetTab(aba, btn){
     if(el) el.style.display = t === aba ? 'block' : 'none';
   });
   if(aba === 'fluxo') pcRenderFluxo();
+  if(typeof _pcAtualizarCard==='function') _pcAtualizarCard();
 }
 
 function pcAtualizar(){
@@ -15688,7 +15736,7 @@ function pcExportar(){
   const filtrar = rows => rows.filter(r => {
     const mAn  = !fAn  || (r.analista||'').toLowerCase().includes(fAn);
     const mBus = !fBus || (r.rc||'').toLowerCase().includes(fBus) || (r.num_oport||'').toLowerCase().includes(fBus);
-    return mAn && mBus;
+    return mAn && mBus && _pcComboMatch(r);
   });
 
   const grupoMercDe = r => r.grupo_merc || (_radarDados||[]).find(x=>String(x.rc||'').trim()===String(r.rc||'').trim()&&x.grupo_merc)?.grupo_merc || '';
@@ -15814,12 +15862,21 @@ function pcRenderFluxo(){
 
   const liberados = rows.filter(r => String(r[idxFluxo]||'').trim().toUpperCase().includes('LIBERAR'));
   const vistos = new Set();
-  const unicos = [];
+  let unicos = [];
   liberados.forEach(r => {
     const chave = [r[iRC],r[iSEQ],r[iOP],r[iIOP]].map(v=>String(v||'').trim()).join('|');
     if(!vistos.has(chave)){ vistos.add(chave); unicos.push(r); }
   });
 
+  unicos = unicos.filter(function(r){
+    var fila=String(r[iFila]||'').trim();
+    var ch=[r[iRC],r[iSEQ],r[iOP]].map(function(v){return String(v||'').trim();}).join('|');
+    var m=_govDados[ch]||{};
+    var st=m.status||''; if(!st && GOV_FILAS_AG.some(function(f){return fila.toUpperCase().includes(f.toUpperCase());})) st='AG. TRATAMENTO';
+    var sc=govCalcStatus(govCalcPrazo(st,m.envio||''),m.finalizado||''); if(!sc) sc='AG. AÇÃO';
+    var aF=_msGet('gov-fpc-ms-fila'), aS=_msGet('gov-fpc-ms-status'), aA=_msGet('gov-fpc-ms-analista');
+    return _govUrgEmSet(aF,fila) && _govUrgEmSet(aS,_govUrgStatusLabel(sc)) && _govUrgEmSet(aA,String(r[iAnalista]||'').trim());
+  });
   if(ct) ct.textContent = unicos.length + ' registro(s) únicos';
 
   if(!unicos.length){
