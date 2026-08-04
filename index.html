@@ -4185,6 +4185,18 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
       <!-- ABA MAPA -->
       <div id="gov-tab-mapa" style="display:none">
+
+        <!-- Filtro de combinacao (Status Patec x Fila Levelboard x Status) -->
+        <div class="cd" style="margin-bottom:1rem;padding:.75rem 1rem">
+          <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">
+            <span style="font-size:12px;font-weight:700;color:var(--az);align-self:center">🔎 Filtros</span>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status Patec<div class="gov-ms" id="gov-fmapa-ms-patec" style="position:relative;min-width:185px"></div></label>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Fila Levelboard<div class="gov-ms" id="gov-fmapa-ms-fila" style="position:relative;min-width:185px"></div></label>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status<div class="gov-ms" id="gov-fmapa-ms-status" style="position:relative;min-width:170px"></div></label>
+            <button id="gov-fmapa-f-limpar" class="btn btn-s" style="font-size:11px;display:none" onclick="govFabMapaLimpar()">✕ Limpar filtros</button>
+          </div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:6px">Escolha um ou mais valores em cada filtro — dentro do filtro soma (OU), entre filtros combina (E).</div>
+        </div>
         <!-- KPIs MAPA -->
         <div class="kgrid" id="gov-kpis" style="margin-bottom:1rem"></div>
 
@@ -4224,6 +4236,18 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
       <!-- ABA PATEC EM ANDAMENTO (exclusiva do ADLV) -->
       <div id="gov-tab-andamento">
+
+        <!-- Filtro de combinacao (Status Patec x Fila Levelboard x Status) -->
+        <div class="cd" style="margin-bottom:1rem;padding:.75rem 1rem">
+          <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">
+            <span style="font-size:12px;font-weight:700;color:var(--az);align-self:center">🔎 Filtros</span>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status Patec<div class="gov-ms" id="gov-fand-ms-patec" style="position:relative;min-width:185px"></div></label>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Fila Levelboard<div class="gov-ms" id="gov-fand-ms-fila" style="position:relative;min-width:185px"></div></label>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status<div class="gov-ms" id="gov-fand-ms-status" style="position:relative;min-width:170px"></div></label>
+            <button id="gov-fand-f-limpar" class="btn btn-s" style="font-size:11px;display:none" onclick="govFabAndLimpar()">✕ Limpar filtros</button>
+          </div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:6px">Escolha um ou mais valores em cada filtro — dentro do filtro soma (OU), entre filtros combina (E).</div>
+        </div>
         <div class="kgrid" id="gov-andamento-kpis" style="margin-bottom:1rem"></div>
         <div id="gov-andamento-sem-dados" style="text-align:center;padding:3rem;color:var(--tx2);font-size:13px;display:none">
           📡 Nenhum item em "Aguardar PATEC ser Finalizado" no momento.
@@ -4260,6 +4284,18 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
       <!-- ABA XGL -->
       <div id="gov-tab-xgl" style="display:none">
+
+        <!-- Filtro de combinacao (Status Patec x Fila Levelboard x Status) -->
+        <div class="cd" style="margin-bottom:1rem;padding:.75rem 1rem">
+          <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">
+            <span style="font-size:12px;font-weight:700;color:var(--az);align-self:center">🔎 Filtros</span>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status Patec<div class="gov-ms" id="gov-fxgl-ms-patec" style="position:relative;min-width:185px"></div></label>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Fila Levelboard<div class="gov-ms" id="gov-fxgl-ms-fila" style="position:relative;min-width:185px"></div></label>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status<div class="gov-ms" id="gov-fxgl-ms-status" style="position:relative;min-width:170px"></div></label>
+            <button id="gov-fxgl-f-limpar" class="btn btn-s" style="font-size:11px;display:none" onclick="govFabXglLimpar()">✕ Limpar filtros</button>
+          </div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:6px">Escolha um ou mais valores em cada filtro — dentro do filtro soma (OU), entre filtros combina (E).</div>
+        </div>
 
         <!-- KPIs XGL -->
         <div class="kgrid" id="xgl-kpis" style="margin-bottom:1rem"></div>
@@ -4412,6 +4448,18 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
       <!-- ABA STATUS B -->
       <div id="gov-tab-statusb" style="display:none">
+
+        <!-- Filtro de combinacao (Status Patec x Fila Levelboard x Status) -->
+        <div class="cd" style="margin-bottom:1rem;padding:.75rem 1rem">
+          <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">
+            <span style="font-size:12px;font-weight:700;color:var(--az);align-self:center">🔎 Filtros</span>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status Patec<div class="gov-ms" id="gov-fsb-ms-patec" style="position:relative;min-width:185px"></div></label>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Fila Levelboard<div class="gov-ms" id="gov-fsb-ms-fila" style="position:relative;min-width:185px"></div></label>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status<div class="gov-ms" id="gov-fsb-ms-status" style="position:relative;min-width:170px"></div></label>
+            <button id="gov-fsb-f-limpar" class="btn btn-s" style="font-size:11px;display:none" onclick="govFabSbLimpar()">✕ Limpar filtros</button>
+          </div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:6px">Escolha um ou mais valores em cada filtro — dentro do filtro soma (OU), entre filtros combina (E).</div>
+        </div>
 
         <!-- KPIs Status B -->
         <div class="kgrid" id="sb-kpis" style="margin-bottom:1rem"></div>
@@ -16265,6 +16313,49 @@ function govUrgPrazoLimpar(){
 }
 
 
+// ── Filtros de analise nas abas da Governanca (Andamento / Finalizado / XGL / Status B) ──
+// Reaproveita o motor de multi-selecao _msInit/_govUrgMS. Mesma combinacao das
+// abas Urgencia (Status Patec x Fila Levelboard x Status): OU dentro do filtro,
+// E entre filtros. Filtra APENAS as linhas da tabela (os KPIs seguem no total da aba).
+function _govFabInit(prefix, metaList, applyFn){
+  var setP=new Set(), setF=new Set(), setS=new Set();
+  metaList.forEach(function(it){
+    if(it.statusPatec) setP.add(it.statusPatec);
+    var f=String(it.fila||'').trim(); if(f) setF.add(f);
+    if(it.status) setS.add(it.status);
+  });
+  var srt=function(a,b){ return String(a).localeCompare(String(b),'pt-BR'); };
+  _msInit(prefix+'-ms-patec',  Array.from(setP).sort(srt), applyFn, true);
+  _msInit(prefix+'-ms-fila',   Array.from(setF).sort(srt), applyFn, true);
+  _msInit(prefix+'-ms-status', Array.from(setS).sort(srt), applyFn, true);
+}
+function _govFabFiltrar(prefix, metaList){
+  var aP=_msGet(prefix+'-ms-patec'), aF=_msGet(prefix+'-ms-fila'), aS=_msGet(prefix+'-ms-status');
+  var b=document.getElementById(prefix+'-f-limpar');
+  if(b) b.style.display=_govUrgFiltrosAtivos([prefix+'-ms-patec',prefix+'-ms-fila',prefix+'-ms-status'])?'':'none';
+  return metaList.filter(function(it){
+    if(!_govUrgEmSet(aP, it.statusPatec)) return false;
+    if(!_govUrgEmSet(aF, String(it.fila||'').trim())) return false;
+    if(!_govUrgEmSet(aS, it.status)) return false;
+    return true;
+  });
+}
+function _govFabLimpar(prefix, applyFn){
+  [prefix+'-ms-patec',prefix+'-ms-fila',prefix+'-ms-status'].forEach(function(id){ if(_govUrgMS[id]){ _govUrgMS[id].sel=new Set(); _msRender(id); } });
+  if(applyFn) applyFn();
+}
+// status calc (espelha o calculo inline das tabelas MAPA/Andamento)
+function _govFabStatusMapa(r){
+  var m=_govDados[govChave(r)]||{};
+  var st=m.status||'';
+  if(!st && GOV_FILAS_AG.some(function(f){ return (r.fila||'').toUpperCase().includes(f.toUpperCase()); })) st='AG. TRATAMENTO';
+  return govCalcStatus(govCalcPrazo(st, m.envio||''), m.finalizado||'');
+}
+function govFabMapaLimpar(){ _govFabLimpar('gov-fmapa', function(){ govRenderMapa(govFiltroMapaPadrao()); }); }
+function govFabAndLimpar(){ _govFabLimpar('gov-fand', govRenderAndamento); }
+function govFabXglLimpar(){ _govFabLimpar('gov-fxgl', xglRender); }
+function govFabSbLimpar(){ _govFabLimpar('gov-fsb', sbRender); }
+
 function govSetTab(aba, btn){
   // Aba XGL é exclusiva do ADLV
   if(aba === 'xgl' && _moduloAtivo === 'fast'){
@@ -16394,7 +16485,13 @@ function govRenderMapa(dados, tbodyId){
     console.log('[Status Mapa] Quantos passaram no filtro da tabela:', dados.length);
   }
 
-  tbody.innerHTML = dados.filter(r => !(_govDados[govChave(r)]?.finalizado)).map((r, idx) => {
+  var _fabPfx = tbodyId === 'gov-andamento-tbody' ? 'gov-fand' : 'gov-fmapa';
+  var _fabSp  = tbodyId === 'gov-andamento-tbody' ? 'PATEC em Andamento' : 'PATEC Finalizado';
+  var _fabBase = dados.filter(function(r){ return !(_govDados[govChave(r)]?.finalizado); });
+  var _fabMeta = _fabBase.map(function(r){ return { r:r, statusPatec:_fabSp, fila:String(r.fila||'').trim(), status:_govUrgStatusLabel(_govFabStatusMapa(r)) }; });
+  _govFabInit(_fabPfx, _fabMeta, function(){ govRenderMapa(dados, tbodyId); });
+  var _fabVis = _govFabFiltrar(_fabPfx, _fabMeta).map(function(x){ return x.r; });
+  tbody.innerHTML = _fabVis.map((r, idx) => {
     const chave = govChave(r);
     const m = _govDados[chave] || {};
 
@@ -16941,7 +17038,16 @@ function xglRender(){
     <div class="kc"><div class="kn" style="color:var(--vd)">${xglConcluido}</div><div class="kl">Concluídos</div></div>
   `;
 
-  tbody.innerHTML = _xglItens.filter(r => !(_xglDados[xglChave(r.rc,r.item,r.oport,r.itemop)]?.finalizado)).map((r, idx) => {
+  var _fabBase = _xglItens.filter(function(r){ return !(_xglDados[xglChave(r.rc,r.item,r.oport,r.itemop)]?.finalizado); });
+  var _fabMeta = _fabBase.map(function(r){
+    var m=_xglDados[xglChave(r.rc,r.item,r.oport,r.itemop)]||{};
+    var stt=m.status||'AG. TRATAMENTO';
+    var scalc=govCalcStatus(govCalcPrazo(stt, m.envio||''), m.finalizado||'');
+    return { r:r, statusPatec:'XGL', fila:_filaLevelPorStatus(stt), status:_govUrgStatusLabel(scalc) };
+  });
+  _govFabInit('gov-fxgl', _fabMeta, xglRender);
+  var _fabVis = _govFabFiltrar('gov-fxgl', _fabMeta).map(function(x){ return x.r; });
+  tbody.innerHTML = _fabVis.map((r, idx) => {
     const chave = xglChave(r.rc, r.item, r.oport, r.itemop);
     const m = _xglDados[chave] || {};
 
@@ -18900,7 +19006,16 @@ function sbRender(){
     <div class="kc"><div class="kn" style="color:var(--am)">${sbEmAberto}</div><div class="kl">Em Aberto<br><span style="font-size:10px;color:var(--vm);font-weight:600">${sbAtrasado} atrasado${sbAtrasado!==1?'s':''} · ${sbEmAberto-sbAtrasado} no prazo</span></div></div>
     <div class="kc"><div class="kn" style="color:var(--vd)">${sbConcluido}</div><div class="kl">Concluídos</div></div>
   `;
-  tbody.innerHTML = _sbItens.filter(r => !(_sbDados[sbChave(r.rc,r.seq,r.op,r.item)]?.finalizado)).map((r, idx) => {
+  var _fabBase = _sbItens.filter(function(r){ return !(_sbDados[sbChave(r.rc,r.seq,r.op,r.item)]?.finalizado); });
+  var _fabMeta = _fabBase.map(function(r){
+    var m=_sbDados[sbChave(r.rc,r.seq,r.op,r.item)]||{};
+    var stt=m.status||'';
+    var scalc=govCalcStatus(govCalcPrazo(stt, m.envio||''), m.finalizado||'');
+    return { r:r, statusPatec:'Status B', fila:_filaLevelPorStatus(stt), status:_govUrgStatusLabel(scalc) };
+  });
+  _govFabInit('gov-fsb', _fabMeta, sbRender);
+  var _fabVis = _govFabFiltrar('gov-fsb', _fabMeta).map(function(x){ return x.r; });
+  tbody.innerHTML = _fabVis.map((r, idx) => {
     const chave = sbChave(r.rc, r.seq, r.op, r.item);
     const m = _sbDados[chave] || {};
     const statusAtual = m.status || '';
