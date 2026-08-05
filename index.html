@@ -25362,7 +25362,8 @@ async function fdiaInicializar(){
     compRow(cntComp.xgl,         'XGL') +
     compRow(cntComp.republicacao,'Republicação') +
     compRow(cntComp.pedido,      'RCs para Pedidos') +
-    compRow(cntComp.devolucao,   'RCs para Devoluções');
+    compRow(cntComp.devolucao,   'RCs para Devoluções') +
+    compRow(cntComp.nova_reserva||0, 'Nova Reserva');
 
   // Justificativa — visível sempre (para quem bateu meta, campos são opcionais)
   const justBox = document.getElementById('fdia-justif-box');
