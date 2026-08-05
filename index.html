@@ -1045,7 +1045,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div class="cd-t">Meus últimos lançamentos</div>
           <div class="tw" style="max-height:220px">
             <table>
-              <thead><tr><th>Data</th><th>Presença</th><th>1ª Análise</th><th>Em Tratativa</th><th>Status B</th><th>Outros</th><th>Forn.</th><th>Req.</th><th>MDG</th><th>Val.Thiago</th><th>XGL</th><th>Rep.</th><th>Pedidos</th><th>Dev.</th><th>Total</th><th>Meta</th></tr></thead>
+              <thead><tr><th>Data</th><th>Presença</th><th>1ª Análise</th><th>Em Tratativa</th><th>Status B</th><th>Outros</th><th>Forn.</th><th>Req.</th><th>MDG</th><th>Val.Thiago</th><th>XGL</th><th>Rep.</th><th>Pedidos</th><th>Dev.</th><th>Nova Res.</th><th>Total</th><th>Meta</th></tr></thead>
               <tbody id="pr-hist-tb"></tbody>
             </table>
           </div>
@@ -2032,7 +2032,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
           <div class="tw" style="margin-bottom:1rem">
             <table>
-              <thead><tr><th>Data</th><th>Colaborador</th><th>Presença</th><th>1ª Análise</th><th>Em Tratativa</th><th>Status B</th><th>Outros</th><th>Forn.</th><th>Req.</th><th>MDG</th><th>Val.Thiago</th><th>XGL</th><th>Rep.</th><th>Pedidos</th><th>Dev.</th><th>Total</th><th>Meta</th><th>Justificativa</th><th></th></tr></thead>
+              <thead><tr><th>Data</th><th>Colaborador</th><th>Presença</th><th>1ª Análise</th><th>Em Tratativa</th><th>Status B</th><th>Outros</th><th>Forn.</th><th>Req.</th><th>MDG</th><th>Val.Thiago</th><th>XGL</th><th>Rep.</th><th>Pedidos</th><th>Dev.</th><th>Nova Res.</th><th>Total</th><th>Meta</th><th>Justificativa</th><th></th></tr></thead>
               <tbody id="adm-prod-tb"></tbody>
               <tfoot id="adm-prod-tf"></tfoot>
             </table>
@@ -8002,7 +8002,7 @@ function renderMiniHist(){
     const f=[...(r.f||[])];while(f.length<12)f.push(0);
     const tot=(f[0]||0)+(f[1]||0)+(f[2]||0);
     const ok=r.pres==='Folga'?'<span class="pl pl-g">Folga</span>':tot>=meta?'<span class="pl pl-ok">✓ Meta</span>':'<span class="pl pl-b">Abaixo</span>';
-    const fOrdem=[f[0],f[1],f[2],f[11],f[3],f[4],f[5],f[6],f[7],f[8],f[9],f[10]];
+    const fOrdem=[f[0],f[1],f[2],f[11],f[3],f[4],f[5],f[6],f[7],f[8],f[9],f[10],f[14]];
     return`<tr>
       <td>${fmtDt(r.data)}</td>
       <td>${presPill(r.pres)}</td>
@@ -9309,11 +9309,11 @@ function filtrarHistProd(modo){
     else if(semMeta) metaPill=isAndre?'<span class="pl pl-az">Líder</span>':'<span class="pl pl-az">Ajuda</span>';
     else if(tot>=metaVal) metaPill='<span class="pl pl-ok">✓ Meta</span>';
     else metaPill='<span class="pl pl-b">Abaixo</span>';
-    const fOrdem=[f[0],f[1],f[2],f[11],f[3],f[4],f[5],f[6],f[7],f[8],f[9],f[10]];
+    const fOrdem=[f[0],f[1],f[2],f[11],f[3],f[4],f[5],f[6],f[7],f[8],f[9],f[10],f[14]];
     const ridx = registros.indexOf(r);
     return`<tr><td>${fmtDt(r.data)}</td><td><strong>${r.colab}</strong></td><td>${presPill(r.pres)}</td>${fOrdem.map(v=>`<td>${v||'—'}</td>`).join('')}<td style="font-weight:700">${tot}</td><td>${metaPill}</td><td style="font-size:10px;color:var(--tx2);max-width:120px;overflow:hidden;text-overflow:ellipsis">${r.justif||'—'}</td><td><button class="btn btn-r" style="padding:2px 8px;font-size:11px" onclick="admExcluirProducao(${ridx},'${r.colab}','${r.data}')">✕</button></td></tr>`;
   }).join('');
-  const sumsOrdem=[sums[0],sums[1],sums[2],sums[11],sums[3],sums[4],sums[5],sums[6],sums[7],sums[8],sums[9],sums[10]];
+  const sumsOrdem=[sums[0],sums[1],sums[2],sums[11],sums[3],sums[4],sums[5],sums[6],sums[7],sums[8],sums[9],sums[10],sums[14]];
   const totMeta=sums[0]+sums[1]+sums[2];
   document.getElementById('adm-prod-tf').innerHTML=`<tr><td colspan="3"><strong>TOTAL</strong></td>${sumsOrdem.map(v=>`<td style="font-weight:700">${v||'—'}</td>`).join('')}<td style="font-weight:700">${totMeta}</td><td>—</td><td>—</td></tr>`;
 }
