@@ -2811,7 +2811,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <select id="gca-f-origem" onchange="gcaRender()" style="width:100%;font-size:12px;padding:5px 10px"><option value="">Todas</option></select></div>
             <div class="field-wrap" style="min-width:180px"><span class="field-label">Concluído (destino)</span>
               <select id="gca-f-tipo" onchange="gcaRender()" style="width:100%;font-size:12px;padding:5px 10px">
-                <option value="">Todos</option><option>Pedido</option><option>XGL</option><option>Republicação</option><option>Devolução</option>
+                <option value="">Todos</option><option>Pedido</option><option>XGL</option><option>Republicação</option><option>Devolução</option><option>Nova Reserva</option>
               </select></div>
             <button class="btn btn-s" style="font-size:11px" onclick="gcaLimpar()">✕ Limpar</button>
           </div>
@@ -3152,7 +3152,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--az)">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:.875rem">
           <div>
-            <div class="cd-t" style="margin:0">📊 Desfechos por dia — Pedido · Republicação · XGL · Devolução</div>
+            <div class="cd-t" style="margin:0">📊 Desfechos por dia — Pedido · Republicação · XGL · Devolução · Nova Reserva</div>
             <div style="font-size:11px;color:var(--tx2);margin-top:3px">Itens finalizados por dia · segue o período do gráfico · use o filtro De/Até para ver datas específicas</div>
           </div>
           <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
@@ -3165,7 +3165,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div id="dfd-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:1rem"></div>
         <div class="tw">
           <table>
-            <thead><tr><th>Data</th><th style="text-align:center">🛒 Pedido</th><th style="text-align:center">🔄 Republicação</th><th style="text-align:center">📦 XGL</th><th style="text-align:center">↩ Devolução</th><th style="text-align:center">Total</th></tr></thead>
+            <thead><tr><th>Data</th><th style="text-align:center">🛒 Pedido</th><th style="text-align:center">🔄 Republicação</th><th style="text-align:center">📦 XGL</th><th style="text-align:center">↩ Devolução</th><th style="text-align:center">🔖 Nova Reserva</th><th style="text-align:center">Total</th></tr></thead>
             <tbody id="dfd-tbody"></tbody>
             <tfoot id="dfd-tfoot"></tfoot>
           </table>
@@ -5192,7 +5192,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <thead><tr>
                 <th>Data</th><th>Presença</th>
                 <th>1ª Anál.</th><th>Em Trat.</th><th>Status B</th><th>Ag Par.</th><th>Outros</th>
-                <th>Forn.</th><th>Req.</th><th>MDG</th><th>Val.Thiago</th><th>Parecerista</th><th>XGL</th><th>Rep.</th><th>Pedidos</th><th>Dev.</th>
+                <th>Forn.</th><th>Req.</th><th>MDG</th><th>Val.Thiago</th><th>Parecerista</th><th>XGL</th><th>Rep.</th><th>Pedidos</th><th>Dev.</th><th>Nova Res.</th>
                 <th>Total</th><th>%</th><th>Status</th>
               </tr></thead>
               <tbody id="fdia-hist-tbody"></tbody>
@@ -7036,12 +7036,12 @@ function renderEstPCP(){
   if(regsEstDia.length===0 && _acoesDia.length){
     const cnt=(pred)=>_acoesDia.filter(a=>!a.anulada&&pred(a)).length;
     const comp=(nome)=>_acoesDia.filter(a=>!a.anulada&&(a.tratamento===nome||a.conclusao===nome)).length;
-    const _f=Array(13).fill(0);
+    const _f=Array(15).fill(0);
     _f[0]=cnt(a=>a.tipo==='primeira_analise'); _f[1]=cnt(a=>a.tipo==='em_tratativa');
     _f[2]=cnt(a=>a.tipo==='status_b'); _f[12]=cnt(a=>a.tipo==='ag_parecer'); _f[11]=cnt(a=>a.tipo==='outros');
     _f[3]=comp('Fornecedor'); _f[4]=comp('Requisitante'); _f[5]=comp('MDG');
     _f[6]=comp('Val. Thiago')+comp('Thiago'); _f[7]=comp('XGL');
-    _f[8]=comp('Republicação'); _f[9]=comp('Pedido'); _f[10]=comp('Devolução');
+    _f[8]=comp('Republicação'); _f[9]=comp('Pedido'); _f[10]=comp('Devolução'); _f[14]=comp('Nova Reserva');
     regsEstDia = [{colab:'(ações)', data:dt, pres:'', f:_f}];
   }
   const somaF = (idx) => regsEstDia.reduce((s,r)=>s+(r.f[idx]||0),0);
@@ -7058,6 +7058,7 @@ function renderEstPCP(){
   const vRepub     = somaF(8);
   const vPedidos   = somaF(9);
   const vDevol     = somaF(10);
+  const vNovaReserva = somaF(14);
 
   const aAnalise   = dtAnt?somaFAnt(0)+somaFAnt(1)+somaFAnt(2)+somaFAnt(12):null;
   const aForn      = dtAnt?somaFAnt(3):null;
@@ -7068,6 +7069,7 @@ function renderEstPCP(){
   const aRepub     = dtAnt?somaFAnt(8):null;
   const aPedidos   = dtAnt?somaFAnt(9):null;
   const aDevol     = dtAnt?somaFAnt(10):null;
+  const aNovaReserva = dtAnt?somaFAnt(14):null;
 
   const cards=[
     {label:'Análise',          sub:'1ª Análise + Tratativa + Status B + Ag Parecer', val:vAnalise,   ant:aAnalise,   cor:'var(--azm)', bg:'var(--azc)', isMeta:true},
@@ -7079,6 +7081,7 @@ function renderEstPCP(){
     {label:'RCs Pedidos',      sub:'',  val:vPedidos,   ant:aPedidos,   cor:'var(--vd)', bg:'var(--cin)'},
     {label:'Republicação',     sub:'',  val:vRepub,     ant:aRepub,     cor:'var(--am)',  bg:'var(--cin)'},
     {label:'RCs Devoluções',   sub:'',  val:vDevol,     ant:aDevol,     cor:'var(--vm)', bg:'var(--cin)'},
+    {label:'Nova Reserva',     sub:'',  val:vNovaReserva, ant:aNovaReserva, cor:'#6D28D9', bg:'var(--cin)'},
   ];
 
   const META_DIA_EQUIPE = 90;
@@ -7188,8 +7191,8 @@ function distCalc(colab, de, ate){
     dias,
     analise, tratativa:soma(1), pf0:soma(0), pf2:soma(2), pf11:soma(11),
     forn:soma(3), req:soma(4), mdg:soma(5), val:soma(6),
-    xgl:soma(7), repub:soma(8), pedidos:soma(9), devol:soma(10),
-    total:analise+soma(3)+soma(4)+soma(5)+soma(6)+soma(7)+soma(8)+soma(9)+soma(10)
+    xgl:soma(7), repub:soma(8), pedidos:soma(9), devol:soma(10), nova_reserva:soma(14),
+    total:analise+soma(3)+soma(4)+soma(5)+soma(6)+soma(7)+soma(8)+soma(9)+soma(10)+soma(14)
   };
 }
 
@@ -9266,7 +9269,7 @@ function _sincronizarRegistrosComAcoes(){
                   comp('Fornecedor'), comp('Requisitante'), comp('MDG'),
                   comp('Val. Thiago')+comp('Thiago'), comp('XGL'),
                   comp('Republicação'), comp('Pedido'), comp('Devolução'),
-                  cnt('outros'), cnt('ag_parecer') ];
+                  cnt('outros'), cnt('ag_parecer'), 0, comp('Nova Reserva') ];
         if(f.some(function(v){return v>0;})){
           registros.push({colab:colab, data:dt, pres:'', f:f, justif:'', _daAcoes:true});
           existentes.add(key); add++;
@@ -10278,7 +10281,7 @@ async function expRelatorioFechamentos(){
       .where('data','>=',de).where('data','<=',ate)
       .orderBy('data','desc').get();
 
-    const rows = [['Data','Colaborador','Presença','1ª Análise','Em Tratativa','Status B','Outros','Fornecedor','Requisitante','MDG','Val.Thiago','XGL','Republicação','Pedido','Devolução','Total','Meta','%','Motivo','Observação','Horário Fechamento']];
+    const rows = [['Data','Colaborador','Presença','1ª Análise','Em Tratativa','Status B','Outros','Fornecedor','Requisitante','MDG','Val.Thiago','XGL','Republicação','Pedido','Devolução','Nova Reserva','Total','Meta','%','Motivo','Observação','Horário Fechamento']];
     snap.forEach(d=>{
       const r=d.data();
       const tot=(r.primeira_analise||0)+(r.em_tratativa||0)+(r.status_b||0)+(r.outros||0);
@@ -10288,7 +10291,7 @@ async function expRelatorioFechamentos(){
         r.data?.split('-').reverse().join('/')||'', r.colab||'', r.presenca||'',
         r.primeira_analise||0, r.em_tratativa||0, r.status_b||0, r.outros||0,
         r.forn||0, r.req||0, r.mdg||0, r.thiago||0, r.xgl||0,
-        r.republicacao||0, r.pedido||0, r.devolucao||0,
+        r.republicacao||0, r.pedido||0, r.devolucao||0, r.nova_reserva||0,
         tot, meta, Math.round(tot/meta*100)+'%',
         r.motivo||'', r.obs||'', ts
       ]);
@@ -11149,7 +11152,7 @@ async function rcqConsultar(){
   }
   const faseCor={'Concluído':'#16a34a','PATEC Finalizado':'#2563EB','PATEC em Andamento':'#d97706','XGL':'#7c3aed','Status B':'#0d9488','PATEC (MAPA)':'#64748b'};
   const chip=(t,c)=>'<span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700;background:'+(c||'#888')+'22;color:'+(c||'#333')+';border:1px solid '+(c||'#ccc')+'55">'+t+'</span>';
-  const desfCor={'Pedido':'#16a34a','XGL':'#7c3aed','Devolução':'#dc2626','Republicação':'#2563EB'};
+  const desfCor={'Pedido':'#16a34a','XGL':'#7c3aed','Devolução':'#dc2626','Republicação':'#2563EB','Nova Reserva':'#6D28D9'};
   const cards=linhas.map(l=>
     '<div style="border:1px solid var(--brd);border-radius:10px;padding:12px 14px;margin-bottom:8px;background:#fff">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">'+
@@ -11275,7 +11278,8 @@ function gcaRender(){
     '<div class="kc" style="cursor:pointer'+_act('Pedido')+'" title="Filtrar Pedido" onclick="gcaFiltrarTipo(\'Pedido\')"><div class="kn" style="color:#16a34a">'+cont('Pedido')+'</div><div class="kl">Pedido</div></div>'+
     '<div class="kc" style="cursor:pointer'+_act('XGL')+'" title="Filtrar XGL" onclick="gcaFiltrarTipo(\'XGL\')"><div class="kn" style="color:#7c3aed">'+cont('XGL')+'</div><div class="kl">XGL</div></div>'+
     '<div class="kc" style="cursor:pointer'+_act('Republicação')+'" title="Filtrar Republicação" onclick="gcaFiltrarTipo(\'Republicação\')"><div class="kn" style="color:#2563EB">'+cont('Republicação')+'</div><div class="kl">Republicação</div></div>'+
-    '<div class="kc" style="cursor:pointer'+_act('Devolução')+'" title="Filtrar Devolução" onclick="gcaFiltrarTipo(\'Devolução\')"><div class="kn" style="color:#dc2626">'+cont('Devolução')+'</div><div class="kl">Devolução</div></div>';
+    '<div class="kc" style="cursor:pointer'+_act('Devolução')+'" title="Filtrar Devolução" onclick="gcaFiltrarTipo(\'Devolução\')"><div class="kn" style="color:#dc2626">'+cont('Devolução')+'</div><div class="kl">Devolução</div></div>'+
+    '<div class="kc" style="cursor:pointer'+_act('Nova Reserva')+'" title="Filtrar Nova Reserva" onclick="gcaFiltrarTipo(\'Nova Reserva\')"><div class="kn" style="color:#6D28D9">'+cont('Nova Reserva')+'</div><div class="kl">Nova Reserva</div></div>';
   const cnt=document.getElementById('gca-count');
   if(cnt) cnt.textContent=dados.length+' concluído(s) no período · '+([...new Set(dados.map(x=>x.centro))].filter(c=>c&&c!=='—').length)+' centro(s)';
   const porCentro={};
@@ -11294,7 +11298,7 @@ function gcaRender(){
   // ── Tabela de detalhe (estilo Detalhe por item) ──
   const twrap=document.getElementById('gca-tabela-wrap');
   if(twrap){
-    const _corD={'Pedido':'#16a34a','XGL':'#7c3aed','Republicação':'#2563EB','Devolução':'#dc2626'};
+    const _corD={'Pedido':'#16a34a','XGL':'#7c3aed','Republicação':'#2563EB','Devolução':'#dc2626','Nova Reserva':'#6D28D9'};
     const _esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
     const _chip=(t)=> t?('<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:'+((_corD[t]||'#888'))+'22;color:'+((_corD[t]||'#555'))+'">'+_esc(t)+'</span>'):'—';
     const linhas=dados.slice().sort((a,b)=>String(b.fin).localeCompare(String(a.fin)));
@@ -17529,7 +17533,7 @@ async function desfechoSalvar(){
   // Normalizar tipo para garantir capitalização correta
   const TIPO_MAP = {
     'pedido':'Pedido','devolução':'Devolução','devolucao':'Devolução',
-    'republicação':'Republicação','republicacao':'Republicação','xgl':'XGL'
+    'republicação':'Republicação','republicacao':'Republicação','xgl':'XGL','nova reserva':'Nova Reserva'
   };
   const tipoNorm = TIPO_MAP[tipo.toLowerCase()] || tipo;
   const desfecho = {
@@ -17607,6 +17611,7 @@ function estRenderDesfechoCards(){
     { key:'Devolução',    label:'Devoluções',    emoji:'↩',  cor:'#D94040', bg:'#FDEAEA' },
     { key:'Republicação', label:'Republicações', emoji:'🔄', cor:'#C07A12', bg:'#FDF3E3' },
     { key:'XGL',          label:'XGL',           emoji:'📦', cor:'#0E9E6A', bg:'#E6F7F1' },
+    { key:'Nova Reserva', label:'Novas Reservas',emoji:'🔖', cor:'#6D28D9', bg:'#F1EAFB' },
   ];
 
   el.innerHTML = tipos.map(t => {
@@ -17670,45 +17675,47 @@ function renderDesfechosDia(){
     if(!r || !r.data) return;
     if(r.data < de || r.data > ate) return;
     const f = r.f || [];
-    const ped = (+f[9]||0), rep = (+f[8]||0), xgl = (+f[7]||0), dev = (+f[10]||0);
-    if(ped+rep+xgl+dev === 0) return; // ignora dias sem desfecho
+    const ped = (+f[9]||0), rep = (+f[8]||0), xgl = (+f[7]||0), dev = (+f[10]||0), res = (+f[14]||0);
+    if(ped+rep+xgl+dev+res === 0) return; // ignora dias sem desfecho
     let alvo = r.data;
     if(typeof _fdiaEhDiaUtil==='function' && !_fdiaEhDiaUtil(r.data)){
       let prox = _dfdCaminhaUtil(r.data, +1);
       if(prox > ate) prox = _dfdCaminhaUtil(r.data, -1);
       alvo = prox;
     }
-    if(!porDia[alvo]) porDia[alvo] = {ped:0,rep:0,xgl:0,dev:0};
+    if(!porDia[alvo]) porDia[alvo] = {ped:0,rep:0,xgl:0,dev:0,res:0};
     porDia[alvo].ped += ped; porDia[alvo].rep += rep;
-    porDia[alvo].xgl += xgl; porDia[alvo].dev += dev;
+    porDia[alvo].xgl += xgl; porDia[alvo].dev += dev; porDia[alvo].res += res;
   });
 
   const dias = Object.keys(porDia).sort();
-  let sPed=0, sRep=0, sXgl=0, sDev=0;
+  let sPed=0, sRep=0, sXgl=0, sDev=0, sRes=0;
 
   tb.innerHTML = dias.map(function(d){
     const o = porDia[d];
-    sPed+=o.ped; sRep+=o.rep; sXgl+=o.xgl; sDev+=o.dev;
-    const tot = o.ped+o.rep+o.xgl+o.dev;
+    sPed+=o.ped; sRep+=o.rep; sXgl+=o.xgl; sDev+=o.dev; sRes+=o.res;
+    const tot = o.ped+o.rep+o.xgl+o.dev+o.res;
     return '<tr><td>'+fmtDt(d)+'</td>'
       + '<td style="text-align:center;color:#1A4A8A;font-weight:600">'+(o.ped||'—')+'</td>'
       + '<td style="text-align:center;color:#C07A12;font-weight:600">'+(o.rep||'—')+'</td>'
       + '<td style="text-align:center;color:#0E9E6A;font-weight:600">'+(o.xgl||'—')+'</td>'
       + '<td style="text-align:center;color:#D94040;font-weight:600">'+(o.dev||'—')+'</td>'
+      + '<td style="text-align:center;color:#6D28D9;font-weight:600">'+(o.res||'—')+'</td>'
       + '<td style="text-align:center;font-weight:700">'+tot+'</td></tr>';
   }).join('');
 
   if(dias.length===0){
-    tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--tx2);padding:1rem">Nenhum desfecho no período selecionado.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--tx2);padding:1rem">Nenhum desfecho no período selecionado.</td></tr>';
   }
 
-  const grand = sPed+sRep+sXgl+sDev;
+  const grand = sPed+sRep+sXgl+sDev+sRes;
   document.getElementById('dfd-tfoot').innerHTML =
       '<tr style="border-top:2px solid var(--brd)"><td style="font-weight:700">TOTAL</td>'
     + '<td style="text-align:center;font-weight:700;color:#1A4A8A">'+sPed+'</td>'
     + '<td style="text-align:center;font-weight:700;color:#C07A12">'+sRep+'</td>'
     + '<td style="text-align:center;font-weight:700;color:#0E9E6A">'+sXgl+'</td>'
     + '<td style="text-align:center;font-weight:700;color:#D94040">'+sDev+'</td>'
+    + '<td style="text-align:center;font-weight:700;color:#6D28D9">'+sRes+'</td>'
     + '<td style="text-align:center;font-weight:700">'+grand+'</td></tr>';
 
   // Média por dia = total do card / nº de DIAS ÚTEIS no intervalo filtrado
@@ -17739,6 +17746,7 @@ function renderDesfechosDia(){
     {emoji:'🔄', label:'Republicações', val:sRep,  cor:'#C07A12', bg:'#FDF3E3'},
     {emoji:'📦', label:'XGL',           val:sXgl,  cor:'#0E9E6A', bg:'#E6F7F1'},
     {emoji:'↩',  label:'Devoluções',    val:sDev,  cor:'#D94040', bg:'#FDEAEA'},
+    {emoji:'🔖', label:'Nova Reserva',  val:sRes,  cor:'#6D28D9', bg:'#F1EAFB'},
     {emoji:'Σ',  label:'Total geral',   val:grand, cor:'#5B21B6', bg:'#F1EAFB'}
   ];
   document.getElementById('dfd-cards').innerHTML = cards.map(function(c){
@@ -17792,7 +17800,7 @@ async function desfechoCarregarFirebase(){
     const CACHE_TS_KEY = _lsMod('patec_desfecho_cache_ts');
     const TIPO_NORM = {
       'pedido':'Pedido','devolução':'Devolução','devolucao':'Devolução',
-      'republicação':'Republicação','republicacao':'Republicação','xgl':'XGL'
+      'republicação':'Republicação','republicacao':'Republicação','xgl':'XGL','nova reserva':'Nova Reserva'
     };
 
     const cicloInicioFiltro = (_cicloAtivo?.inicio) || CICLO_NOVO_INICIO || '2026-06-26';
@@ -22178,6 +22186,11 @@ function q18Consultar(valor){
           <div style="font-size:20px;margin-bottom:4px">↩</div>
           <div style="font-size:12px;font-weight:600;color:var(--vm)">Devolução</div>
         </button>
+        <button class="acao-sel-btn" onclick="acaoSelecionarConclusao(this,'Nova Reserva')"
+          style="background:var(--azc);border:1.5px solid var(--azm);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;grid-column:span 2;transition:all .18s">
+          <div style="font-size:20px;margin-bottom:4px">🔖</div>
+          <div style="font-size:12px;font-weight:600;color:var(--azm)">Nova Reserva</div>
+        </button>
       </div>
 
       <!-- Sub-seleção: XGL Alto ou Baixo (aparece só quando XGL é escolhido) -->
@@ -22317,6 +22330,7 @@ function q18Consultar(valor){
           <option value="Devolução">↩ Devolução</option>
           <option value="Republicação">🔄 Republicação</option>
           <option value="XGL">📦 XGL</option>
+          <option value="Nova Reserva">🔖 Nova Reserva</option>
         </select>
       </div>
       <div>
@@ -25440,6 +25454,7 @@ async function fdiaInicializar(){
             b.outros||r.outros||0,                       // f[11]
             b.ag_parecer||r.ag_parecer||0,               // f[12]
             c.parecerista||r.parecerista||0,             // f[13]
+            c.nova_reserva||r.nova_reserva||0,           // f[14]
           ];
           mapH[r.data] = { data:r.data, pres:r.presenca||'—', f, total:r.total||0, _origem:'fechamento_dia' };
         });
@@ -25451,7 +25466,7 @@ async function fdiaInicializar(){
           .sort((a,b) => b.data.localeCompare(a.data));
       }
       if(!histRegs.length){
-        tbHist.innerHTML='<tr><td colspan="19" style="text-align:center;color:var(--tx2);padding:1.5rem">Nenhum registro encontrado.</td></tr>';
+        tbHist.innerHTML='<tr><td colspan="20" style="text-align:center;color:var(--tx2);padding:1.5rem">Nenhum registro encontrado.</td></tr>';
       } else {
         const _semMetaH = (typeof COLABS_SEM_META_RT !== 'undefined') && COLABS_SEM_META_RT.includes(colab);
         tbHist.innerHTML = histRegs.map(r=>{
@@ -25486,6 +25501,7 @@ async function fdiaInicializar(){
             <td style="text-align:center">${f[8]||'—'}</td>
             <td style="text-align:center">${f[9]||'—'}</td>
             <td style="text-align:center">${f[10]||'—'}</td>
+            <td style="text-align:center;color:#6D28D9">${f[14]||'—'}</td>
             <td style="text-align:center;font-weight:700;color:${corPct}">${tot}</td>
             <td style="text-align:center">${pctH}%</td>
             <td style="text-align:center">${metaPill}</td>
@@ -25643,6 +25659,7 @@ async function fdiaSalvar(){
     forn:         acoes.filter(a=>!a.anulada&&(a.conclusao==='Fornecedor'||a.tratamento==='Fornecedor'||a.conclusao==='FORNECEDOR')).length,
     req:          acoes.filter(a=>!a.anulada&&(a.conclusao==='Requisitante'||a.tratamento==='Requisitante'||a.conclusao==='REQUISITANTE')).length,
     parecerista:  acoes.filter(a=>!a.anulada&&(a.tratamento==='Parecerista'||a.tratamento==='PARECERISTA')).length,
+    nova_reserva: acoes.filter(a=>!a.anulada&&(a.conclusao==='Nova Reserva'||a.tratamento==='Nova Reserva')).length,
   };
 
   const detalhe = _detalheRaw.trim();
@@ -25675,7 +25692,8 @@ async function fdiaSalvar(){
     cntComp.devolucao,     // pf10 — RCs para Devoluções
     cnt.outros,            // pf11 — Outros
     cnt.ag_parecer,        // pf12 — Ag Parecer
-    cntComp.parecerista    // pf13 — Parecerista
+    cntComp.parecerista,   // pf13 — Parecerista
+    cntComp.nova_reserva   // pf14 — Nova Reserva
   ];
   const regProd = {
     colab, data: hoje, pres: _fdiaPresenca,
