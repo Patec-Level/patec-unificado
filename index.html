@@ -6979,7 +6979,7 @@ function renderCardsDia(){
   if(sel) sel.value=dt;
 
   // Dados do dia selecionado
-  const getPcp=(d)=>pcpData.find(r=>r.data===d)||{f1:0,f2:0,f6:0,f3:0,f4:0,f5:0};
+  const getPcp=(d)=>pcpData.find(r=>r.data===d)||{f1:0,f2:0,f6:0,f3:0,f4:0,f5:0,f7:0};
   const getMapa=(d)=>{
     const fb=mapaFirebase.find(r=>r.data===d);
     if(fb) return fb;
@@ -7113,12 +7113,12 @@ function renderEstPCP(){
   if(regsEstDia.length===0 && _acoesDia.length){
     const cnt=(pred)=>_acoesDia.filter(a=>!a.anulada&&pred(a)).length;
     const comp=(nome)=>_acoesDia.filter(a=>!a.anulada&&(a.tratamento===nome||a.conclusao===nome)).length;
-    const _f=Array(15).fill(0);
+    const _f=Array(16).fill(0);
     _f[0]=cnt(a=>a.tipo==='primeira_analise'); _f[1]=cnt(a=>a.tipo==='em_tratativa');
     _f[2]=cnt(a=>a.tipo==='status_b'); _f[12]=cnt(a=>a.tipo==='ag_parecer'); _f[11]=cnt(a=>a.tipo==='outros');
     _f[3]=comp('Fornecedor'); _f[4]=comp('Requisitante'); _f[5]=comp('MDG');
     _f[6]=comp('Val. Thiago')+comp('Thiago'); _f[7]=comp('XGL');
-    _f[8]=comp('Republicação'); _f[9]=comp('Pedido'); _f[10]=comp('Devolução'); _f[14]=comp('Nova Reserva');
+    _f[8]=comp('Republicação'); _f[9]=comp('Pedido'); _f[10]=comp('Devolução'); _f[14]=comp('Nova Reserva'); _f[15]=cnt(a=>a.tipo==='nova_reserva');
     regsEstDia = [{colab:'(ações)', data:dt, pres:'', f:_f}];
   }
   const somaF = (idx) => regsEstDia.reduce((s,r)=>s+(r.f[idx]||0),0);
@@ -7454,8 +7454,9 @@ function renderPainelEstrategico(){
   const totalDev = diasComProd.reduce((s,r)=>s+(r.f4||0),0);
   const totalRep = diasComProd.reduce((s,r)=>s+(r.f5||0),0);
   const totalXgl = diasComProd.reduce((s,r)=>s+(r.f6||0),0);
+  const totalNovaReserva = diasComProd.reduce((s,r)=>s+(r.f7||0),0);
   const totalMDG = diasComProd.reduce((s,r)=>s+(r.f2||0),0);
-  const totalSaidas = totalPed+totalDev+totalRep+totalXgl;
+  const totalSaidas = totalPed+totalDev+totalRep+totalXgl+totalNovaReserva;
   const mediaEquipe = nDias>0?Math.round(totalAnalis/nDias):0;
   const metaDia = getMeta();
 
@@ -7507,6 +7508,7 @@ function renderPainelEstrategico(){
       {label:'Republicação',       sub:'acumulado',                val:totalRep,                            cor:'var(--am)', bg:'var(--cin)', linha:2},
       {label:'Devoluções',         sub:'acumulado',                val:totalDev,                            cor:'var(--vm)', bg:'var(--cin)', linha:2},
       {label:'XGL',                sub:'acumulado',                val:totalXgl,                            cor:'var(--az)', bg:'var(--cin)', linha:2},
+      {label:'Nova Reserva',       sub:'acumulado',                val:totalNovaReserva,                    cor:'#6D28D9', bg:'var(--cin)', linha:2},
       {label:'MDG',                sub:'acumulado',                val:totalMDG,                            cor:'var(--az)', bg:'var(--cin)', linha:2},
     ];
     const l1 = cards2.filter(c=>!c.linha||c.linha===1);
@@ -7619,7 +7621,7 @@ function renderPainelEstrategico(){
         }
       }
       const reg = diasComProd.find(r => r.data === dt);
-      const saidas = reg ? (reg.f3||0)+(reg.f4||0)+(reg.f5||0)+(reg.f6||0) : 0;
+      const saidas = reg ? (reg.f3||0)+(reg.f4||0)+(reg.f5||0)+(reg.f6||0)+(reg.f7||0) : 0;
 
       // Usar producao_acoes se cache já foi carregado para este dia
       // _cache[dt] === undefined → ainda não carregado → usar pcpData fallback
@@ -8077,7 +8079,7 @@ function renderMiniHist(){
   const meta=getMeta();
   tb.innerHTML=regs.map(r=>{
     const f=[...(r.f||[])];while(f.length<12)f.push(0);
-    const tot=(f[0]||0)+(f[1]||0)+(f[2]||0);
+    const tot=(f[0]||0)+(f[1]||0)+(f[2]||0)+(f[15]||0);
     const ok=r.pres==='Folga'?'<span class="pl pl-g">Folga</span>':tot>=meta?'<span class="pl pl-ok">✓ Meta</span>':'<span class="pl pl-b">Abaixo</span>';
     const fOrdem=[f[0],f[1],f[2],f[11],f[3],f[4],f[5],f[6],f[7],f[8],f[9],f[10],f[14]];
     return`<tr>
@@ -9155,7 +9157,7 @@ function pcpRecalcularTudo(){
   diasComProd.forEach(dt=>{
     const calc = pcpCalcDia(dt);
     if(!calc) return;
-    const novo = {data:dt, f1:calc.f1, f2:calc.f2, f6:calc.f6, f3:calc.f3, f4:calc.f4, f5:calc.f5};
+    const novo = {data:dt, f1:calc.f1, f2:calc.f2, f6:calc.f6, f3:calc.f3, f4:calc.f4, f5:calc.f5, f7:calc.f7};
     const idx = pcpData.findIndex(r=>r.data===dt);
     if(idx>=0) pcpData[idx]=novo;
     else pcpData.push(novo);
@@ -9346,7 +9348,7 @@ function _sincronizarRegistrosComAcoes(){
                   comp('Fornecedor'), comp('Requisitante'), comp('MDG'),
                   comp('Val. Thiago')+comp('Thiago'), comp('XGL'),
                   comp('Republicação'), comp('Pedido'), comp('Devolução'),
-                  cnt('outros'), cnt('ag_parecer'), 0, comp('Nova Reserva') ];
+                  cnt('outros'), cnt('ag_parecer'), 0, comp('Nova Reserva'), cnt('nova_reserva') ];
         if(f.some(function(v){return v>0;})){
           registros.push({colab:colab, data:dt, pres:'', f:f, justif:'', _daAcoes:true});
           existentes.add(key); add++;
@@ -9376,7 +9378,7 @@ function filtrarHistProd(modo){
   const sums=Array(12).fill(0);let totT=0;
   document.getElementById('adm-prod-tb').innerHTML=regs.slice().sort((a,b)=>a.data.localeCompare(b.data)).map(r=>{
     const f=[...(r.f||[])];while(f.length<12)f.push(0);
-    const tot=(f[0]||0)+(f[1]||0)+(f[2]||0);
+    const tot=(f[0]||0)+(f[1]||0)+(f[2]||0)+(f[15]||0);
     totT+=tot;f.forEach((v,i)=>sums[i]+=v);
     const metaVal=getMeta();
     const semMeta=(typeof COLABS_SEM_META!=='undefined')&&COLABS_SEM_META.includes(r.colab);
@@ -10049,6 +10051,7 @@ function pcpCalcDia(dt){
   const f3_antigo = soma(9);
   const f4_antigo = soma(10);
   const f5_antigo = soma(8);
+  const f7_antigo = soma(14);
 
   // Se data não está no cache → buscar do Firebase em background
   if(!window._prodAcoesCache) window._prodAcoesCache = {};
@@ -10067,6 +10070,7 @@ function pcpCalcDia(dt){
   const f3_novo = contComp('Pedido');
   const f4_novo = contComp('Devolução');
   const f5_novo = contComp('Republicação');
+  const f7_novo = contComp('Nova Reserva');
 
   const resultado = {
     f1: Math.max(f1_antigo, f1_novo),
@@ -10075,13 +10079,14 @@ function pcpCalcDia(dt){
     f3: Math.max(f3_antigo, f3_novo),
     f4: Math.max(f4_antigo, f4_novo),
     f5: Math.max(f5_antigo, f5_novo),
+    f7: Math.max(f7_antigo, f7_novo),
     colabs: [...new Set([
       ...regs.map(r=>r.colab),
       ...acoes.map(a=>a.colab)
     ])].filter(Boolean).join(', ')
   };
 
-  if(!resultado.f1&&!resultado.f2&&!resultado.f6&&!resultado.f3&&!resultado.f4&&!resultado.f5) return null;
+  if(!resultado.f1&&!resultado.f2&&!resultado.f6&&!resultado.f3&&!resultado.f4&&!resultado.f5&&!resultado.f7) return null;
   return resultado;
 }
 
@@ -10140,7 +10145,7 @@ function pcpAtualizarRegistroDia(dt){
   // Calcula e salva automaticamente no pcpData ao salvar produção
   const calc=pcpCalcDia(dt);
   if(!calc) return;
-  const novo={data:dt,f1:calc.f1,f2:calc.f2,f6:calc.f6,f3:calc.f3,f4:calc.f4,f5:calc.f5};
+  const novo={data:dt,f1:calc.f1,f2:calc.f2,f6:calc.f6,f3:calc.f3,f4:calc.f4,f5:calc.f5,f7:calc.f7};
   const idx=pcpData.findIndex(r=>r.data===dt);
   if(idx>=0) pcpData[idx]=novo;
   else pcpData.push(novo);
@@ -12782,7 +12787,7 @@ function _renderResultadoProd(c){
   const sums=Array(12).fill(0);let totT=0;
   tb.innerHTML=regs.slice().sort((a,b)=>a.data.localeCompare(b.data)).map(r=>{
     const f=[...(r.f||[])];while(f.length<12)f.push(0);
-    const tot=(f[0]||0)+(f[1]||0)+(f[2]||0);totT+=tot;f.forEach((v,i)=>sums[i]+=v);
+    const tot=(f[0]||0)+(f[1]||0)+(f[2]||0)+(f[15]||0);totT+=tot;f.forEach((v,i)=>sums[i]+=v);
     const sm=COLABS_SEM_META.includes(r.colab);
     let mp=r.pres==='Folga'||r.pres==='Férias'?'<span class="pl pl-g">'+r.pres+'</span>':
            sm?'<span class="pl pl-az">Líder/Ajuda</span>':
@@ -25835,6 +25840,7 @@ async function fdiaInicializar(){
             b.ag_parecer||r.ag_parecer||0,               // f[12]
             c.parecerista||r.parecerista||0,             // f[13]
             c.nova_reserva||r.nova_reserva||0,           // f[14]
+            c.nova_reserva_acao||r.nova_reserva_acao||0, // f[15]
           ];
           mapH[r.data] = { data:r.data, pres:r.presenca||'—', f, total:r.total||0, _origem:'fechamento_dia' };
         });
@@ -26040,6 +26046,7 @@ async function fdiaSalvar(){
     req:          acoes.filter(a=>!a.anulada&&(a.conclusao==='Requisitante'||a.tratamento==='Requisitante'||a.conclusao==='REQUISITANTE')).length,
     parecerista:  acoes.filter(a=>!a.anulada&&(a.tratamento==='Parecerista'||a.tratamento==='PARECERISTA')).length,
     nova_reserva: acoes.filter(a=>!a.anulada&&(a.conclusao==='Nova Reserva'||a.tratamento==='Nova Reserva')).length,
+    nova_reserva_acao: acoes.filter(a=>!a.anulada&&a.tipo==='nova_reserva').length,
   };
 
   const detalhe = _detalheRaw.trim();
@@ -26073,7 +26080,8 @@ async function fdiaSalvar(){
     cnt.outros,            // pf11 — Outros
     cnt.ag_parecer,        // pf12 — Ag Parecer
     cntComp.parecerista,   // pf13 — Parecerista
-    cntComp.nova_reserva   // pf14 — Nova Reserva
+    cntComp.nova_reserva,  // pf14 — Nova Reserva
+    cntComp.nova_reserva_acao // pf15 — ação Nova Reserva (produção)
   ];
   const regProd = {
     colab, data: hoje, pres: _fdiaPresenca,
