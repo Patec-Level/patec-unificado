@@ -4171,6 +4171,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button class="stab" onclick="govSetTab('mapa',this)">🗺 PATEC Finalizado</button>
         <button class="stab" id="gov-nav-xgl-btn" onclick="govSetTab('xgl',this)">📋 XGL</button>
         <button class="stab" onclick="govSetTab('statusb',this)">📊 Status B</button>
+        <button class="stab" onclick="govSetTab('novareserva',this)">🎫 Nova Reserva</button>
         <button class="stab" onclick="govSetTab('concluidos',this)">✅ Concluídos</button>
         <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
           <span style="font-size:12px;color:var(--tx2);white-space:nowrap">📋 Histórico RC:</span>
@@ -4572,6 +4573,82 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <th>Ações</th><th>Finalizado</th><th>Comentário</th><th>Grupo Mercadorias</th>
             </tr></thead>
             <tbody id="sb-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── ABA: NOVA RESERVA ── -->
+      <div id="gov-tab-novareserva" style="display:none">
+
+        <div class="cd" style="margin-bottom:1rem;padding:.75rem 1rem;border-left:3px solid #6D28D9">
+          <div style="font-size:12px;color:var(--tx2);line-height:1.5">
+            🎫 <strong>Nova Reserva</strong> — itens que já foram tratados e aguardam apenas a <strong>decisão final</strong> (conclusão: Pedido, Republicação, Devolução, XGL, Nova Reserva).
+            Cada item entra com prazo de <strong>1 dia útil</strong>: fica <strong>Ag. Ação</strong> dentro do prazo e passa a <strong>Atrasado</strong> depois. Ao concluir, migra automaticamente para <strong>Concluídos</strong>.
+          </div>
+        </div>
+
+        <div class="kgrid" id="nr-kpis" style="margin-bottom:1rem"></div>
+
+        <div style="margin-bottom:.75rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-p" style="font-size:11px" onclick="nrAbrirModal()">＋ Adicionar item</button>
+          <button class="btn btn-g" style="font-size:11px" onclick="nrAbrirImport()">📤 Importar planilha</button>
+        </div>
+
+        <!-- Modal adicionar -->
+        <div id="nr-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center">
+          <div class="cd" style="width:380px;max-width:95vw;padding:1.5rem;position:relative">
+            <div style="font-weight:700;font-size:14px;margin-bottom:1rem">🎫 Novo item — Nova Reserva</div>
+            <div style="display:flex;flex-direction:column;gap:.75rem">
+              <div class="field-wrap"><span class="field-label">Analista</span>
+                <input type="text" id="nr-new-analista" placeholder="Ex: Lory" value="Lory" style="width:100%;font-size:12px;padding:5px 10px"></div>
+              <div class="field-wrap"><span class="field-label">RC</span>
+                <input type="text" id="nr-new-rc" placeholder="Número da RC" style="width:100%;font-size:12px;padding:5px 10px"></div>
+              <div class="field-wrap"><span class="field-label">Item da RC</span>
+                <input type="text" id="nr-new-item" placeholder="Ex: 10" style="width:100%;font-size:12px;padding:5px 10px"></div>
+              <div class="field-wrap"><span class="field-label">Comentário</span>
+                <input type="text" id="nr-new-comentario" placeholder="Observação..." style="width:100%;font-size:12px;padding:5px 10px"></div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:1.25rem;justify-content:flex-end">
+              <button class="btn btn-s" onclick="nrFecharModal()">Cancelar</button>
+              <button class="btn btn-p" onclick="nrAdicionarItem()">💾 Salvar</button>
+            </div>
+            <span id="nr-modal-erro" style="font-size:11px;color:var(--vm);display:none;margin-top:.5rem"></span>
+          </div>
+        </div>
+
+        <!-- Modal importar -->
+        <div id="nr-imp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center">
+          <div class="cd" style="width:560px;max-width:95vw;padding:1.5rem;position:relative;max-height:90vh;overflow:auto">
+            <div style="font-weight:700;font-size:14px;margin-bottom:.5rem">📤 Importar itens para Nova Reserva</div>
+            <div style="font-size:11px;color:var(--tx2);margin-bottom:1rem;line-height:1.5">
+              Envie uma planilha <strong>.xlsx</strong>, <strong>.xls</strong> ou <strong>.csv</strong>. A 1ª aba é lida automaticamente.
+              Colunas por posição: <strong>Analista (coluna B)</strong>, <strong>RC (coluna C)</strong>, <strong>Item da RC (coluna D)</strong>.
+              Itens <strong>novos</strong> entram como <strong>Ag. Ação</strong> (prazo de 1 dia útil). Os que <strong>já existem</strong> aparecem só para conferência.
+            </div>
+            <div style="margin-bottom:.75rem">
+              <button class="btn btn-s" style="font-size:11px" onclick="nrBaixarModelo()">⬇️ Baixar modelo de planilha</button>
+            </div>
+            <div class="field-wrap" style="margin-bottom:.75rem">
+              <span class="field-label">Arquivo</span>
+              <input type="file" id="nr-imp-file" accept=".xlsx,.xls,.csv" onchange="nrImportFile(this)" style="width:100%;font-size:12px;padding:5px 0">
+            </div>
+            <div id="nr-imp-preview" style="margin-bottom:.5rem"></div>
+            <div style="display:flex;gap:8px;margin-top:1rem;justify-content:flex-end">
+              <button class="btn btn-s" onclick="nrFecharImport()">Cancelar</button>
+              <button class="btn btn-p" id="nr-imp-confirmar" onclick="nrConfirmarImport()" disabled>💾 Importar</button>
+            </div>
+            <span id="nr-imp-erro" style="font-size:11px;color:var(--vm);display:none;margin-top:.5rem"></span>
+          </div>
+        </div>
+
+        <div class="tw" style="max-height:540px">
+          <table>
+            <thead><tr>
+              <th>Analista</th><th>RC</th><th>Item da RC</th>
+              <th>Envio</th><th>Prazo</th><th>Status</th>
+              <th>Ações</th><th>Comentário</th><th>Grupo Mercadorias</th>
+            </tr></thead>
+            <tbody id="nr-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -16447,6 +16524,8 @@ function govSetTab(aba, btn){
   document.getElementById('gov-tab-concluidos').style.display = aba === 'concluidos' ? 'block' : 'none';
   document.getElementById('gov-tab-statusb').style.display    = aba === 'statusb'    ? 'block' : 'none';
   if(aba === 'statusb') setTimeout(()=>{ if(!_sbItens.length) sbCarregarFirebase().then(sbRender); else sbRender(); }, 100);
+  var _nrTab=document.getElementById('gov-tab-novareserva'); if(_nrTab) _nrTab.style.display = aba === 'novareserva' ? 'block' : 'none';
+  if(aba === 'novareserva') setTimeout(()=>{ if(!_nrItens.length) nrCarregarFirebase().then(nrRender); else nrRender(); }, 100);
   if(aba === 'xgl'){ if(!_xglItens||!_xglItens.length){ xglCarregarFirebase().then(xglRender); } else { xglRender(); } }
   if(aba === 'concluidos') govRenderConcluidos();
   if(aba === 'andamento') govRenderAndamento();
@@ -18517,6 +18596,16 @@ function govRenderConcluidos(){
       status: m.status||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado, grupo_merc: _grupoMercPorRC(r.rc)||'—' });
   });
 
+  // Nova Reserva concluídos
+  (_nrItens||[]).forEach(r => {
+    const chave = nrChave(r.rc, r.item);
+    const m = (typeof _nrDados!=='undefined' && _nrDados[chave])||{};
+    if(!m.finalizado) return;
+    rows.push({ origem: 'Nova Reserva', analista: r.analista||'—', fila: '—', sla: '—',
+      rc: r.rc||'—', item_rc: r.item||'—', op: '—', seq: '—',
+      status: m.status||'—', envio: m.envio||'—', prazo: nrCalcPrazo(m.envio||'')||'—', finalizado: m.finalizado, grupo_merc: _grupoMercPorRC(r.rc)||'—' });
+  });
+
   // ── Itens da base embutida que saíram do radar (só MAPA) ──
   const chavesVivas = new Set([
     ...dadosMapa.map(r=>govChave(r)),
@@ -19393,6 +19482,292 @@ function sbBaixarModelo(){
   XLSX.utils.book_append_sheet(wb, ws, 'Status B');
   XLSX.writeFile(wb, 'modelo_status_b.xlsx');
 }
+
+// ═══════════════════ NOVA RESERVA (aba alimentada por planilha) ═══════════════════
+// Itens já tratados que aguardam a decisão final (conclusão). Prazo de 1 dia útil:
+// Ag. Ação dentro do prazo, Atrasado depois; ao concluir, migra para Concluídos.
+let _nrItens = [];
+let _nrDados = {};
+let _nrImpRows = [];
+
+function nrChave(rc, item){ return [rc, item].map(v=>String(v||'').trim()).join('|'); }
+
+function _nrHojeISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+// prazo = envio + 1 dia útil (pula fim de semana e feriados via _fdiaEhDiaUtil)
+function nrCalcPrazo(envio){
+  if(!envio) return '';
+  const pt = String(envio).split('-'); if(pt.length!==3) return '';
+  const d = new Date(+pt[0], (+pt[1])-1, +pt[2]);
+  let add=0, guarda=0;
+  while(add<1 && guarda<30){
+    d.setDate(d.getDate()+1); guarda++;
+    const iso = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    if(_fdiaEhDiaUtil(iso)) add++;
+  }
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+// Ag. Ação dentro do prazo, Atrasado após, Concluído se finalizado
+function nrCalcStatus(envio, finalizado){
+  if(finalizado) return 'CONCLUÍDO';
+  const prazo = nrCalcPrazo(envio);
+  if(!prazo) return 'AG. AÇÃO';
+  return (_nrHojeISO() <= prazo) ? 'AG. AÇÃO' : 'ATRASADO';
+}
+
+async function nrCarregarFirebase(){
+  try{
+    if(typeof firebase === 'undefined' || !_fbLoaded){
+      const ok = await loadFirebaseSDK(); if(!ok) return; await new Promise(r=>setTimeout(r,300));
+    }
+    const db = getDB(); if(!db) return;
+    const docItens = await db.collection('config').doc('nr_itens').get();
+    if(docItens.exists){
+      const raw = docItens.data().itens || [];
+      const vistos = new Set(); const limpos = [];
+      raw.forEach(r => { const k = nrChave(r.rc, r.item); if(!vistos.has(k)){ vistos.add(k); limpos.push(r); } });
+      _nrItens = [...limpos];
+      if(limpos.length !== raw.length){
+        try{ await db.collection('config').doc('nr_itens').set({ itens:limpos, dt:new Date().toISOString() }); }catch(e){}
+      }
+    } else { _nrItens = []; }
+    const snap = await db.collection('gov_nr').get();
+    _nrDados = {};
+    snap.forEach(doc => {
+      const d = doc.data();
+      if(d.chave) _nrDados[d.chave] = { envio:d.envio||'', finalizado:d.finalizado||'', comentario:d.comentario||'', desfecho:d.desfecho||'', status:d.status||'' };
+    });
+    console.log('Nova Reserva carregada:', _nrItens.length, 'itens');
+  } catch(e){ console.warn('nrCarregarFirebase:', e); }
+}
+
+async function nrSalvarItensFirebase(){
+  try{ const db=getDB(); if(db) await db.collection('config').doc('nr_itens').set({ itens:_nrItens, dt:new Date().toISOString() }); }catch(e){ console.warn('nrSalvarItens:', e); }
+}
+
+function nrRender(){
+  const tbody = document.getElementById('nr-tbody');
+  if(!tbody) return;
+  // KPIs
+  let emAberto=0, concluido=0, atrasado=0, agacao=0;
+  _nrItens.forEach(r => {
+    const ch = nrChave(r.rc, r.item); const m = _nrDados[ch] || {};
+    if(m.finalizado){ concluido++; return; }
+    emAberto++;
+    const st = nrCalcStatus(m.envio||'', '');
+    if(st==='ATRASADO') atrasado++; else agacao++;
+  });
+  const kEl = document.getElementById('nr-kpis');
+  if(kEl) kEl.innerHTML =
+    '<div class="kc"><div class="kn" style="color:#6D28D9">'+_nrItens.length+'</div><div class="kl">Total</div></div>'+
+    '<div class="kc"><div class="kn" style="color:var(--am)">'+emAberto+'</div><div class="kl">Em Aberto<br><span style="font-size:10px;color:var(--vm);font-weight:600">'+atrasado+' atrasado'+(atrasado!==1?'s':'')+' · '+agacao+' ag. ação</span></div></div>'+
+    '<div class="kc"><div class="kn" style="color:var(--vd)">'+concluido+'</div><div class="kl">Concluídos<br><span style="font-size:10px;color:var(--tx2);font-weight:600">migram p/ aba Concluídos</span></div></div>';
+
+  // Só itens não finalizados (finalizados migram para Concluídos)
+  const base = _nrItens.filter(r => !(_nrDados[nrChave(r.rc,r.item)]?.finalizado));
+  if(!base.length){
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--tx2);padding:1.5rem">Nenhum item pendente. Importe uma planilha ou adicione itens.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = base.map(r => {
+    const ch = nrChave(r.rc, r.item); const m = _nrDados[ch] || {};
+    const envio = m.envio || '';
+    const prazo = nrCalcPrazo(envio);
+    const statusCalc = nrCalcStatus(envio, '');
+    const gm = (_radarDados||[]).find(x=>String(x.rc||'').trim()===String(r.rc||'').trim()&&x.grupo_merc)?.grupo_merc || '—';
+    return '<tr>'+
+      '<td style="font-size:11px">'+(r.analista||'—')+'</td>'+
+      '<td style="font-weight:700;color:var(--az)">'+(r.rc||'—')+'</td>'+
+      '<td>'+(r.item||'—')+'</td>'+
+      '<td style="font-size:11px">'+(envio?fmtBR(envio):'—')+'</td>'+
+      '<td style="font-size:11px;'+(prazo?'font-weight:600':'color:var(--tx2)')+'">'+(prazo?fmtBR(prazo):'—')+'</td>'+
+      '<td style="font-size:11px;'+govCorStatus(statusCalc)+'">'+(statusCalc||'—')+'</td>'+
+      '<td style="text-align:center;white-space:nowrap">'+
+        '<button onclick="nrConcluir(\''+ch.replace(/'/g,"\\'")+'\')" title="Registrar a decisão final" style="background:#F1EAFB;border:1.5px solid #6D28D9;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:#6D28D9;white-space:nowrap;margin-right:4px">🏁 Concluir</button>'+
+        '<button onclick="abrirHistoricoRC(\''+(r.rc||'')+'\')" title="Ver histórico de ações" style="background:var(--azc);border:1.5px solid var(--azm);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:var(--azm);white-space:nowrap">📋 Histórico</button>'+
+      '</td>'+
+      '<td style="font-size:11px;max-width:200px">'+(m.comentario||'—')+'</td>'+
+      '<td style="font-size:11px">'+gm+'</td>'+
+    '</tr>';
+  }).join('');
+}
+
+function nrAbrirModal(){
+  const el=document.getElementById('nr-modal'); if(el) el.style.display='flex';
+  const e=document.getElementById('nr-modal-erro'); if(e) e.style.display='none';
+}
+function nrFecharModal(){ const el=document.getElementById('nr-modal'); if(el) el.style.display='none'; }
+
+async function nrAdicionarItem(){
+  const analista = (document.getElementById('nr-new-analista')?.value||'').trim() || 'Lory';
+  const rc   = (document.getElementById('nr-new-rc')?.value||'').trim();
+  const item = (document.getElementById('nr-new-item')?.value||'').trim();
+  const comentario = (document.getElementById('nr-new-comentario')?.value||'').trim();
+  const err = document.getElementById('nr-modal-erro');
+  if(!rc){ if(err){ err.textContent='Informe a RC.'; err.style.display='block'; } return; }
+  const chave = nrChave(rc, item);
+  if(_nrItens.find(x=>nrChave(x.rc,x.item)===chave)){ if(err){ err.textContent='Item já existe nesta aba.'; err.style.display='block'; } return; }
+  const envio = _nrHojeISO();
+  _nrItens.push({ rc, item, analista });
+  _nrDados[chave] = { envio, finalizado:'', comentario, desfecho:'', status:'AG. TRATAMENTO' };
+  try{
+    const db=getDB();
+    if(db){
+      await nrSalvarItensFirebase();
+      await db.collection('gov_nr').doc(chave.replace(/[|]/g,'_')).set({ ..._nrDados[chave], chave, ts:new Date().toISOString() });
+    }
+  }catch(e){ console.warn('nrAdicionarItem:', e); }
+  document.getElementById('nr-new-rc').value=''; document.getElementById('nr-new-item').value=''; document.getElementById('nr-new-comentario').value='';
+  nrFecharModal(); nrRender();
+}
+
+// Abre o modal de ação já direto na etapa de CONCLUSÃO (pula "status de tratamento")
+function nrConcluir(chave){
+  const r = (_nrItens||[]).find(x=>nrChave(x.rc,x.item)===chave);
+  if(!r) return;
+  prodAbrirModal('gov','nova_reserva');
+  // Se o modal não abriu (gate de fechamento/login), aborta
+  const modalEl = document.getElementById('acao-modal');
+  if(modalEl && modalEl.style.display==='none') return;
+  _prodCtx.rcChave = chave;
+  _prodCtx.rcChaves = [chave];
+  _prodCtx.rcChaveColecao = { [chave]:'gov_nr' };
+  _prodCtx.rcBusca = r.rc || '';
+  _prodCtx.novaReserva = true;
+  const _rcBadge=document.getElementById('acao-rc-badge'); if(_rcBadge) _rcBadge.style.display='block';
+  const _rcNum=document.getElementById('acao-rc-numero'); if(_rcNum) _rcNum.textContent=(r.rc||'')+(r.item?(' · Item '+r.item):'');
+  const _idasBadge=document.getElementById('acao-idas-badge'); if(_idasBadge) _idasBadge.style.display='none';
+  const m=_nrDados[chave]||{};
+  const _envioEl=document.getElementById('acao-data-envio'); if(_envioEl) _envioEl.value=m.envio||_nrHojeISO();
+  // Avança direto para o estágio 2 (tipo de conclusão)
+  _prodCtx.tratamento='Concluído'; _prodCtx.conclusao=null;
+  document.getElementById('acao-estagio-1').style.display='none';
+  document.getElementById('acao-estagio-2').style.display='block';
+  const _sub=document.getElementById('acao-modal-subtitulo'); if(_sub) _sub.textContent='Selecione o tipo de conclusão';
+  const _sel=document.getElementById('acao-selecao-atual'); if(_sel) _sel.style.display='none';
+  const _fin=document.getElementById('acao-finalizado-box'); if(_fin) _fin.style.display='block';
+}
+
+// ── Importação (colunas por posição: B=Analista, C=RC, D=Item da RC) ──
+function nrAbrirImport(){
+  _nrImpRows=[];
+  const inp=document.getElementById('nr-imp-file'); if(inp) inp.value='';
+  const prev=document.getElementById('nr-imp-preview'); if(prev) prev.innerHTML='';
+  const btn=document.getElementById('nr-imp-confirmar'); if(btn){ btn.disabled=true; btn.textContent='💾 Importar'; }
+  const err=document.getElementById('nr-imp-erro'); if(err) err.style.display='none';
+  const el=document.getElementById('nr-imp-modal'); if(el) el.style.display='flex';
+}
+function nrFecharImport(){ const el=document.getElementById('nr-imp-modal'); if(el) el.style.display='none'; _nrImpRows=[]; }
+
+function nrImportFile(inp){
+  const f=inp.files && inp.files[0]; if(!f) return;
+  const err=document.getElementById('nr-imp-erro'); if(err) err.style.display='none';
+  const reader=new FileReader();
+  reader.onload = e => {
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}); // array de arrays
+      if(!rows.length){ if(err){ err.textContent='Planilha vazia.'; err.style.display='block'; } return; }
+      const parse=[];
+      const limpar = v => String(v==null?'':v).replace(/\.0$/,'').trim();
+      rows.forEach((row, i) => {
+        const analista = limpar(row[1]);   // coluna B
+        const rc       = limpar(row[2]);   // coluna C
+        const item     = limpar(row[3]);   // coluna D
+        if(!rc) return;
+        // pula linha de cabeçalho (RC não numérica)
+        if(!/^\d/.test(rc)) return;
+        const chave=nrChave(rc,item);
+        const existente=_nrItens.find(x=>nrChave(x.rc,x.item)===chave);
+        const dupSelf=parse.some(p=>p.chave===chave);
+        let dupTipo='';
+        if(existente){ dupTipo=(_nrDados[chave] && _nrDados[chave].finalizado)?'concluido':'aberto'; }
+        else if(dupSelf){ dupTipo='repetida'; }
+        const dup=!!existente || dupSelf;
+        parse.push({ analista:analista||'Lory', rc, item, chave, dup, dupTipo, sel:!dup });
+      });
+      _nrImpRows=parse;
+      nrImpRenderPreview();
+    }catch(ex){ if(err){ err.textContent='Erro ao ler o arquivo: '+ex.message; err.style.display='block'; } }
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+function nrImpRenderPreview(){
+  const prev=document.getElementById('nr-imp-preview'); if(!prev) return;
+  const parse=_nrImpRows||[];
+  if(!parse.length){ prev.innerHTML='<div style="font-size:12px;color:var(--vm);padding:.5rem;background:var(--vmc);border-radius:6px">Nenhuma linha com RC encontrada nas colunas B/C/D.</div>'; nrImpAtualizarBotao(); return; }
+  const novos=parse.filter(p=>!p.dup), concl=parse.filter(p=>p.dupTipo==='concluido'), abertos=parse.filter(p=>p.dupTipo==='aberto'), reps=parse.filter(p=>p.dupTipo==='repetida');
+  const linhas=parse.map((p,idx)=>{
+    const isNew=!p.dup; let sit;
+    if(isNew) sit='<span style="color:var(--vd);font-weight:700">novo</span>';
+    else if(p.dupTipo==='concluido') sit='<span style="color:var(--az);font-weight:700">já existe — concluído</span>';
+    else if(p.dupTipo==='repetida') sit='<span style="color:var(--am);font-weight:700">repetida na planilha</span>';
+    else sit='<span style="color:var(--tx2);font-weight:600">já existe — em aberto</span>';
+    const chk=isNew?'<input type="checkbox" '+(p.sel?'checked':'')+' onchange="nrImpToggle('+idx+',this.checked)" style="cursor:pointer">':'<span style="color:var(--brd)">—</span>';
+    return '<tr style="'+(isNew?'':'opacity:.6')+'"><td style="padding:2px 6px;text-align:center">'+chk+'</td><td style="padding:2px 6px">'+sit+'</td><td style="padding:2px 6px">'+(p.analista||'—')+'</td><td style="padding:2px 6px;font-weight:600">'+p.rc+'</td><td style="padding:2px 6px">'+(p.item||'—')+'</td></tr>';
+  }).join('');
+  prev.innerHTML=
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:.5rem">'+
+      '<span style="font-size:11px;font-weight:700;color:var(--vd);background:var(--vdc);padding:2px 10px;border-radius:20px">✅ '+novos.length+' novo(s)</span>'+
+      '<span style="font-size:11px;font-weight:700;color:var(--az);background:var(--azc);padding:2px 10px;border-radius:20px">🔒 '+concl.length+' concluído(s)</span>'+
+      '<span style="font-size:11px;font-weight:700;color:var(--tx2);background:var(--cin);padding:2px 10px;border-radius:20px">↩️ '+abertos.length+' em aberto</span>'+
+      (reps.length?'<span style="font-size:11px;font-weight:700;color:var(--am);background:var(--amc);padding:2px 10px;border-radius:20px">⚠️ '+reps.length+' repetida(s)</span>':'')+
+      '<span style="font-size:11px;font-weight:700;color:var(--tx2);background:var(--cin);padding:2px 10px;border-radius:20px">Σ '+parse.length+' lida(s)</span>'+
+    '</div>'+
+    (novos.length?'<div style="display:flex;gap:6px;margin-bottom:.4rem"><button class="btn btn-s" style="font-size:10px" onclick="nrImpSelTodos(true)">☑ Selecionar novos</button><button class="btn btn-s" style="font-size:10px" onclick="nrImpSelTodos(false)">☐ Limpar seleção</button></div>':'')+
+    '<div style="max-height:240px;overflow:auto;border:1px solid var(--brd);border-radius:6px"><table style="width:100%;font-size:11px;border-collapse:collapse"><thead><tr style="background:var(--cin)"><th style="padding:3px 6px;text-align:center">✔</th><th style="padding:3px 6px;text-align:left">Situação</th><th style="padding:3px 6px;text-align:left">Analista</th><th style="padding:3px 6px;text-align:left">RC</th><th style="padding:3px 6px;text-align:left">Item da RC</th></tr></thead><tbody>'+linhas+'</tbody></table></div>'+
+    '<div style="font-size:10px;color:var(--tx2);margin-top:4px">Marque os itens <strong>novos</strong> que deseja importar. Entram como Ag. Ação com prazo de 1 dia útil.</div>';
+  nrImpAtualizarBotao();
+}
+function nrImpAtualizarBotao(){
+  const nSel=(_nrImpRows||[]).filter(p=>!p.dup && p.sel).length;
+  const btn=document.getElementById('nr-imp-confirmar');
+  if(btn){ btn.disabled=nSel===0; btn.textContent=nSel>0?('💾 Importar ('+nSel+')'):'💾 Importar'; }
+}
+function nrImpToggle(idx,checked){ if(_nrImpRows[idx] && !_nrImpRows[idx].dup) _nrImpRows[idx].sel=checked; nrImpAtualizarBotao(); }
+function nrImpSelTodos(sel){ (_nrImpRows||[]).forEach(p=>{ if(!p.dup) p.sel=sel; }); nrImpRenderPreview(); }
+
+async function nrConfirmarImport(){
+  const novos=_nrImpRows.filter(p=>!p.dup && p.sel);
+  if(!novos.length) return;
+  const btn=document.getElementById('nr-imp-confirmar'); if(btn){ btn.disabled=true; btn.textContent='⏳ Importando...'; }
+  const envio=_nrHojeISO();
+  novos.forEach(p => {
+    _nrItens.push({ rc:p.rc, item:p.item, analista:p.analista||'Lory' });
+    _nrDados[p.chave] = { envio, finalizado:'', comentario:'', desfecho:'', status:'AG. TRATAMENTO' };
+  });
+  try{
+    const db=getDB();
+    if(db){
+      await nrSalvarItensFirebase();
+      for(let i=0;i<novos.length;i+=450){
+        const batch=db.batch();
+        novos.slice(i,i+450).forEach(p=>{
+          const ref=db.collection('gov_nr').doc(p.chave.replace(/[|]/g,'_'));
+          batch.set(ref,{ envio, finalizado:'', comentario:'', desfecho:'', status:'AG. TRATAMENTO', chave:p.chave, ts:new Date().toISOString() });
+        });
+        await batch.commit();
+      }
+    }
+  }catch(e){ console.warn('nrConfirmarImport:', e); }
+  const total=novos.length;
+  nrFecharImport(); nrRender();
+  if(typeof _expStatus==='function') _expStatus('✅ '+total+' item(ns) importado(s) para Nova Reserva.', true);
+  else console.log('✅ '+total+' item(ns) importado(s) para Nova Reserva.');
+}
+
+function nrBaixarModelo(){
+  // Colunas por posição: A (livre) · B=Analista · C=RC · D=Item da RC
+  const cab=['', 'Analista','RC','Item da RC'];
+  const exemplo=['', 'Lory','36415142','10'];
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([cab, exemplo]);
+  XLSX.utils.book_append_sheet(wb, ws, 'Nova Reserva');
+  XLSX.writeFile(wb, 'modelo_nova_reserva.xlsx');
+}
+
 
 // ── MODAL COMENTÁRIO STATUS B ──
 function sbAbrirComentario(chave){
@@ -24244,6 +24619,7 @@ const PROD_TIPO_LABELS = {
   'status_b':         { label:'Status B', emoji:'✅', cor:'var(--vd)' },
   'outros':           { label:'Outros', emoji:'📋', cor:'var(--am)' },
   'ag_parecer':       { label:'Ag Parecer', emoji:'📝', cor:'var(--roxo,#7c3aed)' },
+  'nova_reserva':     { label:'Nova Reserva', emoji:'🎫', cor:'#6D28D9' },
 };
 
 function pcAbrirModalComRC(tipo){
@@ -24715,6 +25091,7 @@ async function prodConfirmarAcao(){
       const _chaveParaSalvar = _aplicarXglNestaChave ? _chaveEfetivaXgl : _chave;
       const _memDestino = _colecaoDestino === 'gov_xgl' ? (typeof _xglDados!=='undefined' ? _xglDados : null)
                          : _colecaoDestino === 'gov_sb'  ? (typeof _sbDados!=='undefined'  ? _sbDados  : null)
+                         : _colecaoDestino === 'gov_nr'  ? (typeof _nrDados!=='undefined'  ? _nrDados  : null)
                          : _govDados;
       if(_memDestino){
         if(!_memDestino[_chaveParaSalvar]) _memDestino[_chaveParaSalvar] = {};
@@ -24793,6 +25170,8 @@ async function prodConfirmarAcao(){
     // Re-render imediato — mostra novo status/envio/prazo na linha da tabela
     govBuscarRC(_rcRefresh);
   }
+  try{ if(typeof nrRender==='function' && document.getElementById('gov-tab-novareserva')) nrRender(); }catch(e){}
+  try{ if(typeof govRenderConcluidos==='function' && document.getElementById('gov-tab-concluidos') && document.getElementById('gov-tab-concluidos').style.display!=='none') govRenderConcluidos(); }catch(e){}
   const _pcBEl = document.getElementById('pc-busca');
   if(_pcBEl && _pcBEl.value) pcBuscarRCDetalhe(_pcBEl.value);
 
