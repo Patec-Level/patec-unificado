@@ -19565,6 +19565,16 @@ async function nrSalvarItensFirebase(){
   try{ const db=getDB(); if(db) await db.collection('config').doc('nr_itens').set({ itens:_nrItens, dt:new Date().toISOString() }); }catch(e){ console.warn('nrSalvarItens:', e); }
 }
 
+async function nrDeletarItem(chave){
+  const it=_nrItens.find(x=>nrChave(x.rc,x.item)===chave);
+  if(!it) return;
+  if(!confirm('Excluir da Nova Reserva o item RC '+(it.rc||'')+' / Item '+(it.item||'')+'? Esta ação não pode ser desfeita.')) return;
+  _nrItens = _nrItens.filter(x=>nrChave(x.rc,x.item)!==chave);
+  delete _nrDados[chave];
+  try{ const db=getDB(); if(db){ await nrSalvarItensFirebase(); await db.collection('gov_nr').doc(chave.replace(/[|]/g,'_')).delete(); } }catch(e){ console.warn('nrDeletarItem:', e); }
+  nrRender();
+}
+
 function nrRender(){
   const tbody = document.getElementById('nr-tbody');
   if(!tbody) return;
@@ -19623,6 +19633,7 @@ function nrRender(){
       '<td style="text-align:center;white-space:nowrap">'+
         '<button onclick="nrConcluir(\''+ch.replace(/'/g,"\\'")+'\')" title="Registrar a decisão final" style="background:#F1EAFB;border:1.5px solid #6D28D9;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:#6D28D9;white-space:nowrap;margin-right:4px">🏁 Concluir</button>'+
         '<button onclick="abrirHistoricoRC(\''+(r.rc||'')+'\')" title="Ver histórico de ações" style="background:var(--azc);border:1.5px solid var(--azm);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:700;color:var(--azm);white-space:nowrap">📋 Histórico</button>'+
+        ((_authPerfil&&_authPerfil.perfil==='adm')?'<button onclick="nrDeletarItem(\''+ch.replace(/'/g,"\\'")+'\')" title="Excluir item da Nova Reserva" style="background:var(--vmc,#fee2e2);border:1.5px solid var(--vm,#dc2626);border-radius:6px;padding:3px 7px;cursor:pointer;font-size:12px;margin-left:4px">🗑️</button>':'')+
       '</td>'+
       '<td style="font-size:11px;max-width:200px">'+(m.comentario||'—')+'</td>'+
       '<td style="font-size:11px">'+gm+'</td>'+
@@ -19711,12 +19722,14 @@ function nrImportFile(inp){
       const parse=[];
       const limpar = v => String(v==null?'':v).replace(/\.0$/,'').trim();
       rows.forEach((row, i) => {
-        const analista = limpar(row[1]);   // coluna B
-        const rc       = limpar(row[2]);   // coluna C
-        const item     = limpar(row[3]);   // coluna D
-        if(!rc) return;
-        // pula linha de cabeçalho (RC não numérica)
-        if(!/^\d/.test(rc)) return;
+        // Detecta a coluna do RC pelo próprio número (robusto: Analista pode
+        // estar em A ou B, com ou sem cabeçalho, com ou sem coluna A vazia)
+        let rcCol=-1;
+        for(let c=0;c<row.length;c++){ if(/^\d{5,}$/.test(limpar(row[c]))){ rcCol=c; break; } }
+        if(rcCol<0) return;                                   // linha sem RC (cabeçalho/vazia)
+        const rc       = limpar(row[rcCol]);                  // RC
+        const analista = rcCol>0 ? limpar(row[rcCol-1]) : ''; // Analista = coluna à ESQUERDA do RC
+        const item     = limpar(row[rcCol+1]);                // Item da RC = coluna à DIREITA do RC
         const chave=nrChave(rc,item);
         const existente=_nrItens.find(x=>nrChave(x.rc,x.item)===chave);
         const dupSelf=parse.some(p=>p.chave===chave);
@@ -19736,7 +19749,7 @@ function nrImportFile(inp){
 function nrImpRenderPreview(){
   const prev=document.getElementById('nr-imp-preview'); if(!prev) return;
   const parse=_nrImpRows||[];
-  if(!parse.length){ prev.innerHTML='<div style="font-size:12px;color:var(--vm);padding:.5rem;background:var(--vmc);border-radius:6px">Nenhuma linha com RC encontrada nas colunas B/C/D.</div>'; nrImpAtualizarBotao(); return; }
+  if(!parse.length){ prev.innerHTML='<div style="font-size:12px;color:var(--vm);padding:.5rem;background:var(--vmc);border-radius:6px">Nenhuma linha com RC (número) encontrada na planilha.</div>'; nrImpAtualizarBotao(); return; }
   const novos=parse.filter(p=>!p.dup), concl=parse.filter(p=>p.dupTipo==='concluido'), abertos=parse.filter(p=>p.dupTipo==='aberto'), reps=parse.filter(p=>p.dupTipo==='repetida');
   const linhas=parse.map((p,idx)=>{
     const isNew=!p.dup; let sit;
