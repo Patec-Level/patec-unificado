@@ -4589,6 +4589,20 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
         <div class="kgrid" id="nr-kpis" style="margin-bottom:1rem"></div>
 
+        <!-- Filtro de combinacao (Status Patec x Fila Levelboard x Status x Analista) -->
+        <div class="cd" style="margin-bottom:1rem;padding:.75rem 1rem">
+          <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">
+            <span style="font-size:12px;font-weight:700;color:var(--az);align-self:center">🔎 Filtros</span>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status Patec<div class="gov-ms" id="gov-fnr-ms-patec" style="position:relative;min-width:185px"></div></label>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Fila Levelboard<div class="gov-ms" id="gov-fnr-ms-fila" style="position:relative;min-width:185px"></div></label>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status<div class="gov-ms" id="gov-fnr-ms-status" style="position:relative;min-width:170px"></div></label>
+            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Analista<div class="gov-ms" id="gov-fnr-ms-analista" style="position:relative;min-width:170px"></div></label>
+            <button id="gov-fnr-f-limpar" class="btn btn-s" style="font-size:11px;display:none" onclick="govFabNrLimpar()">✕ Limpar filtros</button>
+            <div id="gov-fnr-f-count" style="margin-left:auto;background:var(--azc);border:1.5px solid var(--azm);border-radius:8px;padding:5px 16px;text-align:center;align-self:center;line-height:1.15"><div style="font-size:19px;font-weight:800;color:var(--azm)" id="gov-fnr-f-count-n">0</div><div style="font-size:9px;color:var(--tx2);font-weight:700;text-transform:uppercase;letter-spacing:.3px" id="gov-fnr-f-count-l">itens</div></div>
+          </div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:6px">Escolha um ou mais valores em cada filtro — dentro do filtro soma (OU), entre filtros combina (E).</div>
+        </div>
+
         <div style="margin-bottom:.75rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <button class="btn btn-p" style="font-size:11px" onclick="nrAbrirModal()">＋ Adicionar item</button>
           <button class="btn btn-g" style="font-size:11px" onclick="nrAbrirImport()">📤 Importar planilha</button>
@@ -16513,6 +16527,7 @@ function govFabMapaLimpar(){ _govFabLimpar('gov-fmapa', function(){ govRenderMap
 function govFabAndLimpar(){ _govFabLimpar('gov-fand', govRenderAndamento); }
 function govFabXglLimpar(){ _govFabLimpar('gov-fxgl', xglRender); }
 function govFabSbLimpar(){ _govFabLimpar('gov-fsb', sbRender); }
+function govFabNrLimpar(){ _govFabLimpar('gov-fnr', nrRender); }
 
 function govSetTab(aba, btn){
   // Aba XGL é exclusiva do ADLV
@@ -19572,9 +19587,27 @@ function nrRender(){
   const base = _nrItens.filter(r => !(_nrDados[nrChave(r.rc,r.item)]?.finalizado));
   if(!base.length){
     tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--tx2);padding:1.5rem">Nenhum item pendente. Importe uma planilha ou adicione itens.</td></tr>';
+    _govFabInit('gov-fnr', [], nrRender);
     return;
   }
-  tbody.innerHTML = base.map(r => {
+  // Filtro de combinação (Status Patec x Fila Levelboard x Status x Analista) — mesmo motor das outras abas
+  var _fabMeta = base.map(function(r){
+    var m=_nrDados[nrChave(r.rc,r.item)]||{};
+    var scalc = nrCalcStatus(m.envio||'', '');
+    var rr = (_radarDados||[]).find(function(x){ return String(x.rc||'').trim()===String(r.rc||'').trim(); });
+    return { r:r,
+      statusPatec: (rr && String(rr.status_patec||'').trim()) || 'Nova Reserva',
+      fila: rr ? String(rr.fila||'').trim() : '',
+      status: scalc,
+      analista: (String(r.analista||'').trim() || '—') };
+  });
+  _govFabInit('gov-fnr', _fabMeta, nrRender);
+  var _fabVis = _govFabFiltrar('gov-fnr', _fabMeta).map(function(x){ return x.r; });
+  if(!_fabVis.length){
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--tx2);padding:1.5rem">Nenhum item para os filtros selecionados.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _fabVis.map(r => {
     const ch = nrChave(r.rc, r.item); const m = _nrDados[ch] || {};
     const envio = m.envio || '';
     const prazo = nrCalcPrazo(envio);
@@ -19672,7 +19705,8 @@ function nrImportFile(inp){
     try{
       const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
       const ws=wb.Sheets[wb.SheetNames[0]];
-      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}); // array de arrays
+      let _rng; try{ _rng=XLSX.utils.decode_range(ws['!ref']); _rng.s.c=0; }catch(_e){ _rng=undefined; } // força início na coluna A (evita deslocamento quando A está vazia)
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',range:_rng}); // array de arrays — B/C/D = índices 1/2/3
       if(!rows.length){ if(err){ err.textContent='Planilha vazia.'; err.style.display='block'; } return; }
       const parse=[];
       const limpar = v => String(v==null?'':v).replace(/\.0$/,'').trim();
