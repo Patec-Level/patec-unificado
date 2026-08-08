@@ -24626,6 +24626,7 @@ function rtRenderizar(regs, hoje){ rtRenderizarMonitoramento([], hoje); }
 // Uma única carga de producao_acoes (janela ~45 dias) alimenta RT (hoje),
 // Performance Semanal (semana atual) e Desfechos por dia (intervalo).
 let _ceCache = { adlv:null, fast:null };
+let _ceUsuarios = null; // usuários (fonte única da equipe, igual ao editor)
 const _CE_LOOKBACK_DIAS = 60; // janela padrão de carga
 
 function _ceHojeLocal(){
@@ -24644,6 +24645,12 @@ function _ceModCor(mod){ return mod==='fast' ? '#C07A12' : '#1A4A8A'; }
 
 // ── Equipe do módulo (lê _equipeRt, que já traz adlv E fast em memória) ──
 function _ceEquipe(mod){
+  // Fonte única: a MESMA do editor de Equipe — usuários que têm o módulo
+  // (por colabNome) + metas salvas em config. Assim a aba reflete exatamente
+  // o que está em Usuários (quem tem ADLV/FAST), sem depender de lista fixa.
+  if(Array.isArray(_ceUsuarios) && typeof _equipeMontarLista==='function'){
+    try{ var lu=_equipeMontarLista(mod,_ceUsuarios); if(lu&&lu.length) return lu; }catch(e){}
+  }
   var lista = (typeof _equipeRt!=='undefined' && _equipeRt && Array.isArray(_equipeRt[mod])) ? _equipeRt[mod].filter(function(x){return x&&(x.nome||'').trim();}) : [];
   if(lista.length) return lista;
   // Fallback: reconstrói a equipe a partir das MESMAS constantes que as telas
@@ -25108,11 +25115,23 @@ function ceAbrir(){
     const e1=document.getElementById('ce-dfd-'+mod+'-de'); if(e1&&!e1.value) e1.value=de30;
     const e2=document.getElementById('ce-dfd-'+mod+'-ate'); if(e2&&!e2.value) e2.value=hoje;
   });
-  // garante que a equipe (config/equipe_rt) esteja carregada
   const go=()=>{ ceCarregarModulo('adlv'); ceCarregarModulo('fast'); };
-  if(typeof _equipeRt!=='undefined' && _equipeRt && ((_equipeRt.adlv&&_equipeRt.adlv.length)||(_equipeRt.fast&&_equipeRt.fast.length))) go();
-  else if(typeof equipeRtCarregar==='function') equipeRtCarregar().then(go).catch(go);
-  else go();
+  // Carrega os USUÁRIOS (fonte única da equipe, = editor) + a config de metas,
+  // depois renderiza. Assim a aba reflete exatamente quem tem cada módulo.
+  var pUsr = Promise.resolve();
+  if(typeof getDBUsuarios==='function'){
+    try{
+      var _dbu = getDBUsuarios();
+      if(_dbu) pUsr = _dbu.collection('usuarios').get().then(function(snap){
+        _ceUsuarios=[]; snap.forEach(function(d){ _ceUsuarios.push(d.data()||{}); });
+      }).catch(function(e){ console.warn('ce usuarios:', e); });
+    }catch(e){ console.warn('ce usuarios:', e); }
+  }
+  var pCfg = Promise.resolve();
+  if(typeof equipeRtCarregar==='function' && !(_equipeRt && ((_equipeRt.adlv&&_equipeRt.adlv.length)||(_equipeRt.fast&&_equipeRt.fast.length)))){
+    pCfg = equipeRtCarregar().catch(function(){});
+  }
+  Promise.all([pUsr,pCfg]).then(go).catch(go);
 }
 function ceAtualizarTudo(){ _ceCache.adlv=null; _ceCache.fast=null; ceAbrir(); }
 
