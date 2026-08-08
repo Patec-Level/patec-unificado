@@ -2852,6 +2852,31 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
 
+        <!-- 0) RESUMO DO DIA (mapa_diario) -->
+        <div class="cd" style="margin-bottom:1rem">
+          <div class="cd-t" style="margin:0 0 .875rem">📊 Resumo do dia</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="ce-split">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #1A4A8A22">
+                <span style="font-size:12px;font-weight:800;color:#1A4A8A">🟦 ADLV</span>
+                <input type="date" id="ce-resumo-adlv-dt" onchange="ceResumoData('adlv')" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px;color:var(--az);font-weight:600">
+                <button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="ceResumoHoje('adlv')">📅 Hoje</button>
+                <span style="font-size:10px;color:var(--tx2)" id="ce-resumo-adlv-lbl"></span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px" id="ce-resumo-adlv-cards"></div>
+            </div>
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #C07A1222">
+                <span style="font-size:12px;font-weight:800;color:#C07A12">🟧 FAST</span>
+                <input type="date" id="ce-resumo-fast-dt" onchange="ceResumoData('fast')" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px;color:var(--az);font-weight:600">
+                <button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="ceResumoHoje('fast')">📅 Hoje</button>
+                <span style="font-size:10px;color:var(--tx2)" id="ce-resumo-fast-lbl"></span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px" id="ce-resumo-fast-cards"></div>
+            </div>
+          </div>
+        </div>
+
         <!-- 1) PRODUÇÃO EM TEMPO REAL -->
         <div class="cd" style="margin-bottom:1rem">
           <div class="cd-t" style="margin:0 0 .875rem">📡 Produção em Tempo Real</div>
@@ -2903,6 +2928,29 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
 
+        <!-- 3.5) CARD ANÁLISE DO DIA (PCP) -->
+        <div class="cd" style="margin-bottom:1rem">
+          <div class="cd-t" style="margin:0 0 .875rem">🔍 Análise do dia (PCP)</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="ce-split">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #1A4A8A22">
+                <span style="font-size:12px;font-weight:800;color:#1A4A8A">🟦 ADLV</span>
+                <input type="date" id="ce-pcp-adlv-dt" onchange="cePcpData('adlv')" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px;color:var(--az);font-weight:600">
+                <button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="cePcpHoje('adlv')">📅 Hoje</button>
+              </div>
+              <div id="ce-pcp-adlv"></div>
+            </div>
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #C07A1222">
+                <span style="font-size:12px;font-weight:800;color:#C07A12">🟧 FAST</span>
+                <input type="date" id="ce-pcp-fast-dt" onchange="cePcpData('fast')" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px;color:var(--az);font-weight:600">
+                <button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="cePcpHoje('fast')">📅 Hoje</button>
+              </div>
+              <div id="ce-pcp-fast"></div>
+            </div>
+          </div>
+        </div>
+
         <!-- 4) DESFECHOS POR DIA -->
         <div class="cd" style="margin-bottom:1rem">
           <div class="cd-t" style="margin:0 0 .875rem">📋 Desfechos por dia — Pedido · Republicação · XGL · Devolução · Nova Reserva</div>
@@ -2936,6 +2984,21 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <tbody id="ce-dfd-fast-tbody"></tbody>
                 <tfoot id="ce-dfd-fast-tfoot"></tfoot>
               </table></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5) GRÁFICO Programado × Realizado × Saídas -->
+        <div class="cd" style="margin-bottom:1rem">
+          <div class="cd-t" style="margin:0 0 .875rem">📈 Programado × Realizado × Saídas — Produção</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="ce-split">
+            <div>
+              <div style="font-size:12px;font-weight:800;color:#1A4A8A;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #1A4A8A22">🟦 ADLV</div>
+              <div style="position:relative;height:320px"><canvas id="ce-chart-adlv"></canvas></div>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:800;color:#C07A12;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #C07A1222">🟧 FAST</div>
+              <div style="position:relative;height:320px"><canvas id="ce-chart-fast"></canvas></div>
             </div>
           </div>
         </div>
@@ -24548,7 +24611,23 @@ function _ceModLabel(mod){ return mod==='fast' ? 'FAST' : 'ADLV'; }
 function _ceModCor(mod){ return mod==='fast' ? '#C07A12' : '#1A4A8A'; }
 
 // ── Equipe do módulo (lê _equipeRt, que já traz adlv E fast em memória) ──
-function _ceEquipe(mod){ return (typeof _equipeRt!=='undefined' && _equipeRt && Array.isArray(_equipeRt[mod])) ? _equipeRt[mod].filter(x=>x&&(x.nome||'').trim()) : []; }
+function _ceEquipe(mod){
+  var lista = (typeof _equipeRt!=='undefined' && _equipeRt && Array.isArray(_equipeRt[mod])) ? _equipeRt[mod].filter(function(x){return x&&(x.nome||'').trim();}) : [];
+  if(lista.length) return lista;
+  // Fallback: reconstrói a equipe a partir das MESMAS constantes que as telas
+  // por módulo usam (COLABS_RT_*, META_ANALISTA_RT_*, COLABS_SEM_META_RT_*).
+  // Garante paridade com a Produção em Tempo Real / Alertas / Performance
+  // Semanal do módulo, mesmo que config/equipe_rt ainda não tenha chegado.
+  try{
+    var nomes   = mod==='fast' ? (typeof COLABS_RT_FAST!=='undefined'?COLABS_RT_FAST:[]) : (typeof COLABS_RT_ADLV!=='undefined'?COLABS_RT_ADLV:[]);
+    var metaMap = mod==='fast' ? (typeof META_ANALISTA_RT_FAST!=='undefined'?META_ANALISTA_RT_FAST:{}) : (typeof META_ANALISTA_RT_ADLV!=='undefined'?META_ANALISTA_RT_ADLV:{});
+    var semMeta = mod==='fast' ? (typeof COLABS_SEM_META_RT_FAST!=='undefined'?COLABS_SEM_META_RT_FAST:[]) : (typeof COLABS_SEM_META_RT_ADLV!=='undefined'?COLABS_SEM_META_RT_ADLV:[]);
+    return (nomes||[]).filter(function(n){return (n||'').trim();}).map(function(n){
+      var tem = (semMeta||[]).indexOf(n)===-1;
+      return { nome:n, meta: tem?((+metaMap[n])||30):0, temMeta: tem };
+    });
+  }catch(e){ return []; }
+}
 function _ceColabs(mod){ return _ceEquipe(mod).map(x=>x.nome.trim()); }
 function _ceTemMeta(mod, nome){ const e=_ceEquipe(mod).find(x=>x.nome.trim().toLowerCase()===String(nome).toLowerCase()); return e ? !!e.temMeta : true; }
 function _ceMetaInd(mod, nome){ const e=_ceEquipe(mod).find(x=>x.nome.trim().toLowerCase()===String(nome).toLowerCase()); return (e && e.temMeta && (+e.meta)>0) ? (+e.meta) : 30; }
@@ -24607,9 +24686,19 @@ async function ceCarregarModulo(mod, desdeForcado){
     return;
   }
 
-  let acoes = [], fech = [];
+  // Ciclo do módulo (pra janela do gráfico e contador de dias no ciclo).
+  let ciclo = null;
   try{
-    const snap = await db.collection('producao_acoes').where('data','>=',desde).get();
+    const cdoc = await db.collection('config').doc('ciclo_ativo').get();
+    if(cdoc && cdoc.exists) ciclo = cdoc.data();
+  }catch(e){ console.warn('ce ciclo '+mod+':', e); }
+  // Garante que a janela de ações cubra o ciclo inteiro (se começou antes de 60 dias).
+  let desdeAcoes = desde;
+  if(ciclo && ciclo.inicio && ciclo.inicio < desdeAcoes) desdeAcoes = ciclo.inicio;
+
+  let acoes = [], fech = [], mapa = [];
+  try{
+    const snap = await db.collection('producao_acoes').where('data','>=',desdeAcoes).get();
     snap.forEach(d=>{ const x=d.data(); if(x && !x.anulada) acoes.push(x); });
   }catch(e){ console.warn('ce acoes '+mod+':', e); _ceSetStatus(mod, '⚠ Erro ao ler produção do '+_ceModLabel(mod)); return; }
   try{
@@ -24617,14 +24706,22 @@ async function ceCarregarModulo(mod, desdeForcado){
     const snap2 = await db.collection('fechamento_dia').where('data','>=',desde10).get();
     snap2.forEach(d=>{ const x=d.data(); if(x) fech.push(x); });
   }catch(e){ console.warn('ce fech '+mod+':', e); }
+  try{
+    const snap3 = await db.collection('mapa_diario').where('data','>=',_ceISOmenosDias(hoje,60)).get();
+    snap3.forEach(d=>{ const x=d.data(); if(x&&x.data) mapa.push(x); });
+    mapa.sort((a,b)=>a.data.localeCompare(b.data));
+  }catch(e){ console.warn('ce mapa '+mod+':', e); }
 
-  _ceCache[mod] = { acoes, fech, desde, ts:new Date() };
+  _ceCache[mod] = { acoes, fech, mapa, ciclo, desde:desdeAcoes, ts:new Date() };
   _ceSetStatus(mod, '✓ '+_ceModLabel(mod)+' · '+acoes.length+' ações · atualizado '+new Date().toLocaleTimeString('pt-BR'));
 
+  _ceRenderResumoDia(mod);
   _ceRenderRT(mod);
   _ceRenderAlertas(mod);
   _ceRenderPerfSemanal(mod);
+  _ceRenderPcpCard(mod);
   _ceRenderDesfechos(mod);
+  _ceRenderChart(mod);
 }
 
 function _ceSetStatus(mod, txt){
@@ -24639,9 +24736,10 @@ function _ceRenderFastDesconectado(){
     + '<div style="font-size:24px;margin-bottom:.5rem">🔌</div>'
     + 'Os dados do FAST são de um projeto separado.<br>Conecte para ver a produtividade da equipe FAST aqui.'
     + '<div style="margin-top:.875rem"><button class="btn btn-p" style="font-size:12px" onclick="ceConectarFast()">🔑 Conectar FAST</button></div></div>';
-  ['ce-rt-fast-kpi','ce-rt-fast-cards','ce-alertas-fast','ce-perfsem-fast','ce-dfd-fast-cards'].forEach(id=>{
+  ['ce-resumo-fast-cards','ce-rt-fast-kpi','ce-rt-fast-cards','ce-alertas-fast','ce-perfsem-fast','ce-pcp-fast','ce-dfd-fast-cards'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.innerHTML=aviso;
   });
+  if(_ceChart.fast){ try{ _ceChart.fast.destroy(); _ceChart.fast=null; }catch(e){} }
   const tb=document.getElementById('ce-dfd-fast-tbody'); if(tb) tb.innerHTML='';
   const tf=document.getElementById('ce-dfd-fast-tfoot'); if(tf) tf.innerHTML='';
 }
@@ -24957,6 +25055,223 @@ function ceAbrir(){
   else go();
 }
 function ceAtualizarTudo(){ _ceCache.adlv=null; _ceCache.fast=null; ceAbrir(); }
+
+// ══════════════════════════════════════════════════════════════════
+// CONTROLE DAS EQUIPES — ADIÇÕES (Ago 2026)
+// Resumo do dia (mapa_diario) · card Análise do dia (PCP) · gráfico
+// Programado × Realizado × Saídas — tudo cross-módulo (ADLV + FAST).
+// ══════════════════════════════════════════════════════════════════
+
+let _ceChart = { adlv:null, fast:null };
+
+// Ciclo padrão quando o módulo ainda não tem config/ciclo_ativo
+function _ceCicloPadrao(){ return { inicio:'2026-07-26', fim_previsto:'2026-08-25' }; }
+function _ceCiclo(mod){ const c=_ceCache[mod] && _ceCache[mod].ciclo; return c || _ceCicloPadrao(); }
+function _ceIsoAddDias(iso,n){ const d=new Date(iso+'T12:00:00'); d.setDate(d.getDate()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+// ────────────────────────────────────────────────────────
+// RESUMO DO DIA (mapa_diario) — em cima da Produção em Tempo Real
+// PATEC Finalizado=l3 · Ag.PATEC Finalizar=l4 · 100% Reprov=l5 ·
+// Cancelado=l6 · Abrir ID Não=l7 · Abrir PATEC Obrig=l8
+// ────────────────────────────────────────────────────────
+function _ceMapaDia(mod, iso){ const arr=(_ceCache[mod]&&_ceCache[mod].mapa)||[]; return arr.find(r=>r.data===iso)||null; }
+function _ceMapaDiaAnterior(mod, iso){
+  const arr=(_ceCache[mod]&&_ceCache[mod].mapa)||[];
+  const antes=arr.filter(r=>r.data<iso).map(r=>r.data).sort();
+  return antes.length ? _ceMapaDia(mod, antes[antes.length-1]) : null;
+}
+function ceResumoData(mod){ _ceRenderResumoDia(mod); }
+function ceResumoHoje(mod){ const e=document.getElementById('ce-resumo-'+mod+'-dt'); if(e) e.value=_ceHojeLocal(); _ceRenderResumoDia(mod); }
+
+function _ceRenderResumoDia(mod){
+  const el=document.getElementById('ce-resumo-'+mod+'-cards'); if(!el) return;
+  const cache=_ceCache[mod]; if(!cache){ el.innerHTML=''; return; }
+  const hoje=_ceHojeLocal();
+  const picker=document.getElementById('ce-resumo-'+mod+'-dt');
+  let dt=(picker&&picker.value)||'';
+  if(!dt){
+    // default: hoje se houver mapa; senão o último mapa <= hoje
+    const arr=(cache.mapa||[]).map(r=>r.data).filter(d=>d<=hoje).sort();
+    dt = _ceMapaDia(mod,hoje) ? hoje : (arr.length?arr[arr.length-1]:hoje);
+    if(picker) picker.value=dt;
+  }
+  const lbl=document.getElementById('ce-resumo-'+mod+'-lbl'); if(lbl) lbl.textContent=fmtDt(dt);
+
+  const m=_ceMapaDia(mod,dt);
+  const ma=_ceMapaDiaAnterior(mod,dt);
+  if(!m){
+    el.innerHTML='<div style="font-size:12px;color:var(--tx2);padding:.75rem;background:var(--cin);border-radius:8px">Sem MAPA lançado para '+fmtDt(dt)+' em '+_ceModLabel(mod)+'.</div>';
+    return;
+  }
+  const g=(o,k)=>o?(+o[k]||0):0;
+  const l3=g(m,'l3'),l4=g(m,'l4'),l5=g(m,'l5'),l6=g(m,'l6'),l7=g(m,'l7'),l8=g(m,'l8');
+  const a3=ma?g(ma,'l3'):null,a4=ma?g(ma,'l4'):null,a5=ma?g(ma,'l5'):null,a6=ma?g(ma,'l6'):null,a7=ma?g(ma,'l7'):null,a8=ma?g(ma,'l8'):null;
+  const totPatec=l3+l4+l5+l6, totPatecAnt=ma?(a3+a4+a5+a6):null;
+  const totAbrir=l7+l8, totAbrirAnt=ma?(a7+a8):null;
+  const totGeral=l3+l4+l5+l6+l7+l8, totGeralAnt=ma?(a3+a4+a5+a6+a7+a8):null;
+
+  const varStr=(v,ant)=>{
+    if(ant===null||ant===undefined) return '';
+    const d=v-ant;
+    if(d===0) return '<div style="font-size:10px;font-weight:600;color:var(--tx2);margin-top:3px">— igual ao dia ant.</div>';
+    const cor=d>0?'var(--vm)':'var(--vd)'; const ico=d>0?'▲':'▼';
+    return '<div style="font-size:10px;font-weight:700;color:'+cor+';margin-top:3px">'+ico+' '+(d>0?'+':'')+d+' vs dia ant.</div>';
+  };
+  const card=(label,val,ant,cor,ico)=>'<div style="background:var(--cin);border-radius:10px;padding:.75rem;border:1px solid rgba(0,0,0,.07);text-align:center">'
+    + (ico?'<div style="font-size:15px;margin-bottom:2px">'+ico+'</div>':'')
+    + '<div style="font-size:10px;font-weight:700;color:var(--tx2);margin-bottom:3px;line-height:1.3">'+label+'</div>'
+    + '<div style="font-size:24px;font-weight:700;color:'+cor+';line-height:1">'+val+'</div>'
+    + varStr(val,ant)+'</div>';
+
+  el.innerHTML =
+      card('PATEC Finalizado',l3,a3,'#3266AD','✅')
+    + card('Ag. PATEC Finalizar',l4,a4,'#3266AD','⏳')
+    + card('100% Reprovado',l5,a5,'var(--vd)','❌')
+    + card('PATEC Cancelado',l6,a6,'var(--vd)','🚫')
+    + card('Total PATEC',totPatec,totPatecAnt,'var(--azm)','📊')
+    + card('Abrir ID Não',l7,a7,'var(--am)','🔓')
+    + card('Abrir PATEC Obrig.',l8,a8,'var(--am)','📦')
+    + card('Total Abrir PATEC',totAbrir,totAbrirAnt,'var(--am)','📋')
+    + '<div style="background:var(--azc);border-radius:10px;padding:.75rem;border:1px solid var(--azm);text-align:center;display:flex;flex-direction:column;justify-content:center">'
+      + '<div style="font-size:15px;margin-bottom:2px">🗂</div>'
+      + '<div style="font-size:10px;font-weight:700;color:var(--tx2);margin-bottom:3px">Total Geral</div>'
+      + '<div style="font-size:28px;font-weight:800;color:var(--az);line-height:1">'+totGeral+'</div>'
+      + varStr(totGeral,totGeralAnt)+'</div>';
+}
+
+// ────────────────────────────────────────────────────────
+// CARD "ANÁLISE DO DIA" (PCP) — em cima dos Desfechos por dia
+// vAnalise = 1ªAnálise+Tratativa+StatusB+AgParecer no dia (todos)
+// ────────────────────────────────────────────────────────
+function _ceAcoesAnaliseDia(mod, iso){
+  const ac=(_ceCache[mod]&&_ceCache[mod].acoes)||[];
+  return ac.filter(a=>a.data===iso && (a.tipo==='primeira_analise'||a.tipo==='em_tratativa'||a.tipo==='status_b'||a.tipo==='ag_parecer')).length;
+}
+function _ceDiasComAcao(mod){
+  const ac=(_ceCache[mod]&&_ceCache[mod].acoes)||[];
+  return [...new Set(ac.map(a=>a.data))].sort();
+}
+function cePcpData(mod){ _ceRenderPcpCard(mod); }
+function cePcpHoje(mod){
+  const e=document.getElementById('ce-pcp-'+mod+'-dt');
+  const hoje=_ceHojeLocal();
+  const dias=_ceDiasComAcao(mod).filter(d=>d<=hoje);
+  if(e) e.value = dias.length?dias[dias.length-1]:hoje;
+  _ceRenderPcpCard(mod);
+}
+function _ceRenderPcpCard(mod){
+  const el=document.getElementById('ce-pcp-'+mod); if(!el) return;
+  const cache=_ceCache[mod]; if(!cache){ el.innerHTML=''; return; }
+  const hoje=_ceHojeLocal();
+  const picker=document.getElementById('ce-pcp-'+mod+'-dt');
+  let dt=(picker&&picker.value)||'';
+  const dias=_ceDiasComAcao(mod).filter(d=>d<=hoje);
+  if(!dt){ dt = dias.length?dias[dias.length-1]:hoje; if(picker) picker.value=dt; }
+
+  const vAnalise=_ceAcoesAnaliseDia(mod,dt);
+  const dtAnt=dias.filter(d=>d<dt).slice(-1)[0]||null;
+  const aAnt=dtAnt?_ceAcoesAnaliseDia(mod,dtAnt):null;
+  const meta=_ceMetaEquipe(mod);
+  const metaOk=vAnalise>=meta;
+
+  // dias do ciclo que bateram/não a meta da equipe
+  const ini=_ceCiclo(mod).inicio;
+  let diasMeta=0, diasAbaixo=0;
+  _ceDiasComAcao(mod).filter(d=>d>=ini && d<=hoje).forEach(d=>{
+    const tot=_ceAcoesAnaliseDia(mod,d);
+    if(tot>=meta) diasMeta++; else diasAbaixo++;
+  });
+
+  const varStr=(()=>{
+    if(aAnt===null) return '';
+    const d=vAnalise-aAnt;
+    if(d===0) return '<div style="font-size:10px;color:var(--tx2);margin-top:3px">— igual a '+fmtDt(dtAnt)+'</div>';
+    const cor=d>0?'var(--vd)':'var(--vm)'; const ico=d>0?'▲':'▼';
+    return '<div style="font-size:11px;font-weight:700;color:'+cor+';margin-top:3px">'+ico+' '+(d>0?'+':'')+d+' vs '+fmtDt(dtAnt)+'</div>';
+  })();
+
+  el.innerHTML =
+    '<div style="background:'+(metaOk?'var(--vdc)':'var(--vmc)')+';border-radius:12px;padding:1rem 1.1rem;border:2px solid '+(metaOk?'rgba(14,158,106,.3)':'rgba(217,64,64,.3)')+'">'
+    + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">'
+    + '<div style="flex:1;min-width:150px">'
+      + '<div style="font-size:10px;font-weight:700;color:var(--tx2);margin-bottom:4px">ANÁLISE DO DIA · '+fmtDt(dt)+'</div>'
+      + '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">1ª Análise + Tratativa + Status B + Ag Parecer</div>'
+      + '<div style="font-size:42px;font-weight:700;color:'+(metaOk?'var(--vd)':'var(--vm)')+';line-height:1">'+vAnalise+'</div>'
+      + varStr + '</div>'
+    + '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0">'
+      + '<div style="padding:6px 14px;border-radius:8px;background:'+(metaOk?'var(--vd)':'var(--vm)')+';color:#fff;font-size:14px;font-weight:700;text-align:center">'+(metaOk?'✓ META':'✗ META')+'<div style="font-size:10px;font-weight:500;opacity:.85">meta '+meta+' itens</div></div>'
+      + '<div style="padding:5px 10px;border-radius:8px;background:rgba(255,255,255,.6);text-align:center;border:1px solid rgba(0,0,0,.08)">'
+        + '<div style="font-size:9px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">No ciclo</div>'
+        + '<div style="display:flex;gap:8px;align-items:center">'
+          + '<div style="text-align:center"><div style="font-size:18px;font-weight:700;color:var(--vd);line-height:1">'+diasMeta+'</div><div style="font-size:9px;color:var(--vd);font-weight:600">✓ dias</div></div>'
+          + '<div style="width:1px;height:28px;background:rgba(0,0,0,.1)"></div>'
+          + '<div style="text-align:center"><div style="font-size:18px;font-weight:700;color:var(--vm);line-height:1">'+diasAbaixo+'</div><div style="font-size:9px;color:var(--vm);font-weight:600">✗ dias</div></div>'
+        + '</div></div>'
+    + '</div></div></div>';
+}
+
+// ────────────────────────────────────────────────────────
+// GRÁFICO Programado × Realizado × Saídas — no final da página
+// ────────────────────────────────────────────────────────
+function _ceRenderChart(mod){
+  const canvas=document.getElementById('ce-chart-'+mod);
+  if(!canvas || typeof Chart==='undefined') return;
+  const cache=_ceCache[mod]; if(!cache) return;
+  const hoje=_ceHojeLocal();
+  const META=_ceMetaEquipe(mod);
+
+  const ciclo=_ceCiclo(mod);
+  const ini=ciclo.inicio;
+  const minFim=_ceIsoAddDias(ini,5);
+  let fim=(ciclo.fim_previsto && ciclo.fim_previsto>minFim) ? ciclo.fim_previsto : _ceIsoAddDias(ini,30);
+
+  // eixo = dias úteis do ciclo
+  const dias=[]; { const d=new Date(ini+'T12:00:00'); const f=new Date(fim+'T12:00:00'); while(d<=f){ const dw=d.getDay(); if(dw>=1&&dw<=5) dias.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')); d.setDate(d.getDate()+1); } }
+  const labels=dias.map(d=>fmtDt(d));
+
+  // mapas diários de análise e saídas a partir das ações
+  const analMap={}, saidMap={};
+  (cache.acoes||[]).forEach(a=>{
+    if(!a.data) return;
+    if(a.tipo==='primeira_analise'||a.tipo==='em_tratativa'||a.tipo==='status_b'||a.tipo==='ag_parecer') analMap[a.data]=(analMap[a.data]||0)+1;
+    const cc=String(a.conclusao||'');
+    if(cc==='Pedido'||cc==='Republicação'||cc==='Republicacao'||cc==='XGL'||cc==='Devolução'||cc==='Devolucao'||cc==='Nova Reserva') saidMap[a.data]=(saidMap[a.data]||0)+1;
+  });
+
+  let acProg=0, acAnal=0, acSaid=0;
+  const progAcum=[], analAcum=[], saidAcum=[];
+  dias.forEach((dt,i)=>{
+    acProg+=META; progAcum.push(acProg);
+    if(dt<=hoje){
+      // fim de semana/feriado desde o dia útil anterior → embute neste ponto
+      if(i>0){
+        let cur=new Date(dias[i-1]+'T12:00:00'); cur.setDate(cur.getDate()+1);
+        const f=new Date(dt+'T12:00:00');
+        while(cur<f){
+          const iso=cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0');
+          if(iso<=hoje){ acAnal+=(analMap[iso]||0); acSaid+=(saidMap[iso]||0); }
+          cur.setDate(cur.getDate()+1);
+        }
+      }
+      acAnal+=(analMap[dt]||0); acSaid+=(saidMap[dt]||0);
+      analAcum.push(acAnal); saidAcum.push(acSaid);
+    } else { analAcum.push(null); saidAcum.push(null); }
+  });
+
+  if(_ceChart[mod]){ try{ _ceChart[mod].destroy(); }catch(e){} }
+  _ceChart[mod]=new Chart(canvas,{
+    type:'line',
+    data:{labels,datasets:[
+      {label:'Planejado', data:progAcum, borderColor:'#2563EB',backgroundColor:'rgba(37,99,235,.06)',borderWidth:2,borderDash:[6,4],pointRadius:0,pointHoverRadius:4,fill:true,tension:0,spanGaps:true},
+      {label:'Analisado', data:analAcum, borderColor:'#F97316',backgroundColor:'rgba(249,115,22,.08)',borderWidth:2.5,pointRadius:3,pointHoverRadius:5,fill:false,tension:.3,spanGaps:false},
+      {label:'Saídas',    data:saidAcum, borderColor:'#16A34A',backgroundColor:'rgba(22,163,74,.08)',borderWidth:2,pointRadius:3,pointHoverRadius:5,fill:false,tension:.3,spanGaps:false},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'top',labels:{font:{size:11},usePointStyle:true}}},
+      scales:{y:{beginAtZero:true,ticks:{font:{size:10}},grid:{color:'rgba(0,0,0,.06)'}},x:{ticks:{font:{size:10},maxRotation:45,autoSkip:true,maxTicksLimit:12},grid:{display:false}}}
+    }
+  });
+}
 
 // ── Histórico de Fechamentos do Dia ──
 async function fechCarregarHistorico(){
