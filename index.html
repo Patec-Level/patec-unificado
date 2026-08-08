@@ -24215,7 +24215,7 @@ let _equipeRt = {
     { nome:'Camila',   meta:30, temMeta:true }
   ]
 };
-let _equipeEdit = null; // rascunho do editor (null = reconstruir a partir de _equipeRt)
+let _equipeEditMod = { adlv:[], fast:[] }; // rascunhos do editor (as 2 equipes)
 
 function equipeAplicarListas(){
   try{
@@ -24264,29 +24264,37 @@ function _equipeVis(nome, tipo){
 
 async function equipeAbrirEditor(){
   var host = document.getElementById('equipe-editor');
-  if(host) host.innerHTML = '<div style="font-size:12px;color:var(--tx2)">⏳ Carregando colaboradores cadastrados...</div>';
-  var mod = (_moduloAtivo==='fast') ? 'fast' : 'adlv';
-  var nomes = [];
+  if(host) host.innerHTML = '<div style="font-size:12px;color:var(--tx2)">⏳ Carregando colaboradores cadastrados (ADLV + FAST)...</div>';
+  // Todos os usuários (dos 2 módulos) vivem no MESMO projeto (ADLV) com um
+  // campo `modulos`. Uma leitura só monta as duas equipes — sem autenticar
+  // o FAST separado.
+  var usuarios = [];
   try{
-    var db = getDB();
+    var db = getDBUsuarios();
     if(db){
       var snap = await db.collection('usuarios').get();
-      snap.docs.forEach(function(d){
-        var u = d.data() || {};
-        var mods = Array.isArray(u.modulos) ? u.modulos : ['adlv'];
-        var cn = (u.colabNome||'').trim();
-        if(cn && mods.indexOf(mod) !== -1) nomes.push(cn);
-      });
+      snap.docs.forEach(function(d){ usuarios.push(d.data()||{}); });
     }
   }catch(e){ console.warn('equipe cadastrados:', e); }
-  // incluir também nomes já salvos na config (mesmo que não estejam mais cadastrados)
+  _equipeEditMod.adlv = _equipeMontarLista('adlv', usuarios);
+  _equipeEditMod.fast = _equipeMontarLista('fast', usuarios);
+  equipeRenderEditor();
+}
+
+// Monta a lista de um módulo: nomes puxados dos usuários com aquele módulo
+// (por colabNome) + nomes já salvos na config; mesclado com os settings.
+function _equipeMontarLista(mod, usuarios){
+  var nomes = [];
+  (usuarios||[]).forEach(function(u){
+    var mods = Array.isArray(u.modulos) ? u.modulos : ['adlv'];
+    var cn = (u.colabNome||'').trim();
+    if(cn && mods.indexOf(mod) !== -1) nomes.push(cn);
+  });
   (_equipeRt[mod]||[]).forEach(function(x){ if(x && x.nome) nomes.push(x.nome); });
-  // dedup (case-insensitive) preservando o primeiro nome visto
   var vistos = {}, ordenados = [];
   nomes.forEach(function(n){ var k=n.toLowerCase(); if(!vistos[k]){ vistos[k]=1; ordenados.push(n); } });
   ordenados.sort(function(a,b){ return a.localeCompare(b,'pt-BR'); });
-  // mesclar com settings salvos (meta, temMeta, visRT, visHist)
-  _equipeEdit = ordenados.map(function(n){
+  return ordenados.map(function(n){
     var s = (_equipeRt[mod]||[]).find(function(x){ return x.nome && x.nome.toLowerCase()===n.toLowerCase(); }) || {};
     return {
       nome: n,
@@ -24296,27 +24304,30 @@ async function equipeAbrirEditor(){
       visHist: (s.visHist!==false)
     };
   });
-  equipeRenderEditor();
 }
 
-function equipeRenderEditor(){
-  var host = document.getElementById('equipe-editor');
-  if(!host) return;
-  var modLbl = (_moduloAtivo==='fast') ? 'FAST' : 'ADLV';
-  var lista = _equipeEdit || [];
+function _equipeTabelaHtml(mod){
+  var lista = _equipeEditMod[mod] || [];
+  var cor = (mod==='fast') ? '#C07A12' : '#1A4A8A';
+  var emoji = (mod==='fast') ? '🟧' : '🟦';
+  var lbl = (mod==='fast') ? 'FAST' : 'ADLV';
+  var metaEquipe = lista.filter(function(x){ return x.temMeta && (+x.meta)>0; }).reduce(function(a,x){ return a+(+x.meta||0); }, 0);
   var rows = lista.map(function(x,i){
     return '<tr>'
       + '<td style="padding:6px 8px;font-weight:600">'+String(x.nome||'').replace(/</g,'&lt;')+'</td>'
-      + '<td style="padding:6px 8px;text-align:center"><input type="checkbox"'+(x.temMeta?' checked':'')+' onchange="_equipeEdit['+i+'].temMeta=this.checked;equipeRenderEditor()"></td>'
-      + '<td style="padding:6px 8px;text-align:center"><input type="number" min="0" value="'+(x.meta||0)+'" oninput="_equipeEdit['+i+'].meta=parseInt(this.value)||0" style="width:75px;padding:4px"'+(x.temMeta?'':' disabled')+'></td>'
-      + '<td style="padding:6px 8px;text-align:center"><input type="checkbox"'+(x.visRT?' checked':'')+' onchange="_equipeEdit['+i+'].visRT=this.checked"></td>'
-      + '<td style="padding:6px 8px;text-align:center"><input type="checkbox"'+(x.visHist?' checked':'')+' onchange="_equipeEdit['+i+'].visHist=this.checked"></td>'
-      + '<td style="padding:6px 8px;text-align:center"><button onclick="equipeRemoverLinha('+i+')" title="Remover da equipe deste módulo" style="background:var(--vmc);border:1px solid var(--vm);color:var(--vm);border-radius:6px;padding:3px 9px;cursor:pointer;font-size:12px;font-weight:600">🗑️</button></td>'
+      + '<td style="padding:6px 8px;text-align:center"><input type="checkbox"'+(x.temMeta?' checked':'')+' onchange="_equipeEditMod[\''+mod+'\']['+i+'].temMeta=this.checked;equipeRenderEditor()"></td>'
+      + '<td style="padding:6px 8px;text-align:center"><input type="number" min="0" value="'+(x.meta||0)+'" oninput="_equipeEditMod[\''+mod+'\']['+i+'].meta=parseInt(this.value)||0;_equipeAtualizarMetaEquipe(\''+mod+'\')" style="width:75px;padding:4px"'+(x.temMeta?'':' disabled')+'></td>'
+      + '<td style="padding:6px 8px;text-align:center"><input type="checkbox"'+(x.visRT?' checked':'')+' onchange="_equipeEditMod[\''+mod+'\']['+i+'].visRT=this.checked"></td>'
+      + '<td style="padding:6px 8px;text-align:center"><input type="checkbox"'+(x.visHist?' checked':'')+' onchange="_equipeEditMod[\''+mod+'\']['+i+'].visHist=this.checked"></td>'
+      + '<td style="padding:6px 8px;text-align:center"><button onclick="equipeRemoverLinha(\''+mod+'\','+i+')" title="Remover da equipe '+lbl+'" style="background:var(--vmc);border:1px solid var(--vm);color:var(--vm);border-radius:6px;padding:3px 9px;cursor:pointer;font-size:12px;font-weight:600">🗑️</button></td>'
     + '</tr>';
   }).join('');
-  if(!rows) rows = '<tr><td colspan="6" style="text-align:center;color:var(--tx2);padding:1rem">Nenhum colaborador cadastrado neste módulo (defina o colabNome do usuário na aba Usuários).</td></tr>';
-  host.innerHTML =
-    '<div class="al al-b" style="margin-bottom:.75rem">ℹ Lista puxada automaticamente dos usuários cadastrados no módulo <strong>'+modLbl+'</strong> (pelo colabNome). Desmarcar <em>Tempo Real</em> ou <em>Histórico</em> só esconde a pessoa daquela tela — ela continua contando no total da equipe. <em>Meta individual</em> desmarcada = contribui sem meta diária própria (ex.: liderança). <strong>🗑️ Remover</strong> tira a pessoa da equipe deste módulo (produção, metas e telas) — se ela ainda tiver este módulo em <strong>Usuários</strong>, ela volta ao recarregar; então quem saiu do projeto, tire o módulo dela em Usuários primeiro. Para dar acesso aos DOIS projetos, marque ADLV e FAST na aba Usuários.</div>'
+  if(!rows) rows = '<tr><td colspan="6" style="text-align:center;color:var(--tx2);padding:1rem">Nenhum colaborador com o módulo '+lbl+' (defina o colabNome e marque '+lbl+' na aba Usuários).</td></tr>';
+  return ''
+    + '<div style="margin-top:1rem;margin-bottom:.5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding-bottom:6px;border-bottom:2px solid '+cor+'22">'
+      + '<span style="font-size:13px;font-weight:800;color:'+cor+'">'+emoji+' Equipe '+lbl+'</span>'
+      + '<span style="font-size:11px;color:var(--tx2)">Meta da equipe: <strong id="equipe-metaeq-'+mod+'" style="color:'+cor+'">'+metaEquipe+'</strong>/dia</span>'
+    + '</div>'
     + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
     + '<thead><tr style="background:var(--cin)">'
       + '<th style="text-align:left;padding:8px">Colaborador</th>'
@@ -24325,30 +24336,51 @@ function equipeRenderEditor(){
       + '<th style="padding:8px;width:130px">Ver em Tempo Real</th>'
       + '<th style="padding:8px;width:130px">Ver no Histórico</th>'
       + '<th style="padding:8px;width:80px">Remover</th>'
-    + '</tr></thead><tbody>'+rows+'</tbody></table></div>'
-    + '<div style="display:flex;gap:10px;margin-top:1rem;align-items:center;flex-wrap:wrap">'
-      + '<button class="btn btn-g" onclick="equipeRtSalvar()">✓ Salvar equipe</button>'
+    + '</tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+
+function _equipeAtualizarMetaEquipe(mod){
+  var lista = _equipeEditMod[mod] || [];
+  var m = lista.filter(function(x){ return x.temMeta && (+x.meta)>0; }).reduce(function(a,x){ return a+(+x.meta||0); }, 0);
+  var el = document.getElementById('equipe-metaeq-'+mod);
+  if(el) el.textContent = m;
+}
+
+function equipeRenderEditor(){
+  var host = document.getElementById('equipe-editor');
+  if(!host) return;
+  host.innerHTML =
+    '<div class="al al-b" style="margin-bottom:.75rem">ℹ Lista puxada automaticamente dos usuários cadastrados (pelo colabNome e o módulo marcado em <strong>Usuários</strong>). As duas equipes aparecem aqui — você é o coordenador das duas. Desmarcar <em>Tempo Real</em> ou <em>Histórico</em> só esconde a pessoa daquela tela — ela continua contando no total da equipe. <em>Meta individual</em> desmarcada = contribui sem meta diária própria (ex.: liderança). <strong>🗑️ Remover</strong> tira a pessoa da equipe daquele módulo — se ela ainda tiver o módulo em <strong>Usuários</strong>, ela volta ao recarregar; então quem saiu do projeto, tire o módulo dela em Usuários primeiro. Para dar acesso aos DOIS projetos, marque ADLV e FAST na aba Usuários. <strong>✓ Salvar equipe</strong> grava as duas de uma vez.</div>'
+    + _equipeTabelaHtml('adlv')
+    + _equipeTabelaHtml('fast')
+    + '<div style="display:flex;gap:10px;margin-top:1.25rem;align-items:center;flex-wrap:wrap">'
+      + '<button class="btn btn-g" onclick="equipeRtSalvar()">✓ Salvar equipe (ADLV + FAST)</button>'
       + '<button class="btn btn-s" onclick="equipeAbrirEditor()">↺ Recarregar cadastrados</button>'
       + '<span id="equipe-ok" style="font-size:11px;color:var(--vd);font-weight:600;display:none">✓ Salvo! Já refletido nas telas.</span>'
     + '</div>';
 }
 
-function equipeRemoverLinha(i){
-  var x = (_equipeEdit||[])[i];
+function equipeRemoverLinha(mod, i){
+  var lista = _equipeEditMod[mod] || [];
+  var x = lista[i];
   if(!x) return;
-  if(!confirm('Remover '+(x.nome||'esta pessoa')+' da equipe deste módulo?\n\nTira a pessoa da lista (produção, metas, Tempo Real, Histórico e gráficos deste módulo).\n\nATENÇÃO: se ela ainda tiver acesso a este módulo na aba Usuários, ela volta a aparecer ao recarregar. Para quem saiu do projeto de vez, tire o módulo dela em ADM > Usuários primeiro (ou remova o usuário).\n\nA remoção só vale depois de clicar em \u201cSalvar equipe\u201d.')) return;
-  _equipeEdit.splice(i,1);
+  var lbl = (mod==='fast') ? 'FAST' : 'ADLV';
+  if(!confirm('Remover '+(x.nome||'esta pessoa')+' da equipe '+lbl+'?\n\nTira a pessoa da lista (produção, metas, Tempo Real, Histórico e gráficos do '+lbl+').\n\nATENÇÃO: se ela ainda tiver o módulo '+lbl+' na aba Usuários, ela volta a aparecer ao recarregar. Para quem saiu do projeto de vez, tire o módulo dela em ADM > Usuários primeiro (ou remova o usuário).\n\nA remoção só vale depois de clicar em \u201cSalvar equipe\u201d.')) return;
+  lista.splice(i,1);
   equipeRenderEditor();
 }
 
 async function equipeRtSalvar(){
-  var mod = (_moduloAtivo==='fast') ? 'fast' : 'adlv';
-  var lista = (_equipeEdit||[]).filter(function(x){ return x && (x.nome||'').trim(); }).map(function(x){
-    return { nome:x.nome.trim(), meta:(x.temMeta ? (+x.meta||0) : 0), temMeta:!!x.temMeta, visRT:(x.visRT!==false), visHist:(x.visHist!==false) };
-  });
+  function _norm(lista){
+    return (lista||[]).filter(function(x){ return x && (x.nome||'').trim(); }).map(function(x){
+      return { nome:x.nome.trim(), meta:(x.temMeta ? (+x.meta||0) : 0), temMeta:!!x.temMeta, visRT:(x.visRT!==false), visHist:(x.visHist!==false) };
+    });
+  }
   if(!Array.isArray(_equipeRt.adlv)) _equipeRt.adlv = [];
   if(!Array.isArray(_equipeRt.fast)) _equipeRt.fast = [];
-  _equipeRt[mod] = lista; // preserva o outro módulo
+  // Salva AS DUAS equipes de uma vez.
+  _equipeRt.adlv = _norm(_equipeEditMod.adlv);
+  _equipeRt.fast = _norm(_equipeEditMod.fast);
   var ok = false;
   try{ ok = await fbSet('config','equipe_rt', _equipeRt); }catch(e){ alert('Erro ao salvar: '+e.message); }
   equipeAplicarListas();
