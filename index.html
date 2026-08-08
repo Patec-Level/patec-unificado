@@ -24311,11 +24311,12 @@ function equipeRenderEditor(){
       + '<td style="padding:6px 8px;text-align:center"><input type="number" min="0" value="'+(x.meta||0)+'" oninput="_equipeEdit['+i+'].meta=parseInt(this.value)||0" style="width:75px;padding:4px"'+(x.temMeta?'':' disabled')+'></td>'
       + '<td style="padding:6px 8px;text-align:center"><input type="checkbox"'+(x.visRT?' checked':'')+' onchange="_equipeEdit['+i+'].visRT=this.checked"></td>'
       + '<td style="padding:6px 8px;text-align:center"><input type="checkbox"'+(x.visHist?' checked':'')+' onchange="_equipeEdit['+i+'].visHist=this.checked"></td>'
+      + '<td style="padding:6px 8px;text-align:center"><button onclick="equipeRemoverLinha('+i+')" title="Remover da equipe deste módulo" style="background:var(--vmc);border:1px solid var(--vm);color:var(--vm);border-radius:6px;padding:3px 9px;cursor:pointer;font-size:12px;font-weight:600">🗑️</button></td>'
     + '</tr>';
   }).join('');
-  if(!rows) rows = '<tr><td colspan="5" style="text-align:center;color:var(--tx2);padding:1rem">Nenhum colaborador cadastrado neste módulo (defina o colabNome do usuário na aba Usuários).</td></tr>';
+  if(!rows) rows = '<tr><td colspan="6" style="text-align:center;color:var(--tx2);padding:1rem">Nenhum colaborador cadastrado neste módulo (defina o colabNome do usuário na aba Usuários).</td></tr>';
   host.innerHTML =
-    '<div class="al al-b" style="margin-bottom:.75rem">ℹ Lista puxada automaticamente dos usuários cadastrados no módulo <strong>'+modLbl+'</strong> (pelo colabNome). Desmarcar <em>Tempo Real</em> ou <em>Histórico</em> só esconde a pessoa daquela tela — ela continua contando no total da equipe. <em>Meta individual</em> desmarcada = contribui sem meta diária própria (ex.: liderança).</div>'
+    '<div class="al al-b" style="margin-bottom:.75rem">ℹ Lista puxada automaticamente dos usuários cadastrados no módulo <strong>'+modLbl+'</strong> (pelo colabNome). Desmarcar <em>Tempo Real</em> ou <em>Histórico</em> só esconde a pessoa daquela tela — ela continua contando no total da equipe. <em>Meta individual</em> desmarcada = contribui sem meta diária própria (ex.: liderança). <strong>🗑️ Remover</strong> tira a pessoa da equipe deste módulo (produção, metas e telas) — se ela ainda tiver este módulo em <strong>Usuários</strong>, ela volta ao recarregar; então quem saiu do projeto, tire o módulo dela em Usuários primeiro. Para dar acesso aos DOIS projetos, marque ADLV e FAST na aba Usuários.</div>'
     + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
     + '<thead><tr style="background:var(--cin)">'
       + '<th style="text-align:left;padding:8px">Colaborador</th>'
@@ -24323,12 +24324,21 @@ function equipeRenderEditor(){
       + '<th style="padding:8px;width:100px">Meta/dia</th>'
       + '<th style="padding:8px;width:130px">Ver em Tempo Real</th>'
       + '<th style="padding:8px;width:130px">Ver no Histórico</th>'
+      + '<th style="padding:8px;width:80px">Remover</th>'
     + '</tr></thead><tbody>'+rows+'</tbody></table></div>'
     + '<div style="display:flex;gap:10px;margin-top:1rem;align-items:center;flex-wrap:wrap">'
       + '<button class="btn btn-g" onclick="equipeRtSalvar()">✓ Salvar equipe</button>'
       + '<button class="btn btn-s" onclick="equipeAbrirEditor()">↺ Recarregar cadastrados</button>'
       + '<span id="equipe-ok" style="font-size:11px;color:var(--vd);font-weight:600;display:none">✓ Salvo! Já refletido nas telas.</span>'
     + '</div>';
+}
+
+function equipeRemoverLinha(i){
+  var x = (_equipeEdit||[])[i];
+  if(!x) return;
+  if(!confirm('Remover '+(x.nome||'esta pessoa')+' da equipe deste módulo?\n\nTira a pessoa da lista (produção, metas, Tempo Real, Histórico e gráficos deste módulo).\n\nATENÇÃO: se ela ainda tiver acesso a este módulo na aba Usuários, ela volta a aparecer ao recarregar. Para quem saiu do projeto de vez, tire o módulo dela em ADM > Usuários primeiro (ou remova o usuário).\n\nA remoção só vale depois de clicar em \u201cSalvar equipe\u201d.')) return;
+  _equipeEdit.splice(i,1);
+  equipeRenderEditor();
 }
 
 async function equipeRtSalvar(){
