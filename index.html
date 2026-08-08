@@ -325,6 +325,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
 /* ── ADM TABS ── */
 .adm-tab{display:none}.adm-tab:first-of-type{display:block}
+@media(max-width:960px){.ce-split{grid-template-columns:1fr !important}}
 .ia-loading{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--azm);padding:8px 0}
 .ia-spin{animation:spin .6s linear infinite;display:inline-block}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -856,6 +857,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button class="stab" id="adm-nav-equipe-btn" onclick="setAdmTab('equipe',this)">🧑‍🤝‍🧑 Equipe (Metas RT)</button>
         <button class="stab" id="adm-nav-online-btn" onclick="setAdmTab('online',this)">🕐 Último Acesso</button>
         <button class="stab" onclick="setAdmTab('rt-producao',this)">📡 Produção Tempo Real</button>
+        <button class="stab" id="adm-nav-controle-equipes-btn" onclick="setAdmTab('controle-equipes',this)">🧭 Controle das Equipes</button>
         <button class="stab" onclick="setAdmTab('metas',this)">🎯 Metas e Gap</button>
         <button class="stab" onclick="setAdmTab('meta-gap',this)">📌 Meta & Gap (Topbar)</button>
         <button class="stab" onclick="setAdmTab('senhas',this)">🔑 Senhas</button>
@@ -2833,6 +2835,112 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div style="position:relative;height:340px"><canvas id="gca-chart-motivo"></canvas></div>
         </div>
       </div>
+
+      <!-- ══════════════ CONTROLE DAS EQUIPES (ADLV + FAST) ══════════════ -->
+      <div id="adm-controle-equipes" class="adm-tab" style="display:none">
+        <div class="cd" style="margin-bottom:1rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--tx)">🧭 Controle das Equipes — ADLV + FAST</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:4px">Visão do ADM com as DUAS equipes lado a lado, independente do módulo aberto. Cada painel lê direto da base do seu módulo.</div>
+            </div>
+            <button class="btn btn-s" style="font-size:11px" onclick="ceAtualizarTudo()">↺ Atualizar tudo</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:.75rem">
+            <div style="font-size:11px;color:var(--tx2);background:#EBF0FA;border-radius:8px;padding:6px 10px;border-left:3px solid #1A4A8A" id="ce-status-adlv">⏳ ADLV...</div>
+            <div style="font-size:11px;color:var(--tx2);background:#FDF3E3;border-radius:8px;padding:6px 10px;border-left:3px solid #C07A12" id="ce-status-fast">⏳ FAST...</div>
+          </div>
+        </div>
+
+        <!-- 1) PRODUÇÃO EM TEMPO REAL -->
+        <div class="cd" style="margin-bottom:1rem">
+          <div class="cd-t" style="margin:0 0 .875rem">📡 Produção em Tempo Real</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="ce-split">
+            <div>
+              <div style="font-size:12px;font-weight:800;color:#1A4A8A;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #1A4A8A22">🟦 ADLV</div>
+              <div class="kgrid" id="ce-rt-adlv-kpi" style="margin-bottom:.875rem"></div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px" id="ce-rt-adlv-cards"></div>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:800;color:#C07A12;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #C07A1222">🟧 FAST</div>
+              <div class="kgrid" id="ce-rt-fast-kpi" style="margin-bottom:.875rem"></div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px" id="ce-rt-fast-cards"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2) ALERTAS DE PERFORMANCE -->
+        <div class="cd" style="margin-bottom:1rem">
+          <div class="cd-t" style="margin:0">🔔 Alertas de Performance</div>
+          <div style="font-size:11px;color:var(--tx2);margin-bottom:.875rem">Últimos 5 dias úteis · Baseado nos fechamentos do dia</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="ce-split">
+            <div>
+              <div style="font-size:12px;font-weight:800;color:#1A4A8A;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #1A4A8A22">🟦 ADLV</div>
+              <div id="ce-alertas-adlv"></div>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:800;color:#C07A12;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #C07A1222">🟧 FAST</div>
+              <div id="ce-alertas-fast"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3) PERFORMANCE SEMANAL DA EQUIPE -->
+        <div class="cd" style="margin-bottom:1rem">
+          <div class="cd-t" style="margin:0">📊 Performance Semanal da Equipe</div>
+          <div style="font-size:11px;color:var(--tx2);margin-bottom:.875rem">
+            ADLV <span id="ce-perfsem-adlv-lbl"></span> · FAST <span id="ce-perfsem-fast-lbl"></span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="ce-split">
+            <div>
+              <div style="font-size:12px;font-weight:800;color:#1A4A8A;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #1A4A8A22">🟦 ADLV</div>
+              <div id="ce-perfsem-adlv"></div>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:800;color:#C07A12;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #C07A1222">🟧 FAST</div>
+              <div id="ce-perfsem-fast"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4) DESFECHOS POR DIA -->
+        <div class="cd" style="margin-bottom:1rem">
+          <div class="cd-t" style="margin:0 0 .875rem">📋 Desfechos por dia — Pedido · Republicação · XGL · Devolução · Nova Reserva</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="ce-split">
+            <!-- ADLV -->
+            <div>
+              <div style="font-size:12px;font-weight:800;color:#1A4A8A;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #1A4A8A22">🟦 ADLV</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:.75rem">
+                <div class="field-wrap" style="min-width:130px"><span class="field-label">De</span><input type="date" id="ce-dfd-adlv-de" style="width:100%;font-size:12px;padding:5px 10px"></div>
+                <div class="field-wrap" style="min-width:130px"><span class="field-label">Até</span><input type="date" id="ce-dfd-adlv-ate" style="width:100%;font-size:12px;padding:5px 10px"></div>
+                <button class="btn btn-s" style="font-size:11px" onclick="ceDesfechoFiltrar('adlv')">🔍 Filtrar</button>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:.875rem" id="ce-dfd-adlv-cards"></div>
+              <div class="tw" style="max-height:360px"><table>
+                <thead><tr><th>Data</th><th style="text-align:center">🛒 Pedido</th><th style="text-align:center">🔄 Repub.</th><th style="text-align:center">📦 XGL</th><th style="text-align:center">↩ Dev.</th><th style="text-align:center">🔖 N.Reserva</th><th style="text-align:center">Total</th></tr></thead>
+                <tbody id="ce-dfd-adlv-tbody"></tbody>
+                <tfoot id="ce-dfd-adlv-tfoot"></tfoot>
+              </table></div>
+            </div>
+            <!-- FAST -->
+            <div>
+              <div style="font-size:12px;font-weight:800;color:#C07A12;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #C07A1222">🟧 FAST</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:.75rem">
+                <div class="field-wrap" style="min-width:130px"><span class="field-label">De</span><input type="date" id="ce-dfd-fast-de" style="width:100%;font-size:12px;padding:5px 10px"></div>
+                <div class="field-wrap" style="min-width:130px"><span class="field-label">Até</span><input type="date" id="ce-dfd-fast-ate" style="width:100%;font-size:12px;padding:5px 10px"></div>
+                <button class="btn btn-s" style="font-size:11px" onclick="ceDesfechoFiltrar('fast')">🔍 Filtrar</button>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:.875rem" id="ce-dfd-fast-cards"></div>
+              <div class="tw" style="max-height:360px"><table>
+                <thead><tr><th>Data</th><th style="text-align:center">🛒 Pedido</th><th style="text-align:center">🔄 Repub.</th><th style="text-align:center">📦 XGL</th><th style="text-align:center">↩ Dev.</th><th style="text-align:center">🔖 N.Reserva</th><th style="text-align:center">Total</th></tr></thead>
+                <tbody id="ce-dfd-fast-tbody"></tbody>
+                <tfoot id="ce-dfd-fast-tfoot"></tfoot>
+              </table></div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /adm-controle-equipes -->
 
     </div><!-- /adm-painel -->
   </div><!-- /p-adm -->
@@ -8819,6 +8927,12 @@ function setAdmTab(id,btn){
     alert('Apenas o administrador geral pode editar a equipe e as metas.');
     return;
   }
+  // Controle das Equipes cruza dados das DUAS equipes (ADLV + FAST) —
+  // mesma sensibilidade das abas Usuários/Último Acesso/Equipe.
+  if(id==='controle-equipes' && !_isAdmGeral()){
+    alert('Apenas o administrador geral pode ver o Controle das Equipes.');
+    return;
+  }
   // Testar E-mails, Apresentação, Apresentação 1 e Entradas Plano de Ação
   // são exclusivas do ADLV — dependem de listas de destinatários e dados
   // específicos do ADLV que não se aplicam ao FAST.
@@ -8836,6 +8950,7 @@ function setAdmTab(id,btn){
   if(id==='q18-upload') setTimeout(()=>{ q18CarregarFirebase(); },50);
   if(id==='analise-nm') setTimeout(()=>{ aNmAbrir(); },50);
   if(id==='analise-concluidos') setTimeout(gcaAbrir,50);
+  if(id==='controle-equipes') setTimeout(ceAbrir,50);
   if(id==='analista-auto') setTimeout(()=>{ aaVerificarDados(); if(window._aaAptas) aaCarregarResultadoFirebase(); aaSetTab('pedido'); },50);
   if(id==='meta-gap') setTimeout(initMetaGapADM,50);
   if(id==='ferias-adm') setTimeout(renderFeriasForm,50);
@@ -24400,6 +24515,448 @@ function rtRenderizarMonitoramento(acoes, hoje){
 
 // Manter compatibilidade
 function rtRenderizar(regs, hoje){ rtRenderizarMonitoramento([], hoje); }
+
+// ══════════════════════════════════════════════════════════════════
+// CONTROLE DAS EQUIPES (ADM) — visão cross-módulo ADLV + FAST
+// Mostra, lado a lado, a produtividade das DUAS equipes independente
+// do módulo ativo. Cada painel lê direto do projeto Firebase do módulo
+// correspondente (patec-dashboard = ADLV, patec-fast = FAST), sem
+// tocar em nenhuma variável global do módulo ativo. O FAST é um projeto
+// separado — quando o ADM está no ADLV, autentica o FAST sob demanda
+// (mesma mecânica do Backup TOTAL); se não autenticar, mostra um botão
+// "Conectar FAST" que pede a senha.
+// ══════════════════════════════════════════════════════════════════
+
+// Cache por módulo pra minimizar leituras no Firebase (plano Spark).
+// Uma única carga de producao_acoes (janela ~45 dias) alimenta RT (hoje),
+// Performance Semanal (semana atual) e Desfechos por dia (intervalo).
+let _ceCache = { adlv:null, fast:null };
+const _CE_LOOKBACK_DIAS = 60; // janela padrão de carga
+
+function _ceHojeLocal(){
+  const n = new Date();
+  return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+}
+function _ceISOmenosDias(iso, dias){
+  const p = iso.split('-');
+  const d = new Date(+p[0], (+p[1])-1, +p[2]);
+  d.setDate(d.getDate()-dias);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function _ceFmtDM(iso){ const [,m,dd]=iso.split('-'); return dd+'/'+m; }
+function _ceModLabel(mod){ return mod==='fast' ? 'FAST' : 'ADLV'; }
+function _ceModCor(mod){ return mod==='fast' ? '#C07A12' : '#1A4A8A'; }
+
+// ── Equipe do módulo (lê _equipeRt, que já traz adlv E fast em memória) ──
+function _ceEquipe(mod){ return (window._equipeRt && Array.isArray(_equipeRt[mod])) ? _equipeRt[mod].filter(x=>x&&(x.nome||'').trim()) : []; }
+function _ceColabs(mod){ return _ceEquipe(mod).map(x=>x.nome.trim()); }
+function _ceTemMeta(mod, nome){ const e=_ceEquipe(mod).find(x=>x.nome.trim().toLowerCase()===String(nome).toLowerCase()); return e ? !!e.temMeta : true; }
+function _ceMetaInd(mod, nome){ const e=_ceEquipe(mod).find(x=>x.nome.trim().toLowerCase()===String(nome).toLowerCase()); return (e && e.temMeta && (+e.meta)>0) ? (+e.meta) : 30; }
+function _ceMetaEquipe(mod){
+  // Soma das metas de quem tem meta individual (self-corrige se a equipe mudar).
+  const s = _ceEquipe(mod).filter(x=>x.temMeta && (+x.meta)>0).reduce((a,x)=>a+(+x.meta),0);
+  return s>0 ? s : 90;
+}
+function _ceVis(mod, nome, tipo){
+  const e=_ceEquipe(mod).find(x=>x.nome.trim().toLowerCase()===String(nome).toLowerCase());
+  if(!e) return true;
+  return tipo==='rt' ? (e.visRT!==false) : (e.visHist!==false);
+}
+
+// ── Conexão Firebase do módulo (autentica FAST se preciso) ──
+async function _ceGetDB(mod){
+  if(mod==='adlv'){
+    const db = getDBModulo('adlv');
+    return { db, err: db ? null : 'Firebase ADLV indisponível' };
+  }
+  // FAST — projeto separado, precisa de auth própria
+  let fastApp = firebase.apps.find(a=>a.name==='fastApp');
+  let ok = !!(fastApp && fastApp.auth && fastApp.auth().currentUser);
+  if(!ok){
+    let r = await _autenticarFast(); // tenta com a senha temporária do login
+    fastApp = firebase.apps.find(a=>a.name==='fastApp');
+    ok = !!(r && r.ok && fastApp && fastApp.auth().currentUser);
+  }
+  if(!ok) return { db:null, err:'FAST_NAO_AUTENTICADO' };
+  return { db: fastApp.firestore(), err:null };
+}
+
+// Botão manual "Conectar FAST" (pede a senha e recarrega o painel FAST)
+async function ceConectarFast(){
+  const senha = await _pedirSenhaModal('Confirme sua senha para ver os dados do FAST:');
+  if(!senha) return;
+  const r = await _autenticarFast(senha);
+  if(!(r && r.ok)){
+    alert('Não foi possível autenticar no FAST ('+(r&&r.motivo||'erro')+').');
+    return;
+  }
+  _ceCache.fast = null;
+  ceCarregarModulo('fast');
+}
+
+// ── Carga única por módulo → dispara render dos 4 painéis ──
+async function ceCarregarModulo(mod, desdeForcado){
+  const hoje = _ceHojeLocal();
+  const desde = desdeForcado || _ceISOmenosDias(hoje, _CE_LOOKBACK_DIAS);
+  _ceSetStatus(mod, '⏳ Carregando dados do '+_ceModLabel(mod)+'...');
+
+  const { db, err } = await _ceGetDB(mod);
+  if(!db){
+    if(err==='FAST_NAO_AUTENTICADO'){ _ceRenderFastDesconectado(); return; }
+    _ceSetStatus(mod, '⚠ '+(err||'Firebase indisponível'));
+    return;
+  }
+
+  let acoes = [], fech = [];
+  try{
+    const snap = await db.collection('producao_acoes').where('data','>=',desde).get();
+    snap.forEach(d=>{ const x=d.data(); if(x && !x.anulada) acoes.push(x); });
+  }catch(e){ console.warn('ce acoes '+mod+':', e); _ceSetStatus(mod, '⚠ Erro ao ler produção do '+_ceModLabel(mod)); return; }
+  try{
+    const desde10 = _ceISOmenosDias(hoje, 12);
+    const snap2 = await db.collection('fechamento_dia').where('data','>=',desde10).get();
+    snap2.forEach(d=>{ const x=d.data(); if(x) fech.push(x); });
+  }catch(e){ console.warn('ce fech '+mod+':', e); }
+
+  _ceCache[mod] = { acoes, fech, desde, ts:new Date() };
+  _ceSetStatus(mod, '✓ '+_ceModLabel(mod)+' · '+acoes.length+' ações · atualizado '+new Date().toLocaleTimeString('pt-BR'));
+
+  _ceRenderRT(mod);
+  _ceRenderAlertas(mod);
+  _ceRenderPerfSemanal(mod);
+  _ceRenderDesfechos(mod);
+}
+
+function _ceSetStatus(mod, txt){
+  const el = document.getElementById('ce-status-'+mod);
+  if(el) el.textContent = txt;
+}
+
+// FAST sem conexão: preenche os 4 painéis com um aviso + botão conectar
+function _ceRenderFastDesconectado(){
+  _ceSetStatus('fast', '🔌 FAST não conectado neste momento.');
+  const aviso = '<div style="text-align:center;padding:1.5rem;color:var(--tx2);font-size:12px">'
+    + '<div style="font-size:24px;margin-bottom:.5rem">🔌</div>'
+    + 'Os dados do FAST são de um projeto separado.<br>Conecte para ver a produtividade da equipe FAST aqui.'
+    + '<div style="margin-top:.875rem"><button class="btn btn-p" style="font-size:12px" onclick="ceConectarFast()">🔑 Conectar FAST</button></div></div>';
+  ['ce-rt-fast-kpi','ce-rt-fast-cards','ce-alertas-fast','ce-perfsem-fast','ce-dfd-fast-cards'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.innerHTML=aviso;
+  });
+  const tb=document.getElementById('ce-dfd-fast-tbody'); if(tb) tb.innerHTML='';
+  const tf=document.getElementById('ce-dfd-fast-tfoot'); if(tf) tf.innerHTML='';
+}
+
+// ────────────────────────────────────────────────────────
+// 1) PRODUÇÃO EM TEMPO REAL (por módulo) — foto 1
+// ────────────────────────────────────────────────────────
+function _ceRenderRT(mod){
+  const cache = _ceCache[mod]; if(!cache) return;
+  const hoje = _ceHojeLocal();
+  const acoesHoje = cache.acoes.filter(a=>a.data===hoje);
+
+  const colabs = _ceColabs(mod);
+  const porColab = {};
+  colabs.forEach(c=>{ porColab[c]={primeira_analise:0,em_tratativa:0,status_b:0,ag_parecer:0,outros:0,total:0,ultimaAcao:null,acoes:[]}; });
+  acoesHoje.forEach(a=>{
+    const p=porColab[a.colab]; if(!p) return;
+    if(p[a.tipo]!==undefined) p[a.tipo]++;
+    p.total++;
+    if(!p.ultimaAcao || a.ts>p.ultimaAcao) p.ultimaAcao=a.ts;
+    p.acoes.push(a);
+  });
+
+  const metaEq = _ceMetaEquipe(mod);
+  const totalEquipe = colabs.reduce((s,c)=>{
+    const p=porColab[c]; const semMeta=!_ceTemMeta(mod,c);
+    return s + (semMeta ? (p?.total||0) : (p?.primeira_analise||0)+(p?.em_tratativa||0)+(p?.status_b||0)+(p?.ag_parecer||0));
+  },0);
+  const pctEq = metaEq>0 ? Math.min(100,Math.round(totalEquipe/metaEq*100)) : 0;
+  const comMeta = colabs.filter(c=>_ceTemMeta(mod,c));
+  const bateram = comMeta.filter(c=>{
+    const p=porColab[c]; const meta=_ceMetaInd(mod,c);
+    return (p.primeira_analise+p.em_tratativa+p.status_b+p.ag_parecer)>=meta;
+  }).length;
+  const ativos = colabs.filter(c=>porColab[c].total>0).length;
+  const faltam = Math.max(0, metaEq-totalEquipe);
+
+  const kpi = document.getElementById('ce-rt-'+mod+'-kpi');
+  if(kpi) kpi.innerHTML =
+      '<div class="kc '+(totalEquipe>=metaEq?'ok':totalEquipe>=metaEq*.8?'warn':'bad')+'"><div class="kc-l">Resultado equipe hoje</div><div class="kc-v">'+totalEquipe+'</div><div class="kc-s">'+pctEq+'% da meta ('+metaEq+')</div></div>'
+    + '<div class="kc"><div class="kc-l">Colaboradores ativos</div><div class="kc-v">'+ativos+'</div><div class="kc-s">com ação registrada hoje</div></div>'
+    + '<div class="kc '+(bateram===comMeta.length?'ok':bateram>0?'warn':'bad')+'"><div class="kc-l">Bateram a meta</div><div class="kc-v">'+bateram+' / '+comMeta.length+'</div><div class="kc-s">analistas</div></div>'
+    + '<div class="kc '+(faltam===0?'ok':'warn')+'"><div class="kc-l">Faltam para a meta</div><div class="kc-v" style="color:'+(faltam===0?'var(--vd)':'var(--am)')+'">'+faltam+'</div><div class="kc-s">'+(faltam===0?'✅ Meta atingida!':'de '+metaEq+' itens')+'</div></div>';
+
+  const cardsEl = document.getElementById('ce-rt-'+mod+'-cards');
+  if(cardsEl){
+    const visiveis = colabs.filter(c=>_ceVis(mod,c,'rt'));
+    if(!visiveis.length){ cardsEl.innerHTML='<div style="font-size:12px;color:var(--tx2)">Nenhum colaborador cadastrado para '+_ceModLabel(mod)+'.</div>'; return; }
+    cardsEl.innerHTML = visiveis.map(colab=>{
+      const p=porColab[colab];
+      const semMeta=!_ceTemMeta(mod,colab);
+      const meta=_ceMetaInd(mod,colab);
+      const resultado = semMeta ? p.total : (p.primeira_analise+p.em_tratativa+p.status_b+p.ag_parecer);
+      const pctC = Math.min(100, Math.round(resultado/meta*100));
+      const cor = semMeta ? (resultado>=meta?'var(--vd)':resultado>=meta*.8?'var(--am)':'var(--azm)') : resultado>=meta?'var(--vd)':resultado>=meta*.8?'var(--am)':resultado>0?'var(--vm)':'var(--brd)';
+      const ativo=p.total>0;
+      const horario=p.ultimaAcao?new Date(p.ultimaAcao).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):null;
+      const ua = p.acoes.length ? p.acoes.slice().sort((a,b)=>b.ts>a.ts?1:-1)[0] : null;
+      const uaLabel = ua ? ((PROD_TIPO_LABELS[ua.tipo]?.emoji||'•')+' '+(PROD_TIPO_LABELS[ua.tipo]?.label||ua.tipo)+(ua.tratamento?' → '+ua.tratamento:'')) : null;
+      return '<div style="background:#fff;border-radius:12px;padding:1rem 1.25rem;border:1px solid var(--brd);border-top:3px solid '+cor+';box-shadow:0 1px 6px rgba(13,35,71,.05);position:relative">'
+        + (ativo?'<span class="rt-dot" style="position:absolute;top:12px;right:12px" title="Ativo hoje"></span>':'')
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem"><div style="display:flex;align-items:center;gap:10px">'
+        + '<div style="width:40px;height:40px;border-radius:50%;background:'+(ativo?cor:'var(--brd)')+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700">'+(colab[0]||'?')+'</div>'
+        + '<div><div style="font-size:13px;font-weight:700;color:var(--az)">'+colab+' '+(semMeta?'<span style="font-size:9px;background:var(--azc);color:var(--azm);padding:1px 7px;border-radius:10px;font-weight:600">👑 Líder</span>':'')+'</div>'
+        + '<div style="font-size:10px;color:var(--tx2)">'+(ativo?'Última ação: '+horario:'Sem ações hoje')+'</div></div></div>'
+        + '<div style="text-align:right"><div style="font-size:28px;font-weight:700;color:'+(ativo?cor:'var(--tx2)')+';line-height:1">'+resultado+'</div><div style="font-size:10px;color:var(--tx2)">meta '+meta+'</div></div></div>'
+        + '<div style="height:6px;background:#EEE;border-radius:3px;overflow:hidden;margin-bottom:.75rem"><div style="height:100%;width:'+pctC+'%;background:'+cor+';border-radius:3px;transition:width .6s"></div></div>'
+        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;font-size:10px;margin-bottom:'+(uaLabel?'.625rem':'0')+'">'
+        + '<div style="text-align:center;background:var(--azc);border-radius:6px;padding:4px 2px"><div style="font-weight:700;color:var(--azm)">'+p.primeira_analise+'</div><div style="color:var(--tx2)">1ª Anál.</div></div>'
+        + '<div style="text-align:center;background:var(--azc);border-radius:6px;padding:4px 2px"><div style="font-weight:700;color:var(--azm)">'+p.em_tratativa+'</div><div style="color:var(--tx2)">Em Trat.</div></div>'
+        + '<div style="text-align:center;background:var(--vdc);border-radius:6px;padding:4px 2px"><div style="font-weight:700;color:var(--vd)">'+p.status_b+'</div><div style="color:var(--tx2)">Status B</div></div>'
+        + '<div style="text-align:center;background:var(--amc);border-radius:6px;padding:4px 2px"><div style="font-weight:700;color:var(--am)">'+p.outros+'</div><div style="color:var(--tx2)">Outros</div></div></div>'
+        + (uaLabel?'<div style="font-size:10px;background:var(--cin);border-radius:6px;padding:4px 10px;color:var(--tx2)">⏱ Última: '+uaLabel+'</div>':'')
+        + '</div>';
+    }).join('');
+  }
+}
+
+// ────────────────────────────────────────────────────────
+// 2) ALERTAS DE PERFORMANCE (por módulo) — foto 2 (topo)
+//    Últimos 5 dias úteis, baseado nos fechamentos do dia.
+// ────────────────────────────────────────────────────────
+function _ceRenderAlertas(mod){
+  const el = document.getElementById('ce-alertas-'+mod); if(!el) return;
+  const cache = _ceCache[mod]; if(!cache){ el.innerHTML=''; return; }
+  const META = 30;
+
+  // 5 últimos dias úteis
+  const dias=[]; let d=new Date();
+  while(dias.length<5){ const dow=d.getDay(); if(dow!==0&&dow!==6){ const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); dias.unshift(iso); } d.setDate(d.getDate()-1); }
+
+  const colabs = _ceColabs(mod).filter(c=>_ceTemMeta(mod,c)).filter(c=>_ceVis(mod,c,'hist'));
+  // total do fechamento por colab+data (folga/férias = 'FOLGA')
+  const fmap = {};
+  cache.fech.forEach(f=>{ if(!f||!f.data) return; fmap[f.colab+'|'+f.data] = (f.presenca==='Folga'||f.presenca==='Férias') ? 'FOLGA' : (+f.total||0); });
+
+  if(!colabs.length){ el.innerHTML='<div style="font-size:12px;color:var(--tx2)">Nenhum analista com meta em '+_ceModLabel(mod)+'.</div>'; return; }
+
+  const cards = colabs.map(colab=>{
+    const vals = dias.map(dia=>{ const v=fmap[colab+'|'+dia]; return v===undefined?null:v; });
+    let consecutivos=0;
+    for(let i=dias.length-1;i>=0;i--){ if(vals[i]===null||vals[i]==='FOLGA') continue; if(vals[i]<META) consecutivos++; else break; }
+    const comDados = vals.filter(v=>v!==null&&v!=='FOLGA');
+    const media = comDados.length ? Math.round(comDados.reduce((a,b)=>a+b,0)/comDados.length) : null;
+    const pctMedia = media!==null ? Math.round(media/META*100) : null;
+    let ultimaBateu=null;
+    for(let i=dias.length-1;i>=0;i--){ if(vals[i]!==null&&vals[i]!=='FOLGA'&&vals[i]>=META){ ultimaBateu=dias[i]; break; } }
+    let status,cor,icone,msg;
+    if(consecutivos>=3){ status='CRÍTICO'; cor='var(--vm)'; icone='🔴'; msg=consecutivos+' dias consecutivos abaixo da meta'; }
+    else if(consecutivos===2){ status='ATENÇÃO'; cor='var(--am)'; icone='🟡'; msg='2 dias consecutivos abaixo da meta'; }
+    else if(consecutivos===1){ status='OBSERVAR'; cor='#E67E22'; icone='🟠'; msg='1 dia abaixo da meta'; }
+    else if(comDados.length===0){ status='SEM DADOS'; cor='var(--tx2)'; icone='⚫'; msg='Sem fechamentos registrados'; }
+    else { status='NORMAL'; cor='var(--vd)'; icone='✅'; msg='Dentro da meta nos últimos dias'; }
+    return {colab,consecutivos,media,pctMedia,ultimaBateu,status,cor,icone,msg,vals,comDados};
+  });
+
+  el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">'
+    + cards.map(c=>
+        '<div style="border-radius:10px;border:1.5px solid '+c.cor+';background:'+(c.status==='CRÍTICO'?'rgba(217,64,64,.06)':c.status==='ATENÇÃO'?'rgba(192,122,18,.06)':c.status==='NORMAL'?'rgba(76,175,80,.06)':'var(--cin)')+';padding:.875rem 1rem">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.625rem"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:16px">'+c.icone+'</span><span style="font-size:14px;font-weight:700;color:var(--az)">'+c.colab+'</span></div>'
+        + '<span style="font-size:10px;font-weight:700;color:'+c.cor+';padding:2px 8px;border-radius:12px;border:1px solid '+c.cor+'">'+c.status+'</span></div>'
+        + '<div style="font-size:12px;font-weight:600;color:'+c.cor+';margin-bottom:.5rem">'+c.msg+'</div>'
+        + '<div style="display:flex;gap:12px;font-size:11px;color:var(--tx2);margin-bottom:.625rem">'
+        + (c.media!==null?'<span>Média: <strong style="color:'+(c.pctMedia>=100?'var(--vd)':c.pctMedia>=70?'var(--am)':'var(--vm)')+'">'+c.media+'/'+META+' ('+c.pctMedia+'%)</strong></span>':'')
+        + (c.ultimaBateu?'<span>Última meta: <strong style="color:var(--vd)">'+_ceFmtDM(c.ultimaBateu)+'</strong></span>':(c.comDados.length>0?'<span style="color:var(--vm)">Não bateu a meta no período</span>':''))
+        + '</div><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px">'
+        + dias.map((dia,i)=>{ const v=c.vals[i]; const cor2=(v===null||v==='FOLGA')?'var(--tx2)':v>=META?'var(--vd)':v>=META*.7?'var(--am)':'var(--vm)'; const bg=v==='FOLGA'?'rgba(192,122,18,.12)':v===null?'var(--cin)':v>=META?'rgba(76,175,80,.12)':v>=META*.7?'rgba(192,122,18,.12)':'rgba(217,64,64,.1)'; return '<div style="text-align:center;background:'+bg+';border-radius:5px;padding:3px 2px"><div style="font-size:11px;font-weight:700;color:'+cor2+'">'+(v==='FOLGA'?'🌴':(v!==null?v:'—'))+'</div><div style="font-size:9px;color:var(--tx2)">'+_ceFmtDM(dia)+'</div></div>'; }).join('')
+        + '</div></div>'
+      ).join('')
+    + '</div><div style="font-size:10px;color:var(--tx2);margin-top:.75rem">🔴 3+ dias consecutivos · 🟡 2 dias · 🟠 1 dia · ✅ Normal · Baseado nos fechamentos registrados</div>';
+}
+
+// ────────────────────────────────────────────────────────
+// 3) PERFORMANCE SEMANAL DA EQUIPE (por módulo) — foto 2 (baixo)
+// ────────────────────────────────────────────────────────
+function _ceSemana(){
+  const hoje=new Date(); const dow=hoje.getDay();
+  const seg=new Date(hoje); seg.setDate(hoje.getDate()-(dow===0?6:dow-1)); seg.setHours(0,0,0,0);
+  const dias=[]; for(let i=0;i<5;i++){ const d=new Date(seg); d.setDate(seg.getDate()+i); dias.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')); }
+  return { dias };
+}
+function _ceContarAcoesSemana(mod, colab, dias){
+  const cache=_ceCache[mod]; const acoes=cache?cache.acoes:[];
+  const ANALISE=['primeira_analise','em_tratativa','status_b','ag_parecer'];
+  const LABEL={primeira_analise:'1ª Análise',em_tratativa:'Em Tratativa',status_b:'Status B',ag_parecer:'Ag Parecer',outros:'Outros'};
+  const COR={primeira_analise:'var(--azm)',em_tratativa:'var(--azm)',status_b:'var(--vd)',ag_parecer:'#7c3aed',outros:'var(--am)'};
+  const porDia={}; let totalSem=0; const comp={primeira_analise:0,em_tratativa:0,status_b:0,ag_parecer:0,outros:0};
+  const doDia=(iso)=>acoes.filter(a=>a.data===iso && a.colab===colab);
+  dias.forEach(dia=>{
+    const ac=doDia(dia);
+    const tot=ac.filter(a=>ANALISE.includes(a.tipo)).length;
+    porDia[dia]=tot; totalSem+=tot;
+    ac.forEach(a=>{ if(comp[a.tipo]!==undefined) comp[a.tipo]++; });
+  });
+  // sáb/dom após a sexta: soma no total sem virar coluna
+  try{
+    const ult=dias[dias.length-1];
+    if(ult){ const base=new Date(ult+'T12:00:00'); for(let k=1;k<=2;k++){ const w=new Date(base); w.setDate(w.getDate()+k); const iso=w.getFullYear()+'-'+String(w.getMonth()+1).padStart(2,'0')+'-'+String(w.getDate()).padStart(2,'0'); const ac=doDia(iso); totalSem+=ac.filter(a=>ANALISE.includes(a.tipo)).length; ac.forEach(a=>{ if(comp[a.tipo]!==undefined) comp[a.tipo]++; }); } }
+  }catch(e){}
+  return { porDia, totalSem, comp, LABEL, COR };
+}
+function _ceDiasFolga(mod, colab, dias){
+  const set=new Set(); const cache=_ceCache[mod]; if(!cache) return set;
+  cache.fech.forEach(f=>{ if(f && f.colab===colab && (f.presenca==='Folga'||f.presenca==='Férias') && dias.indexOf(f.data)!==-1) set.add(f.data); });
+  return set;
+}
+function _ceRenderPerfSemanal(mod){
+  const el=document.getElementById('ce-perfsem-'+mod); if(!el) return;
+  const cache=_ceCache[mod]; if(!cache){ el.innerHTML=''; return; }
+  const { dias }=_ceSemana();
+  const fmtDiaSem=d=>{ const dow=new Date(d+'T12:00:00').getDay(); return ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][dow]; };
+  const META_DIA=30;
+  const lbl=document.getElementById('ce-perfsem-'+mod+'-lbl'); if(lbl) lbl.textContent=_ceFmtDM(dias[0])+' a '+_ceFmtDM(dias[4]);
+
+  const colabs=_ceColabs(mod).filter(c=>_ceTemMeta(mod,c)).filter(c=>_ceVis(mod,c,'hist'));
+  if(!colabs.length){ el.innerHTML='<div style="font-size:12px;color:var(--tx2)">Nenhum analista com meta em '+_ceModLabel(mod)+'.</div>'; return; }
+
+  const dados=colabs.map(c=>{
+    const { porDia, totalSem, comp, LABEL, COR }=_ceContarAcoesSemana(mod,c,dias);
+    const folgaSet=_ceDiasFolga(mod,c,dias);
+    const metaSem=META_DIA*((dias.filter(d=>_fdiaEhDiaUtil(d)&&!folgaSet.has(d)).length)||1);
+    const pct=metaSem>0?Math.round(totalSem/metaSem*100):0;
+    return { colab:c, porDia, totalSem, metaSem, pct, comp, LABEL, COR, folgaSet };
+  }).sort((a,b)=>b.totalSem-a.totalSem);
+
+  const corCel=(tot)=>{ if(tot>=META_DIA) return 'background:rgba(76,175,80,.15);color:var(--vd);font-weight:700'; if(tot>=META_DIA*0.7) return 'background:rgba(255,193,7,.15);color:var(--am);font-weight:700'; if(tot>0) return 'background:rgba(217,64,64,.1);color:var(--vm);font-weight:600'; return 'color:var(--tx2)'; };
+
+  el.innerHTML =
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:1.25rem">'
+    + dados.map((d,i)=>'<div style="background:'+(i===0?'var(--azc)':'var(--cin)')+';border:1.5px solid '+(i===0?'var(--azm)':'var(--brd)')+';border-radius:10px;padding:.875rem 1rem">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem"><span style="font-size:16px;font-weight:800;color:'+(i===0?'var(--azm)':i===1?'var(--am)':'var(--tx2)')+'">'+(i+1)+'°</span><span style="font-size:13px;font-weight:700;color:var(--az)">'+d.colab+'</span></div>'
+        + '<div style="font-size:26px;font-weight:800;color:'+(d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)')+';line-height:1">'+d.totalSem+'</div>'
+        + '<div style="font-size:10px;color:var(--tx2);margin-top:2px">de '+d.metaSem+' meta · '+d.pct+'%</div>'
+        + '<div style="height:4px;background:#EEE;border-radius:2px;margin-top:.5rem;overflow:hidden"><div style="height:100%;width:'+Math.min(d.pct,100)+'%;background:'+(d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)')+';border-radius:2px;transition:width .5s"></div></div></div>').join('')
+    + '</div>'
+    + '<div class="tw" style="margin-bottom:1rem"><table><thead><tr><th>Analista</th>'
+    + dias.map(d=>'<th style="text-align:center">'+fmtDiaSem(d)+'<br><span style="font-weight:400;font-size:10px">'+_ceFmtDM(d)+'</span></th>').join('')
+    + '<th style="text-align:center">Total</th><th style="text-align:center">Meta</th><th style="text-align:center">%</th></tr></thead><tbody>'
+    + dados.map(d=>'<tr><td style="font-weight:600">'+d.colab+'</td>'
+        + dias.map(dia=>'<td style="text-align:center;font-size:13px;'+((d.folgaSet&&d.folgaSet.has(dia))?'color:var(--am);font-weight:700':corCel(d.porDia[dia]||0))+'">'+((d.folgaSet&&d.folgaSet.has(dia))?'🌴':(d.porDia[dia]||0))+'</td>').join('')
+        + '<td style="text-align:center;font-weight:700;font-size:14px;color:'+(d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)')+'">'+d.totalSem+'</td>'
+        + '<td style="text-align:center;color:var(--tx2)">'+d.metaSem+'</td>'
+        + '<td style="text-align:center;font-weight:700;color:'+(d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)')+'">'+d.pct+'%</td></tr>').join('')
+    + '<tr style="background:var(--cin);border-top:2px solid var(--brd)"><td style="font-weight:700;color:var(--tx2)">Meta/dia</td>'
+    + dias.map(d=>'<td style="text-align:center;color:var(--tx2);font-size:11px">'+(_fdiaEhDiaUtil(d)?META_DIA:'—')+'</td>').join('')
+    + '<td></td><td></td><td></td></tr></tbody></table></div>'
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'
+    + dados.map(d=>'<div style="background:var(--cin);border:1px solid var(--brd);border-radius:8px;padding:.75rem"><div style="font-size:11px;font-weight:700;color:var(--az);margin-bottom:.5rem">'+d.colab+' — composição</div>'
+        + (Object.entries(d.comp).filter(([,v])=>v>0).map(([tipo,v])=>'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px"><span style="font-size:11px;color:var(--tx)">'+d.LABEL[tipo]+'</span><span style="font-size:11px;font-weight:700;color:'+d.COR[tipo]+'">'+v+' <span style="color:var(--tx2);font-weight:400">('+(Math.round(v/d.totalSem*100)||0)+'%)</span></span></div>').join('') || '<div style="font-size:11px;color:var(--tx2)">Sem ações</div>')
+        + '</div>').join('')
+    + '</div>';
+}
+
+// ────────────────────────────────────────────────────────
+// 4) DESFECHOS POR DIA (por módulo) — foto 3
+//    Conta o campo 'conclusao' das ações no intervalo De/Até.
+// ────────────────────────────────────────────────────────
+function _ceDesfechoRange(mod){
+  const hoje=_ceHojeLocal();
+  const e1=document.getElementById('ce-dfd-'+mod+'-de');
+  const e2=document.getElementById('ce-dfd-'+mod+'-ate');
+  let de=(e1&&e1.value)||'';
+  let ate=(e2&&e2.value)||'';
+  if(!de){ de=_ceISOmenosDias(hoje,30); if(e1) e1.value=de; }
+  if(!ate){ ate=hoje; if(e2) e2.value=ate; }
+  return { de, ate };
+}
+async function ceDesfechoFiltrar(mod){
+  const { de }=_ceDesfechoRange(mod);
+  const cache=_ceCache[mod];
+  // Se o "De" for anterior à janela carregada, recarrega desde essa data.
+  if(cache && de < cache.desde){ await ceCarregarModulo(mod, de); return; }
+  _ceRenderDesfechos(mod);
+}
+function _ceRenderDesfechos(mod){
+  const tb=document.getElementById('ce-dfd-'+mod+'-tbody'); if(!tb) return;
+  const cache=_ceCache[mod]; if(!cache){ tb.innerHTML=''; return; }
+  const { de, ate }=_ceDesfechoRange(mod);
+
+  const caminhaUtil=(iso,dir)=>{ const p=iso.split('-'); let d=new Date(+p[0],(+p[1])-1,+p[2]); let i2=iso,g=0; do{ d.setDate(d.getDate()+dir); i2=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); g++; }while(g<40 && !_fdiaEhDiaUtil(i2)); return i2; };
+
+  // conta por dia a partir do campo conclusao das ações
+  const porDia={};
+  cache.acoes.forEach(a=>{
+    if(!a||!a.data||!a.conclusao) return;
+    if(a.data<de||a.data>ate) return;
+    const cc=String(a.conclusao);
+    let k=null;
+    if(cc==='Pedido') k='ped'; else if(cc==='Republicação'||cc==='Republicacao') k='rep';
+    else if(cc==='XGL') k='xgl'; else if(cc==='Devolução'||cc==='Devolucao') k='dev';
+    else if(cc==='Nova Reserva') k='res';
+    if(!k) return;
+    let alvo=a.data;
+    if(!_fdiaEhDiaUtil(a.data)){ let prox=caminhaUtil(a.data,+1); if(prox>ate) prox=caminhaUtil(a.data,-1); alvo=prox; }
+    if(!porDia[alvo]) porDia[alvo]={ped:0,rep:0,xgl:0,dev:0,res:0};
+    porDia[alvo][k]++;
+  });
+
+  const diasK=Object.keys(porDia).sort();
+  let sPed=0,sRep=0,sXgl=0,sDev=0,sRes=0;
+  tb.innerHTML=diasK.map(d=>{
+    const o=porDia[d]; sPed+=o.ped; sRep+=o.rep; sXgl+=o.xgl; sDev+=o.dev; sRes+=o.res;
+    const tot=o.ped+o.rep+o.xgl+o.dev+o.res;
+    return '<tr><td>'+fmtDt(d)+'</td>'
+      +'<td style="text-align:center;color:#1A4A8A;font-weight:600">'+(o.ped||'—')+'</td>'
+      +'<td style="text-align:center;color:#C07A12;font-weight:600">'+(o.rep||'—')+'</td>'
+      +'<td style="text-align:center;color:#0E9E6A;font-weight:600">'+(o.xgl||'—')+'</td>'
+      +'<td style="text-align:center;color:#D94040;font-weight:600">'+(o.dev||'—')+'</td>'
+      +'<td style="text-align:center;color:#6D28D9;font-weight:600">'+(o.res||'—')+'</td>'
+      +'<td style="text-align:center;font-weight:700">'+tot+'</td></tr>';
+  }).join('');
+  if(!diasK.length) tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--tx2);padding:1rem">Nenhum desfecho no período selecionado.</td></tr>';
+
+  const grand=sPed+sRep+sXgl+sDev+sRes;
+  const tf=document.getElementById('ce-dfd-'+mod+'-tfoot');
+  if(tf) tf.innerHTML='<tr style="border-top:2px solid var(--brd)"><td style="font-weight:700">TOTAL</td>'
+    +'<td style="text-align:center;font-weight:700;color:#1A4A8A">'+sPed+'</td>'
+    +'<td style="text-align:center;font-weight:700;color:#C07A12">'+sRep+'</td>'
+    +'<td style="text-align:center;font-weight:700;color:#0E9E6A">'+sXgl+'</td>'
+    +'<td style="text-align:center;font-weight:700;color:#D94040">'+sDev+'</td>'
+    +'<td style="text-align:center;font-weight:700;color:#6D28D9">'+sRes+'</td>'
+    +'<td style="text-align:center;font-weight:700">'+grand+'</td></tr>';
+
+  // média por dia útil no intervalo
+  let nUteis=0;
+  (function(){ const pa=de.split('-'),pb=ate.split('-'); let cur=new Date(+pa[0],(+pa[1])-1,+pa[2]); const fim=new Date(+pb[0],(+pb[1])-1,+pb[2]); let g=0; while(cur<=fim&&g<3660){ const iso=cur.getFullYear()+'-'+String(cur.getMonth()+1).padStart(2,'0')+'-'+String(cur.getDate()).padStart(2,'0'); if(_fdiaEhDiaUtil(iso)) nUteis++; cur.setDate(cur.getDate()+1); g++; } })();
+  const fmtMedia=v=>{ const m=nUteis>0?(v/nUteis):0; return m.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}); };
+
+  const cards=[
+    {emoji:'🛒',label:'Pedidos',val:sPed,cor:'#1A4A8A',bg:'#EBF0FA'},
+    {emoji:'🔄',label:'Republicações',val:sRep,cor:'#C07A12',bg:'#FDF3E3'},
+    {emoji:'📦',label:'XGL',val:sXgl,cor:'#0E9E6A',bg:'#E6F7F1'},
+    {emoji:'↩',label:'Devoluções',val:sDev,cor:'#D94040',bg:'#FDEAEA'},
+    {emoji:'🔖',label:'Nova Reserva',val:sRes,cor:'#6D28D9',bg:'#F1EAFB'},
+    {emoji:'Σ',label:'Total geral',val:grand,cor:'#5B21B6',bg:'#F1EAFB'}
+  ];
+  const cEl=document.getElementById('ce-dfd-'+mod+'-cards');
+  if(cEl) cEl.innerHTML=cards.map(c=>'<div style="background:'+c.bg+';border-radius:8px;padding:.75rem;border:1px solid '+c.cor+'22;text-align:center"><div style="font-size:18px;margin-bottom:2px">'+c.emoji+'</div><div style="font-size:22px;font-weight:700;color:'+(c.val>0?c.cor:'var(--tx2)')+'">'+c.val+'</div><div style="font-size:10px;color:var(--tx2);margin-top:1px">'+c.label+'</div><div style="font-size:10px;font-weight:600;color:'+c.cor+';margin-top:4px;padding-top:4px;border-top:1px solid '+c.cor+'22">média '+fmtMedia(c.val)+'/dia</div></div>').join('');
+}
+
+// ── Abre a aba: carrega os dois módulos ──
+function ceAbrir(){
+  // datas padrão dos filtros de desfecho
+  const hoje=_ceHojeLocal(); const de30=_ceISOmenosDias(hoje,30);
+  ['adlv','fast'].forEach(mod=>{
+    const e1=document.getElementById('ce-dfd-'+mod+'-de'); if(e1&&!e1.value) e1.value=de30;
+    const e2=document.getElementById('ce-dfd-'+mod+'-ate'); if(e2&&!e2.value) e2.value=hoje;
+  });
+  // garante que a equipe (config/equipe_rt) esteja carregada
+  const go=()=>{ ceCarregarModulo('adlv'); ceCarregarModulo('fast'); };
+  if(window._equipeRt && ((_equipeRt.adlv&&_equipeRt.adlv.length)||(_equipeRt.fast&&_equipeRt.fast.length))) go();
+  else if(typeof equipeRtCarregar==='function') equipeRtCarregar().then(go).catch(go);
+  else go();
+}
+function ceAtualizarTudo(){ _ceCache.adlv=null; _ceCache.fast=null; ceAbrir(); }
 
 // ── Histórico de Fechamentos do Dia ──
 async function fechCarregarHistorico(){
