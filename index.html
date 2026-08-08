@@ -2894,22 +2894,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
 
-        <!-- 2) ALERTAS DE PERFORMANCE -->
-        <div class="cd" style="margin-bottom:1rem">
-          <div class="cd-t" style="margin:0">🔔 Alertas de Performance</div>
-          <div style="font-size:11px;color:var(--tx2);margin-bottom:.875rem">Últimos 5 dias úteis · Baseado nos fechamentos do dia</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="ce-split">
-            <div>
-              <div style="font-size:12px;font-weight:800;color:#1A4A8A;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #1A4A8A22">🟦 ADLV</div>
-              <div id="ce-alertas-adlv"></div>
-            </div>
-            <div>
-              <div style="font-size:12px;font-weight:800;color:#C07A12;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #C07A1222">🟧 FAST</div>
-              <div id="ce-alertas-fast"></div>
-            </div>
-          </div>
-        </div>
-
         <!-- 3) PERFORMANCE SEMANAL DA EQUIPE -->
         <div class="cd" style="margin-bottom:1rem">
           <div class="cd-t" style="margin:0">📊 Performance Semanal da Equipe</div>
@@ -24722,7 +24706,6 @@ async function ceCarregarModulo(mod, desdeForcado){
 
   _ceRenderResumoDia(mod);
   _ceRenderRT(mod);
-  _ceRenderAlertas(mod);
   _ceRenderPerfSemanal(mod);
   _ceRenderPcpCard(mod);
   _ceRenderDesfechos(mod);
@@ -24766,7 +24749,7 @@ function _ceRenderFastDesconectado(){
     + '<div style="font-size:24px;margin-bottom:.5rem">🔌</div>'
     + 'Os dados do FAST são de um projeto separado.<br>Conecte para ver a produtividade da equipe FAST aqui.'
     + '<div style="margin-top:.875rem"><button class="btn btn-p" style="font-size:12px" onclick="ceConectarFast()">🔑 Conectar FAST</button></div></div>';
-  ['ce-resumo-fast-cards','ce-rt-fast-kpi','ce-rt-fast-cards','ce-alertas-fast','ce-perfsem-fast','ce-pcp-fast','ce-dfd-fast-cards'].forEach(id=>{
+  ['ce-resumo-fast-cards','ce-rt-fast-kpi','ce-rt-fast-cards','ce-perfsem-fast','ce-pcp-fast','ce-dfd-fast-cards'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.innerHTML=aviso;
   });
   if(_ceChart.fast){ try{ _ceChart.fast.destroy(); _ceChart.fast=null; }catch(e){} }
