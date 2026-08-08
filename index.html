@@ -6159,6 +6159,8 @@ let ciclos_historico = JSON.parse(localStorage.getItem(_lsMod('patec_ciclos_hist
 // ══ NAVEGAÇÃO UNIFICADA ══
 
 function go(id, el) {
+  // Sai da página do ADM → desliga o tempo real do Controle das Equipes.
+  if(id!=='adm' && typeof _cePararRT==='function') _cePararRT();
   // Plano de Ação é exclusivo do ADLV — bloqueia navegação direta no FAST
   // (a página nem aparece no menu, mas isso cobre tentativa via console/link)
   if(id === 'plano-acao' && _moduloAtivo === 'fast'){
@@ -9085,6 +9087,7 @@ function setAdmTab(id,btn){
   document.querySelectorAll('#adm-tabs .stab').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   document.querySelectorAll('.adm-tab').forEach(t=>t.style.display='none');
+  if(id!=='controle-equipes' && typeof _cePararRT==='function') _cePararRT();
   document.getElementById('adm-'+id).style.display='block';
 }
 
@@ -24715,6 +24718,8 @@ async function ceCarregarModulo(mod, desdeForcado){
   _ceCache[mod] = { acoes, fech, mapa, ciclo, desde:desdeAcoes, ts:new Date() };
   _ceSetStatus(mod, '✓ '+_ceModLabel(mod)+' · '+acoes.length+' ações · atualizado '+new Date().toLocaleTimeString('pt-BR'));
 
+  _ceCache[mod].acoesHoje = acoes.filter(a=>a.data===hoje); // semente antes do 1º snapshot
+
   _ceRenderResumoDia(mod);
   _ceRenderRT(mod);
   _ceRenderAlertas(mod);
@@ -24722,7 +24727,32 @@ async function ceCarregarModulo(mod, desdeForcado){
   _ceRenderPcpCard(mod);
   _ceRenderDesfechos(mod);
   _ceRenderChart(mod);
+
+  // TEMPO REAL: liga o listener de HOJE (RT + gráfico) para este módulo.
+  _ceIniciarRT(mod, db);
 }
+
+// ── TEMPO REAL (onSnapshot) — só Produção RT + gráfico das 2 equipes ──
+// Escuta producao_acoes do DIA (filtro de campo único = índice automático,
+// sem precisar criar índice composto). Desliga sozinho ao sair da aba.
+let _ceRtListeners = { adlv:null, fast:null };
+function _ceIniciarRT(mod, db){
+  try{
+    _cePararRtUm(mod); // garante 1 listener por módulo (sem duplicar)
+    const hoje=_ceHojeLocal();
+    _ceRtListeners[mod] = db.collection('producao_acoes').where('data','==',hoje).onSnapshot(function(snap){
+      const arr=[]; snap.forEach(function(d){ const x=d.data(); if(x && !x.anulada) arr.push(x); });
+      if(_ceCache[mod]) _ceCache[mod].acoesHoje = arr;
+      _ceRenderRT(mod);
+      _ceRenderChart(mod);
+      _ceSetStatus(mod, '🟢 '+_ceModLabel(mod)+' ao vivo · '+arr.length+' ações hoje · '+new Date().toLocaleTimeString('pt-BR'));
+    }, function(err){ console.warn('ce RT listener '+mod+':', err); });
+  }catch(e){ console.warn('_ceIniciarRT '+mod+':', e); }
+}
+function _cePararRtUm(mod){
+  if(_ceRtListeners[mod]){ try{ _ceRtListeners[mod](); }catch(e){} _ceRtListeners[mod]=null; }
+}
+function _cePararRT(){ _cePararRtUm('adlv'); _cePararRtUm('fast'); }
 
 function _ceSetStatus(mod, txt){
   const el = document.getElementById('ce-status-'+mod);
@@ -24740,6 +24770,7 @@ function _ceRenderFastDesconectado(){
     const el=document.getElementById(id); if(el) el.innerHTML=aviso;
   });
   if(_ceChart.fast){ try{ _ceChart.fast.destroy(); _ceChart.fast=null; }catch(e){} }
+  if(typeof _cePararRtUm==='function') _cePararRtUm('fast');
   const tb=document.getElementById('ce-dfd-fast-tbody'); if(tb) tb.innerHTML='';
   const tf=document.getElementById('ce-dfd-fast-tfoot'); if(tf) tf.innerHTML='';
 }
@@ -24750,7 +24781,8 @@ function _ceRenderFastDesconectado(){
 function _ceRenderRT(mod){
   const cache = _ceCache[mod]; if(!cache) return;
   const hoje = _ceHojeLocal();
-  const acoesHoje = cache.acoes.filter(a=>a.data===hoje);
+  // Ao vivo: usa o snapshot do listener (cache.acoesHoje); senão filtra a carga inicial.
+  const acoesHoje = Array.isArray(cache.acoesHoje) ? cache.acoesHoje : cache.acoes.filter(a=>a.data===hoje);
 
   const colabs = _ceColabs(mod);
   const porColab = {};
@@ -25230,8 +25262,12 @@ function _ceRenderChart(mod){
   const labels=dias.map(d=>fmtDt(d));
 
   // mapas diários de análise e saídas a partir das ações
+  // Histórico (data<hoje) da carga inicial + ações de HOJE ao vivo (listener)
+  const _histAc = (cache.acoes||[]).filter(a=>a.data<hoje);
+  const _hojeAc = Array.isArray(cache.acoesHoje) ? cache.acoesHoje : (cache.acoes||[]).filter(a=>a.data===hoje);
+  const _todasAc = _histAc.concat(_hojeAc);
   const analMap={}, saidMap={};
-  (cache.acoes||[]).forEach(a=>{
+  _todasAc.forEach(a=>{
     if(!a.data) return;
     if(a.tipo==='primeira_analise'||a.tipo==='em_tratativa'||a.tipo==='status_b'||a.tipo==='ag_parecer') analMap[a.data]=(analMap[a.data]||0)+1;
     const cc=String(a.conclusao||'');
@@ -25258,6 +25294,15 @@ function _ceRenderChart(mod){
     } else { analAcum.push(null); saidAcum.push(null); }
   });
 
+  // Tempo real: se o gráfico já existe com o mesmo eixo, só atualiza os dados
+  // (evita recriar/re-animar a cada ação registrada).
+  if(_ceChart[mod] && _ceChart[mod].data && _ceChart[mod].data.labels && _ceChart[mod].data.labels.length===labels.length){
+    const _ds=[progAcum, analAcum, saidAcum];
+    _ceChart[mod].data.labels=labels;
+    _ceChart[mod].data.datasets.forEach((d,i)=>{ d.data=_ds[i]; });
+    _ceChart[mod].update('none');
+    return;
+  }
   if(_ceChart[mod]){ try{ _ceChart[mod].destroy(); }catch(e){} }
   _ceChart[mod]=new Chart(canvas,{
     type:'line',
