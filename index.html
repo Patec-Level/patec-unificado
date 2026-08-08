@@ -24548,7 +24548,7 @@ function _ceModLabel(mod){ return mod==='fast' ? 'FAST' : 'ADLV'; }
 function _ceModCor(mod){ return mod==='fast' ? '#C07A12' : '#1A4A8A'; }
 
 // ── Equipe do módulo (lê _equipeRt, que já traz adlv E fast em memória) ──
-function _ceEquipe(mod){ return (window._equipeRt && Array.isArray(_equipeRt[mod])) ? _equipeRt[mod].filter(x=>x&&(x.nome||'').trim()) : []; }
+function _ceEquipe(mod){ return (typeof _equipeRt!=='undefined' && _equipeRt && Array.isArray(_equipeRt[mod])) ? _equipeRt[mod].filter(x=>x&&(x.nome||'').trim()) : []; }
 function _ceColabs(mod){ return _ceEquipe(mod).map(x=>x.nome.trim()); }
 function _ceTemMeta(mod, nome){ const e=_ceEquipe(mod).find(x=>x.nome.trim().toLowerCase()===String(nome).toLowerCase()); return e ? !!e.temMeta : true; }
 function _ceMetaInd(mod, nome){ const e=_ceEquipe(mod).find(x=>x.nome.trim().toLowerCase()===String(nome).toLowerCase()); return (e && e.temMeta && (+e.meta)>0) ? (+e.meta) : 30; }
@@ -24952,7 +24952,7 @@ function ceAbrir(){
   });
   // garante que a equipe (config/equipe_rt) esteja carregada
   const go=()=>{ ceCarregarModulo('adlv'); ceCarregarModulo('fast'); };
-  if(window._equipeRt && ((_equipeRt.adlv&&_equipeRt.adlv.length)||(_equipeRt.fast&&_equipeRt.fast.length))) go();
+  if(typeof _equipeRt!=='undefined' && _equipeRt && ((_equipeRt.adlv&&_equipeRt.adlv.length)||(_equipeRt.fast&&_equipeRt.fast.length))) go();
   else if(typeof equipeRtCarregar==='function') equipeRtCarregar().then(go).catch(go);
   else go();
 }
