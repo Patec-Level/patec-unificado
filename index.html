@@ -2473,6 +2473,42 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
 
+        <!-- ── RESET DAS RCs DA GOVERNANCA (FAST) ── -->
+        <div class="cd" id="fast-reset-card" style="margin-top:1rem;border-top:3px solid var(--vm);display:none">
+          <div class="cd-t" style="color:var(--vm)">🧹 Resetar RCs da Governança (FAST)</div>
+          <div class="al al-r" style="font-size:12px;margin-bottom:.75rem">
+            Apaga <strong>as RCs/itens das abas de Governança</strong> do FAST — PATEC em Andamento/Finalizado,
+            Status B, Nova Reserva e XGL (itens, status, comentários e histórico desses itens). Depois é só
+            subir o radar e as planilhas reais.
+          </div>
+          <div class="al al-b" style="font-size:11px;margin-bottom:1rem">
+            ✅ <strong>NÃO</strong> mexe em produção da equipe, fechamentos, ciclo, metas nem desfechos.
+            🔒 Age <strong>somente no projeto patec-fast</strong> — o ADLV (patec-dashboard) é um banco separado
+            e não é tocado. Só funciona com o módulo FAST aberto.
+          </div>
+
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:.6rem;cursor:pointer">
+            <input type="checkbox" id="fast-reset-radar-chk" checked> Também limpar o <strong>Radar</strong> (esvazia PATEC em Andamento/Finalizado até o próximo upload)
+          </label>
+
+          <div style="display:flex;align-items:center;gap:8px;background:var(--cin);border:1px solid var(--brd);border-radius:8px;padding:.6rem .75rem;margin-bottom:.75rem">
+            <span style="font-size:18px">🗄️</span>
+            <div style="font-size:11px;color:var(--tx2)">Recomendado: baixe o Backup TOTAL antes — a ação é irreversível.</div>
+            <button class="btn btn-r" style="margin-left:auto;font-size:10px;padding:4px 10px" onclick="backupCompletoTotal()">💾 Backup TOTAL</button>
+          </div>
+
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:.6rem;cursor:pointer">
+            <input type="checkbox" id="fast-reset-backup-chk" onchange="fastResetValidar()"> Entendo que esta ação é irreversível.
+          </label>
+          <div style="margin-bottom:.75rem">
+            <label style="font-size:11px;color:var(--tx2)">Para liberar, digite <strong>RESETAR GOV</strong>:</label>
+            <input type="text" id="fast-reset-frase" oninput="fastResetValidar()" placeholder="RESETAR GOV" class="inp" style="width:100%;max-width:260px;font-size:12px;margin-top:3px">
+          </div>
+
+          <button class="btn btn-r" id="fast-reset-btn" disabled onclick="fastResetExecutar()">🧹 Resetar RCs da Governança</button>
+          <div id="fast-reset-log" style="display:none;margin-top:1rem;font-size:12px;font-family:monospace;background:var(--cin);border:1px solid var(--brd);border-radius:8px;padding:.75rem;max-height:280px;overflow:auto;line-height:1.6"></div>
+        </div>
+
         <!-- ── LIMPAR DUPLICATAS DO XGL ── -->
         <div class="cd" style="margin-top:1rem;border-top:3px solid var(--am)">
           <div class="cd-t">🧹 Limpar Duplicatas do XGL</div>
@@ -9068,6 +9104,7 @@ function setAdmTab(id,btn){
     setTimeout(()=>{ if(typeof fechCarregarHistorico==='function') fechCarregarHistorico(); }, 300);
     setTimeout(()=>{ if(typeof filtrarHistProd==='function') filtrarHistProd('all'); }, 350);
   }
+  if(id==='export-adm' && typeof fastResetInitCard==='function'){ fastResetInitCard(); }
   document.querySelectorAll('#adm-tabs .stab').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   document.querySelectorAll('.adm-tab').forEach(t=>t.style.display='none');
@@ -18652,6 +18689,123 @@ async function govBuscaSalvar(aba, chave, campo, valor){
       });
     } catch(e){ console.warn('sbBuscaSalvar:', e); }
     _registrarEdicaoManual(chave, campo, valor);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// RESET DAS RCs DA GOVERNANCA (FAST) — age SOMENTE em patec-fast
+// So os itens de governanca: gov_mapa/gov_xgl/gov_sb/gov_nr +
+// overrides + as listas de upload. NAO toca producao/ciclo/desfechos.
+// ════════════════════════════════════════════════════════════
+var _FAST_GOV_COLECOES = ['gov_mapa','gov_xgl','gov_sb','gov_nr','gov_analista_overrides'];
+var _FAST_GOV_CONFIG_DOCS = ['xgl_itens','sb_itens','nr_itens','gov_mapa_ts'];
+
+// Mostra o card so no modulo FAST e so para o ADM geral (Andre)
+function fastResetInitCard(){
+  var card = document.getElementById('fast-reset-card');
+  if(!card) return;
+  card.style.display = (typeof _isAdmGeral === 'function' && _isAdmGeral() && _moduloAtivo === 'fast') ? 'block' : 'none';
+}
+
+function fastResetValidar(){
+  var btn = document.getElementById('fast-reset-btn');
+  if(!btn) return;
+  var okChk = document.getElementById('fast-reset-backup-chk');
+  var frase = (document.getElementById('fast-reset-frase') || {}).value || '';
+  btn.disabled = !((okChk && okChk.checked) && frase.trim() === 'RESETAR GOV');
+}
+
+async function _fastResetApagarColecao(db, col){
+  var total = 0;
+  while(true){
+    var snap = await db.collection(col).limit(450).get();
+    if(snap.empty) break;
+    var batch = db.batch();
+    snap.docs.forEach(function(d){ batch.delete(d.ref); });
+    await batch.commit();
+    total += snap.size;
+    if(snap.size < 450) break;
+  }
+  return total;
+}
+
+async function fastResetExecutar(){
+  // ── TRAVA 1: so ADM geral
+  if(typeof _isAdmGeral !== 'function' || !_isAdmGeral()){ alert('Apenas o administrador geral pode executar o reset.'); return; }
+  // ── TRAVA 2 (a mais importante): so roda com o modulo FAST ativo.
+  //    getDBModulo('fast') aponta para o projeto patec-fast (banco separado
+  //    do ADLV=patec-dashboard), entao o ADLV nunca e alcancado.
+  if(_moduloAtivo !== 'fast'){
+    alert('\u26d4 Abra o modulo FAST antes de resetar.\n\nEste reset age SOMENTE no projeto patec-fast. O ADLV (patec-dashboard) e um banco separado e nao e tocado.');
+    return;
+  }
+  // ── TRAVA 3: confirmacao + frase
+  var chk = document.getElementById('fast-reset-backup-chk');
+  if(!chk || !chk.checked){ alert('Marque a confirmacao antes de continuar.'); return; }
+  if(((document.getElementById('fast-reset-frase')||{}).value||'').trim() !== 'RESETAR GOV'){ alert('Digite exatamente: RESETAR GOV'); return; }
+  var limparRadar = !!(document.getElementById('fast-reset-radar-chk') && document.getElementById('fast-reset-radar-chk').checked);
+  // ── TRAVA 4: confirmacao destrutiva final
+  if(!confirm('\u26a0\ufe0f CONFIRMACAO\n\nApagar TODAS as RCs/itens das abas de Governanca do FAST:\n\u2022 PATEC em Andamento / Finalizado (status e historico)\n\u2022 Status B, Nova Reserva e XGL (itens)\n'+(limparRadar?'\u2022 Radar (Andamento/Finalizado ficam vazios ate o proximo upload)\n':'')+'\nProducao da equipe, fechamentos, ciclo e desfechos NAO sao afetados.\nADLV NAO e afetado.\n\nContinuar?')) return;
+
+  var box = document.getElementById('fast-reset-log');
+  var btn = document.getElementById('fast-reset-btn');
+  if(btn){ btn.disabled = true; btn.textContent = '\u23f3 Resetando...'; }
+  function log(m){ if(box){ box.style.display='block'; box.innerHTML += m + '<br>'; box.scrollTop = box.scrollHeight; } }
+
+  try{
+    var db = getDBModulo('fast');
+    if(!db) throw new Error('Firebase FAST nao disponivel');
+    var proj = '';
+    try{ proj = (db.app && db.app.options && db.app.options.projectId) || ''; }catch(e){}
+    if(proj && proj !== 'patec-fast'){ throw new Error('Projeto inesperado ('+proj+') — abortado por seguranca.'); }
+    log('\ud83d\udd12 Projeto confirmado: <b>patec-fast</b> — ADLV intocado.');
+
+    var apagados = 0;
+    for(var i=0;i<_FAST_GOV_COLECOES.length;i++){
+      var col = _FAST_GOV_COLECOES[i];
+      log('\ud83d\uddd1\ufe0f Limpando <b>'+col+'</b>...');
+      var n = await _fastResetApagarColecao(db, col);
+      apagados += n;
+      log('   \u2713 '+n+' registro(s) removido(s).');
+    }
+
+    // Listas de upload das abas (Status B / Nova Reserva / XGL) + carimbo do mapa
+    log('\ud83e\uddf9 Limpando listas (XGL, Status B, Nova Reserva)...');
+    for(var c=0;c<_FAST_GOV_CONFIG_DOCS.length;c++){
+      await db.collection('config').doc(_FAST_GOV_CONFIG_DOCS[c]).delete().catch(function(){});
+    }
+    log('   \u2713 Listas limpas.');
+
+    // Radar (opcional) — alimenta PATEC em Andamento/Finalizado
+    if(limparRadar){
+      log('\ud83e\uddf9 Limpando Radar (Andamento/Finalizado)...');
+      try{
+        var meta = await db.collection('config').doc('radar_dados').get();
+        var nCh = meta.exists ? (meta.data().nChunks||0) : 0;
+        var lim = Math.max(nCh, 30);
+        for(var r=0;r<lim;r++){ await db.collection('config').doc('radar_dados_'+r).delete().catch(function(){}); }
+        await db.collection('config').doc('radar_dados').delete().catch(function(){});
+      }catch(e){}
+      log('   \u2713 Radar limpo.');
+    }
+
+    // Limpar caches locais do FAST relacionados a governanca/radar
+    try{
+      var rm = [];
+      for(var k=0;k<localStorage.length;k++){
+        var key = localStorage.key(k);
+        if(key && key.slice(-6) === '__fast' && (key.indexOf('radar')>=0 || key.indexOf('gov')>=0 || key.indexOf('xgl')>=0 || key.indexOf('sb_')>=0 || key.indexOf('nr_')>=0)) rm.push(key);
+      }
+      rm.forEach(function(key){ localStorage.removeItem(key); });
+    }catch(e){}
+
+    log('<br><b style="color:var(--vd)">\u2705 RCs da Governanca resetadas. '+apagados+' registro(s) apagados.</b>');
+    log('A pagina vai recarregar em 4s...');
+    if(btn){ btn.textContent = '\u2705 Concluido'; }
+    setTimeout(function(){ location.reload(); }, 4000);
+  }catch(e){
+    log('<b style="color:var(--vm)">\u26d4 Erro: '+e.message+'</b>');
+    if(btn){ btn.disabled=false; btn.textContent='\ud83e\uddf9 Resetar RCs da Governanca'; }
   }
 }
 
