@@ -17786,6 +17786,8 @@ function desfechoToggleDev(){
   const tipo = document.getElementById('desfecho-tipo')?.value;
   const campos = document.getElementById('desfecho-dev-campos');
   if(campos) campos.style.display = tipo === 'Devolução' ? 'flex' : 'none';
+  const pedidoBox = document.getElementById('desfecho-pedido-box');
+  if(pedidoBox) pedidoBox.style.display = tipo === 'Pedido' ? 'flex' : 'none';
 }
 
 function desfechoAbrir(aba, chave, valor){
@@ -17804,6 +17806,11 @@ function desfechoAbrir(aba, chave, valor){
   document.getElementById('desfecho-motivo').value = '';
   document.getElementById('desfecho-obs').value = '';
   document.getElementById('desfecho-dev-campos').style.display = 'none';
+  // Reset campos de Pedido
+  ['desfecho-pedido-negociacao','desfecho-pedido-fornecedor','desfecho-pedido-id-sap','desfecho-pedido-nm','desfecho-pedido-comentario'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  const _pedidoBoxReset = document.getElementById('desfecho-pedido-box'); if(_pedidoBoxReset) _pedidoBoxReset.style.display = 'none';
   document.getElementById('desfecho-modal-erro').style.display = 'none';
   document.getElementById('desfecho-modal-chave').textContent = `Chave: ${chave} · Finalizado: ${fmtBR(valor)||valor}`;
   el.style.display = 'flex';
@@ -17829,6 +17836,18 @@ async function desfechoSalvar(){
     const motivo = document.getElementById('desfecho-motivo').value;
     if(!motivo){ erroEl.textContent = 'Selecione o motivo da devolução.'; erroEl.style.display='block'; return; }
   }
+  // Capturar e validar campos de Pedido (mesma regra obrigatória do Painel Operacional)
+  const _pedidoNegociacao  = tipo === 'Pedido' ? (document.getElementById('desfecho-pedido-negociacao')?.value||'').trim() : '';
+  const _pedidoFornecedor  = tipo === 'Pedido' ? (document.getElementById('desfecho-pedido-fornecedor')?.value||'').trim() : '';
+  const _pedidoIdSap       = tipo === 'Pedido' ? (document.getElementById('desfecho-pedido-id-sap')?.value||'').trim() : '';
+  const _pedidoNm          = tipo === 'Pedido' ? (document.getElementById('desfecho-pedido-nm')?.value||'').trim() : '';
+  const _pedidoComentario  = tipo === 'Pedido' ? (document.getElementById('desfecho-pedido-comentario')?.value||'').trim() : '';
+  if(tipo === 'Pedido'){
+    if(!_pedidoNegociacao){ erroEl.textContent='Informe a data de negociação (solicitação de desconto).'; erroEl.style.display='block'; document.getElementById('desfecho-pedido-negociacao')?.focus(); return; }
+    if(!_pedidoIdSap){ erroEl.textContent='Informe o Fornecedor Ganhador ID SAP.'; erroEl.style.display='block'; document.getElementById('desfecho-pedido-id-sap')?.focus(); return; }
+    if(!_pedidoNm){ erroEl.textContent='Informe o NM do Pedido.'; erroEl.style.display='block'; document.getElementById('desfecho-pedido-nm')?.focus(); return; }
+    if(!_pedidoComentario){ erroEl.textContent='Informe o comentário para a equipe de pedido.'; erroEl.style.display='block'; document.getElementById('desfecho-pedido-comentario')?.focus(); return; }
+  }
 
   const {aba, chave} = _desfechoCtx;
   // Normalizar tipo para garantir capitalização correta
@@ -17842,7 +17861,14 @@ async function desfechoSalvar(){
     centro: document.getElementById('desfecho-centro').value.trim(),
     motivo: tipoNorm === 'Devolução' ? document.getElementById('desfecho-motivo').value : '',
     obs: document.getElementById('desfecho-obs').value.trim(),
-    ts: new Date().toISOString()
+    ts: new Date().toISOString(),
+    ...(tipoNorm === 'Pedido' ? {
+      pedido_negociacao: _pedidoNegociacao,
+      pedido_fornecedor: _pedidoFornecedor,
+      pedido_id_sap: _pedidoIdSap,
+      pedido_nm: _pedidoNm,
+      pedido_comentario: _pedidoComentario
+    } : {})
   };
 
   // Salvar no Firebase
@@ -23124,6 +23150,35 @@ function q18Consultar(valor){
             <option>Q18</option>
             <option>Faturamento mínimo</option>
           </select>
+        </div>
+      </div>
+      <!-- Campos Pedido (aparece só quando tipo de saída = Pedido) -->
+      <div id="desfecho-pedido-box" style="display:none;flex-direction:column;gap:.625rem;background:#f0fdf4;border:1px solid #16a34a;border-radius:8px;padding:.875rem">
+        <div style="font-size:11px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.4px">🛒 Dados do Pedido</div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">📅 Negociação — Data da solicitação de desconto <span style="color:var(--vm)">*</span></div>
+          <input type="date" id="desfecho-pedido-negociacao"
+            style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid #16a34a;border-radius:8px;background:#fff">
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">🏭 Fornecedor <span style="font-size:10px;color:var(--tx2);font-weight:400">(opcional)</span></div>
+          <input type="text" id="desfecho-pedido-fornecedor" placeholder="Nome do fornecedor..."
+            style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:8px;background:#fff">
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">🔢 Fornecedor Ganhador ID SAP <span style="color:var(--vm)">*</span></div>
+          <input type="text" id="desfecho-pedido-id-sap" placeholder="Código SAP do fornecedor..."
+            style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid #16a34a;border-radius:8px;background:#fff">
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">📦 NM do Pedido <span style="color:var(--vm)">*</span></div>
+          <input type="text" id="desfecho-pedido-nm" placeholder="NM que vai para pedido..."
+            style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid #16a34a;border-radius:8px;background:#fff">
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">💬 Comentário para equipe de pedido <span style="color:var(--vm)">*</span></div>
+          <textarea id="desfecho-pedido-comentario" placeholder="Instruções e análise para a equipe de pedido..." rows="3"
+            style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid #16a34a;border-radius:8px;background:#fff;resize:vertical;font-family:inherit"></textarea>
         </div>
       </div>
       <div>
