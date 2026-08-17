@@ -7977,7 +7977,7 @@ const COLABS_SEM_META_FAST = ['Herina','Aline','Priscila','Ajuda de outros times
 let COLABS_SEM_META = (_moduloAtivo === 'fast') ? COLABS_SEM_META_FAST : COLABS_SEM_META_ADLV;
 
 let COLABS_ADLV = ['André','Lory','Ludy','Wanessa']; // Aline transferida Mai/2026
-let COLABS_FAST = ['Herina','Aline','Priscila','Claudio','Indaia','Camila'];
+let COLABS_FAST = ['Aline','Claudio']; // Herina/Priscila/Camila/Indaia saíram da equipe FAST
 let COLABS = (_moduloAtivo === 'fast') ? COLABS_FAST : COLABS_ADLV;
 
 function _atualizarColabsPorModulo(){
@@ -7987,6 +7987,11 @@ function _atualizarColabsPorModulo(){
     COLABS_RT = (_moduloAtivo === 'fast') ? COLABS_RT_FAST : COLABS_RT_ADLV;
     COLABS_SEM_META_RT = (_moduloAtivo === 'fast') ? COLABS_SEM_META_RT_FAST : COLABS_SEM_META_RT_ADLV;
     META_ANALISTA_RT = (_moduloAtivo === 'fast') ? META_ANALISTA_RT_FAST : META_ANALISTA_RT_ADLV;
+    // Meta da equipe = soma das metas individuais de quem está na equipe do
+    // módulo ativo agora (mesma regra do ADLV, aplicada também ao FAST). Antes
+    // ficava fixa em 90 e não acompanhava trocas de equipe/ajustes de meta
+    // feitos em Admin > Equipe (Metas RT).
+    if(typeof _recalcularMetaEquipeRT === 'function') _recalcularMetaEquipeRT();
   }
   // Regras de Governança (Status de Tratamento e prazos por etapa) — o FAST
   // tem etapas e prazos próprios (sem Validação do Thiago, com MDG Equipe
@@ -24417,15 +24422,30 @@ async function usrSalvarPerms(uid, nome){
 // ══════════════════════════════════════════════════════
 
 let META_ANALISTA_RT_ADLV = { 'Lory':30, 'Ludy':30, 'Wanessa':30 }; // André não tem meta individual
-let META_ANALISTA_RT_FAST = { 'Claudio':30, 'Indaia':30, 'Camila':30 }; // ajustável depois pelo André
+// Equipe FAST atual: Herina/Priscila/Camila/Indaia saíram da equipe; Aline
+// deixou de ser líder e passou a ter meta individual (padrão 30, igual Claudio).
+// Claudio e Aline: 30 é o padrão inicial, mas o valor real é o que estiver
+// salvo em Admin > Equipe (Metas RT) — ajustável ali conforme demanda.
+let META_ANALISTA_RT_FAST = { 'Aline':30, 'Claudio':30 };
 let META_ANALISTA_RT = (_moduloAtivo === 'fast') ? META_ANALISTA_RT_FAST : META_ANALISTA_RT_ADLV;
-const META_EQUIPE_RT = 90; // meta das 3 analistas/colaboradoras
+let META_EQUIPE_RT = 60; // valor inicial — recalculado dinamicamente por _recalcularMetaEquipeRT()
 let COLABS_RT_ADLV = ['André','Lory','Ludy','Wanessa'];
-let COLABS_RT_FAST = ['Herina','Aline','Priscila','Claudio','Indaia','Camila'];
+let COLABS_RT_FAST = ['Aline','Claudio'];
 let COLABS_RT = (_moduloAtivo === 'fast') ? COLABS_RT_FAST : COLABS_RT_ADLV;
 let COLABS_SEM_META_RT_ADLV = ['André']; // contribui para equipe mas sem meta diária individual
-let COLABS_SEM_META_RT_FAST = ['Herina','Aline','Priscila'];
+let COLABS_SEM_META_RT_FAST = []; // ninguém sem meta hoje — Herina/Priscila/Camila/Indaia saíram da equipe FAST
 let COLABS_SEM_META_RT = (_moduloAtivo === 'fast') ? COLABS_SEM_META_RT_FAST : COLABS_SEM_META_RT_ADLV;
+
+// Meta da equipe = soma das metas individuais de quem está na equipe do
+// módulo ativo agora (mesma regra do ADLV: 30+30=60 hoje no FAST, mas
+// acompanha automaticamente qualquer ajuste feito em Admin > Equipe (Metas RT)
+// — inclusão/remoção de pessoas ou mudança de meta individual).
+function _recalcularMetaEquipeRT(){
+  // Sem fallback fixo: se ninguém da equipe tiver meta configurada, a meta
+  // da equipe é 0 (o velocímetro mostra 0%, o que é o estado real nesse caso).
+  META_EQUIPE_RT = (COLABS_RT||[]).reduce((soma, colab) => soma + (META_ANALISTA_RT[colab] || 0), 0);
+}
+_recalcularMetaEquipeRT();
 
 // ══════════════════════════════════════════════════════
 // EQUIPE EDITÁVEL (RT / Alertas / Performance Semanal)
@@ -24442,12 +24462,8 @@ let _equipeRt = {
     { nome:'Wanessa', meta:30, temMeta:true }
   ],
   fast: [
-    { nome:'Herina',   meta:0,  temMeta:false },
-    { nome:'Aline',    meta:0,  temMeta:false },
-    { nome:'Priscila', meta:0,  temMeta:false },
-    { nome:'Claudio',  meta:30, temMeta:true },
-    { nome:'Indaia',   meta:30, temMeta:true },
-    { nome:'Camila',   meta:30, temMeta:true }
+    { nome:'Aline',    meta:30, temMeta:true },
+    { nome:'Claudio',  meta:30, temMeta:true }
   ]
 };
 let _equipeEditMod = { adlv:[], fast:[] }; // rascunhos do editor (as 2 equipes)
