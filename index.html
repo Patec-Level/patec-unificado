@@ -7997,6 +7997,10 @@ function _atualizarColabsPorModulo(){
     COLABS_RT = (_moduloAtivo === 'fast') ? COLABS_RT_FAST : COLABS_RT_ADLV;
     COLABS_SEM_META_RT = (_moduloAtivo === 'fast') ? COLABS_SEM_META_RT_FAST : COLABS_SEM_META_RT_ADLV;
     META_ANALISTA_RT = (_moduloAtivo === 'fast') ? META_ANALISTA_RT_FAST : META_ANALISTA_RT_ADLV;
+    if(typeof META_ANALISTA_RT_BRUTA_FAST !== 'undefined'){
+      META_ANALISTA_RT_BRUTA = (_moduloAtivo === 'fast') ? META_ANALISTA_RT_BRUTA_FAST : META_ANALISTA_RT_BRUTA_ADLV;
+      COLABS_LIDER_RT = (_moduloAtivo === 'fast') ? COLABS_LIDER_RT_FAST : COLABS_LIDER_RT_ADLV;
+    }
     // Meta da equipe = soma das metas individuais de quem está na equipe do
     // módulo ativo agora (mesma regra do ADLV, aplicada também ao FAST). Antes
     // ficava fixa em 90 e não acompanhava trocas de equipe/ajustes de meta
@@ -24445,6 +24449,17 @@ let COLABS_RT = (_moduloAtivo === 'fast') ? COLABS_RT_FAST : COLABS_RT_ADLV;
 let COLABS_SEM_META_RT_ADLV = ['André']; // contribui para equipe mas sem meta diária individual
 let COLABS_SEM_META_RT_FAST = []; // ninguém sem meta hoje — Herina/Priscila/Camila/Indaia saíram da equipe FAST
 let COLABS_SEM_META_RT = (_moduloAtivo === 'fast') ? COLABS_SEM_META_RT_FAST : COLABS_SEM_META_RT_ADLV;
+// Meta bruta: valor real configurado de quem está com "Meta Individual"
+// marcada, incluindo 0 (não confundir com META_ANALISTA_RT, que só guarda
+// valores > 0). "Líder real" = só quem está com o checkbox DESMARCADO —
+// diferente de COLABS_SEM_META_RT, que também inclui quem está marcado mas
+// com Meta/dia=0 (esses não são líderes, só não têm meta nesse módulo).
+let META_ANALISTA_RT_BRUTA_ADLV = {};
+let META_ANALISTA_RT_BRUTA_FAST = {};
+let META_ANALISTA_RT_BRUTA = (_moduloAtivo === 'fast') ? META_ANALISTA_RT_BRUTA_FAST : META_ANALISTA_RT_BRUTA_ADLV;
+let COLABS_LIDER_RT_ADLV = ['André'];
+let COLABS_LIDER_RT_FAST = [];
+let COLABS_LIDER_RT = (_moduloAtivo === 'fast') ? COLABS_LIDER_RT_FAST : COLABS_LIDER_RT_ADLV;
 
 // Meta da equipe = soma das metas individuais de quem está na equipe do
 // módulo ativo agora (mesma regra do ADLV: 30+30=60 hoje no FAST, mas
@@ -24485,16 +24500,27 @@ function equipeAplicarListas(){
       var nomes = lista.map(function(x){ return x.nome.trim(); });
       var meta = {};
       lista.forEach(function(x){ if(x.temMeta && (+x.meta)>0) meta[x.nome.trim()] = (+x.meta); });
+      // Meta bruta: valor real de quem está com o checkbox marcado, mesmo
+      // que seja 0 (não confundir com `meta`, que só guarda valores > 0).
+      // Usada pra mostrar "meta 0" de verdade em vez de cair no 30 padrão.
+      var metaBruta = {};
+      lista.forEach(function(x){ if(x.temMeta) metaBruta[x.nome.trim()] = (+x.meta)||0; });
       // "Sem meta" = checkbox desmarcado OU Meta/dia = 0. Meta 0 não é mais
       // tratada como "ainda não configurada" — é tratada como "sem meta real
       // nesse módulo", e a pessoa some das contagens/rankings de meta.
       var semMeta = lista.filter(function(x){ return !x.temMeta || !((+x.meta)>0); }).map(function(x){ return x.nome.trim(); });
+      // "Líder" de verdade = só quem está com o checkbox DESMARCADO. Diferente
+      // de "sem meta": alguém marcado com Meta/dia=0 não é líder, só não tem
+      // meta nesse módulo — não ganha o badge 👑 nem a referência solta de 30.
+      var lider = lista.filter(function(x){ return !x.temMeta; }).map(function(x){ return x.nome.trim(); });
       if(mod==='adlv'){
         COLABS_ADLV = nomes; COLABS_RT_ADLV = nomes;
         META_ANALISTA_RT_ADLV = meta; COLABS_SEM_META_RT_ADLV = semMeta;
+        META_ANALISTA_RT_BRUTA_ADLV = metaBruta; COLABS_LIDER_RT_ADLV = lider;
       } else {
         COLABS_FAST = nomes; COLABS_RT_FAST = nomes;
         META_ANALISTA_RT_FAST = meta; COLABS_SEM_META_RT_FAST = semMeta;
+        META_ANALISTA_RT_BRUTA_FAST = metaBruta; COLABS_LIDER_RT_FAST = lider;
       }
     });
     if(typeof _atualizarColabsPorModulo === 'function') _atualizarColabsPorModulo();
@@ -24768,11 +24794,21 @@ function rtRenderizarMonitoramento(acoes, hoje){
   if(cardsEl){
     cardsEl.innerHTML = COLABS_RT.filter(c=>_equipeVis(c,'rt')).map(colab=>{
       const p = porColab[colab];
-      const semMeta = COLABS_SEM_META_RT.includes(colab);
-      const meta = META_ANALISTA_RT[colab]||30;
-      const resultado = semMeta ? p.total : (p.primeira_analise + p.em_tratativa + p.status_b + p.ag_parecer);
-      const pctC = Math.min(100, Math.round(resultado/meta*100));
-      const cor = semMeta ? (resultado>=meta?'var(--vd)':resultado>=meta*.8?'var(--am)':'var(--azm)') : resultado>=meta?'var(--vd)':resultado>=meta*.8?'var(--am)':resultado>0?'var(--vm)':'var(--brd)';
+      // "Líder" (badge + referência solta de 30) é só quem está com o
+      // checkbox "Meta Individual" DESMARCADO. Quem está marcado mas com
+      // Meta/dia=0 não é líder — é só alguém sem meta real nesse módulo, e
+      // o card mostra "meta 0" mesmo (COLABS_SEM_META_RT inclui os dois
+      // casos juntos, por isso não dá pra usar ele aqui).
+      const lider = (typeof COLABS_LIDER_RT!=='undefined') ? COLABS_LIDER_RT.includes(colab) : COLABS_SEM_META_RT.includes(colab);
+      const meta = lider ? 30 : ((typeof META_ANALISTA_RT_BRUTA!=='undefined' && META_ANALISTA_RT_BRUTA[colab]!=null) ? META_ANALISTA_RT_BRUTA[colab] : (META_ANALISTA_RT[colab]||30));
+      const temMetaReal = meta>0;
+      const resultado = lider ? p.total : (p.primeira_analise + p.em_tratativa + p.status_b + p.ag_parecer);
+      const pctC = temMetaReal ? Math.min(100, Math.round(resultado/meta*100)) : 0;
+      const cor = !temMetaReal
+        ? (resultado>0?'var(--azm)':'var(--brd)')
+        : lider
+          ? (resultado>=meta?'var(--vd)':resultado>=meta*.8?'var(--am)':'var(--azm)')
+          : (resultado>=meta?'var(--vd)':resultado>=meta*.8?'var(--am)':resultado>0?'var(--vm)':'var(--brd)');
       const ativo = p.total > 0;
       const horario = p.ultimaAcao ? new Date(p.ultimaAcao).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : null;
 
@@ -24789,7 +24825,7 @@ function rtRenderizarMonitoramento(acoes, hoje){
           <div style="display:flex;align-items:center;gap:10px">
             <div style="width:40px;height:40px;border-radius:50%;background:${ativo?cor:'var(--brd)'};color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700">${colab[0]}</div>
             <div>
-              <div style="font-size:13px;font-weight:700;color:var(--az)">${colab} ${semMeta?'<span style="font-size:9px;background:var(--azc);color:var(--azm);padding:1px 7px;border-radius:10px;font-weight:600">👑 Líder</span>':''}</div>
+              <div style="font-size:13px;font-weight:700;color:var(--az)">${colab} ${lider?'<span style="font-size:9px;background:var(--azc);color:var(--azm);padding:1px 7px;border-radius:10px;font-weight:600">👑 Líder</span>':''}</div>
               <div style="font-size:10px;color:var(--tx2)">${ativo ? `Última ação: ${horario}` : 'Sem ações hoje'}</div>
             </div>
           </div>
@@ -24933,7 +24969,15 @@ function _ceColabs(mod){ return _ceEquipe(mod).map(x=>x.nome.trim()); }
 // meta nesse módulo" (mesma regra de equipeAplicarListas), então a pessoa
 // some sozinha dos rankings/contagens que dependem dessa função.
 function _ceTemMeta(mod, nome){ const e=_ceEquipe(mod).find(x=>x.nome.trim().toLowerCase()===String(nome).toLowerCase()); return e ? (!!e.temMeta && (+e.meta)>0) : true; }
-function _ceMetaInd(mod, nome){ const e=_ceEquipe(mod).find(x=>x.nome.trim().toLowerCase()===String(nome).toLowerCase()); return (e && e.temMeta && (+e.meta)>0) ? (+e.meta) : 30; }
+// "É líder" = checkbox "Meta Individual" DESMARCADO (ex.: André). Diferente
+// de "sem meta real": alguém com o checkbox marcado mas Meta/dia=0 (ex.:
+// Lory/Ludy/Wanessa no FAST) NÃO é líder — só não tem meta nesse módulo.
+// Só líder de verdade ganha o badge 👑 e a referência "solta" de 30 itens.
+function _ceEhLider(mod, nome){ const e=_ceEquipe(mod).find(x=>x.nome.trim().toLowerCase()===String(nome).toLowerCase()); return e ? !e.temMeta : false; }
+// Meta individual exibida: quem tem o checkbox marcado usa o valor real
+// (inclusive 0, se for o caso — não vira 30 escondido); líder sem checkbox
+// usa 30 como referência solta (não é uma meta cobrada de verdade).
+function _ceMetaInd(mod, nome){ const e=_ceEquipe(mod).find(x=>x.nome.trim().toLowerCase()===String(nome).toLowerCase()); if(!e) return 30; return e.temMeta ? (+e.meta||0) : 30; }
 function _ceMetaEquipe(mod){
   // Soma das metas de quem tem meta individual real (self-corrige se a
   // equipe mudar). Sem fallback fixo: se ninguém tiver meta > 0, a meta da
@@ -25122,11 +25166,20 @@ function _ceRenderRT(mod){
     if(!visiveis.length){ cardsEl.innerHTML='<div style="font-size:12px;color:var(--tx2)">Nenhum colaborador cadastrado para '+_ceModLabel(mod)+'.</div>'; return; }
     cardsEl.innerHTML = visiveis.map(colab=>{
       const p=porColab[colab];
-      const semMeta=!_ceTemMeta(mod,colab);
+      // "Líder" (badge + referência solta de 30) é só quem está com o
+      // checkbox "Meta Individual" DESMARCADO. Quem está marcado mas com
+      // Meta/dia=0 (ex.: Lory/Ludy/Wanessa no FAST) não é líder — é só
+      // alguém sem meta real nesse módulo, e o card mostra "meta 0" mesmo.
+      const lider=_ceEhLider(mod,colab);
       const meta=_ceMetaInd(mod,colab);
-      const resultado = semMeta ? p.total : (p.primeira_analise+p.em_tratativa+p.status_b+p.ag_parecer);
-      const pctC = Math.min(100, Math.round(resultado/meta*100));
-      const cor = semMeta ? (resultado>=meta?'var(--vd)':resultado>=meta*.8?'var(--am)':'var(--azm)') : resultado>=meta?'var(--vd)':resultado>=meta*.8?'var(--am)':resultado>0?'var(--vm)':'var(--brd)';
+      const temMetaReal = meta>0;
+      const resultado = lider ? p.total : (p.primeira_analise+p.em_tratativa+p.status_b+p.ag_parecer);
+      const pctC = temMetaReal ? Math.min(100, Math.round(resultado/meta*100)) : 0;
+      const cor = !temMetaReal
+        ? (resultado>0?'var(--azm)':'var(--brd)')
+        : lider
+          ? (resultado>=meta?'var(--vd)':resultado>=meta*.8?'var(--am)':'var(--azm)')
+          : (resultado>=meta?'var(--vd)':resultado>=meta*.8?'var(--am)':resultado>0?'var(--vm)':'var(--brd)');
       const ativo=p.total>0;
       const horario=p.ultimaAcao?new Date(p.ultimaAcao).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):null;
       const ua = p.acoes.length ? p.acoes.slice().sort((a,b)=>b.ts>a.ts?1:-1)[0] : null;
@@ -25135,7 +25188,7 @@ function _ceRenderRT(mod){
         + (ativo?'<span class="rt-dot" style="position:absolute;top:12px;right:12px" title="Ativo hoje"></span>':'')
         + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem"><div style="display:flex;align-items:center;gap:10px">'
         + '<div style="width:40px;height:40px;border-radius:50%;background:'+(ativo?cor:'var(--brd)')+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700">'+(colab[0]||'?')+'</div>'
-        + '<div><div style="font-size:13px;font-weight:700;color:var(--az)">'+colab+' '+(semMeta?'<span style="font-size:9px;background:var(--azc);color:var(--azm);padding:1px 7px;border-radius:10px;font-weight:600">👑 Líder</span>':'')+'</div>'
+        + '<div><div style="font-size:13px;font-weight:700;color:var(--az)">'+colab+' '+(lider?'<span style="font-size:9px;background:var(--azc);color:var(--azm);padding:1px 7px;border-radius:10px;font-weight:600">👑 Líder</span>':'')+'</div>'
         + '<div style="font-size:10px;color:var(--tx2)">'+(ativo?'Última ação: '+horario:'Sem ações hoje')+'</div></div></div>'
         + '<div style="text-align:right"><div style="font-size:28px;font-weight:700;color:'+(ativo?cor:'var(--tx2)')+';line-height:1">'+resultado+'</div><div style="font-size:10px;color:var(--tx2)">meta '+meta+'</div></div></div>'
         + '<div style="height:6px;background:#EEE;border-radius:3px;overflow:hidden;margin-bottom:.75rem"><div style="height:100%;width:'+pctC+'%;background:'+cor+';border-radius:3px;transition:width .6s"></div></div>'
@@ -25665,8 +25718,12 @@ async function fechCarregarHistorico(){
 
     gridEl.innerHTML = COLABS_RT.filter(c=>_equipeVis(c,'hist')).map(colab => {
       const r = porColab[colab];
-      const semMeta = COLABS_SEM_META_RT.includes(colab);
-      const meta = META_ANALISTA_RT[colab]||30;
+      // "Líder" só pra quem está com o checkbox desmarcado de verdade.
+      // Quem está marcado com Meta/dia=0 mostra "sem meta" com 0 mesmo,
+      // não o rótulo de líder.
+      const lider = (typeof COLABS_LIDER_RT!=='undefined') ? COLABS_LIDER_RT.includes(colab) : COLABS_SEM_META_RT.includes(colab);
+      const meta = lider ? 30 : ((typeof META_ANALISTA_RT_BRUTA!=='undefined' && META_ANALISTA_RT_BRUTA[colab]!=null) ? META_ANALISTA_RT_BRUTA[colab] : (META_ANALISTA_RT[colab]||30));
+      const temMetaReal = meta>0;
 
       if(!r) return `
         <div style="background:var(--cin);border-radius:10px;padding:1rem;border:1.5px dashed var(--brd);opacity:.6">
@@ -25679,8 +25736,8 @@ async function fechCarregarHistorico(){
 
       const bd = r.breakdown||{};
       const total = r.total||0;
-      const pct = semMeta ? null : Math.round(total/meta*100);
-      const cor = semMeta ? 'var(--azm)' : total>=meta?'var(--vd)':total>=meta*.8?'var(--am)':'var(--vm)';
+      const pct = temMetaReal ? Math.round(total/meta*100) : null;
+      const cor = lider ? 'var(--azm)' : !temMetaReal ? (total>0?'var(--azm)':'var(--brd)') : total>=meta?'var(--vd)':total>=meta*.8?'var(--am)':'var(--vm)';
       const hr = r.ts ? new Date(r.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
 
       return `
@@ -25695,10 +25752,10 @@ async function fechCarregarHistorico(){
             </div>
             <div style="text-align:right">
               <div style="font-size:24px;font-weight:700;color:${cor};line-height:1">${total}</div>
-              <div style="font-size:10px;color:var(--tx2)">${semMeta?'Líder':pct+'% da meta'}</div>
+              <div style="font-size:10px;color:var(--tx2)">${lider?'Líder':temMetaReal?pct+'% da meta':'sem meta (0)'}</div>
             </div>
           </div>
-          ${!semMeta?`<div style="height:5px;background:#EEE;border-radius:3px;overflow:hidden;margin-bottom:.625rem">
+          ${temMetaReal?`<div style="height:5px;background:#EEE;border-radius:3px;overflow:hidden;margin-bottom:.625rem">
             <div style="height:100%;width:${Math.min(100,pct)}%;background:${cor};border-radius:3px"></div>
           </div>`:''}
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;font-size:10px">
@@ -25723,12 +25780,13 @@ async function fechCarregarHistorico(){
     if(regs.length){
       tabelaWrap.style.display = 'block';
       tbody.innerHTML = regs.filter(r=>_equipeVis(r.colab,'hist')).sort((a,b)=>a.colab>b.colab?1:-1).map(r=>{
-        const semMeta = COLABS_SEM_META_RT.includes(r.colab);
-        const meta = META_ANALISTA_RT[r.colab]||30;
+        const lider = (typeof COLABS_LIDER_RT!=='undefined') ? COLABS_LIDER_RT.includes(r.colab) : COLABS_SEM_META_RT.includes(r.colab);
+        const meta = lider ? 30 : ((typeof META_ANALISTA_RT_BRUTA!=='undefined' && META_ANALISTA_RT_BRUTA[r.colab]!=null) ? META_ANALISTA_RT_BRUTA[r.colab] : (META_ANALISTA_RT[r.colab]||30));
+        const temMetaReal = meta>0;
         const bd = r.breakdown||{};
         const total = r.total||0;
-        const pct = semMeta ? '—' : Math.round(total/meta*100)+'%';
-        const ok = semMeta || total>=meta;
+        const pct = (lider || !temMetaReal) ? '—' : Math.round(total/meta*100)+'%';
+        const ok = lider || !temMetaReal || total>=meta;
         return `<tr>
           <td>${r.data||'—'}</td>
           <td style="font-weight:600">${r.colab||'—'}</td>
@@ -25737,7 +25795,7 @@ async function fechCarregarHistorico(){
           <td style="text-align:center">${bd.status_b||0}</td>
           <td style="text-align:center">${bd.outros||0}</td>
           <td style="text-align:center;font-weight:700;color:${ok?'var(--vd)':'var(--vm)'}">${total}</td>
-          <td style="text-align:center">${semMeta?'—':meta}</td>
+          <td style="text-align:center">${lider?'—':meta}</td>
           <td style="text-align:center">${pct}</td>
           <td style="text-align:center"><span class="pl ${ok?'pl-ok':'pl-b'}" style="font-size:9px">${ok?'✅ Meta':'⚠ Abaixo'}</span></td>
           <td style="font-size:11px;color:var(--tx2)">${r.motivo||'—'}${r.detalhe?' — '+r.detalhe:''}</td>
