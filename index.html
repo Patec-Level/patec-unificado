@@ -7036,14 +7036,21 @@ function renderPerfSemanal(){
     .filter(c=>_equipeVis(c,'hist'));
   if(!COLABS_ANALISTAS.length){ el.innerHTML='<div style="font-size:12px;color:var(--tx2)">Nenhum colaborador com meta carregado.</div>'; return; }
 
-  // Calcular dados por analista — Meta/dia é a meta individual real de cada um.
+  // Calcular dados por analista — Meta é a soma da meta REAL de cada dia da
+  // semana (normalmente a meta padrão do colaborador, mas pode ter sido
+  // ajustada pontualmente em Admin > Equipe (Metas RT) > Ajustar meta de um
+  // dia específico — ex.: dia em que a pessoa atuou em outro módulo).
   const dados = COLABS_ANALISTAS.map(c => {
     const { porDia, totalSem, comp, LABEL, COR } = _contarAcoesSemana(c, dias);
     const folgaSet = _diasFolga(c, dias);
-    const metaDia = (typeof META_ANALISTA_RT!=='undefined' && META_ANALISTA_RT[c]) || 30;
-    const metaSem = metaDia * ((dias.filter(d=>_fdiaEhDiaUtil(d) && !folgaSet.has(d)).length) || 1);
+    const metaPorDia = {};
+    dias.forEach(d => { metaPorDia[d] = (typeof _metaDiaEfetiva==='function') ? _metaDiaEfetiva(_moduloAtivo, c, d) : ((typeof META_ANALISTA_RT!=='undefined' && META_ANALISTA_RT[c]) || 30); });
+    const diasUteis = dias.filter(d=>_fdiaEhDiaUtil(d) && !folgaSet.has(d));
+    const metaSem = diasUteis.reduce((s,d)=>s+(metaPorDia[d]||0), 0);
+    const metasUteis = diasUteis.map(d=>metaPorDia[d]);
+    const metaDiaLabel = metasUteis.length && metasUteis.every(v=>v===metasUteis[0]) ? String(metasUteis[0]) : 'varia';
     const pct = metaSem>0 ? Math.round(totalSem/metaSem*100) : 0;
-    return { colab:c, porDia, totalSem, metaDia, metaSem, pct, comp, LABEL, COR, folgaSet };
+    return { colab:c, porDia, totalSem, metaPorDia, metaDiaLabel, metaSem, pct, comp, LABEL, COR, folgaSet };
   }).sort((a,b) => b.totalSem - a.totalSem);
 
   // Cor da célula por dia
@@ -7088,9 +7095,9 @@ function renderPerfSemanal(){
           ${dados.map(d=>`
             <tr>
               <td style="font-weight:600">${d.colab}</td>
-              ${dias.map(dia=>`<td style="text-align:center;font-size:13px;${(d.folgaSet&&d.folgaSet.has(dia))?'color:var(--am);font-weight:700':corCelula(d.porDia[dia]||0,d.metaDia)}">${(d.folgaSet&&d.folgaSet.has(dia))?'🌴':(d.porDia[dia]||0)}</td>`).join('')}
+              ${dias.map(dia=>`<td style="text-align:center;font-size:13px;${(d.folgaSet&&d.folgaSet.has(dia))?'color:var(--am);font-weight:700':corCelula(d.porDia[dia]||0,d.metaPorDia[dia]||0)}">${(d.folgaSet&&d.folgaSet.has(dia))?'🌴':(d.porDia[dia]||0)}</td>`).join('')}
               <td style="text-align:center;font-weight:700;font-size:14px;color:${d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)'}">${d.totalSem}</td>
-              <td style="text-align:center;color:var(--tx2)">${d.metaDia}</td>
+              <td style="text-align:center;color:var(--tx2)">${d.metaDiaLabel}</td>
               <td style="text-align:center;color:var(--tx2)">${d.metaSem}</td>
               <td style="text-align:center;font-weight:700;color:${d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)'}">${d.pct}%</td>
             </tr>`).join('')}
@@ -23517,6 +23524,7 @@ function _entrarNoApp(){
       initMetaGap();
       aaCarregarResultadoFirebase();
       if(typeof equipeRtCarregar === 'function') equipeRtCarregar().catch(e=>console.warn('equipeRtCarregar (login):', e));
+      if(typeof metasDiariasCarregar === 'function') metasDiariasCarregar().catch(e=>console.warn('metasDiariasCarregar (login):', e));
       // Recalcula o painel do dia (renderCardsDia, dentro de renderPainelEstrategico)
       // para refletir o ciclo ativo correto.
       if(typeof cicloCarregarAtivo === 'function'){
@@ -24543,6 +24551,78 @@ async function equipeRtCarregar(){
   equipeAplicarListas();
 }
 
+// ══════════════════════════════════════════════════════
+// META DO DIA — ajuste pontual da meta de um colaborador, num módulo, numa
+// data específica. Existe porque a meta diária NÃO é fixa: o André pode
+// alocar alguém em outra atividade/módulo num dia (ex.: hoje a Aline faz 15
+// no FAST e 20 no ADLV) e a meta daquele dia precisa refletir isso — nas
+// telas de Tempo Real, no velocímetro pessoal e na Performance Semanal.
+// Guardado em config/metas_diarias = { adlv:{ "AAAA-MM-DD":{ nome:meta } },
+// fast:{ ... } }. Quando não há ajuste pra um dia, cai no padrão configurado
+// em Equipe (Metas RT) — o mesmo padrão de sempre.
+// ══════════════════════════════════════════════════════
+let _metasDiarias = { adlv:{}, fast:{} };
+
+// Meta padrão (sem ajuste pontual) de alguém num módulo — mesma regra do
+// _ceMetaInd: líder (checkbox desmarcado) usa 30 como referência solta;
+// quem tem meta real usa o valor configurado, mesmo que seja 0. Lê direto
+// de _equipeRt (fonte única), então funciona mesmo sem a tela de Controle
+// das Equipes ter sido aberta ainda.
+function _metaPadrao(mod, colab){
+  try{
+    var lista = (_equipeRt && _equipeRt[mod]) || [];
+    var e = lista.find(function(x){ return x && x.nome && x.nome.trim().toLowerCase()===String(colab).trim().toLowerCase(); });
+    if(!e) return 30;
+    return e.temMeta ? (+e.meta||0) : 30;
+  }catch(err){ return 30; }
+}
+
+// Meta REAL e efetiva de um colaborador, num módulo, numa data: usa o ajuste
+// pontual daquele dia se existir (mesmo que seja 0), senão cai no padrão.
+function _metaDiaEfetiva(mod, colab, data){
+  try{
+    var porData = _metasDiarias && _metasDiarias[mod] ? _metasDiarias[mod][data] : null;
+    var ov = porData ? porData[colab] : undefined;
+    if(ov==null){
+      // tentar por nome sem diferenciar maiúsculas/whitespace, caso o
+      // ajuste tenha sido salvo com grafia levemente diferente
+      if(porData){
+        var k = Object.keys(porData).find(function(n){ return n.trim().toLowerCase()===String(colab).trim().toLowerCase(); });
+        if(k!=null) ov = porData[k];
+      }
+    }
+    if(ov!=null && ov!=='') return (+ov)||0;
+  }catch(err){}
+  return _metaPadrao(mod, colab);
+}
+
+async function metasDiariasCarregar(){
+  try{
+    var saved = await fbGet('config','metas_diarias');
+    _metasDiarias = {
+      adlv: (saved && saved.adlv && typeof saved.adlv==='object') ? saved.adlv : {},
+      fast: (saved && saved.fast && typeof saved.fast==='object') ? saved.fast : {}
+    };
+  }catch(e){ console.warn('metasDiariasCarregar:', e); }
+}
+
+// Salva os ajustes de um módulo+data de uma vez. `valores` = {nome: meta,...}
+// — valor null remove o ajuste daquele nome (volta pro padrão).
+async function metasDiariasSalvarLote(mod, data, valores){
+  if(!_metasDiarias.adlv) _metasDiarias.adlv={};
+  if(!_metasDiarias.fast) _metasDiarias.fast={};
+  if(!_metasDiarias[mod][data]) _metasDiarias[mod][data]={};
+  Object.keys(valores||{}).forEach(function(nome){
+    var v = valores[nome];
+    if(v===null || v===undefined){ delete _metasDiarias[mod][data][nome]; }
+    else { _metasDiarias[mod][data][nome] = (+v)||0; }
+  });
+  if(Object.keys(_metasDiarias[mod][data]).length===0) delete _metasDiarias[mod][data];
+  var ok=false;
+  try{ ok = await fbSet('config','metas_diarias', _metasDiarias); }catch(e){ console.warn('metasDiariasSalvarLote:', e); }
+  return ok;
+}
+
 function _equipeVis(nome, tipo){
   try{
     var mod = (_moduloAtivo==='fast') ? 'fast' : 'adlv';
@@ -24566,6 +24646,7 @@ async function equipeAbrirEditor(){
       snap.docs.forEach(function(d){ usuarios.push(d.data()||{}); });
     }
   }catch(e){ console.warn('equipe cadastrados:', e); }
+  try{ if(typeof metasDiariasCarregar==='function') await metasDiariasCarregar(); }catch(e){ console.warn('metas diárias:', e); }
   _equipeEditMod.adlv = _equipeMontarLista('adlv', usuarios);
   _equipeEditMod.fast = _equipeMontarLista('fast', usuarios);
   equipeRenderEditor();
@@ -24647,7 +24728,80 @@ function equipeRenderEditor(){
       + '<button class="btn btn-g" onclick="equipeRtSalvar()">✓ Salvar equipe (ADLV + FAST)</button>'
       + '<button class="btn btn-s" onclick="equipeAbrirEditor()">↺ Recarregar cadastrados</button>'
       + '<span id="equipe-ok" style="font-size:11px;color:var(--vd);font-weight:600;display:none">✓ Salvo! Já refletido nas telas.</span>'
+    + '</div>'
+    + '<div style="margin-top:1.5rem;padding-top:1rem;border-top:2px solid var(--brd)">'
+      + '<div style="font-size:13px;font-weight:800;color:var(--az);margin-bottom:.35rem">🗓️ Ajustar meta de um dia específico</div>'
+      + '<div style="font-size:11px;color:var(--tx2);margin-bottom:.75rem">A meta diária não é fixa. Se alguém vai atuar em outro módulo ou outra atividade num dia, ajuste a meta REAL daquele dia aqui — sem mexer na meta padrão da pessoa (ex.: hoje a Aline faz 15 no FAST e 20 no ADLV). Reflete em Tempo Real, no velocímetro pessoal e na Performance Semanal.</div>'
+      + '<div style="margin-bottom:.75rem"><label style="font-size:12px;font-weight:600;color:var(--tx2)">Data: </label> <input type="date" id="metadia-data" value="'+_fdiaHojeLocal()+'" onchange="_metaDiaRenderAjuste()" style="padding:5px 9px;border-radius:6px;border:1px solid var(--brd)"></div>'
+      + '<div id="metadia-ajuste-body"></div>'
     + '</div>';
+  _metaDiaRenderAjuste();
+}
+
+// ── Ajuste pontual da meta de um dia específico (ver _metaDiaEfetiva) ──
+function _metaDiaRenderAjuste(){
+  var body = document.getElementById('metadia-ajuste-body');
+  if(!body) return;
+  var data = (document.getElementById('metadia-data')||{}).value || _fdiaHojeLocal();
+  var html = '';
+  ['adlv','fast'].forEach(function(mod){
+    var lbl = mod==='fast' ? 'FAST' : 'ADLV';
+    var cor = mod==='fast' ? '#C07A12' : '#1A4A8A';
+    var lista = (_equipeRt[mod]||[]).filter(function(x){ return x && x.temMeta && (x.nome||'').trim(); });
+    if(!lista.length) return;
+    html += '<div style="margin-top:.5rem;margin-bottom:.35rem;font-size:12px;font-weight:700;color:'+cor+'">'+lbl+'</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin-bottom:.5rem">';
+    lista.forEach(function(x){
+      var nome = x.nome.trim();
+      var val = (typeof _metaDiaEfetiva==='function') ? _metaDiaEfetiva(mod, nome, data) : ((+x.meta)||0);
+      var ajustado = !!(_metasDiarias[mod] && _metasDiarias[mod][data] && _metasDiarias[mod][data][nome]!=null);
+      html += '<div style="display:flex;align-items:center;gap:6px;background:var(--cin);border:1px solid '+(ajustado?cor:'var(--brd)')+';border-radius:8px;padding:6px 8px">'
+        + '<span style="font-size:11px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+nome.replace(/</g,'&lt;')+(ajustado?' <span style="color:'+cor+'">●</span>':'')+'</span>'
+        + '<input type="number" min="0" value="'+val+'" data-mod="'+mod+'" data-nome="'+nome.replace(/"/g,'&quot;')+'" class="metadia-input" style="width:52px;padding:3px;border-radius:5px;border:1px solid var(--brd)">'
+        + (ajustado ? '<button title="Restaurar padrão ('+((+x.meta)||0)+')" onclick="_metaDiaResetUm(\''+mod+'\',\''+nome.replace(/'/g,"\\'")+'\')" style="background:none;border:none;cursor:pointer;font-size:12px;padding:2px">↺</button>' : '')
+      + '</div>';
+    });
+    html += '</div>';
+  });
+  if(!html) html = '<div style="font-size:11px;color:var(--tx2)">Nenhum colaborador com meta individual configurada.</div>';
+  html += '<div style="display:flex;gap:8px;align-items:center;margin-top:.5rem;flex-wrap:wrap">'
+    + '<button class="btn btn-g" onclick="_metaDiaSalvarAjuste()">✓ Salvar ajustes desse dia</button>'
+    + '<button class="btn btn-s" onclick="_metaDiaRenderAjuste()">↺ Recarregar (descarta edições não salvas)</button>'
+    + '<span id="metadia-ok" style="font-size:11px;color:var(--vd);font-weight:600;display:none">✓ Salvo!</span>'
+  + '</div>';
+  body.innerHTML = html;
+}
+
+async function _metaDiaSalvarAjuste(){
+  var data = (document.getElementById('metadia-data')||{}).value; if(!data) return;
+  var inputs = document.querySelectorAll('.metadia-input');
+  var porMod = {};
+  inputs.forEach(function(inp){
+    var mod = inp.getAttribute('data-mod'), nome = inp.getAttribute('data-nome');
+    var v = parseInt(inp.value,10); if(isNaN(v)||v<0) v=0;
+    if(!porMod[mod]) porMod[mod]={};
+    porMod[mod][nome]=v;
+  });
+  var ok=true;
+  for(var mod in porMod){ var r = await metasDiariasSalvarLote(mod, data, porMod[mod]); if(!r) ok=false; }
+  var okEl = document.getElementById('metadia-ok');
+  if(okEl){ okEl.style.display='inline'; setTimeout(function(){okEl.style.display='none';},3000); }
+  if(!ok) alert('Salvo localmente, mas houve falha ao gravar no Firebase. Confira a conexão e salve de novo.');
+  try{ if(typeof renderPerfSemanal==='function') renderPerfSemanal(); }catch(e){}
+  try{ if(typeof _ceRenderPerfSemanal==='function'){ _ceRenderPerfSemanal('adlv'); _ceRenderPerfSemanal('fast'); } }catch(e){}
+  try{ if(typeof _ceRenderRT==='function'){ _ceRenderRT('adlv'); _ceRenderRT('fast'); } }catch(e){}
+  try{ if(typeof _authPerfil!=='undefined' && _authPerfil?.colabNome && typeof prodRenderizarPaineis==='function') prodRenderizarPaineis(_authPerfil.colabNome); }catch(e){}
+  _metaDiaRenderAjuste();
+}
+
+async function _metaDiaResetUm(mod, nome){
+  var data = (document.getElementById('metadia-data')||{}).value; if(!data) return;
+  var vals = {}; vals[nome] = null;
+  await metasDiariasSalvarLote(mod, data, vals);
+  _metaDiaRenderAjuste();
+  try{ if(typeof renderPerfSemanal==='function') renderPerfSemanal(); }catch(e){}
+  try{ if(typeof _ceRenderPerfSemanal==='function'){ _ceRenderPerfSemanal('adlv'); _ceRenderPerfSemanal('fast'); } }catch(e){}
+  try{ if(typeof _ceRenderRT==='function'){ _ceRenderRT('adlv'); _ceRenderRT('fast'); } }catch(e){}
 }
 
 function equipeRemoverLinha(mod, i){
@@ -24800,7 +24954,10 @@ function rtRenderizarMonitoramento(acoes, hoje){
       // o card mostra "meta 0" mesmo (COLABS_SEM_META_RT inclui os dois
       // casos juntos, por isso não dá pra usar ele aqui).
       const lider = (typeof COLABS_LIDER_RT!=='undefined') ? COLABS_LIDER_RT.includes(colab) : COLABS_SEM_META_RT.includes(colab);
-      const meta = lider ? 30 : ((typeof META_ANALISTA_RT_BRUTA!=='undefined' && META_ANALISTA_RT_BRUTA[colab]!=null) ? META_ANALISTA_RT_BRUTA[colab] : (META_ANALISTA_RT[colab]||30));
+      // Meta de HOJE — pode ter sido ajustada pontualmente (ver "Ajustar meta
+      // de um dia específico" em Equipe (Metas RT)); se não houver ajuste,
+      // cai na meta padrão do colaborador.
+      const meta = lider ? 30 : (typeof _metaDiaEfetiva==='function' ? _metaDiaEfetiva(_moduloAtivo, colab, _fdiaHojeLocal()) : ((typeof META_ANALISTA_RT_BRUTA!=='undefined' && META_ANALISTA_RT_BRUTA[colab]!=null) ? META_ANALISTA_RT_BRUTA[colab] : (META_ANALISTA_RT[colab]||30)));
       const temMetaReal = meta>0;
       const resultado = lider ? p.total : (p.primeira_analise + p.em_tratativa + p.status_b + p.ag_parecer);
       const pctC = temMetaReal ? Math.min(100, Math.round(resultado/meta*100)) : 0;
@@ -25171,7 +25328,9 @@ function _ceRenderRT(mod){
       // Meta/dia=0 (ex.: Lory/Ludy/Wanessa no FAST) não é líder — é só
       // alguém sem meta real nesse módulo, e o card mostra "meta 0" mesmo.
       const lider=_ceEhLider(mod,colab);
-      const meta=_ceMetaInd(mod,colab);
+      // Meta de HOJE — pode ter sido ajustada pontualmente (ver "Ajustar meta
+      // de um dia específico"); sem ajuste, cai na meta padrão da pessoa.
+      const meta = lider ? 30 : (typeof _metaDiaEfetiva==='function' ? _metaDiaEfetiva(mod, colab, _fdiaHojeLocal()) : _ceMetaInd(mod,colab));
       const temMetaReal = meta>0;
       const resultado = lider ? p.total : (p.primeira_analise+p.em_tratativa+p.status_b+p.ag_parecer);
       const pctC = temMetaReal ? Math.min(100, Math.round(resultado/meta*100)) : 0;
@@ -25301,15 +25460,21 @@ function _ceRenderPerfSemanal(mod){
   const colabs=_ceColabs(mod).filter(c=>_ceTemMeta(mod,c)).filter(c=>_ceVis(mod,c,'hist'));
   if(!colabs.length){ el.innerHTML='<div style="font-size:12px;color:var(--tx2)">Nenhum analista com meta em '+_ceModLabel(mod)+'.</div>'; return; }
 
-  // Meta/dia é a meta individual real de cada um (mesma fonte da tela Admin >
-  // Equipe (Metas RT)), não mais um valor fixo de 30 igual para todos.
+  // Meta de cada dia é a meta REAL daquele dia — normalmente a meta padrão
+  // do colaborador (mesma fonte da tela Admin > Equipe (Metas RT)), mas pode
+  // ter sido ajustada pontualmente em "Ajustar meta de um dia específico"
+  // (ex.: dia em que a pessoa atuou em outro módulo/atividade).
   const dados=colabs.map(c=>{
     const { porDia, totalSem, comp, LABEL, COR }=_ceContarAcoesSemana(mod,c,dias);
     const folgaSet=_ceDiasFolga(mod,c,dias);
-    const metaDia=_ceMetaInd(mod,c);
-    const metaSem=metaDia*((dias.filter(d=>_fdiaEhDiaUtil(d)&&!folgaSet.has(d)).length)||1);
+    const metaPorDia={};
+    dias.forEach(d=>{ metaPorDia[d] = (typeof _metaDiaEfetiva==='function') ? _metaDiaEfetiva(mod,c,d) : _ceMetaInd(mod,c); });
+    const diasUteis=dias.filter(d=>_fdiaEhDiaUtil(d)&&!folgaSet.has(d));
+    const metaSem=diasUteis.reduce((s,d)=>s+(metaPorDia[d]||0),0);
+    const metasUteis=diasUteis.map(d=>metaPorDia[d]);
+    const metaDiaLabel = metasUteis.length && metasUteis.every(v=>v===metasUteis[0]) ? String(metasUteis[0]) : 'varia';
     const pct=metaSem>0?Math.round(totalSem/metaSem*100):0;
-    return { colab:c, porDia, totalSem, metaDia, metaSem, pct, comp, LABEL, COR, folgaSet };
+    return { colab:c, porDia, totalSem, metaPorDia, metaDiaLabel, metaSem, pct, comp, LABEL, COR, folgaSet };
   }).sort((a,b)=>b.totalSem-a.totalSem);
 
   const corCel=(tot,metaDia)=>{ if(tot>=metaDia) return 'background:rgba(76,175,80,.15);color:var(--vd);font-weight:700'; if(tot>=metaDia*0.7) return 'background:rgba(255,193,7,.15);color:var(--am);font-weight:700'; if(tot>0) return 'background:rgba(217,64,64,.1);color:var(--vm);font-weight:600'; return 'color:var(--tx2)'; };
@@ -25326,9 +25491,9 @@ function _ceRenderPerfSemanal(mod){
     + dias.map(d=>'<th style="text-align:center">'+fmtDiaSem(d)+'<br><span style="font-weight:400;font-size:10px">'+_ceFmtDM(d)+'</span></th>').join('')
     + '<th style="text-align:center">Total</th><th style="text-align:center">Meta/dia</th><th style="text-align:center">Meta</th><th style="text-align:center">%</th></tr></thead><tbody>'
     + dados.map(d=>'<tr><td style="font-weight:600">'+d.colab+'</td>'
-        + dias.map(dia=>'<td style="text-align:center;font-size:13px;'+((d.folgaSet&&d.folgaSet.has(dia))?'color:var(--am);font-weight:700':corCel(d.porDia[dia]||0,d.metaDia))+'">'+((d.folgaSet&&d.folgaSet.has(dia))?'🌴':(d.porDia[dia]||0))+'</td>').join('')
+        + dias.map(dia=>'<td style="text-align:center;font-size:13px;'+((d.folgaSet&&d.folgaSet.has(dia))?'color:var(--am);font-weight:700':corCel(d.porDia[dia]||0,d.metaPorDia[dia]||0))+'">'+((d.folgaSet&&d.folgaSet.has(dia))?'🌴':(d.porDia[dia]||0))+'</td>').join('')
         + '<td style="text-align:center;font-weight:700;font-size:14px;color:'+(d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)')+'">'+d.totalSem+'</td>'
-        + '<td style="text-align:center;color:var(--tx2)">'+d.metaDia+'</td>'
+        + '<td style="text-align:center;color:var(--tx2)">'+d.metaDiaLabel+'</td>'
         + '<td style="text-align:center;color:var(--tx2)">'+d.metaSem+'</td>'
         + '<td style="text-align:center;font-weight:700;color:'+(d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)')+'">'+d.pct+'%</td></tr>').join('')
     + '</tbody></table></div>'
@@ -25455,7 +25620,11 @@ function ceAbrir(){
   if(typeof equipeRtCarregar==='function'){
     pCfg = equipeRtCarregar().catch(function(){});
   }
-  Promise.all([pUsr,pCfg]).then(go).catch(go);
+  var pMetaDia = Promise.resolve();
+  if(typeof metasDiariasCarregar==='function'){
+    pMetaDia = metasDiariasCarregar().catch(function(){});
+  }
+  Promise.all([pUsr,pCfg,pMetaDia]).then(go).catch(go);
 }
 function ceAtualizarTudo(){ _ceCache.adlv=null; _ceCache.fast=null; ceAbrir(); }
 
@@ -26663,7 +26832,9 @@ function govAtualizarVelocimetroEquipe(total, metaVal){
 function prodRenderizarPaineis(colab){
   const acoes = window._prodAcoesHoje || [];
   const cnt   = prodContarHoje(acoes);
-  const metaVal = META_ANALISTA_RT[colab] || 0;
+  // Meta de HOJE — pode ter sido ajustada pontualmente (Equipe (Metas RT) >
+  // Ajustar meta de um dia específico); sem ajuste, cai na meta padrão.
+  const metaVal = (typeof _metaDiaEfetiva==='function' && typeof _moduloAtivo!=='undefined') ? _metaDiaEfetiva(_moduloAtivo, colab, _fdiaHojeLocal()) : (META_ANALISTA_RT[colab] || 0);
   const semMeta = COLABS_SEM_META_RT.includes(colab);
   const pct = metaVal > 0 ? Math.min(100, Math.round(cnt.meta / metaVal * 100)) : 100;
   const cor = semMeta ? 'var(--azm)' : cnt.meta >= metaVal ? 'var(--vd)' : cnt.meta >= metaVal*.8 ? 'var(--am)' : 'var(--vm)';
@@ -26999,7 +27170,9 @@ async function fdiaInicializar(){
   if(av) av.textContent = colab[0].toUpperCase();
   if(nm) nm.textContent = colab;
 
-  const metaVal = META_ANALISTA_RT[colab] || 30;
+  // Meta do dia que está sendo fechado (hoje, ou o dia anterior no
+  // fechamento retroativo) — pode ter sido ajustada pontualmente.
+  const metaVal = (typeof _metaDiaEfetiva==='function' && typeof _moduloAtivo!=='undefined') ? _metaDiaEfetiva(_moduloAtivo, colab, dataAlvo) : (META_ANALISTA_RT[colab] || 30);
   const metaEl  = document.getElementById('fdia-meta');
   if(metaEl) metaEl.textContent = metaVal;
 
@@ -27316,7 +27489,7 @@ async function fdiaAnularAcao(docId){
     _fdiaDesenharLinhaTempo();
     // Atualizar totais do card
     const colab = _authPerfil?.colabNome || colabLogado;
-    const metaVal = META_ANALISTA_RT[colab]||30;
+    const metaVal = (typeof _metaDiaEfetiva==='function' && typeof _moduloAtivo!=='undefined') ? _metaDiaEfetiva(_moduloAtivo, colab, _fdiaDataEfetiva()) : (META_ANALISTA_RT[colab]||30);
     const semMeta = (typeof COLABS_SEM_META_RT!=='undefined') && COLABS_SEM_META_RT.includes(colab);
     const acoesAtivas = _fdiaAcoesDia.filter(a=>!a.anulada);
     const cnt = prodContarHoje(acoesAtivas);
@@ -27339,10 +27512,12 @@ async function fdiaAnularAcao(docId){
 
 async function fdiaSalvar(){
   const colab   = _authPerfil?.colabNome || colabLogado;
-  const metaVal = META_ANALISTA_RT[colab]||30;
+  const hoje = _fdiaDataEfetiva(); // data-alvo (hoje, ou o dia anterior no fechamento retroativo)
+  // Meta REAL do dia que está sendo fechado — pode ter sido ajustada
+  // pontualmente (Equipe (Metas RT) > Ajustar meta de um dia específico).
+  const metaVal = (typeof _metaDiaEfetiva==='function' && typeof _moduloAtivo!=='undefined') ? _metaDiaEfetiva(_moduloAtivo, colab, hoje) : (META_ANALISTA_RT[colab]||30);
   const acoes   = window._prodAcoesHoje||[];
   const cnt     = prodContarHoje(acoes);
-  const hoje = _fdiaDataEfetiva(); // data-alvo (hoje, ou o dia anterior no fechamento retroativo)
 
   // Bloquear se modalidade não informada
   if(!_fdiaPresenca){
