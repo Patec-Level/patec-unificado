@@ -6787,14 +6787,19 @@ async function renderAlertasPerf(){
   if(!el) return;
   el.innerHTML = '<div style="font-size:12px;color:var(--tx2)">⏳ Carregando fechamentos...</div>';
 
-  const COLABS_AN = (typeof COLABS!=='undefined' && COLABS.length ? COLABS : (window.COLABS||['Lory','Ludy','Wanessa'])).filter(c=>c!=='André').filter(c=>_equipeVis(c,'hist'));
-  const META = 30;
+  // Só entra quem tem meta individual real nesse módulo (exclui líderes/sem
+  // meta e quem está com Meta/dia = 0 em Admin > Equipe (Metas RT) — meta 0
+  // não vira mais 30 por padrão, a pessoa simplesmente não participa do alerta).
+  const COLABS_AN = (typeof COLABS!=='undefined' && COLABS.length ? COLABS : (window.COLABS||['Lory','Ludy','Wanessa']))
+    .filter(c => (typeof COLABS_SEM_META_RT==='undefined') || !COLABS_SEM_META_RT.includes(c))
+    .filter(c=>_equipeVis(c,'hist'));
 
   const { resultado, dias } = await _buscarFechamentos5Dias(COLABS_AN);
 
   const fmtD = d => { const [,m,dd]=d.split('-'); return `${dd}/${m}`; };
 
   const cards = COLABS_AN.map(colab => {
+    const META = (typeof META_ANALISTA_RT!=='undefined' && META_ANALISTA_RT[colab]) || 30;
     const hist = resultado[colab] || {};
     const vals = dias.map(d => hist[d]); // null = sem fechamento
 
@@ -6837,7 +6842,7 @@ async function renderAlertasPerf(){
       msg='Dentro da meta nos últimos dias';
     }
 
-    return { colab, consecutivos, media, pctMedia, ultimaBateu, status, cor, icone, msg, vals, dias };
+    return { colab, meta:META, consecutivos, media, pctMedia, ultimaBateu, status, cor, icone, msg, vals, dias };
   });
 
   el.innerHTML = `
@@ -6853,15 +6858,15 @@ async function renderAlertasPerf(){
           </div>
           <div style="font-size:12px;font-weight:600;color:${c.cor};margin-bottom:.5rem">${c.msg}</div>
           <div style="display:flex;gap:12px;font-size:11px;color:var(--tx2);margin-bottom:.625rem">
-            ${c.media!==null?`<span>Média: <strong style="color:${c.pctMedia>=100?'var(--vd)':c.pctMedia>=70?'var(--am)':'var(--vm)'}">${c.media}/${META} (${c.pctMedia}%)</strong></span>`:''}
+            ${c.media!==null?`<span>Média: <strong style="color:${c.pctMedia>=100?'var(--vd)':c.pctMedia>=70?'var(--am)':'var(--vm)'}">${c.media}/${c.meta} (${c.pctMedia}%)</strong></span>`:''}
             ${c.ultimaBateu?`<span>Última meta: <strong style="color:var(--vd)">${fmtD(c.ultimaBateu)}</strong></span>`:c.comDados>0?'<span style="color:var(--vm)">Não bateu a meta no período</span>':''}
           </div>
           <!-- Mini histórico 5 dias -->
           <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px">
             ${c.dias.map((d,i) => {
               const v = c.vals[i];
-              const cor2 = (v===null||v==='FOLGA')?'var(--tx2)':v>=META?'var(--vd)':v>=META*.7?'var(--am)':'var(--vm)';
-              const bg  = v==='FOLGA'?'rgba(192,122,18,.12)':v===null?'var(--cin)':v>=META?'rgba(76,175,80,.12)':v>=META*.7?'rgba(192,122,18,.12)':'rgba(217,64,64,.1)';
+              const cor2 = (v===null||v==='FOLGA')?'var(--tx2)':v>=c.meta?'var(--vd)':v>=c.meta*.7?'var(--am)':'var(--vm)';
+              const bg  = v==='FOLGA'?'rgba(192,122,18,.12)':v===null?'var(--cin)':v>=c.meta?'rgba(76,175,80,.12)':v>=c.meta*.7?'rgba(192,122,18,.12)':'rgba(217,64,64,.1)';
               return `<div style="text-align:center;background:${bg};border-radius:5px;padding:3px 2px">
                 <div style="font-size:11px;font-weight:700;color:${cor2}">${v==='FOLGA'?'🌴':(v!==null?v:'—')}</div>
                 <div style="font-size:9px;color:var(--tx2)">${fmtD(d)}</div>
@@ -6876,8 +6881,11 @@ async function renderAlertasPerf(){
 async function renderFdiaAlertaIndividual(colab){
   const el = document.getElementById('fdia-alerta-perf');
   if(!el || !colab) return;
+  // Sem meta individual real nesse módulo (checkbox off ou Meta/dia = 0) →
+  // não faz sentido alertar essa pessoa contra uma meta que não é dela.
+  if(typeof COLABS_SEM_META_RT!=='undefined' && COLABS_SEM_META_RT.includes(colab)){ el.style.display='none'; return; }
 
-  const META = 30;
+  const META = (typeof META_ANALISTA_RT!=='undefined' && META_ANALISTA_RT[colab]) || 30;
   const { resultado, dias } = await _buscarFechamentos5Dias([colab]);
   const hist = resultado[colab] || {};
   const vals = dias.map(d => hist[d]);
@@ -7018,26 +7026,30 @@ function renderPerfSemanal(){
   const { dias, seg, sex } = _semanaAtual();
   const fmtD = d => { const [,m,dd]=d.split('-'); return `${dd}/${m}`; };
   const fmtDiaSem = d => { const dow=new Date(d+'T12:00:00').getDay(); return ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][dow]; };
-  const META_DIA = 30;
 
   if(lbl) lbl.textContent = `${fmtD(dias[0])} a ${fmtD(dias[4])}`;
 
-  const COLABS_ANALISTAS = (typeof COLABS!=='undefined' && COLABS.length ? COLABS : (window.COLABS||['Lory','Ludy','Wanessa'])).filter(c => c !== 'André').filter(c=>_equipeVis(c,'hist'));
-  if(!COLABS_ANALISTAS.length){ el.innerHTML='<div style="font-size:12px;color:var(--tx2)">Nenhum colaborador carregado.</div>'; return; }
+  // Só entra quem tem meta individual real (checkbox marcado E Meta/dia > 0
+  // em Admin > Equipe (Metas RT) — meta 0 não vira mais 30 por padrão).
+  const COLABS_ANALISTAS = (typeof COLABS!=='undefined' && COLABS.length ? COLABS : (window.COLABS||['Lory','Ludy','Wanessa']))
+    .filter(c => (typeof COLABS_SEM_META_RT==='undefined') || !COLABS_SEM_META_RT.includes(c))
+    .filter(c=>_equipeVis(c,'hist'));
+  if(!COLABS_ANALISTAS.length){ el.innerHTML='<div style="font-size:12px;color:var(--tx2)">Nenhum colaborador com meta carregado.</div>'; return; }
 
-  // Calcular dados por analista
+  // Calcular dados por analista — Meta/dia é a meta individual real de cada um.
   const dados = COLABS_ANALISTAS.map(c => {
     const { porDia, totalSem, comp, LABEL, COR } = _contarAcoesSemana(c, dias);
     const folgaSet = _diasFolga(c, dias);
-    const metaSem = META_DIA * ((dias.filter(d=>_fdiaEhDiaUtil(d) && !folgaSet.has(d)).length) || 1);
+    const metaDia = (typeof META_ANALISTA_RT!=='undefined' && META_ANALISTA_RT[c]) || 30;
+    const metaSem = metaDia * ((dias.filter(d=>_fdiaEhDiaUtil(d) && !folgaSet.has(d)).length) || 1);
     const pct = metaSem>0 ? Math.round(totalSem/metaSem*100) : 0;
-    return { colab:c, porDia, totalSem, metaSem, pct, comp, LABEL, COR, folgaSet };
+    return { colab:c, porDia, totalSem, metaDia, metaSem, pct, comp, LABEL, COR, folgaSet };
   }).sort((a,b) => b.totalSem - a.totalSem);
 
   // Cor da célula por dia
-  const corCelula = (tot) => {
-    if(tot >= META_DIA) return 'background:rgba(76,175,80,.15);color:var(--vd);font-weight:700';
-    if(tot >= META_DIA*0.7) return 'background:rgba(255,193,7,.15);color:var(--am);font-weight:700';
+  const corCelula = (tot, metaDia) => {
+    if(tot >= metaDia) return 'background:rgba(76,175,80,.15);color:var(--vd);font-weight:700';
+    if(tot >= metaDia*0.7) return 'background:rgba(255,193,7,.15);color:var(--am);font-weight:700';
     if(tot > 0) return 'background:rgba(217,64,64,.1);color:var(--vm);font-weight:600';
     return 'color:var(--tx2)';
   };
@@ -7067,6 +7079,7 @@ function renderPerfSemanal(){
             <th>Analista</th>
             ${dias.map(d=>`<th style="text-align:center">${fmtDiaSem(d)}<br><span style="font-weight:400;font-size:10px">${fmtD(d)}</span></th>`).join('')}
             <th style="text-align:center">Total</th>
+            <th style="text-align:center">Meta/dia</th>
             <th style="text-align:center">Meta</th>
             <th style="text-align:center">%</th>
           </tr>
@@ -7075,16 +7088,12 @@ function renderPerfSemanal(){
           ${dados.map(d=>`
             <tr>
               <td style="font-weight:600">${d.colab}</td>
-              ${dias.map(dia=>`<td style="text-align:center;font-size:13px;${(d.folgaSet&&d.folgaSet.has(dia))?'color:var(--am);font-weight:700':corCelula(d.porDia[dia]||0)}">${(d.folgaSet&&d.folgaSet.has(dia))?'🌴':(d.porDia[dia]||0)}</td>`).join('')}
+              ${dias.map(dia=>`<td style="text-align:center;font-size:13px;${(d.folgaSet&&d.folgaSet.has(dia))?'color:var(--am);font-weight:700':corCelula(d.porDia[dia]||0,d.metaDia)}">${(d.folgaSet&&d.folgaSet.has(dia))?'🌴':(d.porDia[dia]||0)}</td>`).join('')}
               <td style="text-align:center;font-weight:700;font-size:14px;color:${d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)'}">${d.totalSem}</td>
+              <td style="text-align:center;color:var(--tx2)">${d.metaDia}</td>
               <td style="text-align:center;color:var(--tx2)">${d.metaSem}</td>
               <td style="text-align:center;font-weight:700;color:${d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)'}">${d.pct}%</td>
             </tr>`).join('')}
-          <tr style="background:var(--cin);border-top:2px solid var(--brd)">
-            <td style="font-weight:700;color:var(--tx2)">Meta/dia</td>
-            ${dias.map(d=>`<td style="text-align:center;color:var(--tx2);font-size:11px">${_fdiaEhDiaUtil(d)?META_DIA:'—'}</td>`).join('')}
-            <td></td><td></td><td></td>
-          </tr>
         </tbody>
       </table>
     </div>
@@ -7113,7 +7122,8 @@ function renderFdiaSemana(colab){
   const { dias } = _semanaAtual();
   const fmtD = d => { const [,m,dd]=d.split('-'); return `${dd}/${m}`; };
   const fmtDiaSem = d => { const dow=new Date(d+'T12:00:00').getDay(); return ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][dow]; };
-  const META_DIA = 30;
+  // Meta/dia real do colaborador (mesma fonte de Admin > Equipe (Metas RT)).
+  const META_DIA = (typeof META_ANALISTA_RT!=='undefined' && META_ANALISTA_RT[colab]) || 30;
 
   const { porDia, totalSem, comp, LABEL, COR } = _contarAcoesSemana(colab, dias);
   const _folgaSetInd = _diasFolga(colab, dias);
@@ -24475,7 +24485,10 @@ function equipeAplicarListas(){
       var nomes = lista.map(function(x){ return x.nome.trim(); });
       var meta = {};
       lista.forEach(function(x){ if(x.temMeta && (+x.meta)>0) meta[x.nome.trim()] = (+x.meta); });
-      var semMeta = lista.filter(function(x){ return !x.temMeta; }).map(function(x){ return x.nome.trim(); });
+      // "Sem meta" = checkbox desmarcado OU Meta/dia = 0. Meta 0 não é mais
+      // tratada como "ainda não configurada" — é tratada como "sem meta real
+      // nesse módulo", e a pessoa some das contagens/rankings de meta.
+      var semMeta = lista.filter(function(x){ return !x.temMeta || !((+x.meta)>0); }).map(function(x){ return x.nome.trim(); });
       if(mod==='adlv'){
         COLABS_ADLV = nomes; COLABS_RT_ADLV = nomes;
         META_ANALISTA_RT_ADLV = meta; COLABS_SEM_META_RT_ADLV = semMeta;
@@ -24911,17 +24924,21 @@ function _ceEquipe(mod){
     var semMeta = mod==='fast' ? (typeof COLABS_SEM_META_RT_FAST!=='undefined'?COLABS_SEM_META_RT_FAST:[]) : (typeof COLABS_SEM_META_RT_ADLV!=='undefined'?COLABS_SEM_META_RT_ADLV:[]);
     return (nomes||[]).filter(function(n){return (n||'').trim();}).map(function(n){
       var tem = (semMeta||[]).indexOf(n)===-1;
-      return { nome:n, meta: tem?((+metaMap[n])||30):0, temMeta: tem };
+      return { nome:n, meta: tem?((+metaMap[n])||0):0, temMeta: tem };
     });
   }catch(e){ return []; }
 }
 function _ceColabs(mod){ return _ceEquipe(mod).map(x=>x.nome.trim()); }
-function _ceTemMeta(mod, nome){ const e=_ceEquipe(mod).find(x=>x.nome.trim().toLowerCase()===String(nome).toLowerCase()); return e ? !!e.temMeta : true; }
+// "Tem meta real" = checkbox marcado E Meta/dia > 0. Meta 0 conta como "sem
+// meta nesse módulo" (mesma regra de equipeAplicarListas), então a pessoa
+// some sozinha dos rankings/contagens que dependem dessa função.
+function _ceTemMeta(mod, nome){ const e=_ceEquipe(mod).find(x=>x.nome.trim().toLowerCase()===String(nome).toLowerCase()); return e ? (!!e.temMeta && (+e.meta)>0) : true; }
 function _ceMetaInd(mod, nome){ const e=_ceEquipe(mod).find(x=>x.nome.trim().toLowerCase()===String(nome).toLowerCase()); return (e && e.temMeta && (+e.meta)>0) ? (+e.meta) : 30; }
 function _ceMetaEquipe(mod){
-  // Soma das metas de quem tem meta individual (self-corrige se a equipe mudar).
-  const s = _ceEquipe(mod).filter(x=>x.temMeta && (+x.meta)>0).reduce((a,x)=>a+(+x.meta),0);
-  return s>0 ? s : 90;
+  // Soma das metas de quem tem meta individual real (self-corrige se a
+  // equipe mudar). Sem fallback fixo: se ninguém tiver meta > 0, a meta da
+  // equipe é 0 (estado real), não um número inventado.
+  return _ceEquipe(mod).filter(x=>x.temMeta && (+x.meta)>0).reduce((a,x)=>a+(+x.meta),0);
 }
 function _ceVis(mod, nome, tipo){
   const e=_ceEquipe(mod).find(x=>x.nome.trim().toLowerCase()===String(nome).toLowerCase());
@@ -25140,7 +25157,6 @@ function _ceRenderRT(mod){
 function _ceRenderAlertas(mod){
   const el = document.getElementById('ce-alertas-'+mod); if(!el) return;
   const cache = _ceCache[mod]; if(!cache){ el.innerHTML=''; return; }
-  const META = 30;
 
   // 5 últimos dias úteis
   const dias=[]; let d=new Date();
@@ -25154,6 +25170,7 @@ function _ceRenderAlertas(mod){
   if(!colabs.length){ el.innerHTML='<div style="font-size:12px;color:var(--tx2)">Nenhum analista com meta em '+_ceModLabel(mod)+'.</div>'; return; }
 
   const cards = colabs.map(colab=>{
+    const META = _ceMetaInd(mod, colab); // meta individual real (colabs já filtrados por _ceTemMeta)
     const vals = dias.map(dia=>{ const v=fmap[colab+'|'+dia]; return v===undefined?null:v; });
     let consecutivos=0;
     for(let i=dias.length-1;i>=0;i--){ if(vals[i]===null||vals[i]==='FOLGA') continue; if(vals[i]<META) consecutivos++; else break; }
@@ -25168,7 +25185,7 @@ function _ceRenderAlertas(mod){
     else if(consecutivos===1){ status='OBSERVAR'; cor='#E67E22'; icone='🟠'; msg='1 dia abaixo da meta'; }
     else if(comDados.length===0){ status='SEM DADOS'; cor='var(--tx2)'; icone='⚫'; msg='Sem fechamentos registrados'; }
     else { status='NORMAL'; cor='var(--vd)'; icone='✅'; msg='Dentro da meta nos últimos dias'; }
-    return {colab,consecutivos,media,pctMedia,ultimaBateu,status,cor,icone,msg,vals,comDados};
+    return {colab,meta:META,consecutivos,media,pctMedia,ultimaBateu,status,cor,icone,msg,vals,comDados};
   });
 
   el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">'
@@ -25178,10 +25195,10 @@ function _ceRenderAlertas(mod){
         + '<span style="font-size:10px;font-weight:700;color:'+c.cor+';padding:2px 8px;border-radius:12px;border:1px solid '+c.cor+'">'+c.status+'</span></div>'
         + '<div style="font-size:12px;font-weight:600;color:'+c.cor+';margin-bottom:.5rem">'+c.msg+'</div>'
         + '<div style="display:flex;gap:12px;font-size:11px;color:var(--tx2);margin-bottom:.625rem">'
-        + (c.media!==null?'<span>Média: <strong style="color:'+(c.pctMedia>=100?'var(--vd)':c.pctMedia>=70?'var(--am)':'var(--vm)')+'">'+c.media+'/'+META+' ('+c.pctMedia+'%)</strong></span>':'')
+        + (c.media!==null?'<span>Média: <strong style="color:'+(c.pctMedia>=100?'var(--vd)':c.pctMedia>=70?'var(--am)':'var(--vm)')+'">'+c.media+'/'+c.meta+' ('+c.pctMedia+'%)</strong></span>':'')
         + (c.ultimaBateu?'<span>Última meta: <strong style="color:var(--vd)">'+_ceFmtDM(c.ultimaBateu)+'</strong></span>':(c.comDados.length>0?'<span style="color:var(--vm)">Não bateu a meta no período</span>':''))
         + '</div><div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px">'
-        + dias.map((dia,i)=>{ const v=c.vals[i]; const cor2=(v===null||v==='FOLGA')?'var(--tx2)':v>=META?'var(--vd)':v>=META*.7?'var(--am)':'var(--vm)'; const bg=v==='FOLGA'?'rgba(192,122,18,.12)':v===null?'var(--cin)':v>=META?'rgba(76,175,80,.12)':v>=META*.7?'rgba(192,122,18,.12)':'rgba(217,64,64,.1)'; return '<div style="text-align:center;background:'+bg+';border-radius:5px;padding:3px 2px"><div style="font-size:11px;font-weight:700;color:'+cor2+'">'+(v==='FOLGA'?'🌴':(v!==null?v:'—'))+'</div><div style="font-size:9px;color:var(--tx2)">'+_ceFmtDM(dia)+'</div></div>'; }).join('')
+        + dias.map((dia,i)=>{ const v=c.vals[i]; const cor2=(v===null||v==='FOLGA')?'var(--tx2)':v>=c.meta?'var(--vd)':v>=c.meta*.7?'var(--am)':'var(--vm)'; const bg=v==='FOLGA'?'rgba(192,122,18,.12)':v===null?'var(--cin)':v>=c.meta?'rgba(76,175,80,.12)':v>=c.meta*.7?'rgba(192,122,18,.12)':'rgba(217,64,64,.1)'; return '<div style="text-align:center;background:'+bg+';border-radius:5px;padding:3px 2px"><div style="font-size:11px;font-weight:700;color:'+cor2+'">'+(v==='FOLGA'?'🌴':(v!==null?v:'—'))+'</div><div style="font-size:9px;color:var(--tx2)">'+_ceFmtDM(dia)+'</div></div>'; }).join('')
         + '</div></div>'
       ).join('')
     + '</div><div style="font-size:10px;color:var(--tx2);margin-top:.75rem">🔴 3+ dias consecutivos · 🟡 2 dias · 🟠 1 dia · ✅ Normal · Baseado nos fechamentos registrados</div>';
@@ -25226,21 +25243,23 @@ function _ceRenderPerfSemanal(mod){
   const cache=_ceCache[mod]; if(!cache){ el.innerHTML=''; return; }
   const { dias }=_ceSemana();
   const fmtDiaSem=d=>{ const dow=new Date(d+'T12:00:00').getDay(); return ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][dow]; };
-  const META_DIA=30;
   const lbl=document.getElementById('ce-perfsem-'+mod+'-lbl'); if(lbl) lbl.textContent=_ceFmtDM(dias[0])+' a '+_ceFmtDM(dias[4]);
 
   const colabs=_ceColabs(mod).filter(c=>_ceTemMeta(mod,c)).filter(c=>_ceVis(mod,c,'hist'));
   if(!colabs.length){ el.innerHTML='<div style="font-size:12px;color:var(--tx2)">Nenhum analista com meta em '+_ceModLabel(mod)+'.</div>'; return; }
 
+  // Meta/dia é a meta individual real de cada um (mesma fonte da tela Admin >
+  // Equipe (Metas RT)), não mais um valor fixo de 30 igual para todos.
   const dados=colabs.map(c=>{
     const { porDia, totalSem, comp, LABEL, COR }=_ceContarAcoesSemana(mod,c,dias);
     const folgaSet=_ceDiasFolga(mod,c,dias);
-    const metaSem=META_DIA*((dias.filter(d=>_fdiaEhDiaUtil(d)&&!folgaSet.has(d)).length)||1);
+    const metaDia=_ceMetaInd(mod,c);
+    const metaSem=metaDia*((dias.filter(d=>_fdiaEhDiaUtil(d)&&!folgaSet.has(d)).length)||1);
     const pct=metaSem>0?Math.round(totalSem/metaSem*100):0;
-    return { colab:c, porDia, totalSem, metaSem, pct, comp, LABEL, COR, folgaSet };
+    return { colab:c, porDia, totalSem, metaDia, metaSem, pct, comp, LABEL, COR, folgaSet };
   }).sort((a,b)=>b.totalSem-a.totalSem);
 
-  const corCel=(tot)=>{ if(tot>=META_DIA) return 'background:rgba(76,175,80,.15);color:var(--vd);font-weight:700'; if(tot>=META_DIA*0.7) return 'background:rgba(255,193,7,.15);color:var(--am);font-weight:700'; if(tot>0) return 'background:rgba(217,64,64,.1);color:var(--vm);font-weight:600'; return 'color:var(--tx2)'; };
+  const corCel=(tot,metaDia)=>{ if(tot>=metaDia) return 'background:rgba(76,175,80,.15);color:var(--vd);font-weight:700'; if(tot>=metaDia*0.7) return 'background:rgba(255,193,7,.15);color:var(--am);font-weight:700'; if(tot>0) return 'background:rgba(217,64,64,.1);color:var(--vm);font-weight:600'; return 'color:var(--tx2)'; };
 
   el.innerHTML =
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:1.25rem">'
@@ -25252,15 +25271,14 @@ function _ceRenderPerfSemanal(mod){
     + '</div>'
     + '<div class="tw" style="margin-bottom:1rem"><table><thead><tr><th>Analista</th>'
     + dias.map(d=>'<th style="text-align:center">'+fmtDiaSem(d)+'<br><span style="font-weight:400;font-size:10px">'+_ceFmtDM(d)+'</span></th>').join('')
-    + '<th style="text-align:center">Total</th><th style="text-align:center">Meta</th><th style="text-align:center">%</th></tr></thead><tbody>'
+    + '<th style="text-align:center">Total</th><th style="text-align:center">Meta/dia</th><th style="text-align:center">Meta</th><th style="text-align:center">%</th></tr></thead><tbody>'
     + dados.map(d=>'<tr><td style="font-weight:600">'+d.colab+'</td>'
-        + dias.map(dia=>'<td style="text-align:center;font-size:13px;'+((d.folgaSet&&d.folgaSet.has(dia))?'color:var(--am);font-weight:700':corCel(d.porDia[dia]||0))+'">'+((d.folgaSet&&d.folgaSet.has(dia))?'🌴':(d.porDia[dia]||0))+'</td>').join('')
+        + dias.map(dia=>'<td style="text-align:center;font-size:13px;'+((d.folgaSet&&d.folgaSet.has(dia))?'color:var(--am);font-weight:700':corCel(d.porDia[dia]||0,d.metaDia))+'">'+((d.folgaSet&&d.folgaSet.has(dia))?'🌴':(d.porDia[dia]||0))+'</td>').join('')
         + '<td style="text-align:center;font-weight:700;font-size:14px;color:'+(d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)')+'">'+d.totalSem+'</td>'
+        + '<td style="text-align:center;color:var(--tx2)">'+d.metaDia+'</td>'
         + '<td style="text-align:center;color:var(--tx2)">'+d.metaSem+'</td>'
         + '<td style="text-align:center;font-weight:700;color:'+(d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)')+'">'+d.pct+'%</td></tr>').join('')
-    + '<tr style="background:var(--cin);border-top:2px solid var(--brd)"><td style="font-weight:700;color:var(--tx2)">Meta/dia</td>'
-    + dias.map(d=>'<td style="text-align:center;color:var(--tx2);font-size:11px">'+(_fdiaEhDiaUtil(d)?META_DIA:'—')+'</td>').join('')
-    + '<td></td><td></td><td></td></tr></tbody></table></div>'
+    + '</tbody></table></div>'
     + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'
     + dados.map(d=>'<div style="background:var(--cin);border:1px solid var(--brd);border-radius:8px;padding:.75rem"><div style="font-size:11px;font-weight:700;color:var(--az);margin-bottom:.5rem">'+d.colab+' — composição</div>'
         + (Object.entries(d.comp).filter(([,v])=>v>0).map(([tipo,v])=>'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px"><span style="font-size:11px;color:var(--tx)">'+d.LABEL[tipo]+'</span><span style="font-size:11px;font-weight:700;color:'+d.COR[tipo]+'">'+v+' <span style="color:var(--tx2);font-weight:400">('+(Math.round(v/d.totalSem*100)||0)+'%)</span></span></div>').join('') || '<div style="font-size:11px;color:var(--tx2)">Sem ações</div>')
