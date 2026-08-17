@@ -25394,7 +25394,12 @@ function ceAbrir(){
     }catch(e){ console.warn('ce usuarios:', e); }
   }
   var pCfg = Promise.resolve();
-  if(typeof equipeRtCarregar==='function' && !(_equipeRt && ((_equipeRt.adlv&&_equipeRt.adlv.length)||(_equipeRt.fast&&_equipeRt.fast.length)))){
+  // Sempre busca a config salva no Firebase ao abrir essa tela — antes só
+  // buscava se _equipeRt "parecesse vazio", mas como _equipeRt sempre começa
+  // com um seed local não-vazio, essa busca acabava nunca acontecendo aqui e
+  // a tela podia ficar mostrando dados desatualizados/seed em vez do que foi
+  // realmente salvo em Admin > Equipe (Metas RT).
+  if(typeof equipeRtCarregar==='function'){
     pCfg = equipeRtCarregar().catch(function(){});
   }
   Promise.all([pUsr,pCfg]).then(go).catch(go);
