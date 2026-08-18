@@ -14468,7 +14468,10 @@ function renderPlanoAcao(){
   const dtIni  = document.getElementById('pa-dt-inicio');
   const dtFim  = document.getElementById('pa-dt-fim');
   const hoje   = HOJE.toISOString().split('T')[0];
-  // datas não preenchidas automaticamente
+  // ADLV: datas não preenchidas automaticamente (comportamento original).
+  // FAST: sem histórico anterior a hoje — o plano conta a partir de hoje,
+  // então o início do período já vem preenchido com a data de hoje.
+  if(_moduloAtivo === 'fast' && dtIni && !dtIni.value) dtIni.value = hoje;
   if(dtFim && !dtFim.value) dtFim.value = hoje;
   renderCascata();
 }
@@ -14643,11 +14646,46 @@ async function paHistoricoSalvarFirebase(){
 
 // Manter compatibilidade
 function paHistoricoSalvar(){ paHistoricoSalvarFirebase(); }
+// Valor AO VIVO do Ag. Tratamento (mesmo critério do card do Radar Estratégico
+// e da ancoragem em renderCascata) — usado só pelo fallback do FAST abaixo.
+function _paBacklogAoVivo(){
+  if(!_radarDados || !_radarDados.length) return null;
+  const FILAS_AG = ['patec','análise de oportunidade'];
+  const normF = v=>String(v||'').trim().toLowerCase();
+  const agTrat = _radarDados.filter(r=>
+    (r.analista_auto||'').trim()==='Analisar PATEC Finalizado' &&
+    FILAS_AG.includes(normF(r.fila))
+  ).length;
+  return agTrat > 0 ? agTrat : null;
+}
+
 // Base do gráfico = marco mais recente ANTERIOR ou IGUAL à data de início
 function paGetMarcoBase(dtRef){
-  if(!_paHistorico.length) return {dt:'2026-05-06', val:488};
   const ref = dtRef || new Date().toISOString().split('T')[0];
-  // Filtrar marcos até a data de referência, excluindo marcos automáticos futuros
+  if(_moduloAtivo === 'fast'){
+    // FAST não tem meses de histórico embutido como o ADLV — sem isso, o
+    // fallback antigo ("usar o marco mais antigo que existir, seja qual for
+    // a data dele") podia pegar um marco de uma data FUTURA em relação à
+    // referência e espalhar esse valor pra trás no tempo (gerava número
+    // errado tipo "490" fixo em dias sem nenhum dado real). Aqui: se não
+    // existe marco real na data ou antes dela, e a referência é HOJE, usa o
+    // valor ao vivo do Ag. Tratamento como base — assim o Plano de Ação do
+    // FAST sempre começa contando a partir de um número real (nunca do
+    // ADLV, nunca de um marco fora de ordem).
+    const candidatosFast = [..._paHistorico]
+      .filter(h => h.dt <= ref)
+      .sort((a,b) => b.dt.localeCompare(a.dt));
+    if(candidatosFast.length) return candidatosFast[0];
+    const hojeISOfb = new Date().toISOString().split('T')[0];
+    if(ref === hojeISOfb){
+      const liveVal = _paBacklogAoVivo();
+      if(liveVal !== null) return {dt: ref, val: liveVal, label:'Backlog ao vivo (Ag. Tratamento)'};
+    }
+    if(_paHistorico.length) return [..._paHistorico].sort((a,b)=>a.dt.localeCompare(b.dt))[0];
+    return {dt: ref, val: 0, label:'Sem dado'};
+  }
+  // ADLV — comportamento original, sem nenhuma alteração.
+  if(!_paHistorico.length) return {dt:'2026-05-06', val:488};
   const candidatos = [..._paHistorico]
     .filter(h => h.dt <= ref)
     .sort((a,b) => b.dt.localeCompare(a.dt));
