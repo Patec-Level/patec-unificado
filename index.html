@@ -6181,12 +6181,8 @@ let ciclos_historico = JSON.parse(localStorage.getItem(_lsMod('patec_ciclos_hist
 function go(id, el) {
   // Sai da página do ADM → desliga o tempo real do Controle das Equipes.
   if(id!=='adm' && typeof _cePararRT==='function') _cePararRT();
-  // Plano de Ação é exclusivo do ADLV — bloqueia navegação direta no FAST
-  // (a página nem aparece no menu, mas isso cobre tentativa via console/link)
-  if(id === 'plano-acao' && _moduloAtivo === 'fast'){
-    alert('Plano de Ação é exclusivo do ADLV.');
-    return;
-  }
+  // Plano de Ação: liberado para ADLV e FAST (cada módulo usa sua própria
+  // base do Firebase — getDB()/_lsMod() já isolam os dados automaticamente).
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.sb-it').forEach(i => i.classList.remove('active'));
   const page = document.getElementById('p-' + id);
@@ -8068,6 +8064,13 @@ function _atualizarColabsPorModulo(){
   // carregada pra nunca mais rodar com o módulo errado.
   window._prodAcoesCache = {};
   window._prodCacheOK = false; // força recarregar o cache no módulo novo
+  // Mesma categoria de bug (Plano de Ação, liberado pro FAST): `_paHistorico`
+  // é seedado com os marcos reais do ADLV assim que a página carrega, antes
+  // da escolha do módulo. Zera aqui ao entrar no FAST — paHistoricoCarregarFirebase()
+  // recarrega em seguida (via getDB()) só com os dados reais do FAST.
+  if(_moduloAtivo === 'fast' && typeof _paHistorico !== 'undefined'){
+    _paHistorico = [];
+  }
 }
 
 BANCO_HE = COLABS.map(c => ({ colab: c, periodos: [] })); // inicializa BANCO_HE
@@ -9044,10 +9047,11 @@ function setAdmTab(id,btn){
     alert('Apenas o administrador geral pode ver o Controle das Equipes.');
     return;
   }
-  // Testar E-mails, Apresentação, Apresentação 1 e Entradas Plano de Ação
-  // são exclusivas do ADLV — dependem de listas de destinatários e dados
-  // específicos do ADLV que não se aplicam ao FAST.
-  if((id==='email-teste' || id==='apresentacao' || id==='apresentacao1' || id==='pa-entradas') && _moduloAtivo==='fast'){
+  // Testar E-mails, Apresentação e Apresentação 1 são exclusivas do ADLV —
+  // dependem de listas de destinatários e dados específicos do ADLV que não
+  // se aplicam ao FAST. Entradas Plano de Ação já é liberada para os dois
+  // módulos (cada um lê/grava na sua própria base).
+  if((id==='email-teste' || id==='apresentacao' || id==='apresentacao1') && _moduloAtivo==='fast'){
     alert('Esse recurso é exclusivo do ADLV.');
     return;
   }
@@ -14517,6 +14521,49 @@ if(!_paHistorico.length){
   localStorage.setItem(_lsMod('patec_pa_historico'), JSON.stringify(_paHistorico));
 }
 
+// Marcos históricos reais do ADLV (16/03 a 26/06/2026) — usados como fonte
+// única (paHistoricoCarregarFirebase) e como "assinatura" pra identificar e
+// limpar qualquer marco do ADLV que tenha vazado pra base do FAST (ver
+// _paEhMarcoAdlvOriginal, usado em paHistoricoCarregarFirebase e
+// paAtualizarBacklogAuto). Nunca deve ser usado como seed do FAST.
+function _paHistoricoSeedAdlv(){
+  return [
+    {dt:'2026-03-16', val:766, label:'Início do acompanhamento'},
+    {dt:'2026-05-06', val:488, label:'Base do gráfico de medição'},
+    {dt:'2026-05-22', val:632, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-05-23', val:632, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-05-24', val:632, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-05-25', val:614, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-05-26', val:610, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-05-27', val:631, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-05-28', val:649, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-05-29', val:669, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-01', val:666, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-03', val:660, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-04', val:660, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-05', val:693, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-08', val:650, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-09', val:630, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-10', val:593, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-11', val:543, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-12', val:533, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-15', val:529, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-16', val:514, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-17', val:520, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-18', val:518, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-19', val:520, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-22', val:480, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-23', val:500, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-24', val:490, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-25', val:495, label:'Backlog Auto — AG. Tratamento'},
+    {dt:'2026-06-26', val:487, label:'Backlog Auto — AG. Tratamento'},
+  ];
+}
+function _paEhMarcoAdlvOriginal(m){
+  if(!m) return false;
+  return _paHistoricoSeedAdlv().some(s => s.dt===m.dt && s.val===m.val && s.label===m.label);
+}
+
 function paHistoricoRender(){
   const el = document.getElementById('pa-historico-backlog');
   if(!el) return;
@@ -14636,45 +14683,32 @@ async function paHistoricoCarregarFirebase(){
     }
     const db=getDB(); if(!db){ console.warn('PA Histórico: db null'); return; }
     const doc=await db.collection('config').doc('pa_historico').get();
-    const listaFB = (doc.exists && doc.data().lista) ? doc.data().lista : [];
-    // Sempre mescla Firebase + dados históricos embutidos — garante que os
-    // marcos históricos nunca sejam perdidos mesmo após perda de dados no Firebase.
-    const HISTORICO_INICIAL = [
-      {dt:'2026-03-16', val:766, label:'Início do acompanhamento'},
-      {dt:'2026-05-06', val:488, label:'Base do gráfico de medição'},
-      {dt:'2026-05-22', val:632, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-05-23', val:632, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-05-24', val:632, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-05-25', val:614, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-05-26', val:610, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-05-27', val:631, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-05-28', val:649, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-05-29', val:669, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-01', val:666, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-03', val:660, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-04', val:660, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-05', val:693, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-08', val:650, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-09', val:630, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-10', val:593, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-11', val:543, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-12', val:533, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-15', val:529, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-16', val:514, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-17', val:520, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-18', val:518, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-19', val:520, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-22', val:480, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-23', val:500, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-24', val:490, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-25', val:495, label:'Backlog Auto — AG. Tratamento'},
-      {dt:'2026-06-26', val:487, label:'Backlog Auto — AG. Tratamento'},
-    ];
+    let listaFB = (doc.exists && doc.data().lista) ? doc.data().lista : [];
+    const qtdOriginalFB = listaFB.length;
     const mapa = {};
-    HISTORICO_INICIAL.forEach(m => mapa[m.dt] = m);
+    if(_moduloAtivo !== 'fast'){
+      // ADLV: sempre mescla Firebase + dados históricos embutidos — garante
+      // que os marcos históricos nunca sejam perdidos mesmo após perda de
+      // dados no Firebase.
+      _paHistoricoSeedAdlv().forEach(m => mapa[m.dt] = m);
+    } else {
+      // FAST: descarta qualquer marco idêntico (data+valor+label) a um marco
+      // do ADLV — limpeza defensiva de uma possível contaminação anterior a
+      // esta liberação (o snapshot automático do backlog já rodava no FAST
+      // via Governança/Radar mesmo com a página bloqueada, e podia mesclar
+      // esses valores do ADLV sem querer na base pa_historico do FAST).
+      listaFB = listaFB.filter(m => !_paEhMarcoAdlvOriginal(m));
+    }
     listaFB.forEach(m => mapa[m.dt] = m);
     _paHistorico = Object.values(mapa).sort((a,b)=>a.dt.localeCompare(b.dt));
     try{ localStorage.setItem(_lsMod('patec_pa_historico'), JSON.stringify(_paHistorico)); }catch(e){}
+    // Se a limpeza acima removeu marco(s) contaminado(s) do FAST, regrava no
+    // Firestore pra limpeza ficar permanente (não só nesta sessão).
+    if(_moduloAtivo === 'fast' && listaFB.length !== qtdOriginalFB){
+      db.collection('config').doc('pa_historico').set({lista:_paHistorico, ts:new Date().toISOString()})
+        .then(()=>console.log('✓ PA Histórico FAST: marcos do ADLV removidos e limpeza salva.'))
+        .catch(e=>console.warn('PA Histórico limpeza:',e));
+    }
     console.log('PA Histórico mesclado:', _paHistorico.length, 'marcos');
     paHistoricoRender();
   } catch(e){ console.warn('PA Histórico load:', e); }
@@ -20468,10 +20502,17 @@ async function paAtualizarBacklogAuto(){
   if(db){
     try{
       const doc = await db.collection('config').doc('pa_historico').get();
-      const listaFB = (doc.exists && doc.data().lista) ? doc.data().lista : [];
+      let listaFB = (doc.exists && doc.data().lista) ? doc.data().lista : [];
+      let memoria = (_paHistorico||[]);
+      // FAST: nunca deixar marco do ADLV entrar/permanecer aqui, mesmo que
+      // tenha vazado antes desta liberação (ver _paEhMarcoAdlvOriginal).
+      if(_moduloAtivo === 'fast'){
+        listaFB = listaFB.filter(m => !_paEhMarcoAdlvOriginal(m));
+        memoria = memoria.filter(m => !_paEhMarcoAdlvOriginal(m));
+      }
       const mapa = {};
-      (_paHistorico||[]).forEach(m => { if(m && m.dt) mapa[m.dt] = m; }); // memória/local
-      listaFB.forEach(m => { if(m && m.dt) mapa[m.dt] = m; });            // Firebase prevalece por data
+      memoria.forEach(m => { if(m && m.dt) mapa[m.dt] = m; }); // memória/local
+      listaFB.forEach(m => { if(m && m.dt) mapa[m.dt] = m; }); // Firebase prevalece por data
       _paHistorico = Object.values(mapa);
     }catch(e){ console.warn('paAtualizarBacklogAuto merge:', e); }
   }
@@ -23483,11 +23524,11 @@ function _entrarNoApp(){
     modBadge.textContent = (_moduloAtivo === 'fast' ? '⚡ FAST' : '🏢 ADLV');
   }
 
-  // Testar E-mails, Apresentação, Apresentação 1, Entradas Plano de Ação,
-  // XGL (Governança), Tirar do Fluxo (Planilha Crítica), PATEC em
-  // Andamento (Governança), a opção "XGL" no Concluído e "Validação Thiago"
-  // são exclusivas do ADLV
-  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','adm-nav-pa-entradas-btn','gov-nav-xgl-btn','pc-nav-fluxo-btn','acao-btn-xgl','acao-btn-validacao-thiago'].forEach(id=>{
+  // Testar E-mails, Apresentação, Apresentação 1, XGL (Governança), Tirar do
+  // Fluxo (Planilha Crítica), PATEC em Andamento (Governança), a opção "XGL"
+  // no Concluído e "Validação Thiago" são exclusivas do ADLV. Entradas Plano
+  // de Ação já é liberada para os dois módulos.
+  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','gov-nav-xgl-btn','pc-nav-fluxo-btn','acao-btn-xgl','acao-btn-validacao-thiago'].forEach(id=>{
     const btnAdlv = document.getElementById(id);
     if(btnAdlv) btnAdlv.style.display = (_moduloAtivo==='fast') ? 'none' : '';
   });
@@ -23772,8 +23813,8 @@ function authMontarSidebar(emailParam){
   // Montar por módulo
   const mods = {};
   const ordemMods = ['ESTRATÉGICO','EXECUÇÃO'];
-  // Plano de Ação é exclusivo do ADLV — não se aplica ao FAST
-  const PAGINAS_ADLV_ONLY = ['plano-acao'];
+  // Plano de Ação: liberado para ADLV e FAST (cada módulo usa sua própria base)
+  const PAGINAS_ADLV_ONLY = [];
   Object.entries(PERMS_SIDEBAR).forEach(([key, cfg]) => {
     if(_moduloAtivo === 'fast' && PAGINAS_ADLV_ONLY.includes(key)) return;
     if(cfg.hidden) return; // item oculto do menu (integrado em outra página)
