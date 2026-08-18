@@ -14105,7 +14105,7 @@ function renderCascata(){
   }
 
   const r        = radarGetRegras();
-  const dtInicio = dtInicioEl.value;
+  let dtInicio   = dtInicioEl.value;
   const dtFim    = dtFimEl?.value || HOJE.toISOString().split('T')[0];
   if(dtInicio > dtFim) return;
 
@@ -14119,14 +14119,25 @@ function renderCascata(){
     if(v>0) saidasPorDia[reg.data]=(saidasPorDia[reg.data]||0)+v;
   });
 
+  // Marco base = mais recente anterior ou igual à data de início selecionada
+  const marco = paGetMarcoBase(dtInicio);
+  let backlogBase = marco.val;
+
+  // FAST: se o único marco disponível é de uma data POSTERIOR à data de
+  // início escolhida no filtro, não existe dado real de backlog antes
+  // dele — em vez de espalhar esse valor pra trás no tempo (fabricando
+  // dias que nunca existiram, tipo aquele "490 fixo" de antes), o período
+  // efetivo passa a começar na data real do marco. Datas anteriores a ela
+  // simplesmente não aparecem, em vez de mostrar número inventado.
+  if(_moduloAtivo === 'fast' && marco.dt > dtInicio){
+    dtInicio = marco.dt;
+  }
+
   // Backlog Inicial = marco mais próximo anterior ao filtro + saídas acumuladas
   const _dAnterior = new Date(dtInicio+'T12:00:00');
   _dAnterior.setDate(_dAnterior.getDate()-1);
   const dtAnterior = _dAnterior.toISOString().split('T')[0];
 
-  // Marco base = mais recente anterior ou igual à data de início selecionada
-  const marco = paGetMarcoBase(dtInicio);
-  let backlogBase = marco.val;
   if(marco.dt <= dtAnterior){
     paDiasUteis(marco.dt, dtAnterior).forEach(d=>{
       const s = saidasPorDia[d]||0;
