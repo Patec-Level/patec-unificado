@@ -1533,6 +1533,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <button class="btn btn-s" style="font-size:11px" onclick="paHistoricoAdicionar()">+ Adicionar</button>
             <button class="btn btn-g" style="font-size:11px" onclick="paHistoricoSalvarFirebase()">💾 Salvar no Firebase</button>
+            <button class="btn btn-r" style="font-size:11px;display:none" id="pa-hist-limpar-fast-btn" onclick="paHistoricoLimparTudoFast()">🗑 Limpar histórico do FAST</button>
             <span id="pa-historico-ok" style="font-size:11px;color:var(--vd);font-weight:600;display:none">✓ Salvo!</span>
           </div>
         </div><!-- /pa-adm-tab-historico -->
@@ -14646,6 +14647,26 @@ async function paHistoricoSalvarFirebase(){
 
 // Manter compatibilidade
 function paHistoricoSalvar(){ paHistoricoSalvarFirebase(); }
+
+// Apaga TODO o histórico de marcos do FAST de uma vez — usado pra limpar
+// marcos que vazaram do ADLV antes da liberação do Plano de Ação pro FAST
+// (ver _paEhMarcoAdlvOriginal). Só existe/funciona dentro do módulo FAST —
+// nunca mexe na base do ADLV, nem sequer o botão aparece fora do FAST.
+async function paHistoricoLimparTudoFast(){
+  if(_moduloAtivo !== 'fast'){ alert('Essa limpeza só está disponível no módulo FAST.'); return; }
+  if(!confirm('Isso vai apagar TODOS os marcos do histórico de backlog do FAST (' + _paHistorico.length + ' registro(s)). Essa ação não afeta o ADLV. Confirmar?')) return;
+  _paHistorico = [];
+  try{ localStorage.setItem(_lsMod('patec_pa_historico'), JSON.stringify(_paHistorico)); }catch(e){}
+  try{
+    const db=getDB(); if(!db){ alert('Firebase não conectado.'); return; }
+    await db.collection('config').doc('pa_historico').set({lista:_paHistorico, ts:new Date().toISOString()});
+    console.log('✓ Histórico de backlog do FAST limpo.');
+    _flash('pa-historico-ok');
+    paHistoricoRenderADM();
+    paHistoricoRender();
+    if(typeof renderCascata === 'function') renderCascata();
+  }catch(e){ alert('Erro ao limpar: '+e.message); }
+}
 // Valor AO VIVO do Ag. Tratamento (mesmo critério do card do Radar Estratégico
 // e da ancoragem em renderCascata) — usado só pelo fallback do FAST abaixo.
 function _paBacklogAoVivo(){
@@ -23570,8 +23591,8 @@ function _entrarNoApp(){
     const btnAdlv = document.getElementById(id);
     if(btnAdlv) btnAdlv.style.display = (_moduloAtivo==='fast') ? 'none' : '';
   });
-  // "MDG Equipe SCOMP" é exclusivo do FAST
-  ['acao-btn-mdg-scomp'].forEach(id=>{
+  // "MDG Equipe SCOMP" e "Limpar histórico do FAST" são exclusivos do FAST
+  ['acao-btn-mdg-scomp','pa-hist-limpar-fast-btn'].forEach(id=>{
     const btnFast = document.getElementById(id);
     if(btnFast) btnFast.style.display = (_moduloAtivo==='fast') ? '' : 'none';
   });
