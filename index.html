@@ -14596,7 +14596,12 @@ function _paHistRem(i){
 }
 function paHistoricoAdicionar(){
   _paHistorico.push({dt:HOJE.toISOString().split('T')[0], val:0, label:'Novo marco'});
-  paHistoricoRender();
+  // Bug pré-existente (afetava ADLV e FAST): chamava paHistoricoRender(), que
+  // atualiza um elemento (#pa-historico-backlog) que não existe mais na
+  // página — o card novo era criado na memória mas nunca aparecia na tela
+  // do ADM, dando a impressão de que "+ Adicionar" não fazia nada. Corrigido
+  // para atualizar a lista editável de verdade (#pa-adm-historico-lista).
+  paHistoricoRenderADM();
 }
 function setPaAdmTab(id, btn){
   ['entradas','historico'].forEach(t=>{
