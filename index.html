@@ -6279,6 +6279,14 @@ function go(id, el) {
     // Aba "Finalizado" (conteúdo original do Plano de Ação)
     if(!_radarDados?.length){
       fbCarregarRadar().then(async ()=>{ await paHistoricoCarregarFirebase(); setTimeout(paAtualizarBacklogAuto,500); renderPlanoAcao(); });
+    } else if(_moduloAtivo === 'fast'){
+      // FAST: o histórico de marcos ainda tem poucos registros reais e
+      // recentes — precisa recarregar do Firestore toda vez que a página é
+      // aberta, mesmo com o Radar já carregado antes nesta sessão. Sem
+      // isso, o gráfico usava uma versão desatualizada em memória (às
+      // vezes vazia) mesmo com o marco certo já salvo no banco — foi o que
+      // fez o marco de ontem "sumir" do gráfico apesar de estar salvo.
+      paHistoricoCarregarFirebase().then(renderPlanoAcao).catch(renderPlanoAcao);
     } else {
       renderPlanoAcao();
     }
