@@ -3716,7 +3716,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px" id="pm-cards-dia"></div>
       </div>
 
-      <!-- Cabeçalho + Filtros -->
+      <!-- Cabeçalho + Filtros + Seletor de Indicador -->
       <div class="cd" style="margin-bottom:1rem">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
           <div>
@@ -3734,18 +3734,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             </div>
             <button class="btn btn-s" style="font-size:11px;align-self:flex-end" onclick="pmPeriodoHoje()">📅 Hoje</button>
             <button class="btn btn-p" style="font-size:11px;align-self:flex-end" onclick="renderMonitoramentoPatec()">🔍 Analisar</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- SELETOR DE INDICADOR -->
-      <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--azm)">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
-          <div class="cd-t" style="margin:0">📈 Monitoramento do PATEC — selecione o indicador</div>
-          <div style="display:flex;gap:8px">
-            <button id="pm-btn-finalizado" class="btn btn-p" style="font-size:12px" onclick="pmSelecionarIndicador('finalizado',this)">✅ PATEC Finalizado</button>
-            <button id="pm-btn-abertura" class="btn btn-s" style="font-size:12px" onclick="pmSelecionarIndicador('abertura',this)">📂 Abertura de PATEC</button>
-            <button id="pm-btn-geral" class="btn btn-s" style="font-size:12px" onclick="pmSelecionarIndicador('geral',this)">📊 PATEC Geral</button>
+            <span style="width:1px;align-self:stretch;background:var(--brd);margin:0 2px"></span>
+            <button id="pm-btn-finalizado" class="btn btn-p" style="font-size:12px;align-self:flex-end" onclick="pmSelecionarIndicador('finalizado',this)">✅ PATEC Finalizado</button>
+            <button id="pm-btn-abertura" class="btn btn-s" style="font-size:12px;align-self:flex-end" onclick="pmSelecionarIndicador('abertura',this)">📂 Abertura de PATEC</button>
+            <button id="pm-btn-geral" class="btn btn-s" style="font-size:12px;align-self:flex-end" onclick="pmSelecionarIndicador('geral',this)">📊 PATEC Geral</button>
           </div>
         </div>
       </div>
