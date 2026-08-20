@@ -3700,6 +3700,22 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <!-- ABA: MONITORAMENTO DO PATEC (evolução diária: Resumo do dia + Radar Estratégico) -->
       <div id="pa-tab-monitoramento" style="display:none">
 
+      <!-- CARDS DO DIA (mesmo do Painel Estratégico / Plano de Ação / Abrir PATEC) -->
+      <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--azm)">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:1rem">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div style="font-size:13px;font-weight:700;color:var(--az)">📊 Resumo do dia</div>
+            <input type="date" id="pm-dia-sel" style="font-size:12px;padding:4px 8px;border:1.5px solid var(--brd);border-radius:6px;color:var(--az);font-weight:600" onchange="renderMonitoramentoCardsDia()">
+            <span style="font-size:11px;color:var(--tx2)" id="pm-hoje-label"></span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-s" style="font-size:11px" onclick="pmVoltarHoje()">📅 Hoje</button>
+            <button class="btn btn-s" style="font-size:11px" onclick="renderMonitoramentoCardsDia()">↺ Atualizar</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px" id="pm-cards-dia"></div>
+      </div>
+
       <!-- Cabeçalho + Filtros -->
       <div class="cd" style="margin-bottom:1rem">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
@@ -14549,7 +14565,10 @@ function paSetTabInterna(aba, btn){
     Promise.resolve()
       .then(()=> typeof fbCarregarMapaDiario==='function' ? fbCarregarMapaDiario() : null)
       .catch(e=>console.warn('paSetTabInterna (monitoramento):', e))
-      .finally(()=>{ try{ pmPeriodoHoje(); }catch(e){} });
+      .finally(()=>{
+        try{ renderMonitoramentoCardsDia(); }catch(e){}
+        try{ pmPeriodoHoje(); }catch(e){}
+      });
   }
 }
 
@@ -14578,6 +14597,31 @@ function renderPlanoAcao(){
 // PATEC Finalizado / Ag. PATEC Finalizar → Resumo do dia (mapa_diario/mapaFirebase)
 // Ag. Tratamento                          → marcos diários do Radar Estratégico
 // ════════════════════════════════════════════
+function pmVoltarHoje(){
+  const el = document.getElementById('pm-dia-sel');
+  if(el){ el.value = HOJE.toISOString().split('T')[0]; renderMonitoramentoCardsDia(); }
+}
+
+// ── Cards do Dia (igual Painel Estratégico/Plano de Ação/Abrir PATEC) ──
+function renderMonitoramentoCardsDia(){
+  const sel    = document.getElementById('pm-dia-sel');
+  const lbl    = document.getElementById('pm-hoje-label');
+  const dt     = sel?.value || HOJE.toISOString().split('T')[0];
+  const hojeStr= HOJE.toISOString().split('T')[0];
+  if(lbl) lbl.textContent = dt+(dt===hojeStr?' (hoje)':'');
+
+  // Sincronizar data com o seletor do Painel Estratégico e reusar renderCardsDia
+  const estSel = document.getElementById('est-dia-sel');
+  if(estSel) estSel.value = dt;
+
+  // Renderizar no container do Painel Estratégico temporariamente
+  // e copiar o HTML para pm-cards-dia
+  renderCardsDia();
+  const fonte = document.getElementById('est-cards-dia');
+  const dest  = document.getElementById('pm-cards-dia');
+  if(fonte && dest) dest.innerHTML = fonte.innerHTML;
+}
+
 function pmPeriodoHoje(){
   const hoje = HOJE.toISOString().split('T')[0];
   const ini  = document.getElementById('pm-dt-inicio');
