@@ -2889,6 +2889,55 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
 
+        <!-- MONITORAMENTO DO PATEC — EVOLUÇÃO DIÁRIA (ADLV + FAST lado a lado) -->
+        <div class="cd" style="margin-bottom:1rem">
+          <div class="cd-t" style="margin:0 0 .875rem">📈 Monitoramento do PATEC — Evolução Diária</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="ce-split">
+            <!-- ADLV -->
+            <div>
+              <div style="font-size:12px;font-weight:800;color:#1A4A8A;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #1A4A8A22">🟦 ADLV</div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:.5rem">
+                <input type="date" id="ce-mon-adlv-dt-inicio" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px" onchange="renderCeMonitoramento('adlv')">
+                <span style="font-size:10px;color:var(--tx2)">até</span>
+                <input type="date" id="ce-mon-adlv-dt-fim" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px" onchange="renderCeMonitoramento('adlv')">
+                <button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="ceMonPeriodoHoje('adlv')">📅 Hoje</button>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.625rem">
+                <button id="ce-mon-adlv-btn-finalizado" class="btn btn-p" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('adlv','finalizado',this)">✅ Finalizado</button>
+                <button id="ce-mon-adlv-btn-abertura" class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('adlv','abertura',this)">📂 Abertura</button>
+                <button id="ce-mon-adlv-btn-geral" class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('adlv','geral',this)">📊 Geral</button>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;margin-bottom:.625rem" id="ce-mon-adlv-kpis"></div>
+              <div style="position:relative;height:220px;margin-bottom:.625rem"><canvas id="ce-mon-adlv-chart"></canvas></div>
+              <div class="tw" style="max-height:240px"><table>
+                <thead id="ce-mon-adlv-thead"><tr><th>Data</th><th>PATEC Final.</th><th>Ag. Finalizar</th><th>Ag. Trat.</th></tr></thead>
+                <tbody id="ce-mon-adlv-tb-body"></tbody>
+              </table></div>
+            </div>
+            <!-- FAST -->
+            <div>
+              <div style="font-size:12px;font-weight:800;color:#C07A12;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #C07A1222">🟧 FAST</div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:.5rem">
+                <input type="date" id="ce-mon-fast-dt-inicio" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px" onchange="renderCeMonitoramento('fast')">
+                <span style="font-size:10px;color:var(--tx2)">até</span>
+                <input type="date" id="ce-mon-fast-dt-fim" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px" onchange="renderCeMonitoramento('fast')">
+                <button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="ceMonPeriodoHoje('fast')">📅 Hoje</button>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.625rem">
+                <button id="ce-mon-fast-btn-finalizado" class="btn btn-p" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('fast','finalizado',this)">✅ Finalizado</button>
+                <button id="ce-mon-fast-btn-abertura" class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('fast','abertura',this)">📂 Abertura</button>
+                <button id="ce-mon-fast-btn-geral" class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('fast','geral',this)">📊 Geral</button>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;margin-bottom:.625rem" id="ce-mon-fast-kpis"></div>
+              <div style="position:relative;height:220px;margin-bottom:.625rem"><canvas id="ce-mon-fast-chart"></canvas></div>
+              <div class="tw" style="max-height:240px"><table>
+                <thead id="ce-mon-fast-thead"><tr><th>Data</th><th>PATEC Final.</th><th>Ag. Finalizar</th><th>Ag. Trat.</th></tr></thead>
+                <tbody id="ce-mon-fast-tb-body"></tbody>
+              </table></div>
+            </div>
+          </div>
+        </div>
+
         <!-- 1) PRODUÇÃO EM TEMPO REAL -->
         <div class="cd" style="margin-bottom:1rem">
           <div class="cd-t" style="margin:0 0 .875rem">📡 Produção em Tempo Real</div>
@@ -25645,7 +25694,19 @@ async function ceCarregarModulo(mod, desdeForcado){
     mapa.sort((a,b)=>a.data.localeCompare(b.data));
   }catch(e){ console.warn('ce mapa '+mod+':', e); }
 
-  _ceCache[mod] = { acoes, fech, mapa, ciclo, desde:desdeAcoes, ts:new Date() };
+  // Monitoramento do PATEC (Ag. Tratamento) — mesmos marcos diários do
+  // Plano de Ação (config/pa_historico), lidos direto do módulo, sem
+  // depender de _moduloAtivo estar em 'adlv'/'fast'.
+  let agTratHist = [];
+  try{
+    const docH = await db.collection('config').doc('pa_historico').get();
+    agTratHist = (docH.exists && docH.data().lista) ? docH.data().lista : [];
+    if(mod === 'fast' && typeof _paEhMarcoAdlvOriginal === 'function'){
+      agTratHist = agTratHist.filter(m => !_paEhMarcoAdlvOriginal(m));
+    }
+  }catch(e){ console.warn('ce pa_historico '+mod+':', e); }
+
+  _ceCache[mod] = { acoes, fech, mapa, ciclo, agTratHist, desde:desdeAcoes, ts:new Date() };
   _ceSetStatus(mod, '✓ '+_ceModLabel(mod)+' · '+acoes.length+' ações · atualizado '+new Date().toLocaleTimeString('pt-BR'));
 
   _ceCache[mod].acoesHoje = acoes.filter(a=>a.data===hoje); // semente antes do 1º snapshot
@@ -25656,9 +25717,141 @@ async function ceCarregarModulo(mod, desdeForcado){
   _ceRenderPcpCard(mod);
   _ceRenderDesfechos(mod);
   _ceRenderChart(mod);
+  try{ ceMonPeriodoHoje(mod); }catch(e){ console.warn('ce monitoramento '+mod+':', e); }
 
   // TEMPO REAL: liga o listener de HOJE (RT + gráfico) para este módulo.
   _ceIniciarRT(mod, db);
+}
+
+// ════════════════════════════════════════════
+// MONITORAMENTO DO PATEC — dentro de Controle das Equipes (ADLV + FAST)
+// Mesma lógica da aba Monitoramento do Plano de Ação, mas lendo direto de
+// _ceCache[mod] (já carregado por ceCarregarModulo, sem depender de
+// _moduloAtivo) — assim dá pra ver ADLV e FAST lado a lado ao mesmo tempo.
+// ════════════════════════════════════════════
+let _ceMonIndicador = { adlv:'finalizado', fast:'finalizado' };
+
+function _ceMonColetarPonto(mod, d){
+  const cache = _ceCache[mod];
+  const mapa  = cache ? (cache.mapa||[]).find(r=>r.data===d) : null;
+  const agM   = cache ? (cache.agTratHist||[]).find(h=>h.dt===d && h.label && h.label.includes('Auto')) : null;
+  const l3 = mapa ? (mapa.l3||0) : null;
+  const l4 = mapa ? (mapa.l4||0) : null;
+  const l5 = mapa ? (mapa.l5||0) : null;
+  const l6 = mapa ? (mapa.l6||0) : null;
+  const l7 = mapa ? (mapa.l7||0) : null;
+  const l8 = mapa ? (mapa.l8||0) : null;
+  return {
+    data: d,
+    l3, l4, l7, l8,
+    agTrat: agM ? agM.val : null,
+    totalPatec: mapa ? (l3+l4+l5+l6) : null,
+    totalAbrir: mapa ? (l7+l8) : null,
+  };
+}
+
+function ceMonPeriodoHoje(mod){
+  const hoje = _ceHojeLocal();
+  const ini  = document.getElementById('ce-mon-'+mod+'-dt-inicio');
+  const fim  = document.getElementById('ce-mon-'+mod+'-dt-fim');
+  if(fim && !fim.value) fim.value = hoje;
+  if(ini && !ini.value){
+    const d = new Date(hoje+'T12:00:00');
+    d.setDate(d.getDate()-14);
+    ini.value = d.toISOString().split('T')[0];
+  }
+  renderCeMonitoramento(mod);
+}
+
+function ceMonSelecionarIndicador(mod, ind, btn){
+  _ceMonIndicador[mod] = ind;
+  const btnFin = document.getElementById('ce-mon-'+mod+'-btn-finalizado');
+  const btnAbe = document.getElementById('ce-mon-'+mod+'-btn-abertura');
+  const btnGer = document.getElementById('ce-mon-'+mod+'-btn-geral');
+  if(btnFin) btnFin.className = ind==='finalizado' ? 'btn btn-p' : 'btn btn-s';
+  if(btnAbe) btnAbe.className = ind==='abertura'   ? 'btn btn-p' : 'btn btn-s';
+  if(btnGer) btnGer.className = ind==='geral'      ? 'btn btn-p' : 'btn btn-s';
+  renderCeMonitoramento(mod);
+}
+
+function renderCeMonitoramento(mod){
+  const dtIniEl = document.getElementById('ce-mon-'+mod+'-dt-inicio');
+  const dtFimEl = document.getElementById('ce-mon-'+mod+'-dt-fim');
+  if(!dtIniEl || !dtFimEl) return;
+  if(!dtIniEl.value || !dtFimEl.value){ ceMonPeriodoHoje(mod); return; }
+  const dtIni = dtIniEl.value, dtFim = dtFimEl.value;
+  if(dtIni > dtFim) return;
+
+  const chartId = 'ce-mon-'+mod+'-chart';
+  if(!document.getElementById(chartId)) return;
+
+  const dias   = paDiasUteis(dtIni, dtFim);
+  const pontos = dias.map(d => _ceMonColetarPonto(mod, d));
+  const ind    = _ceMonIndicador[mod] || 'finalizado';
+
+  const theadEl = document.getElementById('ce-mon-'+mod+'-thead');
+  const kpiEl   = document.getElementById('ce-mon-'+mod+'-kpis');
+  const tbEl    = document.getElementById('ce-mon-'+mod+'-tb-body');
+  const scalesMini = {
+    y:{beginAtZero:true,grid:{color:'#f0f0f0'},ticks:{font:{size:9}}},
+    x:{grid:{display:false},ticks:{font:{size:8}}}
+  };
+
+  if(ind === 'abertura'){
+    if(theadEl) theadEl.innerHTML = '<tr><th>Data</th><th>Abrir Obrig.</th><th>Abrir Idênt. Não</th></tr>';
+    if(kpiEl) kpiEl.innerHTML =
+      _pmKpiCard('Abrir Obrig.',      '📦', '#C07A12', _pmUltimoComValor(pontos,'l8'), 'l8') +
+      _pmKpiCard('Abrir Idênt. Não',  '🔓', '#D94040', _pmUltimoComValor(pontos,'l7'), 'l7');
+    if(tbEl) tbEl.innerHTML = pontos.map(p=>`<tr>
+      <td style="font-weight:600">${_pmFmtDptBR(p.data)}</td>
+      <td style="color:#C07A12;font-weight:700">${p.l8===null?'—':p.l8}</td>
+      <td style="color:#D94040;font-weight:700">${p.l7===null?'—':p.l7}</td>
+    </tr>`).join('');
+    mkChart(chartId,'line',{
+      labels: pontos.map(p=>_pmFmtDptBR(p.data)),
+      datasets:[
+        {label:'Abrir Obrig.',     data:pontos.map(p=>p.l8), borderColor:'#C07A12', backgroundColor:'rgba(192,122,18,.08)', borderWidth:2, pointRadius:2, tension:.15, spanGaps:true},
+        {label:'Abrir Idênt. Não', data:pontos.map(p=>p.l7), borderColor:'#D94040', backgroundColor:'rgba(217,64,64,.08)',  borderWidth:2, pointRadius:2, tension:.15, spanGaps:true},
+      ]
+    }, {legend:true, scales:scalesMini});
+  } else if(ind === 'geral'){
+    if(theadEl) theadEl.innerHTML = '<tr><th>Data</th><th>Total PATEC</th><th>Total Abrir</th></tr>';
+    if(kpiEl) kpiEl.innerHTML =
+      _pmKpiCard('Total PATEC', '📊', 'var(--azm)', _pmUltimoComValor(pontos,'totalPatec'), 'totalPatec') +
+      _pmKpiCard('Total Abrir', '📋', '#C07A12',    _pmUltimoComValor(pontos,'totalAbrir'), 'totalAbrir');
+    if(tbEl) tbEl.innerHTML = pontos.map(p=>`<tr>
+      <td style="font-weight:600">${_pmFmtDptBR(p.data)}</td>
+      <td style="color:var(--azm);font-weight:700">${p.totalPatec===null?'—':p.totalPatec}</td>
+      <td style="color:#C07A12;font-weight:700">${p.totalAbrir===null?'—':p.totalAbrir}</td>
+    </tr>`).join('');
+    mkChart(chartId,'line',{
+      labels: pontos.map(p=>_pmFmtDptBR(p.data)),
+      datasets:[
+        {label:'Total PATEC', data:pontos.map(p=>p.totalPatec), borderColor:'#1A4A8A', backgroundColor:'rgba(26,74,138,.08)',  borderWidth:2, pointRadius:2, tension:.15, spanGaps:true},
+        {label:'Total Abrir', data:pontos.map(p=>p.totalAbrir), borderColor:'#C07A12', backgroundColor:'rgba(192,122,18,.08)', borderWidth:2, pointRadius:2, tension:.15, spanGaps:true},
+      ]
+    }, {legend:true, scales:scalesMini});
+  } else {
+    if(theadEl) theadEl.innerHTML = '<tr><th>Data</th><th>PATEC Final.</th><th>Ag. Finalizar</th><th>Ag. Trat.</th></tr>';
+    if(kpiEl) kpiEl.innerHTML =
+      _pmKpiCard('PATEC Final.',   '✅', '#3266AD', _pmUltimoComValor(pontos,'l3'), 'l3') +
+      _pmKpiCard('Ag. Finalizar',  '⏳', '#3266AD', _pmUltimoComValor(pontos,'l4'), 'l4') +
+      _pmKpiCard('Ag. Trat.',      '🕐', '#2e7d32', _pmUltimoComValor(pontos,'agTrat'), 'agTrat');
+    if(tbEl) tbEl.innerHTML = pontos.map(p=>`<tr>
+      <td style="font-weight:600">${_pmFmtDptBR(p.data)}</td>
+      <td style="color:#3266AD;font-weight:700">${p.l3===null?'—':p.l3}</td>
+      <td style="color:#3266AD;font-weight:700">${p.l4===null?'—':p.l4}</td>
+      <td style="color:#2e7d32;font-weight:700">${p.agTrat===null?'—':p.agTrat}</td>
+    </tr>`).join('');
+    mkChart(chartId,'line',{
+      labels: pontos.map(p=>_pmFmtDptBR(p.data)),
+      datasets:[
+        {label:'PATEC Final.',  data:pontos.map(p=>p.l3),     borderColor:'#3266AD', backgroundColor:'rgba(50,102,173,.08)',  borderWidth:2, pointRadius:2, tension:.15, spanGaps:true},
+        {label:'Ag. Finalizar', data:pontos.map(p=>p.l4),     borderColor:'#6A93C9', backgroundColor:'rgba(106,147,201,.08)', borderWidth:2, pointRadius:2, tension:.15, spanGaps:true},
+        {label:'Ag. Trat.',     data:pontos.map(p=>p.agTrat), borderColor:'#2e7d32', backgroundColor:'rgba(46,125,50,.08)',   borderWidth:2, pointRadius:2, tension:.15, spanGaps:true},
+      ]
+    }, {legend:true, scales:scalesMini});
+  }
 }
 
 // ── TEMPO REAL (onSnapshot) — só Produção RT + gráfico das 2 equipes ──
