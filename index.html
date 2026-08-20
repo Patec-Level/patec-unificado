@@ -3554,6 +3554,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <div class="stabs" style="margin-bottom:1.25rem">
         <button id="pa-tab-btn-finalizado" class="stab active" onclick="paSetTabInterna('finalizado',this)">✅ Finalizado</button>
         <button id="pa-tab-btn-abrirpatec" class="stab" onclick="paSetTabInterna('abrirpatec',this)">📂 Abrir PATEC</button>
+        <button id="pa-tab-btn-monitoramento" class="stab" onclick="paSetTabInterna('monitoramento',this)">📈 Monitoramento do PATEC</button>
       </div>
 
       <!-- ABA: FINALIZADO (conteúdo original do Plano de Ação, intacto) -->
@@ -3695,6 +3696,53 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       </div>
 
       </div><!-- /pa-tab-abrirpatec -->
+
+      <!-- ABA: MONITORAMENTO DO PATEC (evolução diária: Resumo do dia + Radar Estratégico) -->
+      <div id="pa-tab-monitoramento" style="display:none">
+
+      <div class="cd" style="margin-bottom:1rem">
+
+        <!-- Cabeçalho + Filtros -->
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:1.25rem">
+          <div>
+            <div class="cd-t" style="margin:0">📈 Monitoramento do PATEC — Evolução Diária</div>
+            <div style="font-size:11px;color:var(--tx2);margin-top:4px">PATEC Finalizado e Ag. PATEC Finalizar vêm do Resumo do dia · Ag. Tratamento e Em Tratativa vêm do Radar Estratégico (1 marco por dia, no 1º upload).</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div class="field-wrap" style="min-width:140px">
+              <span class="field-label">De</span>
+              <input type="date" id="pm-dt-inicio" style="width:100%;font-size:12px;padding:5px 10px" onchange="renderMonitoramentoPatec()">
+            </div>
+            <div class="field-wrap" style="min-width:140px">
+              <span class="field-label">Até</span>
+              <input type="date" id="pm-dt-fim" style="width:100%;font-size:12px;padding:5px 10px" onchange="renderMonitoramentoPatec()">
+            </div>
+            <button class="btn btn-s" style="font-size:11px;align-self:flex-end" onclick="pmPeriodoHoje()">📅 Hoje</button>
+            <button class="btn btn-p" style="font-size:11px;align-self:flex-end" onclick="renderMonitoramentoPatec()">🔍 Analisar</button>
+          </div>
+        </div>
+
+        <!-- KPI Cards -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:1.25rem" id="pm-kpis"></div>
+
+        <!-- Gráfico -->
+        <div style="position:relative;height:360px;margin-bottom:1.25rem">
+          <canvas id="pm-chart"></canvas>
+        </div>
+
+        <!-- Tabela -->
+        <div class="tw">
+          <table>
+            <thead><tr>
+              <th>Data</th><th>PATEC Finalizado</th><th>Ag. PATEC Finalizar</th><th>Ag. Tratamento</th><th>Em Tratativa</th>
+            </tr></thead>
+            <tbody id="pm-tb-body"></tbody>
+          </table>
+        </div>
+
+      </div>
+
+      </div><!-- /pa-tab-monitoramento -->
 
     </div>
 
@@ -14467,15 +14515,28 @@ function renderCascata(){
 function paSetTabInterna(aba, btn){
   const tabFin = document.getElementById('pa-tab-finalizado');
   const tabAP  = document.getElementById('pa-tab-abrirpatec');
+  const tabMon = document.getElementById('pa-tab-monitoramento');
   const btnFin = document.getElementById('pa-tab-btn-finalizado');
   const btnAP  = document.getElementById('pa-tab-btn-abrirpatec');
+  const btnMon = document.getElementById('pa-tab-btn-monitoramento');
   if(tabFin) tabFin.style.display = aba==='finalizado' ? 'block' : 'none';
   if(tabAP)  tabAP.style.display  = aba==='abrirpatec' ? 'block' : 'none';
+  if(tabMon) tabMon.style.display = aba==='monitoramento' ? 'block' : 'none';
   if(btnFin) btnFin.classList.toggle('active', aba==='finalizado');
   if(btnAP)  btnAP.classList.toggle('active', aba==='abrirpatec');
+  if(btnMon) btnMon.classList.toggle('active', aba==='monitoramento');
   // Re-renderizar a aba que acabou de ficar visível (canvas só desenha corretamente quando visível)
   if(aba==='finalizado'){ try{ renderPlanoAcao(); }catch(e){} }
-  else { try{ renderAbrirPatecCardsDia(); renderAbrirPatecCascata(); }catch(e){} }
+  else if(aba==='abrirpatec'){ try{ renderAbrirPatecCardsDia(); renderAbrirPatecCascata(); }catch(e){} }
+  else if(aba==='monitoramento'){
+    // Novo — não afeta as abas Finalizado/Abrir PATEC. Recarrega Resumo do
+    // dia (mapa_diario) e o histórico "Em Tratativa" antes de desenhar.
+    Promise.resolve()
+      .then(()=> typeof fbCarregarMapaDiario==='function' ? fbCarregarMapaDiario() : null)
+      .then(()=> typeof paHistoricoTratCarregarFirebase==='function' ? paHistoricoTratCarregarFirebase() : null)
+      .catch(e=>console.warn('paSetTabInterna (monitoramento):', e))
+      .finally(()=>{ try{ pmPeriodoHoje(); }catch(e){} });
+  }
 }
 
 function renderPlanoAcao(){
@@ -14498,10 +14559,111 @@ function renderPlanoAcao(){
 
 
 // ════════════════════════════════════════════
+// MONITORAMENTO DO PATEC — EVOLUÇÃO DIÁRIA
+// (aba nova dentro do Plano de Ação; não mexe em Finalizado/Abrir PATEC)
+// PATEC Finalizado / Ag. PATEC Finalizar → Resumo do dia (mapa_diario/mapaFirebase)
+// Ag. Tratamento / Em Tratativa          → marcos diários do Radar Estratégico
+// ════════════════════════════════════════════
+function pmPeriodoHoje(){
+  const hoje = HOJE.toISOString().split('T')[0];
+  const ini  = document.getElementById('pm-dt-inicio');
+  const fim  = document.getElementById('pm-dt-fim');
+  if(fim && !fim.value) fim.value = hoje;
+  if(ini && !ini.value){
+    const d = new Date(hoje+'T12:00:00');
+    d.setDate(d.getDate()-14);
+    ini.value = d.toISOString().split('T')[0];
+  }
+  renderMonitoramentoPatec();
+}
+
+function _pmColetarPonto(d){
+  const mapa = (typeof mapaFirebase!=='undefined' ? mapaFirebase : []).find(r=>r.data===d);
+  const agM  = (_paHistorico||[]).find(h=>h.dt===d && h.label && h.label.includes('Auto'));
+  const emM  = (_paHistoricoTrat||[]).find(h=>h.dt===d && h.label && h.label.includes('Auto'));
+  return {
+    data: d,
+    l3: mapa ? (mapa.l3||0) : null,
+    l4: mapa ? (mapa.l4||0) : null,
+    agTrat: agM ? agM.val : null,
+    emTrat: emM ? emM.val : null,
+  };
+}
+
+function renderMonitoramentoPatec(){
+  const dtIniEl = document.getElementById('pm-dt-inicio');
+  const dtFimEl = document.getElementById('pm-dt-fim');
+  if(!dtIniEl || !dtFimEl) return;
+  if(!dtIniEl.value || !dtFimEl.value){ pmPeriodoHoje(); return; }
+  const dtIni = dtIniEl.value;
+  const dtFim = dtFimEl.value;
+  if(dtIni > dtFim) return;
+
+  const dias   = paDiasUteis(dtIni, dtFim);
+  const pontos = dias.map(_pmColetarPonto);
+  const fmtDptBR = iso=>{ const p=iso.split('-'); return p[2]+'/'+p[1]; };
+
+  // KPIs — último dia do período com dado disponível em cada série
+  const ultimoComValor = campo => {
+    for(let i=pontos.length-1;i>=0;i--){ if(pontos[i][campo]!==null) return pontos[i]; }
+    return null;
+  };
+  const kpiCard = (label, ico, cor, ponto, campo) => `
+    <div class="kc">
+      <div class="kc-v" style="color:${cor}">${ponto ? ponto[campo] : '—'}</div>
+      <div class="kc-l">${ico} ${label}</div>
+      <div class="kc-s">${ponto ? fmtDptBR(ponto.data) : 'sem dado no período'}</div>
+    </div>`;
+  const kpiEl = document.getElementById('pm-kpis');
+  if(kpiEl) kpiEl.innerHTML =
+    kpiCard('PATEC Finalizado',    '✅', '#3266AD', ultimoComValor('l3'), 'l3') +
+    kpiCard('Ag. PATEC Finalizar', '⏳', '#3266AD', ultimoComValor('l4'), 'l4') +
+    kpiCard('Ag. Tratamento',      '🕐', '#2e7d32', ultimoComValor('agTrat'), 'agTrat') +
+    kpiCard('Em Tratativa',        '🔄', '#1565C0', ultimoComValor('emTrat'), 'emTrat');
+
+  // Tabela
+  const tb = document.getElementById('pm-tb-body');
+  if(tb) tb.innerHTML = pontos.map(p=>`<tr>
+    <td style="font-weight:600">${fmtDptBR(p.data)}</td>
+    <td style="color:#3266AD;font-weight:700">${p.l3===null?'—':p.l3}</td>
+    <td style="color:#3266AD;font-weight:700">${p.l4===null?'—':p.l4}</td>
+    <td style="color:#2e7d32;font-weight:700">${p.agTrat===null?'—':p.agTrat}</td>
+    <td style="color:#1565C0;font-weight:700">${p.emTrat===null?'—':p.emTrat}</td>
+  </tr>`).join('');
+
+  // Gráfico
+  const canvas = document.getElementById('pm-chart');
+  if(!canvas) return;
+  mkChart('pm-chart','line',{
+    labels: pontos.map(p=>fmtDptBR(p.data)),
+    datasets:[
+      {label:'PATEC Finalizado',    data:pontos.map(p=>p.l3),     borderColor:'#3266AD', backgroundColor:'rgba(50,102,173,.08)',  borderWidth:2.5, pointRadius:3, tension:.15, spanGaps:true},
+      {label:'Ag. PATEC Finalizar', data:pontos.map(p=>p.l4),     borderColor:'#6A93C9', backgroundColor:'rgba(106,147,201,.08)', borderWidth:2.5, pointRadius:3, tension:.15, spanGaps:true},
+      {label:'Ag. Tratamento',      data:pontos.map(p=>p.agTrat), borderColor:'#2e7d32', backgroundColor:'rgba(46,125,50,.08)',   borderWidth:2.5, pointRadius:3, tension:.15, spanGaps:true},
+      {label:'Em Tratativa',        data:pontos.map(p=>p.emTrat), borderColor:'#1565C0', backgroundColor:'rgba(21,101,192,.08)',  borderWidth:2.5, pointRadius:3, tension:.15, spanGaps:true},
+    ]
+  }, {
+    legend:true,
+    scales:{
+      y:{beginAtZero:true,grid:{color:'#f0f0f0'},ticks:{font:{size:10}}},
+      x:{grid:{display:false},ticks:{font:{size:9}}}
+    }
+  });
+}
+
+
+// ════════════════════════════════════════════
 // PLANO DE AÇÃO — ENTRADAS MANUAIS
 // ════════════════════════════════════════════
 let _paEntradas = []; // [{dt:'2026-05-14', val:45}, ...]
 let _backlogAtualGlobal = null; // Backlog atual calculado pelo gráfico de cascata
+
+// Monitoramento do PATEC — histórico diário "Em Tratativa" (Radar Estratégico).
+// Começa vazio de propósito (sem seed) e só é preenchido via
+// paHistoricoTratCarregarFirebase()/paAtualizarBacklogAuto(), depois que
+// _moduloAtivo já está definido — evita o mesmo bug de carga (_lsMod antes
+// da escolha do módulo) que já existia em _paHistorico.
+let _paHistoricoTrat = []; // [{dt:'2026-08-20', val:12, label:'Backlog Auto — EM TRATATIVA'}, ...]
 
 // Histórico de backlog (apenas informativo)
 // Limpar cache antigo que pode ter dados incorretos (13/06 e 14/06)
@@ -20573,6 +20735,14 @@ async function paAtualizarBacklogAuto(){
     FILAS_AG_AUTO.includes(normFAuto(r.fila))
   ).length;
 
+  // Monitoramento do PATEC — mesmo critério do card "Em Tratativa" do Radar
+  // Estratégico (FILAS_EM_TRAT), gravado 1x por dia igual ao Ag. Tratamento acima.
+  const FILAS_EM_AUTO = ['item em parada','mdg'];
+  const totalEmTrat = (_radarDados||[]).filter(r =>
+    (r.analista_auto||'').trim() === 'Analisar PATEC Finalizado' &&
+    FILAS_EM_AUTO.includes(normFAuto(r.fila))
+  ).length;
+
   const _hAuto = new Date();
   const hoje = _hAuto.getFullYear()+'-'+String(_hAuto.getMonth()+1).padStart(2,'0')+'-'+String(_hAuto.getDate()).padStart(2,'0');
 
@@ -20626,7 +20796,57 @@ async function paAtualizarBacklogAuto(){
     }).catch(e => console.warn('paAtualizarBacklogAuto:', e));
   }
 
+  // ── Monitoramento do PATEC — mesmo mecanismo acima, doc/array separados,
+  // não toca em nada do pa_historico (Ag. Tratamento / Plano de Ação) ──
+  if(db){
+    try{
+      const docT = await db.collection('config').doc('pa_historico_tratativa').get();
+      const listaFBT = (docT.exists && docT.data().lista) ? docT.data().lista : [];
+      const mapaT = {};
+      (_paHistoricoTrat||[]).forEach(m => { if(m && m.dt) mapaT[m.dt] = m; });
+      listaFBT.forEach(m => { if(m && m.dt) mapaT[m.dt] = m; });
+      _paHistoricoTrat = Object.values(mapaT);
+    }catch(e){ console.warn('paAtualizarBacklogAuto merge (tratativa):', e); }
+
+    const idxExistT = _paHistoricoTrat.findIndex(h => h.dt === hoje && h.label && h.label.includes('Auto'));
+    if(idxExistT >= 0){
+      console.log('PA Histórico (Em Tratativa): marco de hoje ('+hoje+') já registrado em '+_paHistoricoTrat[idxExistT].val+' — mantido (1x por dia).');
+    } else {
+      _paHistoricoTrat.push({ dt: hoje, val: totalEmTrat, label: 'Backlog Auto — EM TRATATIVA' });
+      console.log('✓ PA Histórico (Em Tratativa): novo marco do dia '+hoje+' = '+totalEmTrat+' (Em Tratativa)');
+    }
+    _paHistoricoTrat.sort((a,b) => a.dt.localeCompare(b.dt));
+    try{ localStorage.setItem(_lsMod('patec_pa_historico_trat'), JSON.stringify(_paHistoricoTrat)); }catch(e){}
+
+    db.collection('config').doc('pa_historico_tratativa').set({
+      lista: _paHistoricoTrat, ts: new Date().toISOString()
+    }).then(() => {
+      console.log('✓ Backlog auto (Em Tratativa) atualizado:', totalEmTrat, 'itens EM TRATATIVA em', hoje);
+      if(typeof renderMonitoramentoPatec === 'function'){
+        const tabMon = document.getElementById('pa-tab-monitoramento');
+        if(tabMon && tabMon.style.display !== 'none') renderMonitoramentoPatec();
+      }
+    }).catch(e => console.warn('paAtualizarBacklogAuto (tratativa):', e));
+  }
+
   return totalAgTrat;
+}
+
+// Carrega o histórico "Em Tratativa" (Monitoramento do PATEC) do Firebase do
+// módulo ativo — mesmo padrão de paHistoricoCarregarFirebase(), mas sem seed
+// nenhum (a série só existe a partir de hoje, para os dois módulos).
+async function paHistoricoTratCarregarFirebase(){
+  try{
+    const db = getDB();
+    if(!db) return;
+    const doc = await db.collection('config').doc('pa_historico_tratativa').get();
+    const listaFB = (doc.exists && doc.data().lista) ? doc.data().lista : [];
+    const mapa = {};
+    (_paHistoricoTrat||[]).forEach(m => { if(m && m.dt) mapa[m.dt] = m; });
+    listaFB.forEach(m => { if(m && m.dt) mapa[m.dt] = m; });
+    _paHistoricoTrat = Object.values(mapa).sort((a,b)=>a.dt.localeCompare(b.dt));
+    try{ localStorage.setItem(_lsMod('patec_pa_historico_trat'), JSON.stringify(_paHistoricoTrat)); }catch(e){}
+  }catch(e){ console.warn('paHistoricoTratCarregarFirebase:', e); }
 }
 
 
