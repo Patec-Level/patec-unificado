@@ -3700,7 +3700,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <!-- ABA: MONITORAMENTO DO PATEC (evolução diária: Resumo do dia + Radar Estratégico) -->
       <div id="pa-tab-monitoramento" style="display:none">
 
-      <!-- Cabeçalho + Filtros (compartilhado pelas 3 partes abaixo) -->
+      <!-- Cabeçalho + Filtros -->
       <div class="cd" style="margin-bottom:1rem">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
           <div>
@@ -3722,71 +3722,37 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         </div>
       </div>
 
-      <!-- PARTE 1: PATEC FINALIZADO -->
+      <!-- SELETOR DE INDICADOR -->
+      <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--azm)">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+          <div class="cd-t" style="margin:0">📈 Monitoramento do PATEC — selecione o indicador</div>
+          <div style="display:flex;gap:8px">
+            <button id="pm-btn-finalizado" class="btn btn-p" style="font-size:12px" onclick="pmSelecionarIndicador('finalizado',this)">✅ PATEC Finalizado</button>
+            <button id="pm-btn-abertura" class="btn btn-s" style="font-size:12px" onclick="pmSelecionarIndicador('abertura',this)">📂 Abertura de PATEC</button>
+            <button id="pm-btn-geral" class="btn btn-s" style="font-size:12px" onclick="pmSelecionarIndicador('geral',this)">📊 PATEC Geral</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- GRÁFICO CASCATA — MONITORAMENTO DO PATEC -->
       <div class="cd" style="margin-bottom:1rem">
-        <div class="cd-t" style="margin:0 0 1.25rem">1️⃣ PATEC Finalizado</div>
+        <div class="cd-t" style="margin:0 0 1.25rem" id="pm-titulo-grafico">✅ PATEC Finalizado — Acompanhamento</div>
 
         <!-- KPI Cards -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:1.25rem" id="pm1-kpis"></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:1.25rem" id="pm-kpis"></div>
 
         <!-- Gráfico -->
-        <div style="position:relative;height:320px;margin-bottom:1.25rem">
-          <canvas id="pm1-chart"></canvas>
+        <div style="position:relative;height:360px;margin-bottom:1.25rem">
+          <canvas id="pm-chart"></canvas>
         </div>
 
         <!-- Tabela -->
         <div class="tw">
           <table>
-            <thead><tr>
+            <thead id="pm-thead"><tr>
               <th>Data</th><th>PATEC Finalizado</th><th>Ag. PATEC Finalizar</th><th>Ag. Tratamento</th>
             </tr></thead>
-            <tbody id="pm1-tb-body"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- PARTE 2: ABERTURA DE PATEC -->
-      <div class="cd" style="margin-bottom:1rem">
-        <div class="cd-t" style="margin:0 0 1.25rem">2️⃣ Abertura de PATEC</div>
-
-        <!-- KPI Cards -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:1.25rem" id="pm2-kpis"></div>
-
-        <!-- Gráfico -->
-        <div style="position:relative;height:320px;margin-bottom:1.25rem">
-          <canvas id="pm2-chart"></canvas>
-        </div>
-
-        <!-- Tabela -->
-        <div class="tw">
-          <table>
-            <thead><tr>
-              <th>Data</th><th>Abrir PATEC Obrigatório</th><th>Abrir PATEC Idêntico Não</th>
-            </tr></thead>
-            <tbody id="pm2-tb-body"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- PARTE 3: PATEC GERAL -->
-      <div class="cd" style="margin-bottom:1rem">
-        <div class="cd-t" style="margin:0 0 1.25rem">3️⃣ PATEC Geral</div>
-
-        <!-- KPI Cards -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:1.25rem" id="pm3-kpis"></div>
-
-        <!-- Gráfico -->
-        <div style="position:relative;height:320px;margin-bottom:1.25rem">
-          <canvas id="pm3-chart"></canvas>
-        </div>
-
-        <!-- Tabela -->
-        <div class="tw">
-          <table>
-            <thead><tr>
-              <th>Data</th><th>Total PATEC</th><th>Total Abrir PATEC</th>
-            </tr></thead>
-            <tbody id="pm3-tb-body"></tbody>
+            <tbody id="pm-tb-body"></tbody>
           </table>
         </div>
       </div>
@@ -14660,15 +14626,37 @@ function _pmKpiCard(label, ico, cor, ponto, campo){
     </div>`;
 }
 
-// PARTE 1 — PATEC Finalizado (PATEC Finalizado + Ag. PATEC Finalizar + Ag. Tratamento)
-function _pmRenderParte1(pontos){
-  const kpiEl = document.getElementById('pm1-kpis');
+// Indicador selecionado — mesmo padrão do seletor da página Abrir PATEC
+// (apSelecionarIndicador/_apIndicador), agora com 3 opções em vez de 3 filas.
+let _pmIndicador = 'finalizado'; // 'finalizado' | 'abertura' | 'geral'
+
+function pmSelecionarIndicador(ind, btn){
+  _pmIndicador = ind;
+  const btnFin = document.getElementById('pm-btn-finalizado');
+  const btnAbe = document.getElementById('pm-btn-abertura');
+  const btnGer = document.getElementById('pm-btn-geral');
+  if(btnFin) btnFin.className = ind==='finalizado' ? 'btn btn-p' : 'btn btn-s';
+  if(btnAbe) btnAbe.className = ind==='abertura'   ? 'btn btn-p' : 'btn btn-s';
+  if(btnGer) btnGer.className = ind==='geral'      ? 'btn btn-p' : 'btn btn-s';
+  const titEl = document.getElementById('pm-titulo-grafico');
+  if(titEl) titEl.textContent = ind==='abertura' ? '📂 Abertura de PATEC — Acompanhamento'
+                               : ind==='geral'    ? '📊 PATEC Geral — Acompanhamento'
+                               : '✅ PATEC Finalizado — Acompanhamento';
+  renderMonitoramentoPatec();
+}
+
+// PATEC Finalizado (PATEC Finalizado + Ag. PATEC Finalizar + Ag. Tratamento)
+function _pmRenderFinalizado(pontos){
+  const theadEl = document.getElementById('pm-thead');
+  if(theadEl) theadEl.innerHTML = '<tr><th>Data</th><th>PATEC Finalizado</th><th>Ag. PATEC Finalizar</th><th>Ag. Tratamento</th></tr>';
+
+  const kpiEl = document.getElementById('pm-kpis');
   if(kpiEl) kpiEl.innerHTML =
     _pmKpiCard('PATEC Finalizado',    '✅', '#3266AD', _pmUltimoComValor(pontos,'l3'), 'l3') +
     _pmKpiCard('Ag. PATEC Finalizar', '⏳', '#3266AD', _pmUltimoComValor(pontos,'l4'), 'l4') +
     _pmKpiCard('Ag. Tratamento',      '🕐', '#2e7d32', _pmUltimoComValor(pontos,'agTrat'), 'agTrat');
 
-  const tb = document.getElementById('pm1-tb-body');
+  const tb = document.getElementById('pm-tb-body');
   if(tb) tb.innerHTML = pontos.map(p=>`<tr>
     <td style="font-weight:600">${_pmFmtDptBR(p.data)}</td>
     <td style="color:#3266AD;font-weight:700">${p.l3===null?'—':p.l3}</td>
@@ -14676,8 +14664,8 @@ function _pmRenderParte1(pontos){
     <td style="color:#2e7d32;font-weight:700">${p.agTrat===null?'—':p.agTrat}</td>
   </tr>`).join('');
 
-  if(!document.getElementById('pm1-chart')) return;
-  mkChart('pm1-chart','line',{
+  if(!document.getElementById('pm-chart')) return;
+  mkChart('pm-chart','line',{
     labels: pontos.map(p=>_pmFmtDptBR(p.data)),
     datasets:[
       {label:'PATEC Finalizado',    data:pontos.map(p=>p.l3),     borderColor:'#3266AD', backgroundColor:'rgba(50,102,173,.08)',  borderWidth:2.5, pointRadius:3, tension:.15, spanGaps:true},
@@ -14693,22 +14681,25 @@ function _pmRenderParte1(pontos){
   });
 }
 
-// PARTE 2 — Abertura de PATEC (Abrir PATEC Obrigatório + Abrir PATEC Idêntico Não)
-function _pmRenderParte2(pontos){
-  const kpiEl = document.getElementById('pm2-kpis');
+// Abertura de PATEC (Abrir PATEC Obrigatório + Abrir PATEC Idêntico Não)
+function _pmRenderAbertura(pontos){
+  const theadEl = document.getElementById('pm-thead');
+  if(theadEl) theadEl.innerHTML = '<tr><th>Data</th><th>Abrir PATEC Obrigatório</th><th>Abrir PATEC Idêntico Não</th></tr>';
+
+  const kpiEl = document.getElementById('pm-kpis');
   if(kpiEl) kpiEl.innerHTML =
     _pmKpiCard('Abrir PATEC Obrigatório',   '📦', '#C07A12', _pmUltimoComValor(pontos,'l8'), 'l8') +
     _pmKpiCard('Abrir PATEC Idêntico Não',  '🔓', '#D94040', _pmUltimoComValor(pontos,'l7'), 'l7');
 
-  const tb = document.getElementById('pm2-tb-body');
+  const tb = document.getElementById('pm-tb-body');
   if(tb) tb.innerHTML = pontos.map(p=>`<tr>
     <td style="font-weight:600">${_pmFmtDptBR(p.data)}</td>
     <td style="color:#C07A12;font-weight:700">${p.l8===null?'—':p.l8}</td>
     <td style="color:#D94040;font-weight:700">${p.l7===null?'—':p.l7}</td>
   </tr>`).join('');
 
-  if(!document.getElementById('pm2-chart')) return;
-  mkChart('pm2-chart','line',{
+  if(!document.getElementById('pm-chart')) return;
+  mkChart('pm-chart','line',{
     labels: pontos.map(p=>_pmFmtDptBR(p.data)),
     datasets:[
       {label:'Abrir PATEC Obrigatório',  data:pontos.map(p=>p.l8), borderColor:'#C07A12', backgroundColor:'rgba(192,122,18,.08)', borderWidth:2.5, pointRadius:3, tension:.15, spanGaps:true},
@@ -14723,22 +14714,25 @@ function _pmRenderParte2(pontos){
   });
 }
 
-// PARTE 3 — PATEC Geral (Total PATEC + Total Abrir PATEC)
-function _pmRenderParte3(pontos){
-  const kpiEl = document.getElementById('pm3-kpis');
+// PATEC Geral (Total PATEC + Total Abrir PATEC)
+function _pmRenderGeral(pontos){
+  const theadEl = document.getElementById('pm-thead');
+  if(theadEl) theadEl.innerHTML = '<tr><th>Data</th><th>Total PATEC</th><th>Total Abrir PATEC</th></tr>';
+
+  const kpiEl = document.getElementById('pm-kpis');
   if(kpiEl) kpiEl.innerHTML =
     _pmKpiCard('Total PATEC',       '📊', 'var(--azm)', _pmUltimoComValor(pontos,'totalPatec'), 'totalPatec') +
     _pmKpiCard('Total Abrir PATEC', '📋', '#C07A12',    _pmUltimoComValor(pontos,'totalAbrir'), 'totalAbrir');
 
-  const tb = document.getElementById('pm3-tb-body');
+  const tb = document.getElementById('pm-tb-body');
   if(tb) tb.innerHTML = pontos.map(p=>`<tr>
     <td style="font-weight:600">${_pmFmtDptBR(p.data)}</td>
     <td style="color:var(--azm);font-weight:700">${p.totalPatec===null?'—':p.totalPatec}</td>
     <td style="color:#C07A12;font-weight:700">${p.totalAbrir===null?'—':p.totalAbrir}</td>
   </tr>`).join('');
 
-  if(!document.getElementById('pm3-chart')) return;
-  mkChart('pm3-chart','line',{
+  if(!document.getElementById('pm-chart')) return;
+  mkChart('pm-chart','line',{
     labels: pontos.map(p=>_pmFmtDptBR(p.data)),
     datasets:[
       {label:'Total PATEC',       data:pontos.map(p=>p.totalPatec), borderColor:'#1A4A8A', backgroundColor:'rgba(26,74,138,.08)',  borderWidth:2.5, pointRadius:3, tension:.15, spanGaps:true},
@@ -14765,9 +14759,9 @@ function renderMonitoramentoPatec(){
   const dias   = paDiasUteis(dtIni, dtFim);
   const pontos = dias.map(_pmColetarPonto);
 
-  _pmRenderParte1(pontos);
-  _pmRenderParte2(pontos);
-  _pmRenderParte3(pontos);
+  if(_pmIndicador === 'abertura') _pmRenderAbertura(pontos);
+  else if(_pmIndicador === 'geral') _pmRenderGeral(pontos);
+  else _pmRenderFinalizado(pontos);
 }
 
 
