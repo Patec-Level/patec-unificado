@@ -2889,31 +2889,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
 
-        <!-- 0) RESUMO DO DIA (mapa_diario) -->
-        <div class="cd" style="margin-bottom:1rem">
-          <div class="cd-t" style="margin:0 0 .875rem">📊 Resumo do dia</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="ce-split">
-            <div>
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #1A4A8A22">
-                <span style="font-size:12px;font-weight:800;color:#1A4A8A">🟦 ADLV</span>
-                <input type="date" id="ce-resumo-adlv-dt" onchange="ceResumoData('adlv')" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px;color:var(--az);font-weight:600">
-                <button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="ceResumoHoje('adlv')">📅 Hoje</button>
-                <span style="font-size:10px;color:var(--tx2)" id="ce-resumo-adlv-lbl"></span>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px" id="ce-resumo-adlv-cards"></div>
-            </div>
-            <div>
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #C07A1222">
-                <span style="font-size:12px;font-weight:800;color:#C07A12">🟧 FAST</span>
-                <input type="date" id="ce-resumo-fast-dt" onchange="ceResumoData('fast')" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px;color:var(--az);font-weight:600">
-                <button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="ceResumoHoje('fast')">📅 Hoje</button>
-                <span style="font-size:10px;color:var(--tx2)" id="ce-resumo-fast-lbl"></span>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px" id="ce-resumo-fast-cards"></div>
-            </div>
-          </div>
-        </div>
-
         <!-- 1) PRODUÇÃO EM TEMPO REAL -->
         <div class="cd" style="margin-bottom:1rem">
           <div class="cd-t" style="margin:0 0 .875rem">📡 Produção em Tempo Real</div>
@@ -3005,6 +2980,31 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <tbody id="ce-dfd-fast-tbody"></tbody>
                 <tfoot id="ce-dfd-fast-tfoot"></tfoot>
               </table></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RESUMO DO DIA (mapa_diario) — logo acima do gráfico Programado × Realizado, a pedido -->
+        <div class="cd" style="margin-bottom:1rem">
+          <div class="cd-t" style="margin:0 0 .875rem">📊 Resumo do dia</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="ce-split">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #1A4A8A22">
+                <span style="font-size:12px;font-weight:800;color:#1A4A8A">🟦 ADLV</span>
+                <input type="date" id="ce-resumo-adlv-dt" onchange="ceResumoData('adlv')" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px;color:var(--az);font-weight:600">
+                <button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="ceResumoHoje('adlv')">📅 Hoje</button>
+                <span style="font-size:10px;color:var(--tx2)" id="ce-resumo-adlv-lbl"></span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px" id="ce-resumo-adlv-cards"></div>
+            </div>
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #C07A1222">
+                <span style="font-size:12px;font-weight:800;color:#C07A12">🟧 FAST</span>
+                <input type="date" id="ce-resumo-fast-dt" onchange="ceResumoData('fast')" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px;color:var(--az);font-weight:600">
+                <button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="ceResumoHoje('fast')">📅 Hoje</button>
+                <span style="font-size:10px;color:var(--tx2)" id="ce-resumo-fast-lbl"></span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px" id="ce-resumo-fast-cards"></div>
             </div>
           </div>
         </div>
@@ -26078,7 +26078,7 @@ function _ceCiclo(mod){ const c=_ceCache[mod] && _ceCache[mod].ciclo; return c |
 function _ceIsoAddDias(iso,n){ const d=new Date(iso+'T12:00:00'); d.setDate(d.getDate()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
 // ────────────────────────────────────────────────────────
-// RESUMO DO DIA (mapa_diario) — em cima da Produção em Tempo Real
+// RESUMO DO DIA (mapa_diario) — logo acima do gráfico Programado × Realizado
 // PATEC Finalizado=l3 · Ag.PATEC Finalizar=l4 · 100% Reprov=l5 ·
 // Cancelado=l6 · Abrir ID Não=l7 · Abrir PATEC Obrig=l8
 // ────────────────────────────────────────────────────────
