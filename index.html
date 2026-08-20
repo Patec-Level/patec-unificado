@@ -2889,55 +2889,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
 
-        <!-- MONITORAMENTO DO PATEC — EVOLUÇÃO DIÁRIA (ADLV + FAST lado a lado) -->
-        <div class="cd" style="margin-bottom:1rem">
-          <div class="cd-t" style="margin:0 0 .875rem">📈 Monitoramento do PATEC — Evolução Diária</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="ce-split">
-            <!-- ADLV -->
-            <div>
-              <div style="font-size:12px;font-weight:800;color:#1A4A8A;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #1A4A8A22">🟦 ADLV</div>
-              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:.5rem">
-                <input type="date" id="ce-mon-adlv-dt-inicio" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px" onchange="renderCeMonitoramento('adlv')">
-                <span style="font-size:10px;color:var(--tx2)">até</span>
-                <input type="date" id="ce-mon-adlv-dt-fim" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px" onchange="renderCeMonitoramento('adlv')">
-                <button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="ceMonPeriodoHoje('adlv')">📅 Hoje</button>
-              </div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.625rem">
-                <button id="ce-mon-adlv-btn-finalizado" class="btn btn-p" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('adlv','finalizado',this)">✅ Finalizado</button>
-                <button id="ce-mon-adlv-btn-abertura" class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('adlv','abertura',this)">📂 Abertura</button>
-                <button id="ce-mon-adlv-btn-geral" class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('adlv','geral',this)">📊 Geral</button>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;margin-bottom:.625rem" id="ce-mon-adlv-kpis"></div>
-              <div style="position:relative;height:220px;margin-bottom:.625rem"><canvas id="ce-mon-adlv-chart"></canvas></div>
-              <div class="tw" style="max-height:240px"><table>
-                <thead id="ce-mon-adlv-thead"><tr><th>Data</th><th>PATEC Final.</th><th>Ag. Finalizar</th><th>Ag. Trat.</th></tr></thead>
-                <tbody id="ce-mon-adlv-tb-body"></tbody>
-              </table></div>
-            </div>
-            <!-- FAST -->
-            <div>
-              <div style="font-size:12px;font-weight:800;color:#C07A12;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #C07A1222">🟧 FAST</div>
-              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:.5rem">
-                <input type="date" id="ce-mon-fast-dt-inicio" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px" onchange="renderCeMonitoramento('fast')">
-                <span style="font-size:10px;color:var(--tx2)">até</span>
-                <input type="date" id="ce-mon-fast-dt-fim" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px" onchange="renderCeMonitoramento('fast')">
-                <button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="ceMonPeriodoHoje('fast')">📅 Hoje</button>
-              </div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.625rem">
-                <button id="ce-mon-fast-btn-finalizado" class="btn btn-p" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('fast','finalizado',this)">✅ Finalizado</button>
-                <button id="ce-mon-fast-btn-abertura" class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('fast','abertura',this)">📂 Abertura</button>
-                <button id="ce-mon-fast-btn-geral" class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('fast','geral',this)">📊 Geral</button>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;margin-bottom:.625rem" id="ce-mon-fast-kpis"></div>
-              <div style="position:relative;height:220px;margin-bottom:.625rem"><canvas id="ce-mon-fast-chart"></canvas></div>
-              <div class="tw" style="max-height:240px"><table>
-                <thead id="ce-mon-fast-thead"><tr><th>Data</th><th>PATEC Final.</th><th>Ag. Finalizar</th><th>Ag. Trat.</th></tr></thead>
-                <tbody id="ce-mon-fast-tb-body"></tbody>
-              </table></div>
-            </div>
-          </div>
-        </div>
-
         <!-- 1) PRODUÇÃO EM TEMPO REAL -->
         <div class="cd" style="margin-bottom:1rem">
           <div class="cd-t" style="margin:0 0 .875rem">📡 Produção em Tempo Real</div>
@@ -3054,6 +3005,55 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <span style="font-size:10px;color:var(--tx2)" id="ce-resumo-fast-lbl"></span>
               </div>
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px" id="ce-resumo-fast-cards"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MONITORAMENTO DO PATEC — EVOLUÇÃO DIÁRIA (ADLV + FAST lado a lado) -->
+        <div class="cd" style="margin-bottom:1rem">
+          <div class="cd-t" style="margin:0 0 .875rem">📈 Monitoramento do PATEC — Evolução Diária</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="ce-split">
+            <!-- ADLV -->
+            <div>
+              <div style="font-size:12px;font-weight:800;color:#1A4A8A;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #1A4A8A22">🟦 ADLV</div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:.5rem">
+                <input type="date" id="ce-mon-adlv-dt-inicio" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px" onchange="renderCeMonitoramento('adlv')">
+                <span style="font-size:10px;color:var(--tx2)">até</span>
+                <input type="date" id="ce-mon-adlv-dt-fim" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px" onchange="renderCeMonitoramento('adlv')">
+                <button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="ceMonPeriodoHoje('adlv')">📅 Hoje</button>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.625rem">
+                <button id="ce-mon-adlv-btn-finalizado" class="btn btn-p" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('adlv','finalizado',this)">✅ Finalizado</button>
+                <button id="ce-mon-adlv-btn-abertura" class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('adlv','abertura',this)">📂 Abertura</button>
+                <button id="ce-mon-adlv-btn-geral" class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('adlv','geral',this)">📊 Geral</button>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;margin-bottom:.625rem" id="ce-mon-adlv-kpis"></div>
+              <div style="position:relative;height:220px;margin-bottom:.625rem"><canvas id="ce-mon-adlv-chart"></canvas></div>
+              <div class="tw" style="max-height:240px"><table>
+                <thead id="ce-mon-adlv-thead"><tr><th>Data</th><th>PATEC Final.</th><th>Ag. Finalizar</th><th>Ag. Trat.</th></tr></thead>
+                <tbody id="ce-mon-adlv-tb-body"></tbody>
+              </table></div>
+            </div>
+            <!-- FAST -->
+            <div>
+              <div style="font-size:12px;font-weight:800;color:#C07A12;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #C07A1222">🟧 FAST</div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:.5rem">
+                <input type="date" id="ce-mon-fast-dt-inicio" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px" onchange="renderCeMonitoramento('fast')">
+                <span style="font-size:10px;color:var(--tx2)">até</span>
+                <input type="date" id="ce-mon-fast-dt-fim" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px" onchange="renderCeMonitoramento('fast')">
+                <button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="ceMonPeriodoHoje('fast')">📅 Hoje</button>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.625rem">
+                <button id="ce-mon-fast-btn-finalizado" class="btn btn-p" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('fast','finalizado',this)">✅ Finalizado</button>
+                <button id="ce-mon-fast-btn-abertura" class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('fast','abertura',this)">📂 Abertura</button>
+                <button id="ce-mon-fast-btn-geral" class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('fast','geral',this)">📊 Geral</button>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;margin-bottom:.625rem" id="ce-mon-fast-kpis"></div>
+              <div style="position:relative;height:220px;margin-bottom:.625rem"><canvas id="ce-mon-fast-chart"></canvas></div>
+              <div class="tw" style="max-height:240px"><table>
+                <thead id="ce-mon-fast-thead"><tr><th>Data</th><th>PATEC Final.</th><th>Ag. Finalizar</th><th>Ag. Trat.</th></tr></thead>
+                <tbody id="ce-mon-fast-tb-body"></tbody>
+              </table></div>
             </div>
           </div>
         </div>
