@@ -11188,13 +11188,28 @@ function pill2(t){
 // ESQ1: Meta Operacional (Patec) | ESQ2: Patec Finalizado
 // DIR1: Meta do Projeto          | DIR2: Gap do Projeto
 // ════════════════════════════════════════════
+// Planejado do ciclo do MÓDULO ATIVO = soma das metas individuais salvas
+// (config/equipe_rt, via _ceMetaEquipe) × dias úteis do ciclo ativo. Base dos
+// cards automáticos do topo (ADLV no ADLV, FAST no FAST). Retorna 0 se a
+// equipe/ciclo ainda não carregou — aí o card cai no valor manual/padrão.
+function _planejadoCicloAtivo(){
+  var mod = (typeof _moduloAtivo!=='undefined' && _moduloAtivo) ? _moduloAtivo : 'adlv';
+  var dia = (typeof _ceMetaEquipe==='function') ? _ceMetaEquipe(mod) : 0;
+  if(!(dia>0)) return 0;
+  var du = (typeof _equipeDiasUteisCiclo==='function') ? _equipeDiasUteisCiclo() : 0;
+  return (du>0) ? dia*du : 0;
+}
+
 function initMetaGap(){
   const ls = k => localStorage.getItem(k)||'';
+  // AUTOMÁTICO: Meta Operacional e Meta do Projeto = Planejado do ciclo do
+  // módulo ativo. Cai no valor manual só se o planejado ainda for 0.
+  const _planAuto = (typeof _planejadoCicloAtivo==='function') ? _planejadoCicloAtivo() : 0;
 
   // ESQ 1 — Meta Operacional (localStorage > TB_* padrão do arquivo)
   const meta    = ls(_lsMod('patec_meta'))    || TB_META;
-  const metaLbl = ls(_lsMod('patec_meta_label')) || TB_META_LBL;
-  const metaFmt = isNaN(parseInt(meta)) ? meta : parseInt(meta).toLocaleString('pt-BR');
+  const metaLbl = _planAuto>0 ? 'itens · ciclo' : (ls(_lsMod('patec_meta_label')) || TB_META_LBL);
+  const metaFmt = _planAuto>0 ? _planAuto.toLocaleString('pt-BR') : (isNaN(parseInt(meta)) ? meta : parseInt(meta).toLocaleString('pt-BR'));
   _setEl('top-meta',       metaFmt);
   _setEl('top-meta-label', metaLbl);
   _setEl('sb-meta',        metaFmt);
@@ -25393,6 +25408,7 @@ async function equipeRtSalvar(){
   var ok = false;
   try{ ok = await fbSet('config','equipe_rt', _equipeRt); }catch(e){ alert('Erro ao salvar: '+e.message); }
   equipeAplicarListas();
+  if(typeof initMetaGap==='function') initMetaGap();
   var okEl = document.getElementById('equipe-ok');
   if(okEl){ okEl.style.display='inline'; setTimeout(function(){ okEl.style.display='none'; }, 3000); }
   try{ if(typeof rtIniciarListener==='function') rtIniciarListener(); }catch(e){}
