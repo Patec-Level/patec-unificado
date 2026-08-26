@@ -12748,10 +12748,12 @@ async function cicloCarregarAtivo(){
     const cicloFechado = saved && (saved.status==='fechado' || (saved.fim && saved.fim < hoje));
     const cicloAntigo  = saved && (saved.inicio||'') < CICLO_NOVO_INICIO;
     if(cicloFechado){
-      // Ciclo explicitamente encerrado — ativar o novo
-      _cicloAtivo = {...CICLO_MAIJUN};
-      try{ await fbSet('config','ciclo_ativo', _cicloAtivo); }catch(e2){}
-      console.log('[Ciclo] Novo ciclo Jun/Jul ativado após fechamento do anterior');
+      // Ciclo encerrado e NENHUM novo iniciado ainda. NÃO reativar um ciclo
+      // antigo hardcoded — isso revertia p/ Jun/Jul e sobrescrevia o Firebase
+      // se a página recarregasse entre 'encerrar' e 'iniciar'. Mantém o
+      // encerrado como ativo (só leitura) até o ADM iniciar o próximo pelo painel.
+      _cicloAtivo = saved;
+      console.warn('[Ciclo] Ciclo encerrado — inicie o próximo pelo painel ADM.');
     } else if(cicloAntigo && hoje >= CICLO_NOVO_INICIO){
       // Ciclo antigo ainda ativo mas período passou — manter o salvo até encerrar manualmente
       // NÃO sobrescrever: preservar o ciclo antigo para o ADM encerrar via painel
