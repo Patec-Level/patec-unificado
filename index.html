@@ -7729,7 +7729,13 @@ function estInitFim(){
   if(lbl) lbl.textContent=dias>0?dias+' dias úteis restantes':dias===0?'Encerra hoje':'Já encerrado';
 }
 function renderPainelEstrategico(){
-  const META_EQUIPE = 90; // 30 Wanessa + 30 Lory + 30 Ludy
+  // Planejado segue a META INDIVIDUAL somada da equipe do MÓDULO ATIVO
+  // (Admin > Equipe/Metas RT) — mesma fonte do gráfico de Comparação de
+  // Equipes. Ajustar a meta de um analista ali muda a linha do Planejado na
+  // próxima abertura do painel. Fallback 90 só se a equipe não carregou ou
+  // ninguém tiver meta > 0 configurada.
+  const _metaEq = (typeof _ceMetaEquipe === 'function') ? _ceMetaEquipe(_moduloAtivo) : 0;
+  const META_EQUIPE = (_metaEq > 0) ? _metaEq : 90;
   const hoje = HOJE.toISOString().split('T')[0];
   const label = document.getElementById('est-hoje-label');
   if(label) label.textContent = fmtDt(hoje);
