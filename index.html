@@ -25202,6 +25202,82 @@ function _equipeAtualizarMetaEquipe(mod){
   var m = lista.filter(function(x){ return x.temMeta && (+x.meta)>0; }).reduce(function(a,x){ return a+(+x.meta||0); }, 0);
   var el = document.getElementById('equipe-metaeq-'+mod);
   if(el) el.textContent = m;
+  if(typeof _equipeAtualizarPlanejado==='function') _equipeAtualizarPlanejado();
+}
+
+// ── Planejado por equipe (automático, das metas individuais) ──────────
+// Dias úteis do ciclo ATIVO (mesma regra dos gráficos: seg–sex, fora
+// GOV_FERIADOS). Os dois módulos compartilham o ciclo mensal 26→25, então
+// o mesmo nº de dias úteis vale para ADLV e FAST.
+function _equipeDiasUteisCiclo(){
+  var ini = (typeof _cicloAtivo!=='undefined' && _cicloAtivo && _cicloAtivo.inicio) ? _cicloAtivo.inicio
+          : (typeof CICLO_NOVO_INICIO!=='undefined' ? CICLO_NOVO_INICIO : '2026-08-26');
+  var fimP = (typeof _cicloAtivo!=='undefined' && _cicloAtivo && _cicloAtivo.fim_previsto) ? _cicloAtivo.fim_previsto : '';
+  var minFim = _ceIsoAddDias(ini, 5);
+  var fim = (fimP && fimP > minFim) ? fimP : _ceIsoAddDias(ini, 30);
+  var n = 0, d = new Date(ini+'T12:00:00'), f = new Date(fim+'T12:00:00');
+  while(d <= f){
+    var dw = d.getDay();
+    var iso = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    if(dw>=1 && dw<=5 && (typeof GOV_FERIADOS==='undefined' || !GOV_FERIADOS.includes(iso))) n++;
+    d.setDate(d.getDate()+1);
+  }
+  return n;
+}
+
+// Soma das metas individuais do RASCUNHO em edição (reflete o que está na
+// tela antes mesmo de salvar). Mesma regra do "Meta da equipe: X/dia".
+function _equipePlanejadoDia(mod){
+  var lista = (_equipeEditMod && _equipeEditMod[mod]) || [];
+  return lista.filter(function(x){ return x.temMeta && (+x.meta)>0; })
+              .reduce(function(a,x){ return a + (+x.meta||0); }, 0);
+}
+
+function _equipePlanCard(mod, lbl, cor){
+  return '<div style="background:#fff;border:1px solid '+cor+'33;border-left:3px solid '+cor+';border-radius:8px;padding:.6rem .75rem">'
+    + '<div style="font-size:11px;color:'+cor+';font-weight:800">'+lbl+'</div>'
+    + '<div style="font-size:20px;font-weight:800;color:'+cor+'"><span id="equipe-plan-dia-'+mod+'">0</span> <span style="font-size:11px;color:var(--tx2);font-weight:600">/dia</span></div>'
+    + '<div style="font-size:12px;color:var(--tx2)"><strong id="equipe-plan-ciclo-'+mod+'">0</strong> no ciclo</div>'
+  + '</div>';
+}
+
+function _equipePlanejadoResumoHtml(){
+  return ''
+    + '<div style="margin-bottom:1rem;padding:.85rem 1rem;background:var(--cin);border:1px solid var(--brd);border-radius:10px">'
+    + '<div style="font-size:13px;font-weight:800;color:var(--az);margin-bottom:.15rem">📐 Planejado (automático, das metas individuais)</div>'
+    + '<div style="font-size:11px;color:var(--tx2);margin-bottom:.6rem">Soma das metas individuais de cada equipe — recalcula sozinho quando você ajusta uma meta abaixo. Ciclo atual: <strong id="equipe-plan-diasuteis">–</strong> dias úteis.</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">'
+      + _equipePlanCard('adlv', '🟦 ADLV', '#1A4A8A')
+      + _equipePlanCard('fast', '🟧 FAST', '#C07A12')
+      + '<div style="background:#fff;border:1px dashed var(--az);border-radius:8px;padding:.6rem .75rem">'
+        + '<div style="font-size:11px;color:var(--az);font-weight:800">Σ TOTAL (ADLV+FAST)</div>'
+        + '<div style="font-size:20px;font-weight:800;color:var(--az)"><span id="equipe-plan-dia-total">0</span> <span style="font-size:11px;color:var(--tx2);font-weight:600">/dia</span></div>'
+        + '<div style="font-size:12px;color:var(--tx2)"><strong id="equipe-plan-ciclo-total">0</strong> no ciclo</div>'
+      + '</div>'
+    + '</div></div>';
+}
+
+// Recalcula e atualiza os campos do Planejado (ao vivo, sem salvar).
+function _equipeAtualizarPlanejado(){
+  var du = _equipeDiasUteisCiclo();
+  var eld = document.getElementById('equipe-plan-diasuteis'); if(eld) eld.textContent = du;
+  var diaTot = 0, cicloTot = 0;
+  ['adlv','fast'].forEach(function(mod){
+    var dia = _equipePlanejadoDia(mod);
+    var ciclo = dia * du;
+    diaTot += dia; cicloTot += ciclo;
+    var ed = document.getElementById('equipe-plan-dia-'+mod);   if(ed) ed.textContent = dia;
+    var ec = document.getElementById('equipe-plan-ciclo-'+mod); if(ec) ec.textContent = ciclo.toLocaleString('pt-BR');
+  });
+  var edt = document.getElementById('equipe-plan-dia-total');   if(edt) edt.textContent = diaTot;
+  var ect = document.getElementById('equipe-plan-ciclo-total'); if(ect) ect.textContent = cicloTot.toLocaleString('pt-BR');
+  // Guarda pra reaproveitar em outras telas depois (o "refletir em outro lugar").
+  window._planejadoEquipe = {
+    diasUteis: du,
+    adlv:  { dia:_equipePlanejadoDia('adlv'), ciclo:_equipePlanejadoDia('adlv')*du },
+    fast:  { dia:_equipePlanejadoDia('fast'), ciclo:_equipePlanejadoDia('fast')*du },
+    total: { dia:diaTot, ciclo:cicloTot }
+  };
 }
 
 function equipeRenderEditor(){
@@ -25209,6 +25285,7 @@ function equipeRenderEditor(){
   if(!host) return;
   host.innerHTML =
     '<div class="al al-b" style="margin-bottom:.75rem">ℹ Lista puxada automaticamente dos usuários cadastrados (pelo colabNome e o módulo marcado em <strong>Usuários</strong>). As duas equipes aparecem aqui — você é o coordenador das duas. Desmarcar <em>Tempo Real</em> ou <em>Histórico</em> só esconde a pessoa daquela tela — ela continua contando no total da equipe. <em>Meta individual</em> desmarcada = contribui sem meta diária própria (ex.: liderança). <strong>🗑️ Remover</strong> tira a pessoa da equipe daquele módulo — se ela ainda tiver o módulo em <strong>Usuários</strong>, ela volta ao recarregar; então quem saiu do projeto, tire o módulo dela em Usuários primeiro. Para dar acesso aos DOIS projetos, marque ADLV e FAST na aba Usuários. <strong>✓ Salvar equipe</strong> grava as duas de uma vez.</div>'
+    + _equipePlanejadoResumoHtml()
     + _equipeTabelaHtml('adlv')
     + _equipeTabelaHtml('fast')
     + '<div style="display:flex;gap:10px;margin-top:1.25rem;align-items:center;flex-wrap:wrap">'
@@ -25223,6 +25300,7 @@ function equipeRenderEditor(){
       + '<div id="metadia-ajuste-body"></div>'
     + '</div>';
   _metaDiaRenderAjuste();
+  _equipeAtualizarPlanejado();
 }
 
 // ── Ajuste pontual da meta de um dia específico (ver _metaDiaEfetiva) ──
