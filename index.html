@@ -22699,7 +22699,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
   <span style="color:rgba(255,255,255,.8);font-size:12px">Configure sua impressora para A4 Paisagem · Sem margens</span>
 </div>
 
-<div class="page">
+<div class="page" id="apres-slide">
   <!-- HEADER -->
   <div class="hdr">
     <div>
@@ -22893,6 +22893,29 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
   </div>
 </div>
 
+<script>
+(function(){
+  function fit(){
+    var p=document.querySelector('.page'); if(!p) return;
+    p.style.transform='none';
+    var bar=document.querySelector('.no-print');
+    var topo=bar?bar.offsetHeight:0;
+    var pw=p.offsetWidth, ph=p.offsetHeight;
+    if(!pw||!ph) return;
+    var vw=window.innerWidth, vh=window.innerHeight-topo;
+    var s=Math.min(vw/pw, vh/ph, 1);
+    p.style.transformOrigin='top center';
+    p.style.transform='scale('+s+')';
+    document.body.style.overflow='hidden';
+    document.body.style.height=(topo+ph*s)+'px';
+  }
+  window.addEventListener('load',fit);
+  window.addEventListener('resize',fit);
+  window.addEventListener('beforeprint',function(){ var q=document.querySelector('.page'); if(q) q.style.transform='none'; document.body.style.height=''; document.body.style.overflow=''; });
+  window.addEventListener('afterprint',fit);
+  setTimeout(fit,300); setTimeout(fit,1000);
+})();
+<\/script>
 </body></html>`;
 
   const blob = new Blob([html], {type:'text/html'});
@@ -23191,7 +23214,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
   <button onclick="window.print()" style="background:#fff;color:#1b5e20;border:none;padding:10px 32px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨️ Imprimir / Salvar PDF</button>
 </div>
 
-<div class="page">
+<div class="page" id="apres-slide">
   <div class="hdr">
     <div>
       <div class="hdr-title">${titulo}</div>
@@ -23294,6 +23317,29 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
   </div>
 </div>
 
+<script>
+(function(){
+  function fit(){
+    var p=document.querySelector('.page'); if(!p) return;
+    p.style.transform='none';
+    var bar=document.querySelector('.no-print');
+    var topo=bar?bar.offsetHeight:0;
+    var pw=p.offsetWidth, ph=p.offsetHeight;
+    if(!pw||!ph) return;
+    var vw=window.innerWidth, vh=window.innerHeight-topo;
+    var s=Math.min(vw/pw, vh/ph, 1);
+    p.style.transformOrigin='top center';
+    p.style.transform='scale('+s+')';
+    document.body.style.overflow='hidden';
+    document.body.style.height=(topo+ph*s)+'px';
+  }
+  window.addEventListener('load',fit);
+  window.addEventListener('resize',fit);
+  window.addEventListener('beforeprint',function(){ var q=document.querySelector('.page'); if(q) q.style.transform='none'; document.body.style.height=''; document.body.style.overflow=''; });
+  window.addEventListener('afterprint',fit);
+  setTimeout(fit,300); setTimeout(fit,1000);
+})();
+<\/script>
 </body></html>`;
 
   const blob = new Blob([html], {type:'text/html'});
