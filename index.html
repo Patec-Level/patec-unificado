@@ -2688,6 +2688,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="apres-inc-mapa" checked> Detalhamento Mapa (Governança)</label>
                 <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="apres-inc-prazo" checked> Distribuição por Prazo (Donut)</label>
                 <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="apres-inc-cascata" checked> Plano de Ação (Cascata + Simulação)</label>
+                <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="apres-inc-monitoramento" checked> 📈 Monitoramento do PATEC (Evolução)</label>
               </div>
             </div>
           </div>
@@ -22255,6 +22256,7 @@ async function admApresentacaoGerar(){
   const incMapa    = document.getElementById('apres-inc-mapa')?.checked;
   const incPrazo   = document.getElementById('apres-inc-prazo')?.checked;
   const incCascata = document.getElementById('apres-inc-cascata')?.checked;
+  const incMonitoramento = document.getElementById('apres-inc-monitoramento')?.checked;
   // Filtro para Donut + Indicadores (multi-seleção)
   const filtroAnArr = admApresentacaoGetFiltro(); // [] = todos, [...] = selecionados
   const filtroLabel = filtroAnArr.length===0 ? 'Todos os analistas' :
@@ -22414,6 +22416,30 @@ async function admApresentacaoGerar(){
     }
     if(pgPAHidden){ pgPA.style.display=''; pgPA.style.visibility=''; }
     if(tabWasHiddenPA){ if(tabFinPA) tabFinPA.style.display='none'; if(tabAPPA) tabAPPA.style.display='block'; }
+  }
+
+  // ── Capturar imagem Monitoramento do PATEC (aba do Plano de Ação) ──
+  let monitorImg = '';
+  if(incMonitoramento){
+    const pmIniEl = document.getElementById('pm-dt-inicio');
+    const pmFimEl = document.getElementById('pm-dt-fim');
+    if(pmIniEl) pmIniEl.value = paIni || casIni || dataRef;
+    if(pmFimEl) pmFimEl.value = paFim || casFim || dataRef;
+    const pgPAm = document.getElementById('p-plano-acao');
+    const pgPAmHidden = pgPAm && !pgPAm.classList.contains('active');
+    if(pgPAmHidden){ pgPAm.style.display='block'; pgPAm.style.visibility='hidden'; }
+    // A aba interna de monitoramento precisa estar visível pro canvas (pm-chart) ter largura.
+    const tabMon = document.getElementById('pa-tab-monitoramento');
+    const tabMonWasHidden = tabMon && tabMon.style.display === 'none';
+    if(tabMon) tabMon.style.display = 'block';
+    if(typeof renderMonitoramentoPatec === 'function') renderMonitoramentoPatec();
+    await new Promise(r=>setTimeout(r,800));
+    const canvasMon = document.getElementById('pm-chart');
+    if(canvasMon && canvasMon.width > 10){
+      try { monitorImg = canvasMon.toDataURL('image/png'); } catch(e){}
+    }
+    if(tabMonWasHidden && tabMon) tabMon.style.display = 'none';
+    if(pgPAmHidden){ pgPAm.style.display=''; pgPAm.style.visibility=''; }
   }
 
   // ── Simulação PA — usa mesma lógica do renderCascata ──
@@ -22849,6 +22875,15 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
           <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:8px">Simulação · Meta: ${metaDiaSim} itens/dia</div>
           ${simLinhas}
         </div>
+      </div>
+    </div>` : ''}
+
+    ${incMonitoramento ? `
+    <!-- MONITORAMENTO DO PATEC -->
+    <div>
+      <div class="sec-title">📈 Monitoramento do PATEC — Evolução Diária</div>
+      <div style="text-align:center;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:10px">
+        ${monitorImg ? `<img src="${monitorImg}" style="max-width:100%;max-height:360px">` : '<div style="color:#999;text-align:center;padding:2rem;border:1px dashed #ccc;border-radius:8px">Gráfico não disponível</div>'}
       </div>
     </div>` : ''}
 
