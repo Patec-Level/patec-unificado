@@ -7922,7 +7922,9 @@ function renderPainelEstrategico(){
     const f = new Date(fim + 'T12:00:00');
     while(d <= f){
       const dw = d.getDay();
-      if(dw >= 1 && dw <= 5) dias.push(d.toISOString().slice(0,10));
+      const iso = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      // Dia útil = seg–sex E não-feriado (GOV_FERIADOS): feriado não entra no eixo.
+      if(dw >= 1 && dw <= 5 && (typeof GOV_FERIADOS === 'undefined' || !GOV_FERIADOS.includes(iso))) dias.push(iso);
       d.setDate(d.getDate()+1);
     }
     return dias;
@@ -26427,7 +26429,7 @@ function _ceRenderChart(mod){
   let fim=(ciclo.fim_previsto && ciclo.fim_previsto>minFim) ? ciclo.fim_previsto : _ceIsoAddDias(ini,30);
 
   // eixo = dias úteis do ciclo
-  const dias=[]; { const d=new Date(ini+'T12:00:00'); const f=new Date(fim+'T12:00:00'); while(d<=f){ const dw=d.getDay(); if(dw>=1&&dw<=5) dias.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')); d.setDate(d.getDate()+1); } }
+  const dias=[]; { const d=new Date(ini+'T12:00:00'); const f=new Date(fim+'T12:00:00'); while(d<=f){ const dw=d.getDay(); const _iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); if(dw>=1&&dw<=5 && (typeof GOV_FERIADOS==='undefined' || !GOV_FERIADOS.includes(_iso))) dias.push(_iso); d.setDate(d.getDate()+1); } }
   const labels=dias.map(d=>fmtDt(d));
 
   // mapas diários de análise e saídas a partir das ações
