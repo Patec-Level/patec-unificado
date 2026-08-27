@@ -22700,6 +22700,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
 </div>
 
 <div class="page" id="apres-slide">
+  <div id="apres-inner">
   <!-- HEADER -->
   <div class="hdr">
     <div>
@@ -22891,24 +22892,24 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
     <div class="ftr-txt">PATEC · Gestão de Compras · ${dataFmt}</div>
     <div class="ftr-txt">Gerado em ${new Date().toLocaleString('pt-BR')}</div>
   </div>
+  </div>
 </div>
 
 <script>
 (function(){
   function fit(){
     var p=document.querySelector('.page'); if(!p) return;
+    var inner=document.getElementById('apres-inner');
     p.style.transform='none';
-    // Alinha a altura do gráfico do slide do Plano de Ação ao bloco de Simulação
-    // (evita o vão embaixo da simulação). object-fit mantém a proporção.
+    if(inner) inner.style.transform='none';
+    // Gráfico do slide do Plano de Ação preenche a largura; simulação estica pra casar a altura.
     var cbox=document.querySelector('.cascata-img');
     if(cbox && cbox.nextElementSibling){
       var im=cbox.querySelector('img');
       var sim=cbox.nextElementSibling;
       if(im){
-        // Gráfico preenche a LARGURA da coluna (fica maior/zoom), altura natural.
         cbox.style.height=''; cbox.style.display=''; cbox.style.overflow=''; cbox.style.alignItems=''; cbox.style.justifyContent='';
         im.style.width='100%'; im.style.height='auto'; im.style.objectFit=''; im.style.maxHeight='none';
-        // Simulação estica pra casar a altura do gráfico: cards preenchem, alinhados, sem vão.
         var hGraf=cbox.offsetHeight;
         if(hGraf>60){
           sim.style.display='flex'; sim.style.flexDirection='column'; sim.style.minHeight=hGraf+'px';
@@ -22917,20 +22918,33 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
         }
       }
     }
+    // Página fixa em 16:9 (1200x675) — proporção de slide PowerPoint, o print encaixa sem esticar.
+    var PW=1200, PH=675;
+    p.style.width=PW+'px'; p.style.height=PH+'px'; p.style.overflow='hidden'; p.style.margin='0 auto';
+    if(inner){
+      inner.style.width=PW+'px'; inner.style.transformOrigin='top center';
+      var innerH=inner.scrollHeight;
+      var sInner=(innerH>PH)?(PH/innerH):1;
+      inner.style.transform='scale('+sInner+')';
+    }
+    // Escala a página 16:9 pra caber na janela (visualização); o print continua 16:9.
     var bar=document.querySelector('.no-print');
     var topo=bar?bar.offsetHeight:0;
-    var pw=p.offsetWidth, ph=p.offsetHeight;
-    if(!pw||!ph) return;
     var vw=window.innerWidth, vh=window.innerHeight-topo;
-    var s=Math.min(vw/pw, vh/ph, 1);
+    var s=Math.min(vw/PW, vh/PH, 1);
     p.style.transformOrigin='top center';
     p.style.transform='scale('+s+')';
     document.body.style.overflow='hidden';
-    document.body.style.height=(topo+ph*s)+'px';
+    document.body.style.height=(topo+PH*s)+'px';
   }
   window.addEventListener('load',fit);
   window.addEventListener('resize',fit);
-  window.addEventListener('beforeprint',function(){ var q=document.querySelector('.page'); if(q) q.style.transform='none'; document.body.style.height=''; document.body.style.overflow=''; });
+  window.addEventListener('beforeprint',function(){
+    var q=document.querySelector('.page');
+    if(q){ q.style.transform='none'; q.style.width=''; q.style.height=''; q.style.overflow=''; }
+    var qi=document.getElementById('apres-inner'); if(qi) qi.style.transform='';
+    document.body.style.height=''; document.body.style.overflow='';
+  });
   window.addEventListener('afterprint',fit);
   setTimeout(fit,300); setTimeout(fit,1000);
 })();
@@ -23234,6 +23248,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
 </div>
 
 <div class="page" id="apres-slide">
+  <div id="apres-inner">
   <div class="hdr">
     <div>
       <div class="hdr-title">${titulo}</div>
@@ -23334,24 +23349,24 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
     <div class="ftr-txt">PATEC · Abrir PATEC · ${dataFmt}</div>
     <div class="ftr-txt">Gerado em ${new Date().toLocaleString('pt-BR')}</div>
   </div>
+  </div>
 </div>
 
 <script>
 (function(){
   function fit(){
     var p=document.querySelector('.page'); if(!p) return;
+    var inner=document.getElementById('apres-inner');
     p.style.transform='none';
-    // Alinha a altura do gráfico do slide do Plano de Ação ao bloco de Simulação
-    // (evita o vão embaixo da simulação). object-fit mantém a proporção.
+    if(inner) inner.style.transform='none';
+    // Gráfico do slide do Plano de Ação preenche a largura; simulação estica pra casar a altura.
     var cbox=document.querySelector('.cascata-img');
     if(cbox && cbox.nextElementSibling){
       var im=cbox.querySelector('img');
       var sim=cbox.nextElementSibling;
       if(im){
-        // Gráfico preenche a LARGURA da coluna (fica maior/zoom), altura natural.
         cbox.style.height=''; cbox.style.display=''; cbox.style.overflow=''; cbox.style.alignItems=''; cbox.style.justifyContent='';
         im.style.width='100%'; im.style.height='auto'; im.style.objectFit=''; im.style.maxHeight='none';
-        // Simulação estica pra casar a altura do gráfico: cards preenchem, alinhados, sem vão.
         var hGraf=cbox.offsetHeight;
         if(hGraf>60){
           sim.style.display='flex'; sim.style.flexDirection='column'; sim.style.minHeight=hGraf+'px';
@@ -23360,20 +23375,33 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
         }
       }
     }
+    // Página fixa em 16:9 (1200x675) — proporção de slide PowerPoint, o print encaixa sem esticar.
+    var PW=1200, PH=675;
+    p.style.width=PW+'px'; p.style.height=PH+'px'; p.style.overflow='hidden'; p.style.margin='0 auto';
+    if(inner){
+      inner.style.width=PW+'px'; inner.style.transformOrigin='top center';
+      var innerH=inner.scrollHeight;
+      var sInner=(innerH>PH)?(PH/innerH):1;
+      inner.style.transform='scale('+sInner+')';
+    }
+    // Escala a página 16:9 pra caber na janela (visualização); o print continua 16:9.
     var bar=document.querySelector('.no-print');
     var topo=bar?bar.offsetHeight:0;
-    var pw=p.offsetWidth, ph=p.offsetHeight;
-    if(!pw||!ph) return;
     var vw=window.innerWidth, vh=window.innerHeight-topo;
-    var s=Math.min(vw/pw, vh/ph, 1);
+    var s=Math.min(vw/PW, vh/PH, 1);
     p.style.transformOrigin='top center';
     p.style.transform='scale('+s+')';
     document.body.style.overflow='hidden';
-    document.body.style.height=(topo+ph*s)+'px';
+    document.body.style.height=(topo+PH*s)+'px';
   }
   window.addEventListener('load',fit);
   window.addEventListener('resize',fit);
-  window.addEventListener('beforeprint',function(){ var q=document.querySelector('.page'); if(q) q.style.transform='none'; document.body.style.height=''; document.body.style.overflow=''; });
+  window.addEventListener('beforeprint',function(){
+    var q=document.querySelector('.page');
+    if(q){ q.style.transform='none'; q.style.width=''; q.style.height=''; q.style.overflow=''; }
+    var qi=document.getElementById('apres-inner'); if(qi) qi.style.transform='';
+    document.body.style.height=''; document.body.style.overflow='';
+  });
   window.addEventListener('afterprint',fit);
   setTimeout(fit,300); setTimeout(fit,1000);
 })();
