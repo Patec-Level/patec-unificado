@@ -22647,7 +22647,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
 .mapa-grid{display:grid;grid-template-columns:repeat(5,1fr) 1.6fr;grid-template-rows:auto auto;gap:8px}
 .mcard{border-radius:6px;padding:6px 8px;border:1px solid #e5e5e5;background:#f5f5f5 !important;text-align:center;display:flex;flex-direction:column;justify-content:center}
 .mcard-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px;color:#1a1a1a !important}
-.mcard-val{font-size:20px;font-weight:800;line-height:1;margin-bottom:1px;color:#1a1a1a !important}
+.mcard-val{font-size:20px;font-weight:500;line-height:1;margin-bottom:1px;color:#1a1a1a !important}
 .mcard-big{display:flex;flex-direction:column;justify-content:center;grid-row:span 2}
 .mcard-big .mcard-val{font-size:42px}
 .var-up{color:#c62828;font-size:10px;font-weight:700}
@@ -22676,11 +22676,11 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
 .sim-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
 .sim-card{border-radius:6px;padding:7px 10px;background:#f5f5f5;border:1px solid #e5e5e5;text-align:center;display:flex;flex-direction:column;justify-content:center}
 .sim-label{font-size:9px;font-weight:700;text-transform:uppercase;color:#555;margin-bottom:4px}
-.sim-val{font-size:15px;font-weight:800;color:#1565C0}
+.sim-val{font-size:15px;font-weight:500;color:#1a1a1a}
 .sim-sub{font-size:10px;color:#777;margin-top:2px}
-.sim-green .sim-val{color:#1b5e20}
-.sim-orange .sim-val{color:#e65100}
-.sim-red .sim-val{color:#b71c1c}
+.sim-green .sim-val{color:#1a1a1a}
+.sim-orange .sim-val{color:#1a1a1a}
+.sim-red .sim-val{color:#1a1a1a}
 /* Footer */
 .ftr{background:#1b5e20;padding:7px 28px;display:flex;justify-content:space-between;align-items:center;margin-top:10px}
 .ftr-txt{color:rgba(255,255,255,.7);font-size:9px}
@@ -22833,7 +22833,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
       <div>
         <div class="sec-title">🗺️ Detalhamento — Governança (Em Tratativa)</div>
         ${govBars}
-        ${xglTotalCalc>0?`<div class="gov-row" style="margin-top:4px"><div class="gov-lbl" style="color:#6A1E9E;font-weight:700">XGL PENDENTES</div><div class="gov-bar-wrap"><div class="gov-bar" style="width:${Math.round(xglTotalCalc/(govSorted[0]?.[1]||1)*100)}%;background:#6A1E9E"></div></div><div class="gov-cnt">${xglTotalCalc} <span style="color:#999;font-size:10px">(${govTotalFinal>0?Math.round(xglTotalCalc/govTotalFinal*100):0}%)</span></div></div>`:''}
+        ${xglTotalCalc>0?`<div class="gov-row" style="margin-top:4px"><div class="gov-lbl">XGL PENDENTES</div><div class="gov-bar-wrap"><div class="gov-bar" style="width:${Math.round(xglTotalCalc/(govSorted[0]?.[1]||1)*100)}%;background:#6A1E9E"></div></div><div class="gov-cnt">${xglTotalCalc} <span style="color:#999;font-size:10px">(${govTotalFinal>0?Math.round(xglTotalCalc/govTotalFinal*100):0}%)</span></div></div>`:''}
 
       </div>` : '<div></div>'}
 
@@ -23215,9 +23215,9 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
 .sim-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 .sim-card{border-radius:6px;padding:8px 10px;background:#f7f9fc;border:1px solid #dde3ed}
 .sim-label{font-size:9px;font-weight:700;text-transform:uppercase;color:#555;margin-bottom:4px}
-.sim-val{font-size:15px;font-weight:800;color:#1565C0}
+.sim-val{font-size:15px;font-weight:500;color:#1a1a1a}
 .sim-sub{font-size:10px;color:#777;margin-top:2px}
-.sim-green .sim-val{color:#1b5e20}
+.sim-green .sim-val{color:#1a1a1a}
 .ftr{background:#1b5e20;padding:7px 28px;display:flex;justify-content:space-between;align-items:center;margin-top:10px}
 .ftr-txt{color:rgba(255,255,255,.7);font-size:9px}
 @media print{
