@@ -22898,6 +22898,26 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
   function fit(){
     var p=document.querySelector('.page'); if(!p) return;
     p.style.transform='none';
+    // Alinha a altura do gráfico do slide do Plano de Ação ao bloco de Simulação
+    // (evita o vão embaixo da simulação). object-fit mantém a proporção.
+    var cbox=document.querySelector('.cascata-img');
+    if(cbox && cbox.nextElementSibling){
+      var im=cbox.querySelector('img');
+      var sim=cbox.nextElementSibling;
+      if(im){
+        // Mede a altura REAL do conteúdo da simulação (esconde o gráfico p/ ele
+        // não esticar a linha do grid) e casa o gráfico com ela — sem vão.
+        var prevD=cbox.style.display;
+        cbox.style.display='none';
+        var hSim=sim.offsetHeight;
+        cbox.style.display=prevD||'';
+        if(hSim>40){
+          cbox.style.height=hSim+'px';
+          cbox.style.display='flex'; cbox.style.alignItems='center'; cbox.style.justifyContent='center'; cbox.style.overflow='hidden';
+          im.style.width='100%'; im.style.height='100%'; im.style.objectFit='contain'; im.style.maxHeight='none';
+        }
+      }
+    }
     var bar=document.querySelector('.no-print');
     var topo=bar?bar.offsetHeight:0;
     var pw=p.offsetWidth, ph=p.offsetHeight;
@@ -23322,6 +23342,26 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
   function fit(){
     var p=document.querySelector('.page'); if(!p) return;
     p.style.transform='none';
+    // Alinha a altura do gráfico do slide do Plano de Ação ao bloco de Simulação
+    // (evita o vão embaixo da simulação). object-fit mantém a proporção.
+    var cbox=document.querySelector('.cascata-img');
+    if(cbox && cbox.nextElementSibling){
+      var im=cbox.querySelector('img');
+      var sim=cbox.nextElementSibling;
+      if(im){
+        // Mede a altura REAL do conteúdo da simulação (esconde o gráfico p/ ele
+        // não esticar a linha do grid) e casa o gráfico com ela — sem vão.
+        var prevD=cbox.style.display;
+        cbox.style.display='none';
+        var hSim=sim.offsetHeight;
+        cbox.style.display=prevD||'';
+        if(hSim>40){
+          cbox.style.height=hSim+'px';
+          cbox.style.display='flex'; cbox.style.alignItems='center'; cbox.style.justifyContent='center'; cbox.style.overflow='hidden';
+          im.style.width='100%'; im.style.height='100%'; im.style.objectFit='contain'; im.style.maxHeight='none';
+        }
+      }
+    }
     var bar=document.querySelector('.no-print');
     var topo=bar?bar.offsetHeight:0;
     var pw=p.offsetWidth, ph=p.offsetHeight;
