@@ -22905,16 +22905,15 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
       var im=cbox.querySelector('img');
       var sim=cbox.nextElementSibling;
       if(im){
-        // Mede a altura REAL do conteúdo da simulação (esconde o gráfico p/ ele
-        // não esticar a linha do grid) e casa o gráfico com ela — sem vão.
-        var prevD=cbox.style.display;
-        cbox.style.display='none';
-        var hSim=sim.offsetHeight;
-        cbox.style.display=prevD||'';
-        if(hSim>40){
-          cbox.style.height=hSim+'px';
-          cbox.style.display='flex'; cbox.style.alignItems='center'; cbox.style.justifyContent='center'; cbox.style.overflow='hidden';
-          im.style.width='100%'; im.style.height='100%'; im.style.objectFit='contain'; im.style.maxHeight='none';
+        // Gráfico preenche a LARGURA da coluna (fica maior/zoom), altura natural.
+        cbox.style.height=''; cbox.style.display=''; cbox.style.overflow=''; cbox.style.alignItems=''; cbox.style.justifyContent='';
+        im.style.width='100%'; im.style.height='auto'; im.style.objectFit=''; im.style.maxHeight='none';
+        // Simulação estica pra casar a altura do gráfico: cards preenchem, alinhados, sem vão.
+        var hGraf=cbox.offsetHeight;
+        if(hGraf>60){
+          sim.style.display='flex'; sim.style.flexDirection='column'; sim.style.minHeight=hGraf+'px';
+          var grid=sim.querySelector('.sim-grid');
+          if(grid){ grid.style.flex='1 1 auto'; grid.style.gridAutoRows='1fr'; }
         }
       }
     }
@@ -23349,16 +23348,15 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
       var im=cbox.querySelector('img');
       var sim=cbox.nextElementSibling;
       if(im){
-        // Mede a altura REAL do conteúdo da simulação (esconde o gráfico p/ ele
-        // não esticar a linha do grid) e casa o gráfico com ela — sem vão.
-        var prevD=cbox.style.display;
-        cbox.style.display='none';
-        var hSim=sim.offsetHeight;
-        cbox.style.display=prevD||'';
-        if(hSim>40){
-          cbox.style.height=hSim+'px';
-          cbox.style.display='flex'; cbox.style.alignItems='center'; cbox.style.justifyContent='center'; cbox.style.overflow='hidden';
-          im.style.width='100%'; im.style.height='100%'; im.style.objectFit='contain'; im.style.maxHeight='none';
+        // Gráfico preenche a LARGURA da coluna (fica maior/zoom), altura natural.
+        cbox.style.height=''; cbox.style.display=''; cbox.style.overflow=''; cbox.style.alignItems=''; cbox.style.justifyContent='';
+        im.style.width='100%'; im.style.height='auto'; im.style.objectFit=''; im.style.maxHeight='none';
+        // Simulação estica pra casar a altura do gráfico: cards preenchem, alinhados, sem vão.
+        var hGraf=cbox.offsetHeight;
+        if(hGraf>60){
+          sim.style.display='flex'; sim.style.flexDirection='column'; sim.style.minHeight=hGraf+'px';
+          var grid=sim.querySelector('.sim-grid');
+          if(grid){ grid.style.flex='1 1 auto'; grid.style.gridAutoRows='1fr'; }
         }
       }
     }
