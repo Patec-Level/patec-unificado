@@ -22900,34 +22900,26 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
   function fit(){
     var p=document.querySelector('.page'); if(!p) return;
     var inner=document.getElementById('apres-inner');
+    var PW=1280, PH=720;
     p.style.transform='none';
     if(inner) inner.style.transform='none';
-    // Gráfico do slide do Plano de Ação preenche a largura; simulação estica pra casar a altura.
-    var cbox=document.querySelector('.cascata-img');
-    if(cbox && cbox.nextElementSibling){
-      var im=cbox.querySelector('img');
-      var sim=cbox.nextElementSibling;
-      if(im){
-        cbox.style.height=''; cbox.style.display=''; cbox.style.overflow=''; cbox.style.alignItems=''; cbox.style.justifyContent='';
-        im.style.width='100%'; im.style.height='auto'; im.style.objectFit=''; im.style.maxHeight='none';
-        var hGraf=cbox.offsetHeight;
-        if(hGraf>60){
-          sim.style.display='flex'; sim.style.flexDirection='column'; sim.style.minHeight=hGraf+'px';
-          var grid=sim.querySelector('.sim-grid');
-          if(grid){ grid.style.flex='1 1 auto'; grid.style.gridAutoRows='1fr'; }
-        }
-      }
-    }
-    // Página fixa em 16:9 (1200x675) — proporção de slide PowerPoint, o print encaixa sem esticar.
-    var PW=1280, PH=720;
+    // Quadro 16:9 e conteúdo PREENCHENDO tudo (edge-to-edge, sem margem lateral, sem centralizar).
     p.style.width=PW+'px'; p.style.height=PH+'px'; p.style.overflow='hidden'; p.style.margin='0 auto';
     if(inner){
-      inner.style.width=PW+'px'; inner.style.transformOrigin='top center';
-      var innerH=inner.scrollHeight;
-      var sInner=(innerH>PH)?(PH/innerH):1;
-      inner.style.transform='scale('+sInner+')';
+      inner.style.width=PW+'px'; inner.style.height=PH+'px';
+      inner.style.display='flex'; inner.style.flexDirection='column'; inner.style.overflow='hidden';
+      // corpo ocupa toda a altura entre header e footer; suas seções esticam pra preencher
+      var body=inner.querySelector('.body');
+      if(body){ body.style.flex='1 1 0'; body.style.minHeight='0'; }
+      // gráfico do Plano de Ação: preenche a célula sem distorcer (contain)
+      var cbox=inner.querySelector('.cascata-img');
+      if(cbox){
+        cbox.style.height='100%'; cbox.style.display='flex'; cbox.style.alignItems='center'; cbox.style.justifyContent='center'; cbox.style.overflow='hidden';
+        var im=cbox.querySelector('img');
+        if(im){ im.style.width='100%'; im.style.height='100%'; im.style.objectFit='contain'; im.style.maxHeight='none'; }
+      }
     }
-    // Escala a página 16:9 pra caber na janela (visualização); o print continua 16:9.
+    // escala o quadro 16:9 pra caber na janela (o print continua 16:9 e preenchido)
     var bar=document.querySelector('.no-print');
     var topo=bar?bar.offsetHeight:0;
     var vw=window.innerWidth, vh=window.innerHeight-topo;
@@ -22942,7 +22934,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
   window.addEventListener('beforeprint',function(){
     var q=document.querySelector('.page');
     if(q){ q.style.transform='none'; q.style.width=''; q.style.height=''; q.style.overflow=''; }
-    var qi=document.getElementById('apres-inner'); if(qi) qi.style.transform='';
+    var qi=document.getElementById('apres-inner'); if(qi){ qi.style.transform=''; qi.style.height=''; qi.style.display=''; }
     document.body.style.height=''; document.body.style.overflow='';
   });
   window.addEventListener('afterprint',fit);
@@ -23357,34 +23349,26 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
   function fit(){
     var p=document.querySelector('.page'); if(!p) return;
     var inner=document.getElementById('apres-inner');
+    var PW=1280, PH=720;
     p.style.transform='none';
     if(inner) inner.style.transform='none';
-    // Gráfico do slide do Plano de Ação preenche a largura; simulação estica pra casar a altura.
-    var cbox=document.querySelector('.cascata-img');
-    if(cbox && cbox.nextElementSibling){
-      var im=cbox.querySelector('img');
-      var sim=cbox.nextElementSibling;
-      if(im){
-        cbox.style.height=''; cbox.style.display=''; cbox.style.overflow=''; cbox.style.alignItems=''; cbox.style.justifyContent='';
-        im.style.width='100%'; im.style.height='auto'; im.style.objectFit=''; im.style.maxHeight='none';
-        var hGraf=cbox.offsetHeight;
-        if(hGraf>60){
-          sim.style.display='flex'; sim.style.flexDirection='column'; sim.style.minHeight=hGraf+'px';
-          var grid=sim.querySelector('.sim-grid');
-          if(grid){ grid.style.flex='1 1 auto'; grid.style.gridAutoRows='1fr'; }
-        }
-      }
-    }
-    // Página fixa em 16:9 (1200x675) — proporção de slide PowerPoint, o print encaixa sem esticar.
-    var PW=1280, PH=720;
+    // Quadro 16:9 e conteúdo PREENCHENDO tudo (edge-to-edge, sem margem lateral, sem centralizar).
     p.style.width=PW+'px'; p.style.height=PH+'px'; p.style.overflow='hidden'; p.style.margin='0 auto';
     if(inner){
-      inner.style.width=PW+'px'; inner.style.transformOrigin='top center';
-      var innerH=inner.scrollHeight;
-      var sInner=(innerH>PH)?(PH/innerH):1;
-      inner.style.transform='scale('+sInner+')';
+      inner.style.width=PW+'px'; inner.style.height=PH+'px';
+      inner.style.display='flex'; inner.style.flexDirection='column'; inner.style.overflow='hidden';
+      // corpo ocupa toda a altura entre header e footer; suas seções esticam pra preencher
+      var body=inner.querySelector('.body');
+      if(body){ body.style.flex='1 1 0'; body.style.minHeight='0'; }
+      // gráfico do Plano de Ação: preenche a célula sem distorcer (contain)
+      var cbox=inner.querySelector('.cascata-img');
+      if(cbox){
+        cbox.style.height='100%'; cbox.style.display='flex'; cbox.style.alignItems='center'; cbox.style.justifyContent='center'; cbox.style.overflow='hidden';
+        var im=cbox.querySelector('img');
+        if(im){ im.style.width='100%'; im.style.height='100%'; im.style.objectFit='contain'; im.style.maxHeight='none'; }
+      }
     }
-    // Escala a página 16:9 pra caber na janela (visualização); o print continua 16:9.
+    // escala o quadro 16:9 pra caber na janela (o print continua 16:9 e preenchido)
     var bar=document.querySelector('.no-print');
     var topo=bar?bar.offsetHeight:0;
     var vw=window.innerWidth, vh=window.innerHeight-topo;
@@ -23399,7 +23383,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
   window.addEventListener('beforeprint',function(){
     var q=document.querySelector('.page');
     if(q){ q.style.transform='none'; q.style.width=''; q.style.height=''; q.style.overflow=''; }
-    var qi=document.getElementById('apres-inner'); if(qi) qi.style.transform='';
+    var qi=document.getElementById('apres-inner'); if(qi){ qi.style.transform=''; qi.style.height=''; qi.style.display=''; }
     document.body.style.height=''; document.body.style.overflow='';
   });
   window.addEventListener('afterprint',fit);
