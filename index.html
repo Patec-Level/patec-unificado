@@ -14720,6 +14720,7 @@ function _pmColetarPonto(d){
     agTrat: agM ? agM.val : null,
     // Total PATEC = L3+L4+L5+L6 · Total Abrir PATEC = L7+L8 — mesma fórmula
     // usada no Painel Estratégico e na página Abrir PATEC.
+    patecFin: mapa ? (l3+l5+l6) : null,
     totalPatec: mapa ? (l3+l4+l5+l6) : null,
     totalAbrir: mapa ? (l7+l8) : null,
   };
@@ -14766,14 +14767,14 @@ function _pmRenderFinalizado(pontos){
 
   const kpiEl = document.getElementById('pm-kpis');
   if(kpiEl) kpiEl.innerHTML =
-    _pmKpiCard('PATEC Finalizado',    '✅', '#3266AD', _pmUltimoComValor(pontos,'l3'), 'l3') +
+    _pmKpiCard('PATEC Finalizado',    '✅', '#3266AD', _pmUltimoComValor(pontos,'patecFin'), 'patecFin') +
     _pmKpiCard('Ag. PATEC Finalizar', '⏳', '#3266AD', _pmUltimoComValor(pontos,'l4'), 'l4') +
     _pmKpiCard('Ag. Tratamento',      '🕐', '#2e7d32', _pmUltimoComValor(pontos,'agTrat'), 'agTrat');
 
   const tb = document.getElementById('pm-tb-body');
   if(tb) tb.innerHTML = pontos.map(p=>`<tr>
     <td style="font-weight:600">${_pmFmtDptBR(p.data)}</td>
-    <td style="color:#3266AD;font-weight:700">${p.l3===null?'—':p.l3}</td>
+    <td style="color:#3266AD;font-weight:700">${p.patecFin===null?'—':p.patecFin}</td>
     <td style="color:#3266AD;font-weight:700">${p.l4===null?'—':p.l4}</td>
     <td style="color:#2e7d32;font-weight:700">${p.agTrat===null?'—':p.agTrat}</td>
   </tr>`).join('');
@@ -14782,7 +14783,7 @@ function _pmRenderFinalizado(pontos){
   mkChart('pm-chart','line',{
     labels: pontos.map(p=>_pmFmtDptBR(p.data)),
     datasets:[
-      {label:'PATEC Finalizado',    data:pontos.map(p=>p.l3),     borderColor:'#3266AD', backgroundColor:'rgba(50,102,173,.08)',  borderWidth:2.5, pointRadius:3, tension:.15, spanGaps:true},
+      {label:'PATEC Finalizado',    data:pontos.map(p=>p.patecFin),     borderColor:'#3266AD', backgroundColor:'rgba(50,102,173,.08)',  borderWidth:2.5, pointRadius:3, tension:.15, spanGaps:true},
       {label:'Ag. PATEC Finalizar', data:pontos.map(p=>p.l4),     borderColor:'#6A93C9', backgroundColor:'rgba(106,147,201,.08)', borderWidth:2.5, pointRadius:3, tension:.15, spanGaps:true},
       {label:'Ag. Tratamento',      data:pontos.map(p=>p.agTrat), borderColor:'#2e7d32', backgroundColor:'rgba(46,125,50,.08)',   borderWidth:2.5, pointRadius:3, tension:.15, spanGaps:true},
     ]
