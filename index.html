@@ -22902,24 +22902,30 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
     var inner=document.getElementById('apres-inner');
     var PW=1280, PH=720;
     p.style.transform='none';
-    if(inner) inner.style.transform='none';
-    // Quadro 16:9 e conteúdo PREENCHENDO tudo (edge-to-edge, sem margem lateral, sem centralizar).
     p.style.width=PW+'px'; p.style.height=PH+'px'; p.style.overflow='hidden'; p.style.margin='0 auto';
     if(inner){
-      inner.style.width=PW+'px'; inner.style.height=PH+'px';
-      inner.style.display='flex'; inner.style.flexDirection='column'; inner.style.overflow='hidden';
-      // corpo ocupa toda a altura entre header e footer; suas seções esticam pra preencher
-      var body=inner.querySelector('.body');
-      if(body){ body.style.flex='1 1 0'; body.style.minHeight='0'; }
-      // gráfico do Plano de Ação: preenche a célula sem distorcer (contain)
+      inner.style.transform='none';
+      inner.style.width=PW+'px'; inner.style.transformOrigin='top center';
+      inner.style.display=''; inner.style.flexDirection=''; inner.style.height='auto';
       var cbox=inner.querySelector('.cascata-img');
       if(cbox){
-        cbox.style.height='100%'; cbox.style.display='flex'; cbox.style.alignItems='center'; cbox.style.justifyContent='center'; cbox.style.overflow='hidden';
+        cbox.style.height='240px'; cbox.style.display='flex'; cbox.style.alignItems='center'; cbox.style.justifyContent='center'; cbox.style.overflow='hidden';
         var im=cbox.querySelector('img');
         if(im){ im.style.width='100%'; im.style.height='100%'; im.style.objectFit='contain'; im.style.maxHeight='none'; }
       }
+      var innerH=inner.scrollHeight;
+      var body=inner.querySelector('.body');
+      if(innerH <= PH+2){
+        inner.style.height=PH+'px';
+        inner.style.display='flex'; inner.style.flexDirection='column';
+        if(body){ body.style.flex='1 1 0'; body.style.minHeight='0'; }
+        inner.style.transform='none';
+      } else {
+        if(body){ body.style.flex=''; body.style.minHeight=''; }
+        inner.style.height='auto';
+        inner.style.transform='scale('+(PH/innerH)+')';
+      }
     }
-    // escala o quadro 16:9 pra caber na janela (o print continua 16:9 e preenchido)
     var bar=document.querySelector('.no-print');
     var topo=bar?bar.offsetHeight:0;
     var vw=window.innerWidth, vh=window.innerHeight-topo;
@@ -23351,24 +23357,30 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
     var inner=document.getElementById('apres-inner');
     var PW=1280, PH=720;
     p.style.transform='none';
-    if(inner) inner.style.transform='none';
-    // Quadro 16:9 e conteúdo PREENCHENDO tudo (edge-to-edge, sem margem lateral, sem centralizar).
     p.style.width=PW+'px'; p.style.height=PH+'px'; p.style.overflow='hidden'; p.style.margin='0 auto';
     if(inner){
-      inner.style.width=PW+'px'; inner.style.height=PH+'px';
-      inner.style.display='flex'; inner.style.flexDirection='column'; inner.style.overflow='hidden';
-      // corpo ocupa toda a altura entre header e footer; suas seções esticam pra preencher
-      var body=inner.querySelector('.body');
-      if(body){ body.style.flex='1 1 0'; body.style.minHeight='0'; }
-      // gráfico do Plano de Ação: preenche a célula sem distorcer (contain)
+      inner.style.transform='none';
+      inner.style.width=PW+'px'; inner.style.transformOrigin='top center';
+      inner.style.display=''; inner.style.flexDirection=''; inner.style.height='auto';
       var cbox=inner.querySelector('.cascata-img');
       if(cbox){
-        cbox.style.height='100%'; cbox.style.display='flex'; cbox.style.alignItems='center'; cbox.style.justifyContent='center'; cbox.style.overflow='hidden';
+        cbox.style.height='240px'; cbox.style.display='flex'; cbox.style.alignItems='center'; cbox.style.justifyContent='center'; cbox.style.overflow='hidden';
         var im=cbox.querySelector('img');
         if(im){ im.style.width='100%'; im.style.height='100%'; im.style.objectFit='contain'; im.style.maxHeight='none'; }
       }
+      var innerH=inner.scrollHeight;
+      var body=inner.querySelector('.body');
+      if(innerH <= PH+2){
+        inner.style.height=PH+'px';
+        inner.style.display='flex'; inner.style.flexDirection='column';
+        if(body){ body.style.flex='1 1 0'; body.style.minHeight='0'; }
+        inner.style.transform='none';
+      } else {
+        if(body){ body.style.flex=''; body.style.minHeight=''; }
+        inner.style.height='auto';
+        inner.style.transform='scale('+(PH/innerH)+')';
+      }
     }
-    // escala o quadro 16:9 pra caber na janela (o print continua 16:9 e preenchido)
     var bar=document.querySelector('.no-print');
     var topo=bar?bar.offsetHeight:0;
     var vw=window.innerWidth, vh=window.innerHeight-topo;
