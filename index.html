@@ -881,6 +881,42 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button class="stab" id="adm-nav-apresentacao1-btn" onclick="setAdmTab('apresentacao1',this);admApresentacao1Init()">📂 Apresentação 1</button>
         <button class="stab" onclick="setAdmTab('q18-upload',this)">🚫 Q18</button>
         <button class="stab" onclick="setAdmTab('gestao-prod',this)">✏️ Gestão de Produção</button>
+        <button class="stab" onclick="setAdmTab('feriados',this);feriadosRender()">📆 Feriados</button>
+      </div>
+
+      <!-- ── FERIADOS E PONTOS FACULTATIVOS ── -->
+      <div id="adm-feriados" class="adm-tab" style="display:none">
+        <div class="cd-t">📆 Feriados e Pontos Facultativos</div>
+        <div class="al al-b" style="margin-bottom:1rem">ℹ Estas datas são tratadas como <strong>dia não útil</strong> em todo o sistema: eixo do Monitoramento do PATEC, cascata do Plano de Ação, Controle das Equipes, prazos da Governança, Fechamento do Dia e Gestão de Jornada. Um dia que está aqui não aparece no gráfico e não é cobrado como dia sem upload. A lista vale para o ADLV e o FAST.</div>
+
+        <!-- Novo feriado -->
+        <div style="display:grid;grid-template-columns:1fr 2fr auto;gap:10px;align-items:end;margin-bottom:1rem;padding:1rem;background:var(--cin);border-radius:10px;border:1px solid var(--brd)">
+          <div>
+            <label style="font-size:10px;font-weight:700;color:var(--tx2);display:block;margin-bottom:4px">Data</label>
+            <input type="date" id="fer-dt" style="width:100%;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px;font-size:13px">
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:700;color:var(--tx2);display:block;margin-bottom:4px">Descrição</label>
+            <input type="text" id="fer-nome" placeholder="Ex: Aniversário da cidade" maxlength="60" style="width:100%;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px;font-size:13px">
+          </div>
+          <button class="btn btn-p" onclick="feriadosAdicionar()" style="white-space:nowrap">+ Adicionar</button>
+        </div>
+
+        <div id="fer-aviso" style="margin-bottom:1rem"></div>
+
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:.75rem">
+          <span style="font-size:11px;font-weight:700;color:var(--tx2)">MOSTRAR</span>
+          <select id="fer-ano" onchange="feriadosRender()" style="font-size:12px;padding:4px 8px;border:1.5px solid var(--brd);border-radius:7px"></select>
+          <span style="font-size:11px;color:var(--tx2)" id="fer-resumo"></span>
+        </div>
+
+        <div id="fer-lista" style="margin-bottom:1rem"></div>
+
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-g" style="font-size:11px" onclick="feriadosSalvarFirebase()">💾 Salvar no Firebase</button>
+          <button class="btn btn-s" style="font-size:11px" onclick="feriadosRestaurarPadrao()">↺ Restaurar lista padrão</button>
+          <span id="fer-ok" style="font-size:11px;color:var(--vd);font-weight:600;display:none">✓ Salvo!</span>
+        </div>
       </div>
 
 
@@ -6116,6 +6152,7 @@ async function fbCarregarTudo(){
   console.log('✓ Firebase: todos os dados carregados e renderizados');
   fbCarregarMapaDiario();
   fbCarregarPCPDiario();
+  fbCarregarFeriados();   // dias não úteis — usados por todos os eixos de dia útil
 
   // ── LAZY LOAD — só carrega quando a tela for aberta ──
   // Radar    → carrega ao abrir Radar Estratégico
@@ -14208,7 +14245,9 @@ function paDiasUteis(dtInicio, dtFim){
   const d   = new Date(dtInicio+'T12:00:00');
   const fim = new Date(dtFim+'T12:00:00');
   if(isNaN(d) || isNaN(fim)) return dias;
-  const ehFeriado = s => (typeof GOV_FERIADOS !== 'undefined') && GOV_FERIADOS.includes(s);
+  // try/catch: GOV_FERIADOS é declarado mais abaixo no arquivo — se algo chamar
+  // paDiasUteis antes disso, o eixo sai só com seg–sex em vez de quebrar.
+  const ehFeriado = s => { try{ return GOV_FERIADOS.includes(s); }catch(e){ return false; } };
   while(d <= fim){
     const dow = d.getDay();
     const s   = iso(d);
@@ -16844,13 +16883,206 @@ let _govDadosCarregadoOK = false; // true só depois que fbCarregarGov() termina
   // acontece antes do Firebase terminar de carregar o _govDados (race condition)
 let _govAnalistaOverrides = {}; // {chave: analista} — editados na plataforma, soberanos sobre upload // { 'RC|SEQ|OP|IOP': { status, envio, finalizado } }
 
-// Feriados nacionais BR (fixos + móveis aproximados)
-const GOV_FERIADOS = [
-  '2026-01-01','2026-04-03','2026-04-21','2026-05-01','2026-06-11',
-  '2026-09-07','2026-10-12','2026-11-02','2026-11-15','2026-11-20','2026-12-25',
-  '2027-01-01','2027-04-02','2027-04-21','2027-05-01','2027-09-07',
-  '2027-10-12','2027-11-02','2027-11-15','2027-11-20','2027-12-25'
+// ════════════════════════════════════════════
+// FERIADOS E PONTOS FACULTATIVOS
+// GOV_FERIADOS é a lista simples de datas usada por TODAS as contas de dia útil
+// (paDiasUteis, Governança, Fechamento do Dia, Gestão de Jornada, Controle das
+// Equipes). _feriadosLista guarda os mesmos dias com nome/origem para a tela de
+// ADM → Feriados. As duas são mantidas em sincronia por feriadosAplicar().
+// Fonte: Firestore config/feriados (compartilhado ADLV+FAST). Sem Firebase,
+// vale a lista padrão embutida abaixo.
+// ════════════════════════════════════════════
+const GOV_FERIADOS_PADRAO = [
+  {dt:'2026-01-01', nome:'Confraternização Universal'},
+  {dt:'2026-02-17', nome:'Carnaval'},
+  {dt:'2026-04-03', nome:'Sexta-feira Santa'},
+  {dt:'2026-04-21', nome:'Tiradentes'},
+  {dt:'2026-05-01', nome:'Dia do Trabalho'},
+  {dt:'2026-06-04', nome:'Corpus Christi'},
+  {dt:'2026-06-11', nome:'Ponto facultativo'},
+  {dt:'2026-09-07', nome:'Independência'},
+  {dt:'2026-10-12', nome:'Nossa Senhora Aparecida'},
+  {dt:'2026-11-02', nome:'Finados'},
+  {dt:'2026-11-15', nome:'Proclamação da República'},
+  {dt:'2026-11-20', nome:'Consciência Negra'},
+  {dt:'2026-12-25', nome:'Natal'},
+  {dt:'2027-01-01', nome:'Confraternização Universal'},
+  {dt:'2027-02-09', nome:'Carnaval'},
+  {dt:'2027-03-26', nome:'Sexta-feira Santa'},
+  {dt:'2027-04-21', nome:'Tiradentes'},
+  {dt:'2027-05-01', nome:'Dia do Trabalho'},
+  {dt:'2027-05-27', nome:'Corpus Christi'},
+  {dt:'2027-09-07', nome:'Independência'},
+  {dt:'2027-10-12', nome:'Nossa Senhora Aparecida'},
+  {dt:'2027-11-02', nome:'Finados'},
+  {dt:'2027-11-15', nome:'Proclamação da República'},
+  {dt:'2027-11-20', nome:'Consciência Negra'},
+  {dt:'2027-12-25', nome:'Natal'}
 ];
+
+let _feriadosLista = GOV_FERIADOS_PADRAO.map(f=>({...f}));
+let GOV_FERIADOS   = _feriadosLista.map(f=>f.dt);
+
+// Reordena, remove duplicidade de data e regenera GOV_FERIADOS.
+function feriadosAplicar(lista){
+  const mapa = {};
+  (lista||[]).forEach(f=>{
+    const dt = String(f && f.dt || '').trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(dt)) return;
+    mapa[dt] = { dt, nome: String(f.nome||'').trim() || 'Feriado' };
+  });
+  _feriadosLista = Object.values(mapa).sort((a,b)=>a.dt.localeCompare(b.dt));
+  GOV_FERIADOS   = _feriadosLista.map(f=>f.dt);
+  try{ localStorage.setItem('patec_feriados', JSON.stringify(_feriadosLista)); }catch(e){}
+  return _feriadosLista;
+}
+
+// Cache local, para a lista já valer antes do Firebase responder.
+try{
+  const _fCache = JSON.parse(localStorage.getItem('patec_feriados')||'null');
+  if(Array.isArray(_fCache) && _fCache.length) feriadosAplicar(_fCache);
+}catch(e){}
+
+async function fbCarregarFeriados(){
+  try{
+    const doc = await fbGet('config','feriados');
+    if(doc && Array.isArray(doc.lista) && doc.lista.length){
+      feriadosAplicar(doc.lista);
+      console.log('✓ Feriados carregados do Firebase:', GOV_FERIADOS.length);
+    } else {
+      console.log('ℹ Feriados: nada salvo no Firebase — usando a lista padrão ('+GOV_FERIADOS.length+' datas).');
+    }
+  }catch(e){ console.warn('fbCarregarFeriados:', e); }
+  try{ if(typeof feriadosRender==='function') feriadosRender(); }catch(e){}
+  feriadosReRenderizarTelas();
+}
+
+// Redesenha o que depende do eixo de dias úteis depois de mudar a lista.
+function feriadosReRenderizarTelas(){
+  ['renderMonitoramentoPatec','renderCascata','renderPlanoAcao'].forEach(fn=>{
+    try{ if(typeof window[fn]==='function') window[fn](); }catch(e){}
+  });
+  ['adlv','fast'].forEach(mod=>{
+    try{ if(typeof renderCeMonitoramento==='function') renderCeMonitoramento(mod); }catch(e){}
+  });
+}
+
+// ── ADM → Feriados ──
+const _FER_DIAS_SEMANA = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+function _ferDiaSemana(iso){
+  const d = new Date(iso+'T12:00:00');
+  return isNaN(d) ? '' : _FER_DIAS_SEMANA[d.getDay()];
+}
+function _ferAviso(txt, tipo){
+  const el = document.getElementById('fer-aviso');
+  if(!el) return;
+  if(!txt){ el.innerHTML=''; return; }
+  const c = tipo==='erro'  ? ['#fdecea','rgba(217,64,64,.35)','#a02020']
+          : tipo==='alerta'? ['#fff8e6','rgba(192,122,18,.35)','#8a5a0b']
+          :                  ['#eaf6ee','rgba(46,125,50,.3)','#1b5e20'];
+  el.innerHTML = `<div style="background:${c[0]};border:1.5px solid ${c[1]};border-radius:8px;padding:.625rem .875rem;font-size:11.5px;font-weight:600;color:${c[2]};line-height:1.5">${txt}</div>`;
+}
+
+function feriadosRender(){
+  const lista = _feriadosLista || [];
+  const selAno = document.getElementById('fer-ano');
+  const hojeAno = String(new Date().getFullYear());
+  if(selAno){
+    const anos = [...new Set(lista.map(f=>f.dt.slice(0,4)))].sort();
+    const atual = selAno.value || (anos.includes(hojeAno) ? hojeAno : (anos[0]||hojeAno));
+    selAno.innerHTML = '<option value="todos">Todos os anos</option>' +
+      anos.map(a=>`<option value="${a}"${a===atual?' selected':''}>${a}</option>`).join('');
+    if(atual==='todos') selAno.value='todos';
+  }
+  const filtroAno = selAno ? selAno.value : 'todos';
+  const visiveis = lista.filter(f => filtroAno==='todos' || f.dt.slice(0,4)===filtroAno);
+
+  const resumo = document.getElementById('fer-resumo');
+  if(resumo) resumo.textContent = visiveis.length+' data(s) · '+lista.length+' no total';
+
+  const el = document.getElementById('fer-lista');
+  if(!el) return;
+  if(!visiveis.length){
+    el.innerHTML = '<div style="font-size:12px;color:var(--tx2);padding:1rem;background:var(--cin);border-radius:8px">Nenhum feriado cadastrado para este filtro.</div>';
+    return;
+  }
+  const hojeISO = (()=>{ const h=new Date(); return h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0')+'-'+String(h.getDate()).padStart(2,'0'); })();
+  el.innerHTML = `
+    <table class="tb" style="width:100%">
+      <thead><tr><th style="width:120px">Data</th><th style="width:110px">Dia</th><th>Descrição</th><th style="width:90px"></th></tr></thead>
+      <tbody>${visiveis.map(f=>{
+        const idx = _feriadosLista.findIndex(x=>x.dt===f.dt);
+        const fds = ['sábado','domingo'].includes(_ferDiaSemana(f.dt));
+        const passou = f.dt < hojeISO;
+        return `<tr style="${passou?'opacity:.55':''}">
+          <td style="font-weight:700;color:var(--az)">${f.dt.split('-').reverse().join('/')}</td>
+          <td style="font-size:11.5px;color:${fds?'var(--tx2)':'var(--tx)'}">${_ferDiaSemana(f.dt)}${fds?' <span title="Já não era dia útil">·</span>':''}</td>
+          <td><input type="text" value="${String(f.nome||'').replace(/"/g,'&quot;')}" maxlength="60" onchange="feriadosEditarNome(${idx}, this.value)" style="width:100%;padding:5px 8px;border:1.5px solid var(--brd);border-radius:6px;font-size:12.5px"></td>
+          <td><button class="btn btn-r" style="font-size:10.5px;padding:4px 10px" onclick="feriadosRemover('${f.dt}')">Remover</button></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+function feriadosAdicionar(){
+  const dtEl = document.getElementById('fer-dt');
+  const nmEl = document.getElementById('fer-nome');
+  const dt = (dtEl?.value||'').trim();
+  const nome = (nmEl?.value||'').trim();
+  if(!dt){ _ferAviso('Informe a data do feriado.','erro'); return; }
+  if(_feriadosLista.some(f=>f.dt===dt)){
+    _ferAviso('A data '+dt.split('-').reverse().join('/')+' já está cadastrada.','alerta'); return;
+  }
+  feriadosAplicar([..._feriadosLista, {dt, nome: nome||'Feriado'}]);
+  if(dtEl) dtEl.value=''; if(nmEl) nmEl.value='';
+  const selAno = document.getElementById('fer-ano');
+  if(selAno) selAno.value = dt.slice(0,4);
+  feriadosRender();
+  const fds = ['sábado','domingo'].includes(_ferDiaSemana(dt));
+  _ferAviso('✓ '+dt.split('-').reverse().join('/')+' ('+_ferDiaSemana(dt)+') adicionado.'+
+    (fds?' Esse dia já era fim de semana, então nada muda nos gráficos.':' Clique em <strong>Salvar no Firebase</strong> para valer para todo mundo.'), fds?'alerta':'ok');
+  feriadosReRenderizarTelas();
+}
+
+function feriadosEditarNome(idx, val){
+  if(!_feriadosLista[idx]) return;
+  _feriadosLista[idx].nome = String(val||'').trim() || 'Feriado';
+  try{ localStorage.setItem('patec_feriados', JSON.stringify(_feriadosLista)); }catch(e){}
+  _ferAviso('Descrição alterada. Clique em <strong>Salvar no Firebase</strong> para gravar.','alerta');
+}
+
+function feriadosRemover(dt){
+  const f = _feriadosLista.find(x=>x.dt===dt);
+  if(!f) return;
+  if(!confirm('Remover '+dt.split('-').reverse().join('/')+' ('+(f.nome||'')+')?\n\nEsse dia volta a contar como dia útil e passará a aparecer nos gráficos.')) return;
+  feriadosAplicar(_feriadosLista.filter(x=>x.dt!==dt));
+  feriadosRender();
+  _ferAviso('Data removida. Clique em <strong>Salvar no Firebase</strong> para gravar.','alerta');
+  feriadosReRenderizarTelas();
+}
+
+function feriadosRestaurarPadrao(){
+  if(!confirm('Restaurar a lista padrão de feriados nacionais?\n\nAs datas que você cadastrou manualmente serão perdidas.')) return;
+  feriadosAplicar(GOV_FERIADOS_PADRAO.map(f=>({...f})));
+  feriadosRender();
+  _ferAviso('Lista padrão restaurada. Clique em <strong>Salvar no Firebase</strong> para gravar.','alerta');
+  feriadosReRenderizarTelas();
+}
+
+async function feriadosSalvarFirebase(){
+  const ok = await fbSet('config','feriados',{
+    lista: JSON.parse(JSON.stringify(_feriadosLista)),
+    ts: new Date().toISOString()
+  });
+  if(ok){
+    const okEl = document.getElementById('fer-ok');
+    if(okEl){ okEl.style.display='inline'; setTimeout(()=>okEl.style.display='none', 2500); }
+    _ferAviso('✓ '+_feriadosLista.length+' data(s) salvas. Vale para o ADLV e o FAST, em todas as máquinas.','ok');
+    feriadosReRenderizarTelas();
+  } else {
+    _ferAviso('⛔ Não foi possível salvar no Firebase. A lista continua valendo só nesta máquina — tente de novo com a conexão estável.','erro');
+  }
+}
 
 const GOV_PRAZOS_ADLV = {
   'MDG': 5,
