@@ -3774,7 +3774,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
           <div>
             <div class="cd-t" style="margin:0">📈 Monitoramento do PATEC — Evolução Diária</div>
-            <div style="font-size:11px;color:var(--tx2);margin-top:4px"><strong>PATEC Finalizado</strong> = Resumo do dia: PATEC Finalizado + 100% Reprovado + PATEC Cancelado · <strong>Ag. PATEC Finalizar</strong>, Abrir PATEC Obrigatório, Abrir PATEC Idêntico Não, Total PATEC e Total Abrir PATEC vêm direto do Resumo do dia · <strong>Ag. Tratamento</strong> = card Ag. Tratamento do Radar Estratégico (hoje sempre ao vivo; dias anteriores pelo marco gravado no upload do dia).</div>
+            <div style="font-size:11px;color:var(--tx2);margin-top:4px"><strong>PATEC Finalizado</strong> = Resumo do dia: PATEC Finalizado + 100% Reprovado + PATEC Cancelado · <strong>Ag. PATEC Finalizar</strong>, Abrir PATEC Obrigatório, Abrir PATEC Idêntico Não, Total PATEC e Total Abrir PATEC vêm direto do Resumo do dia · <strong>Ag. Tratamento</strong> = card Ag. Tratamento do Radar Estratégico, gravado 1x por dia no upload do Radar. Dia sem upload fica vazio — nenhum número é estimado ou repetido. · Eixo = dias úteis (seg–sex, sem feriado nacional).</div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <div class="field-wrap" style="min-width:140px">
@@ -3793,6 +3793,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <button id="pm-btn-geral" class="btn btn-s" style="font-size:12px;align-self:flex-end" onclick="pmSelecionarIndicador('geral',this)">📊 PATEC Geral</button>
           </div>
         </div>
+        <!-- Status da gravação do marco de Ag. Tratamento do dia -->
+        <div id="pm-status-marco" style="margin-top:.875rem"></div>
       </div>
 
       <!-- GRÁFICO CASCATA — MONITORAMENTO DO PATEC -->
@@ -14193,15 +14195,24 @@ initMetaGap();
 let _paChartCascata = null;
 
 // ── Utilitários de data ──
+// Dias úteis do período = seg–sex E não-feriado (GOV_FERIADOS) — mesmo critério
+// da Governança, do Fechamento do Dia e da Gestão de Jornada. Usada pelo
+// Monitoramento do PATEC, pela cascata do Plano de Ação e pelo Controle das
+// Equipes, então o eixo das três telas é sempre o mesmo.
+// Datas construídas com 'T12:00:00' e formatadas a partir dos componentes
+// LOCAIS — new Date('2026-09-01') seria lido como meia-noite UTC e, em UTC-3,
+// jogava o período inteiro um dia para trás (o último dia do filtro sumia).
 function paDiasUteis(dtInicio, dtFim){
   const dias = [];
-  const d = new Date(dtInicio);
-  d.setHours(12,0,0,0);
-  const fim = new Date(dtFim);
-  fim.setHours(12,0,0,0);
+  const iso = dt => dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+  const d   = new Date(dtInicio+'T12:00:00');
+  const fim = new Date(dtFim+'T12:00:00');
+  if(isNaN(d) || isNaN(fim)) return dias;
+  const ehFeriado = s => (typeof GOV_FERIADOS !== 'undefined') && GOV_FERIADOS.includes(s);
   while(d <= fim){
     const dow = d.getDay();
-    if(dow >= 1 && dow <= 5) dias.push(d.toISOString().split('T')[0]);
+    const s   = iso(d);
+    if(dow >= 1 && dow <= 5 && !ehFeriado(s)) dias.push(s);
     d.setDate(d.getDate()+1);
   }
   return dias;
@@ -14326,8 +14337,11 @@ function renderCascata(){
 
   const _hISO = new Date();
   const hojeISO = _hISO.getFullYear()+'-'+String(_hISO.getMonth()+1).padStart(2,'0')+'-'+String(_hISO.getDate()).padStart(2,'0');
-  // Ancorar no radar APENAS se data fim incluir hoje ou futuro
-  const anchorarRadar = dtFim >= hojeISO && _backlogRealRadar !== null;
+  // Ancorar no radar APENAS se data fim incluir hoje ou futuro E o Radar
+  // carregado for o upload de HOJE — sem o upload do dia o arquivo em memória
+  // é o de ontem e não pode virar o backlog de hoje.
+  const anchorarRadar = dtFim >= hojeISO && _backlogRealRadar !== null
+                        && (typeof _pmRadarEhDeHoje==='function' ? _pmRadarEhDeHoje() : true);
 
   let backlogAtual = backlogBase;
   diasUteis.forEach((d, idx)=>{
@@ -14709,18 +14723,72 @@ function pmPeriodoHoje(){
   renderMonitoramentoPatec();
 }
 
+// Data (local) do upload do Radar que está em memória. O upload é 1x por dia —
+// enquanto ele não acontece, o que está carregado é o arquivo do dia anterior e
+// NÃO pode ser usado como número de hoje em lugar nenhum.
+function _pmDataDoRadarCarregado(){
+  const ts = (typeof _radarTs!=='undefined' && _radarTs) ? _radarTs
+           : (localStorage.getItem(_lsMod('patec_radar_upload_ts'))||'');
+  if(!ts) return null;
+  const d = new Date(ts);
+  if(isNaN(d)) return null;
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function _pmHojeISO(){
+  const h=new Date();
+  return h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0')+'-'+String(h.getDate()).padStart(2,'0');
+}
+function _pmRadarEhDeHoje(){ return _pmDataDoRadarCarregado() === _pmHojeISO(); }
+
 // Ag. Tratamento AO VIVO — exatamente a mesma contagem do card do Radar
 // Estratégico (analista_auto = "Analisar PATEC Finalizado" + fila PATEC /
 // Análise de Oportunidade). Fonte única usada pelo card, pela cascata e pelo
 // marco diário — se mudar a regra, muda aqui.
-function _pmAgTratRadarAoVivo(){
+// Retorna null se o Radar carregado não for o upload de HOJE: sem upload do
+// dia, o Monitoramento não mostra número nenhum para hoje.
+function _pmAgTratRadarAoVivo(ignorarData){
   if(typeof _radarDados==='undefined' || !_radarDados || !_radarDados.length) return null;
+  if(!ignorarData && !_pmRadarEhDeHoje()) return null;
   const FILAS_AG = ['patec','análise de oportunidade'];
   const normF = v=>String(v||'').trim().toLowerCase();
   return _radarDados.filter(r=>
     (r.analista_auto||'').trim()==='Analisar PATEC Finalizado' &&
     FILAS_AG.includes(normF(r.fila))
   ).length;
+}
+
+// Status da gravação do marco de hoje — preenchido por paAtualizarBacklogAuto()
+let _pmStatusMarco = null;
+
+function pmRenderStatusMarco(){
+  const el = document.getElementById('pm-status-marco');
+  if(!el) return;
+  const hoje    = _pmHojeISO();
+  const hojeBR  = hoje.split('-').reverse().join('/');
+  const marco   = (_paHistorico||[]).find(h=>h.dt===hoje && h.label && h.label.includes('Auto'));
+  const dtRadar = _pmDataDoRadarCarregado();
+  const aoVivo  = _pmAgTratRadarAoVivo();          // null se o Radar não é de hoje
+  const s = _pmStatusMarco || {};
+  const box = (bg,brd,cor,txt)=>`<div style="background:${bg};border:1.5px solid ${brd};border-radius:8px;padding:.625rem .875rem;font-size:11.5px;font-weight:600;color:${cor};line-height:1.5">${txt}</div>`;
+
+  if(s.motivo==='erro-leitura' || s.motivo==='erro-gravacao' || s.motivo==='protecao-historico'){
+    return void (el.innerHTML = box('#fdecea','rgba(217,64,64,.35)','#a02020',
+      '⛔ <strong>O Ag. Tratamento de hoje NÃO foi gravado</strong> — o histórico já salvo foi preservado, nada foi apagado. '+
+      'Refaça o upload do Radar Estratégico com a conexão estável.'));
+  }
+  if(marco){
+    const hora = marco.ts ? new Date(marco.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : null;
+    const divergente = (aoVivo!==null && aoVivo!==marco.val);
+    return void (el.innerHTML = box('#eaf6ee','rgba(46,125,50,.3)','#1b5e20',
+      '✅ <strong>Ag. Tratamento de '+hojeBR+' gravado: '+marco.val+'</strong>'+(hora?' (upload das '+hora+')':'')+
+      ' · '+((_paHistorico||[]).length)+' dias no histórico. Este ponto está salvo e continua no gráfico amanhã.'+
+      (divergente?'<br>🔄 O Radar em tela mostra <strong>'+aoVivo+'</strong> — refaça o upload para gravar esse número no dia.':'')));
+  }
+  el.innerHTML = box('#fff8e6','rgba(192,122,18,.35)','#8a5a0b',
+    '⏳ <strong>Upload do Radar de '+hojeBR+' ainda não foi feito</strong> — por isso hoje aparece vazio no gráfico e na tabela. '+
+    (dtRadar ? 'O arquivo carregado é o de <strong>'+dtRadar.split('-').reverse().join('/')+'</strong> e não é usado como número de hoje. '
+             : 'Nenhum arquivo do Radar carregado nesta sessão. ')+
+    'Assim que o upload for feito, o Ag. Tratamento do dia é gravado no ato.');
 }
 
 function _pmColetarPonto(d){
@@ -14732,11 +14800,9 @@ function _pmColetarPonto(d){
   const l6 = mapa ? (mapa.l6||0) : null;
   const l7 = mapa ? (mapa.l7||0) : null;
   const l8 = mapa ? (mapa.l8||0) : null;
-  // Ag. Tratamento: no DIA DE HOJE vale sempre o Radar ao vivo (o mesmo número
-  // do card do Radar Estratégico). O marco salvo é snapshot do 1º upload e
-  // ficava defasado quando o Radar era reenviado mais tarde no mesmo dia.
-  const _hojeISO = (()=>{ const h=new Date(); return h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0')+'-'+String(h.getDate()).padStart(2,'0'); })();
-  const agVivo = (d===_hojeISO) ? _pmAgTratRadarAoVivo() : null;
+  // Ag. Tratamento de HOJE: usa o Radar ao vivo — que só devolve número se o
+  // upload do dia já foi feito. Sem upload, fica null e o dia aparece vazio.
+  const agVivo = (d===_pmHojeISO()) ? _pmAgTratRadarAoVivo() : null;
 
   return {
     data: d,
@@ -14901,6 +14967,8 @@ function renderMonitoramentoPatec(){
   if(_pmIndicador === 'abertura') _pmRenderAbertura(pontos);
   else if(_pmIndicador === 'geral') _pmRenderGeral(pontos);
   else _pmRenderFinalizado(pontos);
+
+  try{ pmRenderStatusMarco(); }catch(e){ console.warn('pmRenderStatusMarco:', e); }
 }
 
 
@@ -20988,59 +21056,98 @@ async function paAtualizarBacklogAuto(forcarUpload){
 
   const db = getDB();
 
+  // O Radar em memória é o upload de HOJE? (fonte única: _pmRadarEhDeHoje)
+  // Upload é 1x por dia: sem o upload do dia, nada é gravado para o dia.
+  const radarEhDeHoje = (typeof _pmRadarEhDeHoje==='function') ? _pmRadarEhDeHoje() : false;
+
   // CORREÇÃO (bug do ciclo bagunçado): antes de gravar, MESCLAR com o que já
   // está no Firebase. Sem isso, um upload feito sem ter aberto o Plano de Ação
   // usava um _paHistorico incompleto (só embutidos + hoje) e o .set() APAGAVA
   // os marcos dos dias intermediários já salvos. Agora nada é perdido.
+  let mergeOk = false;      // só grava se conseguiu ler o que já existe
+  let qtdFB   = 0;          // quantos marcos existem hoje no Firestore
   if(db){
     try{
       const doc = await db.collection('config').doc('pa_historico').get();
       let listaFB = (doc.exists && doc.data().lista) ? doc.data().lista : [];
+      qtdFB = listaFB.length;
       let memoria = (_paHistorico||[]);
       // FAST: nunca deixar marco do ADLV entrar/permanecer aqui, mesmo que
       // tenha vazado antes desta liberação (ver _paEhMarcoAdlvOriginal).
       if(_moduloAtivo === 'fast'){
         listaFB = listaFB.filter(m => !_paEhMarcoAdlvOriginal(m));
         memoria = memoria.filter(m => !_paEhMarcoAdlvOriginal(m));
+        qtdFB = listaFB.length;
       }
       const mapa = {};
       memoria.forEach(m => { if(m && m.dt) mapa[m.dt] = m; }); // memória/local
       listaFB.forEach(m => { if(m && m.dt) mapa[m.dt] = m; }); // Firebase prevalece por data
       _paHistorico = Object.values(mapa);
-    }catch(e){ console.warn('paAtualizarBacklogAuto merge:', e); }
+      mergeOk = true;
+    }catch(e){
+      // NÃO gravar: sem conseguir ler o histórico atual, um .set() apagaria
+      // tudo que já está salvo. Melhor não gravar do que perder o histórico.
+      console.warn('⛔ PA Histórico: falha ao ler o Firestore — gravação abortada para não perder marcos.', e);
+      _pmStatusMarco = {ok:false, motivo:'erro-leitura', val:totalAgTrat, dt:hoje};
+      try{ if(typeof pmRenderStatusMarco==='function') pmRenderStatusMarco(); }catch(_){}
+      return totalAgTrat;
+    }
   }
 
-  // Criar marco do dia APENAS no primeiro upload (travado depois).
+  // Marco do dia: 1 por dia. Só é criado/atualizado com Radar REAL de hoje —
+  // abertura de página com o Radar de ontem em cache não cria marco (era isso
+  // que congelava o valor errado antes do upload do dia).
   const idxExist = _paHistorico.findIndex(h => h.dt === hoje && h.label && h.label.includes('Auto'));
+  let gravouHoje = idxExist >= 0;
   if(idxExist >= 0){
-    if(forcarUpload && _paHistorico[idxExist].val !== totalAgTrat){
+    if((forcarUpload || radarEhDeHoje) && _paHistorico[idxExist].val !== totalAgTrat){
       // Upload novo do Radar no mesmo dia: o marco passa a valer o número
       // atual, senão o Monitoramento fica preso no 1º upload da manhã.
       console.log('↻ PA Histórico: marco de '+hoje+' atualizado de '+_paHistorico[idxExist].val+' para '+totalAgTrat+' (novo upload do Radar).');
       _paHistorico[idxExist].val = totalAgTrat;
+      _paHistorico[idxExist].ts  = new Date().toISOString();
     } else {
-      // Abertura de página com Radar em cache: mantém o marco já gravado.
-      // Se precisar corrigir, dá pra editar na aba ADM.
       console.log('PA Histórico: marco de hoje ('+hoje+') já registrado em '+_paHistorico[idxExist].val+' — mantido.');
     }
-  } else {
-    _paHistorico.push({ dt: hoje, val: totalAgTrat, label: 'Backlog Auto — AG. Tratamento' });
+  } else if(forcarUpload || radarEhDeHoje){
+    _paHistorico.push({ dt: hoje, val: totalAgTrat, label: 'Backlog Auto — AG. Tratamento', ts: new Date().toISOString() });
+    gravouHoje = true;
     console.log('✓ PA Histórico: novo marco do dia '+hoje+' = '+totalAgTrat+' (Ag. Tratamento)');
+  } else {
+    console.log('PA Histórico: Radar em cache não é de hoje — marco de '+hoje+' NÃO criado (aguardando upload do dia).');
   }
 
   // Ordenar e salvar
   _paHistorico.sort((a,b) => a.dt.localeCompare(b.dt));
   localStorage.setItem(_lsMod('patec_pa_historico'), JSON.stringify(_paHistorico));
 
+  _pmStatusMarco = {
+    ok: gravouHoje, motivo: gravouHoje ? 'ok' : 'sem-upload',
+    val: gravouHoje ? totalAgTrat : null, dt: hoje, aoVivo: totalAgTrat, total: _paHistorico.length
+  };
+
   if(db){
-    db.collection('config').doc('pa_historico').set({
-      lista: _paHistorico, ts: new Date().toISOString()
-    }).then(() => {
-      console.log('✓ Backlog auto atualizado:', totalAgTrat, 'itens AG. TRATAMENTO em', hoje);
-      if(typeof renderCascata === 'function') renderCascata();
-      if(typeof paHistoricoRender === 'function') paHistoricoRender();
-    }).catch(e => console.warn('paAtualizarBacklogAuto:', e));
+    // Trava final: nunca gravar uma lista menor que a que está no Firestore.
+    if(mergeOk && _paHistorico.length >= qtdFB){
+      db.collection('config').doc('pa_historico').set({
+        lista: _paHistorico, ts: new Date().toISOString()
+      }).then(() => {
+        console.log('✓ Backlog auto salvo:', totalAgTrat, 'em', hoje, '·', _paHistorico.length, 'marcos no histórico');
+        _pmStatusMarco.salvo = true;
+        if(typeof renderCascata === 'function') renderCascata();
+        if(typeof paHistoricoRender === 'function') paHistoricoRender();
+        try{ if(typeof pmRenderStatusMarco==='function') pmRenderStatusMarco(); }catch(_){}
+      }).catch(e => {
+        console.warn('paAtualizarBacklogAuto:', e);
+        _pmStatusMarco.ok = false; _pmStatusMarco.motivo = 'erro-gravacao';
+        try{ if(typeof pmRenderStatusMarco==='function') pmRenderStatusMarco(); }catch(_){}
+      });
+    } else {
+      console.warn('⛔ PA Histórico: gravação abortada (lista local '+_paHistorico.length+' < Firestore '+qtdFB+').');
+      _pmStatusMarco.ok = false; _pmStatusMarco.motivo = 'protecao-historico';
+    }
   }
+  try{ if(typeof pmRenderStatusMarco==='function') pmRenderStatusMarco(); }catch(_){}
 
   return totalAgTrat;
 }
