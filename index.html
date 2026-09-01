@@ -5678,15 +5678,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:.5rem">
             <div class="cd-t" style="margin:0">📋 Quadro de férias — ordem de saída</div>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <div class="field-wrap" style="min-width:190px;margin:0">
-                <span class="field-label">Status</span>
-                <select id="bf-ferias-filtro-status" onchange="renderFerias()" style="width:100%;font-size:12px;padding:5px 10px">
-                  <option value="todos">Todos os status</option>
-                  <option value="agora">✅ Em férias agora</option>
-                  <option value="programado">📅 Programado</option>
-                  <option value="concluido">✓ Concluído</option>
-                  <option value="ativos">📌 Em férias + Programado</option>
-                </select>
+              <div class="field-wrap" style="margin:0">
+                <span class="field-label">Status (pode marcar mais de um)</span>
+                <div id="bf-ferias-chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
               </div>
               <div class="field-wrap" style="min-width:170px;margin:0">
                 <span class="field-label">Colaborador</span>
@@ -8794,12 +8788,60 @@ function setBFTab(id,btn){
   if(id==='ferias') renderFerias();
   if(id==='banco')  renderBanco();
 }
+// Filtro de status do quadro de férias — multisseleção.
+// Conjunto VAZIO = mostrar todos (não é "esconder tudo").
+const _BF_STATUS = [
+  {id:'agora',      rot:'✅ Em férias agora', cor:'#1b5e20', bg:'#eaf6ee', brd:'rgba(46,125,50,.45)'},
+  {id:'programado', rot:'📅 Programado',      cor:'#1A4A8A', bg:'#eaf1fa', brd:'rgba(26,74,138,.45)'},
+  {id:'concluido',  rot:'✓ Concluído',        cor:'#555',    bg:'#eeeeee', brd:'rgba(0,0,0,.22)'}
+];
+let _bfStatusSel = [];
+
+function feriasToggleStatus(id){
+  _bfStatusSel = _bfStatusSel.includes(id)
+    ? _bfStatusSel.filter(s=>s!==id)
+    : [..._bfStatusSel, id];
+  renderFerias();
+}
 function feriasLimparFiltros(){
-  const s = document.getElementById('bf-ferias-filtro-status');
+  _bfStatusSel = [];
   const c = document.getElementById('bf-ferias-filtro-colab');
-  if(s) s.value = 'todos';
   if(c) c.value = '';
   renderFerias();
+}
+function _bfRenderChips(contagem){
+  const el = document.getElementById('bf-ferias-chips');
+  if(!el) return;
+  const todos = _bfStatusSel.length === 0;
+
+  // Caixas de seleção de verdade (<input type=checkbox>): marcar uma não
+  // desmarca as outras — dá para combinar Programado + Em férias agora, etc.
+  const chip = (s,n,on)=>`
+    <label title="${n===0?'Nenhum período neste status no momento':'Marcar/desmarcar este status'}"
+      style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:11.5px;font-weight:700;
+             padding:5px 11px;border-radius:999px;transition:all .12s;user-select:none;
+             border:1.5px solid ${on?s.brd:'var(--brd)'};
+             background:${on?s.bg:'#fff'};color:${on?s.cor:'var(--tx2)'};
+             ${n===0?'opacity:.55':(on?'':'opacity:.8')}">
+      <input type="checkbox" ${on?'checked':''} onchange="feriasToggleStatus('${s.id}')"
+             style="margin:0;cursor:pointer;accent-color:${s.cor};width:13px;height:13px">
+      ${s.rot}
+      <span style="font-size:10px;font-weight:800;opacity:.75">${n}</span>
+    </label>`;
+
+  // Se algum status marcado não tem nenhum período, avisa — senão parece que a
+  // combinação "não funcionou", quando na verdade aquele status está vazio.
+  const vazios = _BF_STATUS.filter(s => _bfStatusSel.includes(s.id) && !(contagem[s.id]||0))
+                           .map(s => s.rot.replace(/^[^ ]+ /,''));
+
+  el.innerHTML = _BF_STATUS.map(s => chip(s, contagem[s.id]||0, _bfStatusSel.includes(s.id))).join('') +
+    `<span style="font-size:10.5px;color:var(--tx2);align-self:center;margin-left:2px">
+       ${todos ? 'nada marcado = mostrando todos'
+               : `<a href="#" onclick="feriasLimparFiltros();return false" style="color:var(--azm);font-weight:700">limpar</a>`}
+     </span>` +
+    (vazios.length ? `<div style="flex-basis:100%;font-size:10.5px;color:#8a5a0b;font-weight:600;margin-top:2px">
+        ⓘ ${vazios.join(' e ')} — nenhum período neste status agora, então marcar não muda a lista.
+      </div>` : '');
 }
 function renderFerias(){
   const tbId = 'bf-ferias-tb';
@@ -8824,7 +8866,6 @@ function renderFerias(){
   });
 
   // Filtros da tabela
-  const fStatus = document.getElementById('bf-ferias-filtro-status')?.value || 'todos';
   const fColab  = document.getElementById('bf-ferias-filtro-colab')?.value  || '';
   const selColab = document.getElementById('bf-ferias-filtro-colab');
   if(selColab && selColab.options.length <= 1){
@@ -8832,15 +8873,20 @@ function renderFerias(){
       const o=document.createElement('option'); o.value=c; o.textContent=c; selColab.appendChild(o);
     });
   }
-  const visiveis = dados.filter(r =>
-    (fColab ? r.colab===fColab : true) &&
-    (fStatus==='todos'  ? true
-     : fStatus==='ativos' ? (r._st==='agora' || r._st==='programado')
-     : r._st===fStatus)
-  );
+
+  // Contagem por status considerando o filtro de colaborador — os números nas
+  // pastilhas mostram o que cada uma traria de fato.
+  const baseColab = fColab ? dados.filter(r=>r.colab===fColab) : dados;
+  const contagem = {agora:0, programado:0, concluido:0};
+  baseColab.forEach(r=>{ contagem[r._st] = (contagem[r._st]||0)+1; });
+  _bfRenderChips(contagem);
+
+  // Nenhum status marcado = todos (marcar nada não pode significar esconder tudo)
+  const semFiltroStatus = _bfStatusSel.length === 0;
+  const visiveis = baseColab.filter(r => semFiltroStatus || _bfStatusSel.includes(r._st));
 
   const contEl = document.getElementById('bf-ferias-contagem');
-  if(contEl) contEl.textContent = (fStatus==='todos' && !fColab)
+  if(contEl) contEl.textContent = (semFiltroStatus && !fColab)
     ? dados.length+' período(s)'
     : 'mostrando '+visiveis.length+' de '+dados.length;
 
