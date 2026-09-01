@@ -8896,9 +8896,9 @@ function renderFerias(){
                  :                        '<span class="pl pl-g">✓ Concluído</span>';
     const saidaFmt   = r.saida   ? r.saida.split('-').reverse().join('/') : '—';
     const retornoFmt = r.retorno || '—';
-    // A ordem é a posição no quadro COMPLETO — não renumera ao filtrar, senão
-    // "4º" mudaria de significado dependendo do filtro escolhido.
-    const ordem = dados.indexOf(r) + 1;
+    // A ordem é recalculada sobre o que está sendo exibido: filtrou, renumera
+    // de 1 em diante seguindo a data de saída da lista filtrada.
+    const ordem = i + 1;
     return `<tr>
       <td><strong>${ordem}º</strong></td>
       <td><strong>${r.colab}</strong></td>
