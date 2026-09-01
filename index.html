@@ -3774,7 +3774,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
           <div>
             <div class="cd-t" style="margin:0">📈 Monitoramento do PATEC — Evolução Diária</div>
-            <div style="font-size:11px;color:var(--tx2);margin-top:4px">PATEC Finalizado, Ag. PATEC Finalizar, Abrir PATEC Obrigatório, Abrir PATEC Idêntico Não, Total PATEC e Total Abrir PATEC vêm do Resumo do dia · Ag. Tratamento vem do Radar Estratégico (1 marco por dia, no 1º upload).</div>
+            <div style="font-size:11px;color:var(--tx2);margin-top:4px"><strong>PATEC Finalizado</strong> = Resumo do dia: PATEC Finalizado + 100% Reprovado + PATEC Cancelado · <strong>Ag. PATEC Finalizar</strong>, Abrir PATEC Obrigatório, Abrir PATEC Idêntico Não, Total PATEC e Total Abrir PATEC vêm direto do Resumo do dia · <strong>Ag. Tratamento</strong> = card Ag. Tratamento do Radar Estratégico (hoje sempre ao vivo; dias anteriores pelo marco gravado no upload do dia).</div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <div class="field-wrap" style="min-width:140px">
@@ -11908,8 +11908,12 @@ async function radarOnFile(file){
     govSincronizarMapa(rows);
     radarRenderPreview(rows);
     syncPatecFinalizadoRadar();
-    // Atualizar backlog automático após upload
-    setTimeout(paAtualizarBacklogAuto, 500);
+    // Atualizar backlog automático após upload (força regravar o marco do dia)
+    setTimeout(()=>{
+      paAtualizarBacklogAuto(true);
+      // Reflete o número novo no Monitoramento do PATEC sem precisar recarregar
+      try{ if(typeof renderMonitoramentoPatec==='function') renderMonitoramentoPatec(); }catch(e){}
+    }, 500);
     // Disparar alertas após upload do radar
     setTimeout(()=>alertasDisparar('radar_upload'), 2000);
     if(progEl) progEl.style.display='none';
@@ -14705,6 +14709,20 @@ function pmPeriodoHoje(){
   renderMonitoramentoPatec();
 }
 
+// Ag. Tratamento AO VIVO — exatamente a mesma contagem do card do Radar
+// Estratégico (analista_auto = "Analisar PATEC Finalizado" + fila PATEC /
+// Análise de Oportunidade). Fonte única usada pelo card, pela cascata e pelo
+// marco diário — se mudar a regra, muda aqui.
+function _pmAgTratRadarAoVivo(){
+  if(typeof _radarDados==='undefined' || !_radarDados || !_radarDados.length) return null;
+  const FILAS_AG = ['patec','análise de oportunidade'];
+  const normF = v=>String(v||'').trim().toLowerCase();
+  return _radarDados.filter(r=>
+    (r.analista_auto||'').trim()==='Analisar PATEC Finalizado' &&
+    FILAS_AG.includes(normF(r.fila))
+  ).length;
+}
+
 function _pmColetarPonto(d){
   const mapa = (typeof mapaFirebase!=='undefined' ? mapaFirebase : []).find(r=>r.data===d);
   const agM  = (_paHistorico||[]).find(h=>h.dt===d && h.label && h.label.includes('Auto'));
@@ -14714,10 +14732,16 @@ function _pmColetarPonto(d){
   const l6 = mapa ? (mapa.l6||0) : null;
   const l7 = mapa ? (mapa.l7||0) : null;
   const l8 = mapa ? (mapa.l8||0) : null;
+  // Ag. Tratamento: no DIA DE HOJE vale sempre o Radar ao vivo (o mesmo número
+  // do card do Radar Estratégico). O marco salvo é snapshot do 1º upload e
+  // ficava defasado quando o Radar era reenviado mais tarde no mesmo dia.
+  const _hojeISO = (()=>{ const h=new Date(); return h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0')+'-'+String(h.getDate()).padStart(2,'0'); })();
+  const agVivo = (d===_hojeISO) ? _pmAgTratRadarAoVivo() : null;
+
   return {
     data: d,
     l3, l4, l7, l8,
-    agTrat: agM ? agM.val : null,
+    agTrat: (agVivo!==null && agVivo!==undefined) ? agVivo : (agM ? agM.val : null),
     // Total PATEC = L3+L4+L5+L6 · Total Abrir PATEC = L7+L8 — mesma fórmula
     // usada no Painel Estratégico e na página Abrir PATEC.
     patecFin: mapa ? (l3+l5+l6) : null,
@@ -20944,7 +20968,10 @@ async function mapaSalvarComentario(){
 // ════════════════════════════════════════════
 // BACKLOG AUTOMÁTICO — AG. TRATAMENTO DO MAPA
 // ════════════════════════════════════════════
-async function paAtualizarBacklogAuto(){
+// forcarUpload=true → chamada logo após um upload REAL do Radar: o marco do dia
+// é regravado com o número novo. Nas chamadas de abertura de página (que podem
+// rodar com o Radar do dia anterior ainda em cache) o marco existente é mantido.
+async function paAtualizarBacklogAuto(forcarUpload){
   if(!_radarDados || !_radarDados.length) return;
 
   // Contar Ag. Tratamento — MESMA lógica de _backlogRealRadar (renderCascata)
@@ -20986,10 +21013,16 @@ async function paAtualizarBacklogAuto(){
   // Criar marco do dia APENAS no primeiro upload (travado depois).
   const idxExist = _paHistorico.findIndex(h => h.dt === hoje && h.label && h.label.includes('Auto'));
   if(idxExist >= 0){
-    // Marco do dia é gravado UMA VEZ por dia (no 1º upload) e fica fixo.
-    // O valor vem do MESMO Ag. Tratamento do Radar, então bate com o card.
-    // Se precisar corrigir, dá pra editar na aba ADM.
-    console.log('PA Histórico: marco de hoje ('+hoje+') já registrado em '+_paHistorico[idxExist].val+' — mantido (1x por dia).');
+    if(forcarUpload && _paHistorico[idxExist].val !== totalAgTrat){
+      // Upload novo do Radar no mesmo dia: o marco passa a valer o número
+      // atual, senão o Monitoramento fica preso no 1º upload da manhã.
+      console.log('↻ PA Histórico: marco de '+hoje+' atualizado de '+_paHistorico[idxExist].val+' para '+totalAgTrat+' (novo upload do Radar).');
+      _paHistorico[idxExist].val = totalAgTrat;
+    } else {
+      // Abertura de página com Radar em cache: mantém o marco já gravado.
+      // Se precisar corrigir, dá pra editar na aba ADM.
+      console.log('PA Histórico: marco de hoje ('+hoje+') já registrado em '+_paHistorico[idxExist].val+' — mantido.');
+    }
   } else {
     _paHistorico.push({ dt: hoje, val: totalAgTrat, label: 'Backlog Auto — AG. Tratamento' });
     console.log('✓ PA Histórico: novo marco do dia '+hoje+' = '+totalAgTrat+' (Ag. Tratamento)');
@@ -26015,6 +26048,9 @@ function _ceMonColetarPonto(mod, d){
     data: d,
     l3, l4, l7, l8,
     agTrat: agM ? agM.val : null,
+    // Mesma fórmula da aba Monitoramento do Plano de Ação:
+    // PATEC Finalizado = L3 (Finalizado) + L5 (100% Reprovado) + L6 (Cancelado)
+    patecFin: mapa ? (l3+l5+l6) : null,
     totalPatec: mapa ? (l3+l4+l5+l6) : null,
     totalAbrir: mapa ? (l7+l8) : null,
   };
@@ -26104,19 +26140,19 @@ function renderCeMonitoramento(mod){
   } else {
     if(theadEl) theadEl.innerHTML = '<tr><th>Data</th><th>PATEC Final.</th><th>Ag. Finalizar</th><th>Ag. Trat.</th></tr>';
     if(kpiEl) kpiEl.innerHTML =
-      _pmKpiCard('PATEC Final.',   '✅', '#3266AD', _pmUltimoComValor(pontos,'l3'), 'l3') +
+      _pmKpiCard('PATEC Final.',   '✅', '#3266AD', _pmUltimoComValor(pontos,'patecFin'), 'patecFin') +
       _pmKpiCard('Ag. Finalizar',  '⏳', '#3266AD', _pmUltimoComValor(pontos,'l4'), 'l4') +
       _pmKpiCard('Ag. Trat.',      '🕐', '#2e7d32', _pmUltimoComValor(pontos,'agTrat'), 'agTrat');
     if(tbEl) tbEl.innerHTML = pontos.map(p=>`<tr>
       <td style="font-weight:600">${_pmFmtDptBR(p.data)}</td>
-      <td style="color:#3266AD;font-weight:700">${p.l3===null?'—':p.l3}</td>
+      <td style="color:#3266AD;font-weight:700">${p.patecFin===null?'—':p.patecFin}</td>
       <td style="color:#3266AD;font-weight:700">${p.l4===null?'—':p.l4}</td>
       <td style="color:#2e7d32;font-weight:700">${p.agTrat===null?'—':p.agTrat}</td>
     </tr>`).join('');
     mkChart(chartId,'line',{
       labels: pontos.map(p=>_pmFmtDptBR(p.data)),
       datasets:[
-        {label:'PATEC Final.',  data:pontos.map(p=>p.l3),     borderColor:'#3266AD', backgroundColor:'rgba(50,102,173,.08)',  borderWidth:2, pointRadius:2, tension:.15, spanGaps:true},
+        {label:'PATEC Final.',  data:pontos.map(p=>p.patecFin), borderColor:'#3266AD', backgroundColor:'rgba(50,102,173,.08)',  borderWidth:2, pointRadius:2, tension:.15, spanGaps:true},
         {label:'Ag. Finalizar', data:pontos.map(p=>p.l4),     borderColor:'#6A93C9', backgroundColor:'rgba(106,147,201,.08)', borderWidth:2, pointRadius:2, tension:.15, spanGaps:true},
         {label:'Ag. Trat.',     data:pontos.map(p=>p.agTrat), borderColor:'#2e7d32', backgroundColor:'rgba(46,125,50,.08)',   borderWidth:2, pointRadius:2, tension:.15, spanGaps:true},
       ]
