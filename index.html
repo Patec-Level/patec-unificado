@@ -5685,8 +5685,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <tbody id="bf-ferias-tb"></tbody>
             </table>
           </div>
+          <div id="bf-ferias-sem-periodo" style="margin-top:.75rem"></div>
           <div style="margin-top:.75rem;font-size:11px;color:var(--tx2);padding:.75rem;background:var(--cin);border-radius:7px">
-            🔒 Para editar férias, acesse o módulo ADM e atualize o quadro de férias de cada colaborador.
+            🔒 Para editar férias, acesse o módulo ADM e atualize o quadro de férias de cada colaborador.<br>
+            👥 Equipe única: o mesmo quadro de férias e banco de horas aparece no ADLV e no FAST.
           </div>
         </div>
       </div>
@@ -6012,12 +6014,13 @@ async function fbSalvarTopbar(){
   });
 }
 
+// Férias e Banco de Horas: base única (ADLV), vale para os dois módulos.
 async function fbSalvarFerias(){
-  await fbSet('config','ferias',{lista:JSON.parse(JSON.stringify(FERIAS_DATA)),ts:new Date().toISOString()});
+  await fbSetJornada('ferias',{lista:JSON.parse(JSON.stringify(FERIAS_DATA)),ts:new Date().toISOString()});
 }
 
 async function fbSalvarBanco(){
-  await fbSet('config','banco_horas',{lista:JSON.parse(JSON.stringify(BANCO_HORAS)),ts:new Date().toISOString()});
+  await fbSetJornada('banco_horas',{lista:JSON.parse(JSON.stringify(BANCO_HORAS)),ts:new Date().toISOString()});
 }
 
 async function fbSalvarCiclos(){
@@ -6102,41 +6105,65 @@ async function fbCarregarTudo(){
     }
   } catch(_ep){ console.warn('fbCarregarTudo producao:', _ep); }
 
-  // Férias — sync Firebase ↔ localStorage
-  const ferias=await fbGet('config','ferias');
-  const feriasLs=localStorage.getItem(_lsMod('patec_ferias'));
+  // ── Férias — base ÚNICA (ADLV), mesma para os dois módulos ──
+  const ferias=await fbGetJornada('ferias');
+  const feriasLs=localStorage.getItem(_lsJor('patec_ferias'));
   const fbTs=ferias?.ts?new Date(ferias.ts).getTime():0;
-  const lsTs=parseInt(localStorage.getItem(_lsMod('patec_ferias_ts'))||'0');
+  const lsTs=parseInt(localStorage.getItem(_lsJor('patec_ferias_ts'))||'0');
   if(ferias&&ferias.lista&&ferias.lista.length>0&&fbTs>=lsTs){
     FERIAS_DATA.length=0;ferias.lista.forEach(f=>FERIAS_DATA.push(f));
-    localStorage.setItem(_lsMod('patec_ferias'),JSON.stringify(FERIAS_DATA));
-    console.log('✓ Férias (Firebase):',FERIAS_DATA.length,'períodos');
+    console.log('✓ Férias (base única):',FERIAS_DATA.length,'períodos');
   } else if(feriasLs&&lsTs>fbTs){
     try{
       const ls=JSON.parse(feriasLs);
-      if(ls.length>0){FERIAS_DATA.length=0;ls.forEach(f=>FERIAS_DATA.push(f));await fbSalvarFerias();console.log('✓ Férias (LS→Firebase):',FERIAS_DATA.length);}
+      if(ls.length>0){FERIAS_DATA.length=0;ls.forEach(f=>FERIAS_DATA.push(f));console.log('✓ Férias (cache local mais novo):',FERIAS_DATA.length);}
     }catch(e){}
   } else if(ferias && ferias.lista && ferias.lista.length > 0){
     FERIAS_DATA.length=0; ferias.lista.forEach(f=>FERIAS_DATA.push(f));
-    console.log('✓ Férias (Firebase fallback):', FERIAS_DATA.length);
+  }
+  // Alinhar com a equipe da jornada: entra quem falta (Aline), sai quem não
+  // está mais na lista. Preserva tudo que já estava preenchido.
+  // ATENÇÃO: FERIAS_DATA tem UMA LINHA POR PERÍODO, não por pessoa — a mesma
+  // pessoa aparece várias vezes. Por isso aqui não se usa _jornadaAlinharEquipe
+  // (que é 1 registro por pessoa): mantém-se todos os períodos de quem está na
+  // equipe e só se cria linha vazia para quem não tem nenhum.
+  {
+    const antes = FERIAS_DATA.length;
+    const daEquipe = FERIAS_DATA.filter(r => r && COLABS_JORNADA.includes(r.colab));
+    COLABS_JORNADA.forEach((c,i)=>{
+      if(!daEquipe.some(r=>r.colab===c)) daEquipe.push(_FERIAS_VAZIO(c,i));
+    });
+    daEquipe.sort((a,b)=>{
+      if(!a.saida && !b.saida) return COLABS_JORNADA.indexOf(a.colab)-COLABS_JORNADA.indexOf(b.colab);
+      if(!a.saida) return 1;
+      if(!b.saida) return -1;
+      return a.saida.localeCompare(b.saida);
+    });
+    FERIAS_DATA.length=0;
+    daEquipe.forEach((r,i)=>{ r.ordem = i+1; FERIAS_DATA.push(r); });
+    if(FERIAS_DATA.length !== antes) console.log('ℹ Férias: equipe alinhada ('+antes+' → '+FERIAS_DATA.length+' períodos)');
+    localStorage.setItem(_lsJor('patec_ferias'),JSON.stringify(FERIAS_DATA));
   }
   // Reconstruir _feriasState e atualizar formulário se ADM aberto
   _feriasState={};
-  COLABS.forEach(c=>{_feriasState[c]=[];});
+  COLABS_JORNADA.forEach(c=>{_feriasState[c]=[];});
   FERIAS_DATA.forEach(r=>{if(_feriasState[r.colab])_feriasState[r.colab].push({saida:r.saida||'',dias:r.dias||30,retorno:r.retorno||''});});
-  COLABS.forEach(c=>{if(!_feriasState[c].length)_feriasState[c]=[{saida:'',dias:30,retorno:''}];});
-  if(document.getElementById('adm-painel')?.style.display!=='none') renderFeriasForm();
-  // Reconstruir _feriasState e atualizar formulário se ADM aberto
-  _feriasState={};COLABS.forEach(c=>{_feriasState[c]=[];});
-  FERIAS_DATA.forEach(r=>{if(_feriasState[r.colab])_feriasState[r.colab].push({saida:r.saida||'',dias:r.dias||30,retorno:r.retorno||''});});
-  COLABS.forEach(c=>{if(!_feriasState[c].length)_feriasState[c]=[{saida:'',dias:30,retorno:''}];});
+  COLABS_JORNADA.forEach(c=>{if(!_feriasState[c].length)_feriasState[c]=[{saida:'',dias:30,retorno:''}];});
   if(document.getElementById('adm-painel')?.style.display!=='none') renderFeriasForm();
 
-  // Banco de horas
-  const banco = await fbGet('config','banco_horas');
+  // ── Banco de horas — base ÚNICA ──
+  // Casar por NOME, nunca por posição: com a entrada da Aline os índices
+  // mudaram e um merge por índice jogaria os dados de uma pessoa na outra.
+  const banco = await fbGetJornada('banco_horas');
   if(banco && banco.lista){
-    banco.lista.forEach((b,i)=>{ if(BANCO_HORAS[i]) Object.assign(BANCO_HORAS[i],b); });
-    console.log('✓ Banco de horas carregado');
+    const porColab = {};
+    banco.lista.forEach(b=>{ if(b && b.colab) porColab[b.colab] = b; });
+    BANCO_HORAS.length = 0;
+    COLABS_JORNADA.forEach(c=>{
+      BANCO_HORAS.push(Object.assign(_BANCO_VAZIO(c), porColab[c]||{}, {colab:c}));
+    });
+    localStorage.setItem(_lsJor('patec_banco'), JSON.stringify(BANCO_HORAS));
+    console.log('✓ Banco de horas (base única):', BANCO_HORAS.length, 'colaboradores');
   }
 
   // Ciclos
@@ -8173,6 +8200,54 @@ let COLABS_ADLV = ['André','Lory','Ludy','Wanessa']; // Aline transferida Mai/2
 let COLABS_FAST = ['Aline','Claudio']; // Herina/Priscila/Camila/Indaia saíram da equipe FAST
 let COLABS = (_moduloAtivo === 'fast') ? COLABS_FAST : COLABS_ADLV;
 
+// ════════════════════════════════════════════
+// GESTÃO DE JORNADA — EQUIPE ÚNICA
+// Férias, Banco de Horas e Banco HE deixaram de ser por módulo: a equipe passou
+// a ser a mesma, então existe UMA lista de pessoas e UMA base de dados (a do
+// ADLV) para as três telas. Quem abre pelo FAST vê e edita exatamente o mesmo
+// conteúdo. Não confundir com COLABS, que continua trocando por módulo e é
+// usada por meta/produção/RT.
+// ════════════════════════════════════════════
+const COLABS_JORNADA = ['André','Lory','Ludy','Wanessa','Aline'];
+
+// Chave de localStorage única (sem sufixo de módulo) — o cache precisa ser o
+// mesmo nos dois módulos, senão cada um guardaria uma versão diferente.
+function _lsJor(base){ return base + '__jornada'; }
+
+// Conexão da base única. A Gestão de Jornada sempre grava e lê no projeto do
+// ADLV, que é o app [DEFAULT] (já autenticado pelo login) — ver getDBModulo.
+function getDBJornada(){
+  try{ return getDBModulo('adlv'); }catch(e){ return null; }
+}
+async function fbGetJornada(docId){
+  try{
+    const db = getDBJornada(); if(!db) return null;
+    const doc = await db.collection('config').doc(docId).get();
+    return doc.exists ? doc.data() : null;
+  }catch(e){ console.warn('fbGetJornada '+docId+':', e.message); return null; }
+}
+async function fbSetJornada(docId, dados){
+  try{
+    const db = getDBJornada();
+    if(!db){ console.warn('fbSetJornada: base do ADLV indisponível'); return false; }
+    await db.collection('config').doc(docId).set(dados, {merge:true});
+    console.log('✓ Jornada salva na base única:', docId);
+    return true;
+  }catch(e){ console.warn('fbSetJornada '+docId+':', e.message); return false; }
+}
+
+// Garante que a lista carregada tenha exatamente as pessoas de COLABS_JORNADA:
+// acrescenta quem falta (ex.: Aline, na primeira carga) e descarta registros de
+// quem saiu da equipe, preservando o que já estava preenchido.
+function _jornadaAlinharEquipe(lista, criarVazio){
+  const porColab = {};
+  (lista||[]).forEach(r=>{ if(r && r.colab) porColab[r.colab] = r; });
+  return COLABS_JORNADA.map((c,i)=>{
+    const base = criarVazio(c,i);
+    return porColab[c] ? Object.assign(base, porColab[c], {colab:c}) : base;
+  });
+}
+
 function _atualizarColabsPorModulo(){
   COLABS = (_moduloAtivo === 'fast') ? COLABS_FAST : COLABS_ADLV;
   COLABS_SEM_META = (_moduloAtivo === 'fast') ? COLABS_SEM_META_FAST : COLABS_SEM_META_ADLV;
@@ -8253,7 +8328,7 @@ function _atualizarColabsPorModulo(){
   }
 }
 
-BANCO_HE = COLABS.map(c => ({ colab: c, periodos: [] })); // inicializa BANCO_HE
+BANCO_HE = COLABS_JORNADA.map(c => ({ colab: c, periodos: [] })); // equipe única
 const SENHA_PCP = 'patec2026';
 
 let registros = (_moduloAtivo === 'fast') ? [] : [...HISTORICO_INICIAL];
@@ -8263,11 +8338,22 @@ let presAtual   = null;
 let dataAtual   = null;
 
 // ── BANCO DE HORAS / FÉRIAS (zerado, editável pelo ADM) ──
-let FERIAS_DATA = COLABS.map((c,i) => ({
+// Modelos de registro vazio — reusados por _jornadaAlinharEquipe ao carregar.
+const _FERIAS_VAZIO = (c,i) => ({
   colab: c, ordem: i+1,
   saida: '', dias: 30, retorno: '', status: 'Aguardando definição'
-}));
-let BANCO_HORAS = COLABS.map(c => ({
+});
+const _BANCO_VAZIO = c => ({
+  colab: c,
+  horas_h: 0, horas_m: 0, horas_s: 0,
+  horas_extras: 0,
+  folgas_usadas: 0,
+  datas_folgas: [],
+  destino: 'A definir'
+});
+
+let FERIAS_DATA = COLABS_JORNADA.map((c,i) => _FERIAS_VAZIO(c,i));
+let BANCO_HORAS = COLABS_JORNADA.map(c => ({
   colab: c,
   horas_h: 0, horas_m: 0, horas_s: 0,   // horas extras em H:M:S
   horas_extras: 0,                         // total em horas decimais (calculado)
@@ -8747,6 +8833,18 @@ function renderFerias(){
         </div>`;
       }).join('');
     }
+  }
+
+  // Quem está na equipe e ainda não tem período cadastrado. Sem isso a pessoa
+  // simplesmente não aparecia em lugar nenhum até alguém preencher uma data.
+  const semPeriodo = COLABS_JORNADA.filter(c => !FERIAS_DATA.some(r => r.colab===c && r.saida));
+  const elSem = document.getElementById('bf-ferias-sem-periodo');
+  if(elSem){
+    elSem.innerHTML = semPeriodo.length
+      ? `<div style="background:#fff8e6;border:1.5px solid rgba(192,122,18,.35);border-radius:8px;padding:.625rem .875rem;font-size:11.5px;font-weight:600;color:#8a5a0b;line-height:1.5">
+           📌 Sem férias programadas: <strong>${semPeriodo.join(', ')}</strong> — cadastre em ADM → Férias para entrar no quadro.
+         </div>`
+      : '';
   }
 }
 function renderBanco(){
@@ -10072,15 +10170,15 @@ async function analisarIA(tipo){
 // ── FÉRIAS ADM ──
 function renderFeriasForm(){
   // Só reinicializar _feriasState se estiver vazio (não sobrescrever dados do Firebase)
-  const jaTem=COLABS.some(c=>(_feriasState[c]||[]).some(p=>p.saida));
+  const jaTem=COLABS_JORNADA.some(c=>(_feriasState[c]||[]).some(p=>p.saida));
   if(!jaTem){
     _feriasState={};
-    COLABS.forEach(c=>{_feriasState[c]=[];});
+    COLABS_JORNADA.forEach(c=>{_feriasState[c]=[];});
     (FERIAS_DATA||[]).forEach(r=>{
       if(_feriasState[r.colab])_feriasState[r.colab].push({saida:r.saida||'',dias:r.dias||30,retorno:r.retorno||''});
     });
   }
-  COLABS.forEach(c=>{if(!(_feriasState[c]||[]).length)_feriasState[c]=[{saida:'',dias:30,retorno:''}];});
+  COLABS_JORNADA.forEach(c=>{if(!(_feriasState[c]||[]).length)_feriasState[c]=[{saida:'',dias:30,retorno:''}];});
   _renderFeriasColabs();
 }
 function calcRetorno(i){
@@ -10112,8 +10210,8 @@ async function salvarFeriasAdm(){
     });
   });
   FERIAS_DATA.sort((a,b)=>a.saida.localeCompare(b.saida));
-  localStorage.setItem(_lsMod('patec_ferias'),JSON.stringify(FERIAS_DATA));
-  localStorage.setItem(_lsMod('patec_ferias_ts'),String(Date.now()));
+  localStorage.setItem(_lsJor('patec_ferias'),JSON.stringify(FERIAS_DATA));
+  localStorage.setItem(_lsJor('patec_ferias_ts'),String(Date.now()));
   await fbSalvarFerias();
   console.log('✓ Férias salvas Firebase+LS:',FERIAS_DATA.length,'períodos');
   renderFerias();
@@ -10186,14 +10284,14 @@ function _renderFeriasColabs(){
   // Popular selects de filtro
   const selEdit=document.getElementById('ferias-edit-colab');
   if(selEdit&&selEdit.options.length<=1){
-    COLABS.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;selEdit.appendChild(o);});
+    COLABS_JORNADA.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;selEdit.appendChild(o);});
   }
   const selPrev=document.getElementById('ferias-filtro-colab');
   if(selPrev&&selPrev.options.length<=1){
-    COLABS.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;selPrev.appendChild(o);});
+    COLABS_JORNADA.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;selPrev.appendChild(o);});
   }
   const filtColab=selEdit?.value||'';
-  const colabsFiltrados=filtColab?COLABS.filter(c=>c===filtColab):COLABS;
+  const colabsFiltrados=filtColab?COLABS_JORNADA.filter(c=>c===filtColab):COLABS_JORNADA;
 
   container.innerHTML = colabsFiltrados.map(c => {
     const periodos = _feriasState[c]||[];
@@ -10457,7 +10555,7 @@ async function salvarBancoAdm(){
     r.destino = document.getElementById('adm-bh-d-'+i)?.value||'A definir';
     r.folgas_usadas = (r.datas_folgas||[]).length;
   });
-  localStorage.setItem(_lsMod('patec_banco'), JSON.stringify(BANCO_HORAS));
+  localStorage.setItem(_lsJor('patec_banco'), JSON.stringify(BANCO_HORAS));
   await fbSalvarBanco();
   renderBanco();
   const ok = document.getElementById('adm-banco-ok');
@@ -13887,7 +13985,7 @@ initMetaGap();
 function bheInit(){
   const sel=document.getElementById('bhe-colab-sel');
   if(!sel)return;
-  sel.innerHTML='<option value="">— Selecione —</option>'+COLABS.map(c=>`<option value="${c}">${c}</option>`).join('');
+  sel.innerHTML='<option value="">— Selecione —</option>'+COLABS_JORNADA.map(c=>`<option value="${c}">${c}</option>`).join('');
   const selA=document.getElementById('bhe-new-mes-a');
   if(selA){const y=new Date().getFullYear();selA.innerHTML='<option value="">Ano</option>'+[y-1,y,y+1].map(a=>`<option value="${a}">${a}</option>`).join('');selA.value=String(y);}
   bheCarregarLimiteADM();
@@ -14004,28 +14102,31 @@ function bheAddUso(colab,pi){
 function bheRemUso(colab,pi,ui){const dados=BANCO_HE.find(b=>b.colab===colab);if(dados&&dados.periodos[pi]&&!dados.periodos[pi].arquivado)dados.periodos[pi].usos.splice(ui,1);bheRenderPeriodos(colab);bheSalvarTudo();}
 async function bheSalvarTudo(){
   const ts=new Date().toISOString();
-  await fbSet('config','banco_he',{lista:JSON.parse(JSON.stringify(BANCO_HE)),ts});
-  localStorage.setItem(_lsMod('patec_banco_he'),JSON.stringify(BANCO_HE));
-  localStorage.setItem(_lsMod('patec_banco_he_ts'),String(Date.now()));
+  await fbSetJornada('banco_he',{lista:JSON.parse(JSON.stringify(BANCO_HE)),ts});
+  localStorage.setItem(_lsJor('patec_banco_he'),JSON.stringify(BANCO_HE));
+  localStorage.setItem(_lsJor('patec_banco_he_ts'),String(Date.now()));
   console.log('✓ Banco HE salvo');
   renderBHECards();
   const ok=document.getElementById('bhe-ok');if(ok){ok.style.display='inline';setTimeout(()=>ok.style.display='none',3000);}
 }
 async function fbCarregarBHE(){
-  const dados=await fbGet('config','banco_he');
-  const lsRaw=localStorage.getItem(_lsMod('patec_banco_he'));
+  const dados=await fbGetJornada('banco_he');
+  const lsRaw=localStorage.getItem(_lsJor('patec_banco_he'));
   const fbTs=dados?.ts?new Date(dados.ts).getTime():0;
-  const lsTs=parseInt(localStorage.getItem(_lsMod('patec_banco_he_ts'))||'0');
+  const lsTs=parseInt(localStorage.getItem(_lsJor('patec_banco_he_ts'))||'0');
   if(dados&&dados.lista&&dados.lista.length>0&&fbTs>=lsTs){
-    BANCO_HE=dados.lista;localStorage.setItem(_lsMod('patec_banco_he'),JSON.stringify(BANCO_HE));
+    BANCO_HE=dados.lista;localStorage.setItem(_lsJor('patec_banco_he'),JSON.stringify(BANCO_HE));
     console.log('✓ Banco HE (Firebase):',BANCO_HE.reduce((s,b)=>s+b.periodos.length,0),'períodos');
   } else if(lsRaw&&lsTs>fbTs){
-    try{const ls=JSON.parse(lsRaw);if(ls.length>0){BANCO_HE=ls;await fbSet('config','banco_he',{lista:JSON.parse(JSON.stringify(BANCO_HE)),ts:new Date().toISOString()});console.log('✓ Banco HE (LS→Firebase):',BANCO_HE.reduce((s,b)=>s+b.periodos.length,0));}}catch(e){}
+    try{const ls=JSON.parse(lsRaw);if(ls.length>0){BANCO_HE=ls;await fbSetJornada('banco_he',{lista:JSON.parse(JSON.stringify(BANCO_HE)),ts:new Date().toISOString()});console.log('✓ Banco HE (LS→Firebase):',BANCO_HE.reduce((s,b)=>s+b.periodos.length,0));}}catch(e){}
   } else if(dados&&dados.lista&&dados.lista.length>0){
     BANCO_HE=dados.lista;console.log('✓ Banco HE (Firebase fallback):',BANCO_HE.reduce((s,b)=>s+b.periodos.length,0));
   }
-  const cfg=await fbGet('config','bhe_config');
-  if(cfg&&cfg.limite)localStorage.setItem(_lsMod('patec_bhe_limite'),JSON.stringify(cfg.limite));
+  // Equipe única: garante uma ficha para cada pessoa da jornada (ex.: Aline na
+  // primeira carga) sem apagar períodos já cadastrados.
+  BANCO_HE = _jornadaAlinharEquipe(BANCO_HE, c => ({colab:c, periodos:[]}));
+  const cfg=await fbGetJornada('bhe_config');
+  if(cfg&&cfg.limite)localStorage.setItem(_lsJor('patec_bhe_limite'),JSON.stringify(cfg.limite));
 }
 function bheArquivarVencidos(){
   const hoje=HOJE.toISOString().split('T')[0];let mudou=false;
@@ -14038,13 +14139,13 @@ function bheArquivarVencidos(){
     p.arquivado=true;p.arquivado_em=hoje;p.arquivado_motivo='Vencido — pago automaticamente';mudou=true;
     console.log('⚙️ BHE Auto:',b.colab,'—',p.mes_ref,'→ pago',sH+'h'+String(sM).padStart(2,'0')+'min');
   }));
-  if(mudou){fbSet('config','banco_he',{lista:JSON.parse(JSON.stringify(BANCO_HE)),ts:new Date().toISOString()});localStorage.setItem(_lsMod('patec_banco_he'),JSON.stringify(BANCO_HE));}
+  if(mudou){fbSetJornada('banco_he',{lista:JSON.parse(JSON.stringify(BANCO_HE)),ts:new Date().toISOString()});localStorage.setItem(_lsJor('patec_banco_he'),JSON.stringify(BANCO_HE));}
   return mudou;
 }
-function bheGetLimite(){try{const ls=localStorage.getItem(_lsMod('patec_bhe_limite'));if(ls)return JSON.parse(ls);}catch(e){}return{h:0,m:0};}
+function bheGetLimite(){try{const ls=localStorage.getItem(_lsJor('patec_bhe_limite'));if(ls)return JSON.parse(ls);}catch(e){}return{h:0,m:0};}
 function bheCarregarLimiteADM(){const l=bheGetLimite();const elH=document.getElementById('bhe-limite-h');const elM=document.getElementById('bhe-limite-m');if(elH)elH.value=l.h||'';if(elM)elM.value=l.m||'';bhePrevLimite();}
 function bhePrevLimite(){const h=parseInt(document.getElementById('bhe-limite-h')?.value||0);const m=parseInt(document.getElementById('bhe-limite-m')?.value||0);const prev=document.getElementById('bhe-limite-preview');const regra=document.getElementById('bhe-limite-regra');if(h||m){if(prev)prev.textContent=h+'h'+String(m).padStart(2,'0')+'min por mês (equipe)';if(regra)regra.textContent='≤ '+h+'h'+String(m).padStart(2,'0')+'min → pode pagar · acima → dar folga';}else{if(prev)prev.textContent='Nenhum limite definido';if(regra)regra.textContent='Configure acima para ativar';}}
-async function bheSalvarLimite(){const h=parseInt(document.getElementById('bhe-limite-h')?.value||0);const m=parseInt(document.getElementById('bhe-limite-m')?.value||0);const limite={h,m};localStorage.setItem(_lsMod('patec_bhe_limite'),JSON.stringify(limite));await fbSet('config','bhe_config',{limite,ts:new Date().toISOString()});bhePrevLimite();renderBHECards();const ok=document.getElementById('bhe-limite-ok');if(ok){ok.style.display='inline';setTimeout(()=>ok.style.display='none',3000);}}
+async function bheSalvarLimite(){const h=parseInt(document.getElementById('bhe-limite-h')?.value||0);const m=parseInt(document.getElementById('bhe-limite-m')?.value||0);const limite={h,m};localStorage.setItem(_lsJor('patec_bhe_limite'),JSON.stringify(limite));await fbSetJornada('bhe_config',{limite,ts:new Date().toISOString()});bhePrevLimite();renderBHECards();const ok=document.getElementById('bhe-limite-ok');if(ok){ok.style.display='inline';setTimeout(()=>ok.style.display='none',3000);}}
 function renderBHECards(){
   const hoje=HOJE.toISOString().split('T')[0];const mesFiltro=document.getElementById('bhe-filtro-mes')?.value||'';
   const selMes=document.getElementById('bhe-filtro-mes');
