@@ -5675,7 +5675,28 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
         <div class="cd">
-          <div class="cd-t">📋 Quadro de férias — ordem de saída</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:.5rem">
+            <div class="cd-t" style="margin:0">📋 Quadro de férias — ordem de saída</div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <div class="field-wrap" style="min-width:190px;margin:0">
+                <span class="field-label">Status</span>
+                <select id="bf-ferias-filtro-status" onchange="renderFerias()" style="width:100%;font-size:12px;padding:5px 10px">
+                  <option value="todos">Todos os status</option>
+                  <option value="agora">✅ Em férias agora</option>
+                  <option value="programado">📅 Programado</option>
+                  <option value="concluido">✓ Concluído</option>
+                  <option value="ativos">📌 Em férias + Programado</option>
+                </select>
+              </div>
+              <div class="field-wrap" style="min-width:170px;margin:0">
+                <span class="field-label">Colaborador</span>
+                <select id="bf-ferias-filtro-colab" onchange="renderFerias()" style="width:100%;font-size:12px;padding:5px 10px">
+                  <option value="">Todos</option>
+                </select>
+              </div>
+              <span id="bf-ferias-contagem" style="font-size:11px;color:var(--tx2);font-weight:600;align-self:flex-end;padding-bottom:6px"></span>
+            </div>
+          </div>
           <div class="tw">
             <table>
               <thead><tr>
@@ -8773,6 +8794,13 @@ function setBFTab(id,btn){
   if(id==='ferias') renderFerias();
   if(id==='banco')  renderBanco();
 }
+function feriasLimparFiltros(){
+  const s = document.getElementById('bf-ferias-filtro-status');
+  const c = document.getElementById('bf-ferias-filtro-colab');
+  if(s) s.value = 'todos';
+  if(c) c.value = '';
+  renderFerias();
+}
 function renderFerias(){
   const tbId = 'bf-ferias-tb';
   if(!document.getElementById(tbId)) return;
@@ -8782,27 +8810,60 @@ function renderFerias(){
   // Ordenar por data de saída
   const dados = [...FERIAS_DATA].filter(r => r.saida).sort((a,b) => a.saida.localeCompare(b.saida));
 
-  (document.getElementById(tbId)||{}).innerHTML = dados.map((r,i) => {
+  // Classificar TODOS os períodos primeiro. Os cards do topo (próxima saída,
+  // em férias agora, programadas) continuam olhando o quadro inteiro — o filtro
+  // muda só o que a tabela mostra, nunca os indicadores.
+  dados.forEach(r=>{
     const retIso = r.retorno ? r.retorno.split('/').reverse().join('-') : '';
-    const emF    = r.saida <= hoje && retIso >= hoje;
-    const futuro = r.saida > hoje;
-    const status = emF    ? '<span class="pl pl-ok">✅ Em férias agora</span>'
-                 : futuro ? '<span class="pl pl-az">📅 Programado</span>'
-                 :          '<span class="pl pl-g">✓ Concluído</span>';
-    if(futuro && !prox) prox = r;
-    if(emF) emFerias++;
-    if(futuro && r.saida <= new Date(Date.now()+90*864e5).toISOString().split('T')[0]) prog++;
+    r._st = (r.saida <= hoje && retIso >= hoje) ? 'agora'
+          : (r.saida > hoje)                    ? 'programado'
+          :                                       'concluido';
+    if(r._st==='programado' && !prox) prox = r;
+    if(r._st==='agora') emFerias++;
+    if(r._st==='programado' && r.saida <= new Date(Date.now()+90*864e5).toISOString().split('T')[0]) prog++;
+  });
+
+  // Filtros da tabela
+  const fStatus = document.getElementById('bf-ferias-filtro-status')?.value || 'todos';
+  const fColab  = document.getElementById('bf-ferias-filtro-colab')?.value  || '';
+  const selColab = document.getElementById('bf-ferias-filtro-colab');
+  if(selColab && selColab.options.length <= 1){
+    COLABS_JORNADA.forEach(c=>{
+      const o=document.createElement('option'); o.value=c; o.textContent=c; selColab.appendChild(o);
+    });
+  }
+  const visiveis = dados.filter(r =>
+    (fColab ? r.colab===fColab : true) &&
+    (fStatus==='todos'  ? true
+     : fStatus==='ativos' ? (r._st==='agora' || r._st==='programado')
+     : r._st===fStatus)
+  );
+
+  const contEl = document.getElementById('bf-ferias-contagem');
+  if(contEl) contEl.textContent = (fStatus==='todos' && !fColab)
+    ? dados.length+' período(s)'
+    : 'mostrando '+visiveis.length+' de '+dados.length;
+
+  (document.getElementById(tbId)||{}).innerHTML = visiveis.map((r,i) => {
+    const status = r._st==='agora'      ? '<span class="pl pl-ok">✅ Em férias agora</span>'
+                 : r._st==='programado' ? '<span class="pl pl-az">📅 Programado</span>'
+                 :                        '<span class="pl pl-g">✓ Concluído</span>';
     const saidaFmt   = r.saida   ? r.saida.split('-').reverse().join('/') : '—';
     const retornoFmt = r.retorno || '—';
+    // A ordem é a posição no quadro COMPLETO — não renumera ao filtrar, senão
+    // "4º" mudaria de significado dependendo do filtro escolhido.
+    const ordem = dados.indexOf(r) + 1;
     return `<tr>
-      <td><strong>${i+1}º</strong></td>
+      <td><strong>${ordem}º</strong></td>
       <td><strong>${r.colab}</strong></td>
       <td>${saidaFmt}</td>
       <td>${r.dias||'—'}</td>
       <td style="font-weight:600">${retornoFmt}</td>
       <td>${status}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--tx2);padding:1rem">Nenhuma férias cadastrada — preencha no ADM</td></tr>';
+  }).join('') || (dados.length
+      ? '<tr><td colspan="6" style="text-align:center;color:var(--tx2);padding:1rem">Nenhum período com esse filtro. <a href="#" onclick="feriasLimparFiltros();return false" style="color:var(--azm);font-weight:600">Limpar filtros</a></td></tr>'
+      : '<tr><td colspan="6" style="text-align:center;color:var(--tx2);padding:1rem">Nenhuma férias cadastrada — preencha no ADM</td></tr>');
 
   // Atualizar KPIs
   const elProxNome = document.getElementById('bf-prox-nome');
@@ -8819,11 +8880,8 @@ function renderFerias(){
       elAgora.textContent = 'Ninguém';
       elAgora.style.fontSize = '16px';
     } else {
-      // Coletar todos em férias agora
-      const emFeriasLista = dados.filter(r => {
-        const retIso = r.retorno ? r.retorno.split('/').reverse().join('-') : '';
-        return r.saida <= hoje && retIso >= hoje;
-      });
+      // Coletar todos em férias agora (quadro completo, independente do filtro)
+      const emFeriasLista = dados.filter(r => r._st === 'agora');
       elAgora.style.fontSize = '13px';
       elAgora.innerHTML = emFeriasLista.map(r => {
         const retFmt = r.retorno || '—';
