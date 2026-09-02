@@ -4557,6 +4557,26 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <!-- KPIs MAPA -->
         <div class="kgrid" id="gov-kpis" style="margin-bottom:1rem"></div>
 
+        <!-- DIAGNÓSTICO: por que uma RC não aparece na Governança -->
+        <div class="cd" style="margin-bottom:1rem;border-left:3px solid var(--azm)">
+          <div style="display:flex;align-items:end;gap:10px;flex-wrap:wrap">
+            <div class="field-wrap" style="min-width:170px;margin:0">
+              <span class="field-label">🔎 Diagnosticar RC</span>
+              <input type="text" id="gov-diag-rc" placeholder="Ex: 36181159" style="width:100%;font-size:12px;padding:5px 10px"
+                     onkeydown="if(event.key==='Enter')govDiagnosticarRC()">
+            </div>
+            <div class="field-wrap" style="min-width:120px;margin:0">
+              <span class="field-label">Item (opcional)</span>
+              <input type="text" id="gov-diag-item" placeholder="Ex: 20" style="width:100%;font-size:12px;padding:5px 10px"
+                     onkeydown="if(event.key==='Enter')govDiagnosticarRC()">
+            </div>
+            <button class="btn btn-p" style="font-size:11px" onclick="govDiagnosticarRC()">Verificar</button>
+            <button class="btn btn-s" style="font-size:11px" onclick="govDiagLimpar()">Limpar</button>
+            <span style="font-size:10.5px;color:var(--tx2);align-self:center">Diz por que a RC não está na lista — sem precisar abrir o console.</span>
+          </div>
+          <div id="gov-diag-resultado" style="margin-top:.875rem"></div>
+        </div>
+
         <div id="gov-sem-dados" style="text-align:center;padding:3rem;color:var(--tx2);font-size:13px;display:none">
           📡 Nenhum dado disponível. Faça upload no Radar Estratégico (ADM).
         </div>
@@ -17877,6 +17897,141 @@ function _classificarStatusMapa(analistaAuto){
   if(aa.includes('patec') && aa.includes('finalizado') && aa.includes('sem')) return 'Finalizado';
   if(aa.includes('analisar') && aa.includes('patec') && aa.includes('cancelado')) return 'Finalizado';
   return '';
+}
+
+// ════════════════════════════════════════════
+// DIAGNÓSTICO — por que uma RC não aparece na Governança
+// Percorre, na ordem, os mesmos filtros que a tabela aplica:
+//   1. o Radar foi carregado?
+//   2. a RC existe no arquivo do Radar?
+//   3. o STATUS MAPA (analista_auto) classifica como "Finalizado"?
+//   4. o item já tem data de FINALIZADO (foi pra aba Concluídos)?
+//   5. algum filtro da tabela (PATEC/Fila/Status/Analista) está escondendo?
+// ════════════════════════════════════════════
+function govDiagLimpar(){
+  ['gov-diag-rc','gov-diag-item'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  const r=document.getElementById('gov-diag-resultado'); if(r) r.innerHTML='';
+}
+
+function _govDiagBox(tipo, titulo, corpo){
+  const c = tipo==='ok'    ? ['#eaf6ee','rgba(46,125,50,.35)','#1b5e20']
+          : tipo==='erro'  ? ['#fdecea','rgba(217,64,64,.35)','#a02020']
+          :                  ['#fff8e6','rgba(192,122,18,.35)','#8a5a0b'];
+  return `<div style="background:${c[0]};border:1.5px solid ${c[1]};border-radius:8px;padding:.75rem .875rem;margin-bottom:.5rem">
+    <div style="font-size:12px;font-weight:800;color:${c[2]};margin-bottom:${corpo?'5px':'0'}">${titulo}</div>
+    ${corpo?`<div style="font-size:11.5px;color:${c[2]};line-height:1.6">${corpo}</div>`:''}
+  </div>`;
+}
+
+function govDiagnosticarRC(){
+  const el = document.getElementById('gov-diag-resultado');
+  if(!el) return;
+  const rcBusca   = String(document.getElementById('gov-diag-rc')?.value||'').trim();
+  const itemBusca = String(document.getElementById('gov-diag-item')?.value||'').trim();
+  if(!rcBusca){ el.innerHTML = _govDiagBox('alerta','Informe o número da RC.',''); return; }
+
+  // 1 — Radar carregado?
+  if(!_radarDados || !_radarDados.length){
+    el.innerHTML = _govDiagBox('erro','O Radar Estratégico não está carregado nesta sessão.',
+      'Sem o arquivo do Radar a Governança não tem de onde listar nada. Abra o Radar Estratégico ou faça o upload do dia.');
+    return;
+  }
+
+  // 2 — a RC existe no arquivo?
+  const norm = v => String(v||'').trim();
+  let linhas = _radarDados.filter(r => norm(r.rc) === rcBusca);
+  if(!linhas.length){
+    // busca tolerante (zeros à esquerda, espaços)
+    const solto = _radarDados.filter(r => norm(r.rc).replace(/^0+/,'') === rcBusca.replace(/^0+/,''));
+    if(solto.length){
+      el.innerHTML = _govDiagBox('alerta','RC encontrada com formatação diferente.',
+        'No arquivo do Radar ela está como <strong>'+norm(solto[0].rc)+'</strong>. Refaça a busca com esse valor.');
+      return;
+    }
+    el.innerHTML = _govDiagBox('erro','RC '+rcBusca+' não está no arquivo do Radar Estratégico.',
+      'A Governança só lista o que veio no upload — se a RC não está lá, não tem como aparecer.<br>'+
+      'Causas comuns: a RC não entrou na extração do dia; a linha veio com a coluna <strong>RC</strong> em branco '+
+      '(linhas sem RC são descartadas na leitura); ou o upload de hoje ainda não foi feito.<br>'+
+      'O arquivo carregado tem <strong>'+_radarDados.length+'</strong> linhas.');
+    return;
+  }
+
+  // filtro opcional por item (aceita Item da RC ou Item da Oportunidade)
+  if(itemBusca){
+    const porItem = linhas.filter(r => norm(r.item_rc)===itemBusca || norm(r.item_op)===itemBusca);
+    if(!porItem.length){
+      const itens = linhas.map(r=>'RC '+norm(r.item_rc)+' / OP '+norm(r.item_op)).join(' · ');
+      el.innerHTML = _govDiagBox('alerta','A RC '+rcBusca+' existe, mas não com o item '+itemBusca+'.',
+        'Itens encontrados nessa RC: '+(itens||'—'));
+      return;
+    }
+    linhas = porItem;
+  }
+
+  // 3 a 5 — analisar cada linha encontrada
+  const isFast = _moduloAtivo === 'fast';
+  const partes = [_govDiagBox('ok','RC '+rcBusca+' encontrada no Radar — '+linhas.length+' linha(s).',
+    'Abaixo, o que acontece com cada uma na Governança.')];
+
+  linhas.forEach(r => {
+    const chave = govChave(r);
+    const m     = _govDados[chave] || {};
+    const aa    = norm(r.analista_auto);
+    const cls   = _classificarStatusMapa(aa);
+    const ident = 'RC '+norm(r.rc)+' · item RC '+(norm(r.item_rc)||'—')+' · oportunidade '+(norm(r.num_oport)||'—')+
+                  ' · item OP '+(norm(r.item_op)||'—')+'<br><span style="opacity:.75">chave interna: <code>'+chave+'</code></span>';
+
+    // 3 — STATUS MAPA
+    if(cls !== 'Finalizado'){
+      if(cls === 'Andamento'){
+        partes.push(_govDiagBox('alerta','Está em "PATEC em Andamento", não no MAPA.',
+          ident+'<br><br>STATUS MAPA da planilha: <strong>'+(aa||'(vazio)')+'</strong>.<br>'+
+          'No ADLV, o MAPA lista só o que está como <em>Analisar PATEC Finalizado</em>. Este item aparece na aba '+
+          '<strong>PATEC em Andamento</strong> e passa para o MAPA quando o PATEC for finalizado.'));
+      } else {
+        partes.push(_govDiagBox('erro','O STATUS MAPA desta linha não é reconhecido.',
+          ident+'<br><br>Valor lido na coluna <strong>STATUS MAPA</strong>: <strong>'+(aa||'(vazio)')+'</strong>.<br>'+
+          'A Governança só lista quando esse texto contém <em>analisar + patec + finalizado</em> '+
+          '(ou <em>patec + finalizado + sem</em>, ou <em>analisar + patec + cancelado</em>).<br>'+
+          (aa ? 'Como está, esta linha fica fora da lista — corrija o valor na planilha do Radar e refaça o upload.'
+              : 'A coluna veio vazia: confira se o cabeçalho na planilha é exatamente <strong>"STATUS MAPA "</strong> (com o espaço no fim) ou <strong>ANALISTA_AUTOMATICO</strong>.')));
+      }
+      return;
+    }
+
+    // 4 — já finalizado (foi para Concluídos)
+    if(m.finalizado){
+      partes.push(_govDiagBox('alerta','Saiu do MAPA porque já tem data de FINALIZADO.',
+        ident+'<br><br>Finalizado em <strong>'+m.finalizado+'</strong>'+(m.status?' · status de tratamento: <strong>'+m.status+'</strong>':'')+'.<br>'+
+        'Itens finalizados deixam a tabela do MAPA e passam para a aba <strong>Concluídos</strong>. '+
+        'Para trazer de volta, apague a data de finalizado do item.'));
+      return;
+    }
+
+    // 5 — filtros ativos da tabela
+    const meta = { statusPatec:'PATEC Finalizado', fila:norm(r.fila),
+                   status:_govUrgStatusLabel(_govFabStatusMapa(r)), analista:norm(r.analista) };
+    const pfx  = 'gov-fmapa';
+    const ativos = [];
+    [['-ms-patec','PATEC',meta.statusPatec],['-ms-fila','Fila',meta.fila],
+     ['-ms-status','Status',meta.status],['-ms-analista','Analista',meta.analista]].forEach(([suf,rot,val])=>{
+      const set = _msGet(pfx+suf);
+      if(set && set.size && !_govUrgEmSet(set, val)) ativos.push(rot+' (o item é "'+(val||'—')+'", fora do filtro)');
+    });
+    if(ativos.length){
+      partes.push(_govDiagBox('alerta','O item está no MAPA, mas um filtro da tabela está escondendo.',
+        ident+'<br><br>Filtro(s) que excluem: <strong>'+ativos.join('; ')+'</strong>.<br>'+
+        'Use o botão <strong>Limpar filtros</strong> acima da tabela.'));
+      return;
+    }
+
+    partes.push(_govDiagBox('ok','Este item DEVE estar aparecendo no MAPA.',
+      ident+'<br><br>Fila: <strong>'+(meta.fila||'—')+'</strong> · Status de tratamento: <strong>'+(m.status||'(sem status)')+
+      '</strong> · Situação: <strong>'+meta.status+'</strong>.<br>'+
+      'Se mesmo assim não o encontra na tela, role a tabela ou confira se está na aba certa'+(isFast?'':' (MAPA, não Concluídos)')+'.'));
+  });
+
+  el.innerHTML = partes.join('');
 }
 
 function govFiltroMapaPadrao(){
