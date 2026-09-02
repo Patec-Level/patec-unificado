@@ -2041,8 +2041,25 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <div class="cd-t" style="margin:0">📊 Performance Semanal da Equipe</div>
               <div style="font-size:11px;color:var(--tx2);margin-top:3px" id="perf-sem-label">—</div>
             </div>
-            <button class="btn btn-s" style="font-size:11px" onclick="renderPerfSemanal()">↺ Atualizar</button>
+            <button class="btn btn-s" style="font-size:11px" onclick="renderPerfSemanal()">↺ Semana Atual</button>
           </div>
+
+          <!-- Filtro de período -->
+          <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;align-items:flex-end;padding:.75rem;background:rgba(13,35,71,.04);border-radius:8px">
+            <span style="font-size:11px;color:var(--tx2);font-weight:600;text-transform:uppercase;letter-spacing:.4px">📅 Filtrar por período:</span>
+            <div class="field-wrap" style="min-width:140px">
+              <span class="field-label">De (início)</span>
+              <input type="date" id="perf-sem-de" style="width:100%;font-size:12px;padding:5px 10px;border:1px solid var(--brd);border-radius:6px">
+            </div>
+            <span style="font-size:11px;color:var(--tx2);align-self:flex-end;padding-bottom:6px">até</span>
+            <div class="field-wrap" style="min-width:140px">
+              <span class="field-label">Até (fim)</span>
+              <input type="date" id="perf-sem-ate" style="width:100%;font-size:12px;padding:5px 10px;border:1px solid var(--brd);border-radius:6px">
+            </div>
+            <button class="btn btn-p" style="padding:6px 14px;font-size:11px;align-self:flex-end" onclick="renderPerfSemanalFiltrado()">🔍 Filtrar</button>
+            <button class="btn btn-s" style="padding:6px 14px;font-size:11px;align-self:flex-end" onclick="renderPerfSemanal()">↺ Limpar</button>
+          </div>
+
           <div id="perf-semanal-content">
             <div style="font-size:12px;color:var(--tx2)">Carregando...</div>
           </div>
@@ -7254,6 +7271,12 @@ function renderPerfSemanal(){
   if(!el) return;
 
   const { dias, seg, sex } = _semanaAtual();
+
+  // Inicializar datepickers com a semana atual
+  const dtDeEl = document.getElementById('perf-sem-de');
+  const dtAteEl = document.getElementById('perf-sem-ate');
+  if(dtDeEl && !dtDeEl.value) dtDeEl.value = dias[0]; // segunda
+  if(dtAteEl && !dtAteEl.value) dtAteEl.value = dias[dias.length-1]; // sexta
   const fmtD = d => { const [,m,dd]=d.split('-'); return `${dd}/${m}`; };
   const fmtDiaSem = d => { const dow=new Date(d+'T12:00:00').getDay(); return ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][dow]; };
 
@@ -7348,6 +7371,161 @@ function renderPerfSemanal(){
         </div>`).join('')}
     </div>
     <div style="font-size:10px;color:var(--tx2);margin-top:.75rem">🟢 ≥ meta · 🟡 ≥ 70% · 🔴 abaixo · Dados em tempo real do cache de produção</div>`;
+}
+
+// ── Performance Semanal: Filtro Customizado ──
+// Calcula um período customizado (geralmente do usuário) e renderiza
+function renderPerfSemanalFiltrado(){
+  const dtDeEl = document.getElementById('perf-sem-de');
+  const dtAteEl = document.getElementById('perf-sem-ate');
+
+  if(!dtDeEl || !dtAteEl) {
+    console.warn('Elementos de filtro não encontrados');
+    return;
+  }
+
+  const dtDe = dtDeEl.value;
+  const dtAte = dtAteEl.value;
+
+  // Validação básica
+  if(!dtDe || !dtAte) {
+    alert('⚠️ Preencha as duas datas (início e fim)');
+    return;
+  }
+
+  if(dtDe > dtAte) {
+    alert('⚠️ A data inicial não pode ser maior que a data final');
+    return;
+  }
+
+  // Calcular os dias úteis entre as duas datas
+  const dias = _ceCalcularPeriodo(dtDe, dtAte);
+
+  if(dias.length === 0) {
+    alert('⚠️ Nenhum dia útil encontrado neste período');
+    return;
+  }
+
+  // Renderizar Performance Semanal com o período customizado
+  renderPerfSemanalComPeriodo(dias);
+}
+
+// Calcula os dias úteis entre duas datas (segunda a sexta apenas)
+function _ceCalcularPeriodo(dtInicio, dtFim){
+  const dias = [];
+  const atual = new Date(dtInicio + 'T00:00:00');
+  const fim = new Date(dtFim + 'T00:00:00');
+
+  while(atual <= fim){
+    const dow = atual.getDay();
+    // Incluir apenas seg-sex (1-5)
+    if(dow >= 1 && dow <= 5){
+      const iso = atual.toISOString().split('T')[0];
+      dias.push(iso);
+    }
+    atual.setDate(atual.getDate() + 1);
+  }
+
+  return dias;
+}
+
+// Renderiza Performance Semanal com um período customizado
+// Reutiliza exatamente o mesmo código da função original, mas com dias diferentes
+function renderPerfSemanalComPeriodo(dias){
+  const el = document.getElementById('perf-semanal-content');
+  const lbl = document.getElementById('perf-sem-label');
+  if(!el) return;
+
+  const fmtD = d => { const [,m,dd]=d.split('-'); return `${dd}/${m}`; };
+  const fmtDiaSem = d => { const dow=new Date(d+'T12:00:00').getDay(); return ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][dow]; };
+
+  if(lbl && dias.length > 0) lbl.textContent = `${fmtD(dias[0])} a ${fmtD(dias[dias.length-1])} (${dias.length} dias)`;
+
+  // Mesmo filtro de equipe da função original
+  const COLABS_ANALISTAS = (typeof COLABS!=='undefined' && COLABS.length ? COLABS : (window.COLABS||['Lory','Ludy','Wanessa']))
+    .filter(c => (typeof COLABS_SEM_META_RT==='undefined') || !COLABS_SEM_META_RT.includes(c))
+    .filter(c=>_equipeVis(c,'hist'));
+  if(!COLABS_ANALISTAS.length){ el.innerHTML='<div style="font-size:12px;color:var(--tx2)">Nenhum colaborador com meta carregado.</div>'; return; }
+
+  // Calcular dados por analista — mesmo código da função original
+  const dados = COLABS_ANALISTAS.map(c => {
+    const { porDia, totalSem, comp, LABEL, COR } = _contarAcoesSemana(c, dias);
+    const folgaSet = _diasFolga(c, dias);
+    const metaPorDia = {};
+    dias.forEach(d => { metaPorDia[d] = (typeof _metaDiaEfetiva==='function') ? _metaDiaEfetiva(_moduloAtivo, c, d) : ((typeof META_ANALISTA_RT!=='undefined' && META_ANALISTA_RT[c]) || 30); });
+    const diasUteis = dias.filter(d=>_fdiaEhDiaUtil(d) && !folgaSet.has(d));
+    const metaSem = diasUteis.reduce((s,d)=>s+(metaPorDia[d]||0), 0);
+    const metasUteis = diasUteis.map(d=>metaPorDia[d]);
+    const metaDiaLabel = metasUteis.length && metasUteis.every(v=>v===metasUteis[0]) ? String(metasUteis[0]) : 'varia';
+    const pct = metaSem>0 ? Math.round(totalSem/metaSem*100) : 0;
+    return { colab:c, porDia, totalSem, metaPorDia, metaDiaLabel, metaSem, pct, comp, LABEL, COR, folgaSet };
+  }).sort((a,b) => b.totalSem - a.totalSem);
+
+  // Cor da célula por dia (mesmo código)
+  const corCelula = (tot, metaDia) => {
+    if(tot >= metaDia) return 'background:rgba(76,175,80,.15);color:var(--vd);font-weight:700';
+    if(tot >= metaDia*0.7) return 'background:rgba(255,193,7,.15);color:var(--am);font-weight:700';
+    if(tot > 0) return 'background:rgba(217,64,64,.1);color:var(--vm);font-weight:600';
+    return 'color:var(--tx2)';
+  };
+
+  el.innerHTML = `
+    <!-- Ranking -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:1.25rem">
+      ${dados.map((d,i) => `
+        <div style="background:${i===0?'var(--azc)':'var(--cin)'};border:1.5px solid ${i===0?'var(--azm)':'var(--brd)'};border-radius:10px;padding:.875rem 1rem">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
+            <span style="font-size:16px;font-weight:800;color:${i===0?'var(--azm)':i===1?'var(--am)':'var(--tx2)'}">${i+1}°</span>
+            <span style="font-size:13px;font-weight:700;color:var(--az)">${d.colab}</span>
+          </div>
+          <div style="font-size:26px;font-weight:800;color:${d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)'};line-height:1">${d.totalSem}</div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:2px">de ${d.metaSem} meta · ${d.pct}%</div>
+          <div style="height:4px;background:#EEE;border-radius:2px;margin-top:.5rem;overflow:hidden">
+            <div style="height:100%;width:${Math.min(d.pct,100)}%;background:${d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)'};border-radius:2px;transition:width .5s"></div>
+          </div>
+        </div>`).join('')}
+    </div>
+
+    <!-- Tabela por dia -->
+    <div class="tw" style="margin-bottom:1rem">
+      <table>
+        <thead>
+          <tr>
+            <th>Analista</th>
+            ${dias.map(d=>`<th style="text-align:center">${fmtDiaSem(d)}<br><span style="font-weight:400;font-size:10px">${fmtD(d)}</span></th>`).join('')}
+            <th style="text-align:center">Total</th>
+            <th style="text-align:center">Meta/dia</th>
+            <th style="text-align:center">Meta</th>
+            <th style="text-align:center">%</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${dados.map(d=>`
+            <tr>
+              <td style="font-weight:600">${d.colab}</td>
+              ${dias.map(dia=>`<td style="text-align:center;font-size:13px;${(d.folgaSet&&d.folgaSet.has(dia))?'color:var(--am);font-weight:700':corCelula(d.porDia[dia]||0,d.metaPorDia[dia]||0)}">${(d.folgaSet&&d.folgaSet.has(dia))?'🌴':(d.porDia[dia]||0)}</td>`).join('')}
+              <td style="text-align:center;font-weight:700;font-size:14px;color:${d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)'}">${d.totalSem}</td>
+              <td style="text-align:center;color:var(--tx2)">${d.metaDiaLabel}</td>
+              <td style="text-align:center;color:var(--tx2)">${d.metaSem}</td>
+              <td style="text-align:center;font-weight:700;color:${d.pct>=100?'var(--vd)':d.pct>=70?'var(--am)':'var(--vm)'}">${d.pct}%</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Composição por analista -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
+      ${dados.map(d=>`
+        <div style="background:var(--cin);border:1px solid var(--brd);border-radius:8px;padding:.75rem">
+          <div style="font-size:11px;font-weight:700;color:var(--az);margin-bottom:.5rem">${d.colab} — composição</div>
+          ${Object.entries(d.comp).filter(([,v])=>v>0).map(([tipo,v])=>`
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
+              <span style="font-size:11px;color:var(--tx)">${d.LABEL[tipo]}</span>
+              <span style="font-size:11px;font-weight:700;color:${d.COR[tipo]}">${v} <span style="color:var(--tx2);font-weight:400">(${Math.round(v/d.totalSem*100)||0}%)</span></span>
+            </div>`).join('') || '<div style="font-size:11px;color:var(--tx2)">Sem ações</div>'}
+        </div>`).join('')}
+    </div>
+    <div style="font-size:10px;color:var(--tx2);margin-top:.75rem">🟢 ≥ meta · 🟡 ≥ 70% · 🔴 abaixo · Período customizado: ${fmtD(dias[0])} a ${fmtD(dias[dias.length-1])} · ${dias.length} dias</div>`;
 }
 
 // ── FECHAMENTO DO DIA: Minha Semana ──
