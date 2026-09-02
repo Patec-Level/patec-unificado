@@ -2056,7 +2056,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <span class="field-label">Até (fim)</span>
               <input type="date" id="perf-sem-ate" style="width:100%;font-size:12px;padding:5px 10px;border:1px solid var(--brd);border-radius:6px">
             </div>
-            <button class="btn btn-p" style="padding:6px 14px;font-size:11px;align-self:flex-end" onclick="console.log('Clique!'); alert('Teste: Filtro está funcionando!'); renderPerfSemanalFiltrado()">🔍 Filtrar</button>
+            <button class="btn btn-p" style="padding:6px 14px;font-size:11px;align-self:flex-end" onclick="renderPerfSemanalFiltrado()">🔍 Filtrar</button>
             <button class="btn btn-s" style="padding:6px 14px;font-size:11px;align-self:flex-end" onclick="renderPerfSemanal()">↺ Limpar</button>
           </div>
 
@@ -26645,7 +26645,7 @@ function rtRenderizarMonitoramento(acoes, hoje){
           </div>
           <div style="text-align:right">
             <div style="font-size:28px;font-weight:700;color:${ativo?cor:'var(--tx2)'};line-height:1">${resultado}</div>
-            <div style="font-size:10px;color:var(--tx2)">meta ${meta}</div>
+            <div style="font-size:10px;color:var(--tx2)">${semMeta?`meta ${meta}`:`meta ${meta}`}</div>
           </div>
         </div>
         <div style="height:6px;background:#EEE;border-radius:3px;overflow:hidden;margin-bottom:.75rem">
