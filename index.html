@@ -4187,6 +4187,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <div class="cd-t" style="margin:0">💳 Cobrança por Status</div>
               <div style="font-size:11px;color:var(--tx2);margin-top:2px">Suba a planilha de cobrança — a base é substituída e os status atualizam automaticamente.</div>
             </div>
+            <div id="cob-total-head" style="margin-left:auto;margin-right:14px"></div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <span id="cob-atualizado" style="font-size:11px;color:var(--tx2)"></span>
               <button class="btn btn-s" style="font-size:11px" onclick="govCobrancaRender()">↺ Atualizar</button>
@@ -4201,7 +4202,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
           <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Status, Cobrança, Tipo de Cobrança, Prazo, SLA</strong> — obrigatórias: RC e Status.</div>
         </div>
-        <div id="cob-cards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:1rem"></div>
+        <div id="cob-cards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:.75rem"></div>
+        <div id="cob-subcards" style="display:none;margin-bottom:1rem;padding:.6rem .875rem;background:var(--vmc);border:1px solid var(--vm);border-radius:8px"></div>
         <div id="cob-tabela"></div>
       </div>
 
@@ -29671,29 +29673,42 @@ PERMS_SIDEBAR['fechamento-dia'] = { icon:'🔒', label:'Fechamento do Dia', mod:
 //  GOVERNANÇA — COBRANÇA POR STATUS  (exclusivo módulo FAST)
 // ═══════════════════════════════════════════════════════════════
 var _cobDados = [];
-var _cobFiltro = null;
+var _cobFiltro = null;      // tipo de cobrança selecionado
+var _cobSubFiltro = null;   // nº de cobranças selecionado (só p/ tipos "Cobrança *")
 var _cobTipos = [];
+
+// Ordem fixa dos cards: solicitações primeiro, depois as cobranças
+var _COB_ORDEM = [
+  'abertura de patec',
+  'solicitacao fornecedor',
+  'solicitacao requisitante',
+  'solicitacao mdg',
+  'solicitacao scomp',
+  'cobranca patec em andamento',
+  'cobranca fornecedor',
+  'cobranca requisitante',
+  'cobranca mdg',
+  'cobranca scomp'
+];
 
 function _cobEsc(v){
   return String(v == null ? '' : v)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-// Acha a coluna da planilha por lista de nomes aceitos (normaliza acento/espaco/caixa)
 function _cobNorm(s){
   return String(s || '').trim().toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
+
 function _cobCol(linha, nomes){
   var chaves = Object.keys(linha);
   var i, j, k;
-  // 1) match exato
   for (i = 0; i < nomes.length; i++) {
     for (j = 0; j < chaves.length; j++) {
       if (_cobNorm(chaves[j]) === _cobNorm(nomes[i])) return chaves[j];
     }
   }
-  // 2) match parcial
   for (i = 0; i < nomes.length; i++) {
     for (k = 0; k < chaves.length; k++) {
       if (_cobNorm(chaves[k]).indexOf(_cobNorm(nomes[i])) !== -1) return chaves[k];
@@ -29702,17 +29717,34 @@ function _cobCol(linha, nomes){
   return null;
 }
 
-function _cobStatusEl(){ return document.getElementById('cob-status'); }
+// "Cobrança Requisitante" -> true ; "Solicitação Scomp" -> false
+function _cobEhTipoCobranca(tipo){
+  return _cobNorm(tipo).indexOf('cobranca') === 0;
+}
+
+// posicao do tipo na ordem fixa; desconhecido vai pro fim do seu grupo
+function _cobPeso(tipo){
+  var i = _COB_ORDEM.indexOf(_cobNorm(tipo));
+  if (i !== -1) return i;
+  return _cobEhTipoCobranca(tipo) ? 900 : 500;
+}
+
+// nº de cobranças do item, como inteiro
+function _cobQtd(r){
+  var n = parseInt(String(r && r.cobrancas != null ? r.cobrancas : '').trim(), 10);
+  return isNaN(n) ? 0 : n;
+}
+
 function _cobMsg(txt, cor){
-  var el = _cobStatusEl();
+  var el = document.getElementById('cob-status');
   if (!el) return;
   el.textContent = txt || '';
   el.style.color = cor || 'var(--tx2)';
 }
 
-// ── Carregar do Firebase e desenhar ──
+// ── Carregar do Firebase ──
 function govCobrancaRender(){
-  if (!_cobEhFast()) return;   // guarda: modulo ADLV nao usa esta aba
+  if (!_cobEhFast()) return;
   var wrap = document.getElementById('cob-tabela');
   if (!wrap) return;
   var db = (typeof getDB === 'function') ? getDB() : null;
@@ -29736,55 +29768,85 @@ function govCobrancaRender(){
   });
 }
 
+// ── Card do TOTAL, no cabeçalho ──
+function _cobDesenharTotal(){
+  var el = document.getElementById('cob-total-head');
+  if (!el) return;
+  if (!_cobDados.length) { el.innerHTML = ''; return; }
+  var ativo = (_cobFiltro === null);
+  el.innerHTML =
+    '<div onclick="govCobrancaFiltrar(-1)" title="Mostrar todos os itens"'
+    + ' style="cursor:pointer;display:inline-flex;align-items:center;gap:10px;'
+    + 'background:' + (ativo ? 'var(--azm)' : 'var(--azc)') + ';color:' + (ativo ? '#fff' : 'var(--azm)')
+    + ';border:1.5px solid var(--azm);border-radius:8px;padding:6px 18px;line-height:1.1">'
+    + '<span style="font-size:22px;font-weight:800">' + _cobDados.length + '</span>'
+    + '<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Total<br>de itens</span>'
+    + '</div>';
+}
+
 function _cobDesenhar(){
-  var wrap = document.getElementById('cob-tabela');
+  var wrap  = document.getElementById('cob-tabela');
   var cards = document.getElementById('cob-cards');
+  var subs  = document.getElementById('cob-subcards');
   if (!wrap) return;
 
   if (!_cobDados.length) {
     if (cards) cards.innerHTML = '';
+    if (subs)  { subs.innerHTML = ''; subs.style.display = 'none'; }
+    _cobDesenharTotal();
     wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">'
       + '📄 Nenhuma cobrança registrada ainda.<br><span style="font-size:11px">Use <strong>📤 Subir planilha</strong> acima para carregar os dados.</span></div>';
     return;
   }
 
-  // Cards por Tipo de Cobrança
+  _cobDesenharTotal();
+
+  // ── Cards por tipo, na ordem fixa ──
   var grupos = {};
   var i;
   for (i = 0; i < _cobDados.length; i++) {
     var t = _cobDados[i].tipoCobranca || 'Sem tipo';
     grupos[t] = (grupos[t] || 0) + 1;
   }
-  var chaves = Object.keys(grupos).sort(function(a, b){ return grupos[b] - grupos[a]; });
+  var chaves = Object.keys(grupos).sort(function(a, b){
+    var pa = _cobPeso(a), pb = _cobPeso(b);
+    if (pa !== pb) return pa - pb;
+    return grupos[b] - grupos[a];   // empate (desconhecidos): maior volume primeiro
+  });
+  _cobTipos = chaves;
 
   if (cards) {
-    var htmlCards = '<div onclick="govCobrancaFiltrar(-1)" style="cursor:pointer;background:'
-      + (_cobFiltro === null ? 'var(--azm)' : 'var(--azc)') + ';color:'
-      + (_cobFiltro === null ? '#fff' : 'var(--azm)')
-      + ';border:1.5px solid var(--azm);border-radius:8px;padding:8px 18px;text-align:center;line-height:1.2">'
-      + '<div style="font-size:19px;font-weight:800">' + _cobDados.length + '</div>'
-      + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">Total</div></div>';
-
-    _cobTipos = chaves;
+    var html = '';
     for (i = 0; i < chaves.length; i++) {
       var nome = chaves[i];
       var ativo = (_cobFiltro === nome);
-      htmlCards += '<div onclick="govCobrancaFiltrar(' + i + ')"'
+      var ehCob = _cobEhTipoCobranca(nome);
+      html += '<div onclick="govCobrancaFiltrar(' + i + ')"'
+        + ' title="' + (ehCob ? 'Clique para ver a quebra por nº de cobranças' : 'Clique para filtrar') + '"'
         + ' style="cursor:pointer;background:' + (ativo ? 'var(--azm)' : 'var(--bg)')
         + ';color:' + (ativo ? '#fff' : 'var(--tx)')
-        + ';border:1.5px solid var(--brd);border-radius:8px;padding:8px 18px;text-align:center;line-height:1.2;max-width:220px">'
+        + ';border:1.5px solid ' + (ativo ? 'var(--azm)' : 'var(--brd)')
+        + (ehCob && !ativo ? ';border-left:3px solid var(--vm)' : '')
+        + ';border-radius:8px;padding:8px 18px;text-align:center;line-height:1.2;min-width:120px;max-width:230px">'
         + '<div style="font-size:19px;font-weight:800">' + grupos[nome] + '</div>'
-        + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(nome) + '</div></div>';
+        + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(nome) + '</div>'
+        + '</div>';
     }
-    cards.innerHTML = htmlCards;
+    cards.innerHTML = html;
   }
 
-  // Tabela
-  var lista = _cobFiltro
-    ? _cobDados.filter(function(r){ return (r.tipoCobranca || 'Sem tipo') === _cobFiltro; })
-    : _cobDados;
+  _cobDesenharSub();
 
-  var html = '<table><thead><tr>'
+  // ── Tabela ──
+  var lista = _cobDados;
+  if (_cobFiltro) {
+    lista = lista.filter(function(r){ return (r.tipoCobranca || 'Sem tipo') === _cobFiltro; });
+  }
+  if (_cobSubFiltro !== null) {
+    lista = lista.filter(function(r){ return _cobQtd(r) === _cobSubFiltro; });
+  }
+
+  var t = '<table><thead><tr>'
     + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Status</th>'
     + '<th>Cobranças</th><th>Tipo de Cobrança</th><th>Prazo</th><th>SLA</th>'
     + '</tr></thead><tbody>';
@@ -29792,35 +29854,92 @@ function _cobDesenhar(){
   for (i = 0; i < lista.length; i++) {
     var r = lista[i];
     var st = String(r.status || '');
-    var corSt = 'var(--tx2)';
-    var bgSt = 'var(--cin)';
+    var corSt = 'var(--tx2)', bgSt = 'var(--cin)';
     if (_cobNorm(st).indexOf('atras') !== -1) { corSt = 'var(--vm)'; bgSt = 'var(--vmc)'; }
     else if (_cobNorm(st).indexOf('dentro') !== -1) { corSt = 'var(--vd)'; bgSt = 'var(--vdc)'; }
 
     var prazo = (r.prazo === '' || r.prazo == null) ? '—' : r.prazo;
     var corPrazo = (!isNaN(prazo) && Number(prazo) <= 7) ? 'var(--vm)' : 'var(--tx)';
 
-    html += '<tr>'
+    t += '<tr>'
       + '<td>' + _cobEsc(r.analista || '—') + '</td>'
       + '<td style="font-weight:700">' + _cobEsc(r.rc || '—') + '</td>'
       + '<td>' + _cobEsc(r.itemRc || '—') + '</td>'
       + '<td><span style="background:' + bgSt + ';color:' + corSt + ';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">' + _cobEsc(st || '—') + '</span></td>'
-      + '<td style="text-align:center;font-weight:700">' + _cobEsc(r.cobrancas == null ? '0' : r.cobrancas) + '</td>'
+      + '<td style="text-align:center;font-weight:700">' + _cobQtd(r) + '</td>'
       + '<td>' + _cobEsc(r.tipoCobranca || '—') + '</td>'
       + '<td style="text-align:center;font-weight:700;color:' + corPrazo + '">' + _cobEsc(prazo) + '</td>'
       + '<td style="text-align:center">' + _cobEsc(r.sla == null || r.sla === '' ? '—' : r.sla) + '</td>'
       + '</tr>';
   }
-  html += '</tbody></table>';
+  t += '</tbody></table>';
 
-  wrap.innerHTML = '<div class="tw" style="max-height:560px">' + html + '</div>'
-    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">Mostrando ' + lista.length
-    + ' de ' + _cobDados.length + ' itens. Clique num card para filtrar por tipo de cobrança.</div>';
+  var legenda = 'Mostrando ' + lista.length + ' de ' + _cobDados.length + ' itens';
+  if (_cobFiltro) legenda += ' — ' + _cobEsc(_cobFiltro);
+  if (_cobSubFiltro !== null) legenda += ' com ' + _cobSubFiltro + ' cobrança' + (_cobSubFiltro === 1 ? '' : 's');
+  legenda += '. Clique num card para filtrar.';
+
+  wrap.innerHTML = '<div class="tw" style="max-height:560px">' + t + '</div>'
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">' + legenda + '</div>';
 }
 
-// idx = indice do card em _cobTipos; null/-1 = mostrar tudo
+// ── Sub-cards: quebra por nº de cobranças (só p/ tipos "Cobrança *") ──
+function _cobDesenharSub(){
+  var el = document.getElementById('cob-subcards');
+  if (!el) return;
+
+  if (!_cobFiltro || !_cobEhTipoCobranca(_cobFiltro)) {
+    el.innerHTML = '';
+    el.style.display = 'none';
+    return;
+  }
+
+  var itens = _cobDados.filter(function(r){ return (r.tipoCobranca || 'Sem tipo') === _cobFiltro; });
+  var porQtd = {};
+  var maxQtd = 3;
+  itens.forEach(function(r){
+    var q = _cobQtd(r);
+    porQtd[q] = (porQtd[q] || 0) + 1;
+    if (q > maxQtd) maxQtd = q;
+  });
+
+  var html = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+    + '<span style="font-size:11px;font-weight:700;color:var(--az)">↳ ' + _cobEsc(_cobFiltro) + ' — por nº de cobranças:</span>';
+
+  // sempre mostra 1, 2 e 3; acrescenta valores maiores se existirem
+  for (var q = 1; q <= maxQtd; q++) {
+    var n = porQtd[q] || 0;
+    var ativo = (_cobSubFiltro === q);
+    var vazio = (n === 0);
+    html += '<div ' + (vazio ? '' : 'onclick="govCobrancaSubFiltrar(' + q + ')"')
+      + ' style="' + (vazio ? 'opacity:.4;cursor:default' : 'cursor:pointer')
+      + ';background:' + (ativo ? 'var(--vm)' : 'var(--vmc)') + ';color:' + (ativo ? '#fff' : 'var(--vm)')
+      + ';border:1.5px solid var(--vm);border-radius:8px;padding:5px 14px;text-align:center;line-height:1.15;min-width:74px">'
+      + '<div style="font-size:17px;font-weight:800">' + n + '</div>'
+      + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">'
+      + q + ' cobrança' + (q === 1 ? '' : 's') + '</div></div>';
+  }
+
+  if (_cobSubFiltro !== null) {
+    html += '<button class="btn btn-s" style="font-size:10.5px" onclick="govCobrancaSubFiltrar(null)">✕ limpar</button>';
+  }
+  html += '</div>';
+
+  el.innerHTML = html;
+  el.style.display = '';
+}
+
+// idx = posicao do card em _cobTipos; -1 = todos
 function govCobrancaFiltrar(idx){
-  _cobFiltro = (idx === null || idx === -1 || _cobTipos[idx] === undefined) ? null : _cobTipos[idx];
+  var novo = (idx === null || idx === -1 || _cobTipos[idx] === undefined) ? null : _cobTipos[idx];
+  if (novo === _cobFiltro) novo = null;   // clicar de novo desmarca
+  _cobFiltro = novo;
+  _cobSubFiltro = null;                   // trocar de tipo zera a quebra
+  _cobDesenhar();
+}
+
+function govCobrancaSubFiltrar(q){
+  _cobSubFiltro = (q === null || _cobSubFiltro === q) ? null : q;
   _cobDesenhar();
 }
 
@@ -29856,16 +29975,14 @@ function govCobrancaUpload(ev){
       var ws = wb.Sheets[wb.SheetNames[0]];
       if (!ws) throw new Error('Planilha vazia ou ilegível.');
 
-      var linhas = XLSX.utils.sheet_to_json(ws, { defval: '' });
-      // Ignora linhas totalmente vazias
-      linhas = linhas.filter(function(l){
+      var linhas = XLSX.utils.sheet_to_json(ws, { defval: '' }).filter(function(l){
         return Object.keys(l).some(function(k){ return String(l[k]).trim() !== ''; });
       });
       if (!linhas.length) throw new Error('Nenhuma linha de dados encontrada.');
 
       var amostra = linhas[0];
-      var cRc    = _cobCol(amostra, ['RC', 'Nº RC', 'Numero RC']);
-      var cStat  = _cobCol(amostra, ['Status']);
+      var cRc   = _cobCol(amostra, ['RC', 'Nº RC', 'Numero RC']);
+      var cStat = _cobCol(amostra, ['Status']);
       if (!cRc)   throw new Error('Coluna "RC" não encontrada na planilha.');
       if (!cStat) throw new Error('Coluna "Status" não encontrada na planilha.');
 
@@ -29905,25 +30022,18 @@ function govCobrancaUpload(ev){
 
       _cobMsg('⏳ Substituindo base (' + registros.length + ' itens)...');
 
-      // Apaga a base antiga e grava a nova — a planilha é sempre a fonte da verdade
       db.collection('cobranca_status').get().then(function(snap){
-        var lotes = [];
-        var lote = db.batch();
-        var n = 0;
+        var lotes = [], lote = db.batch(), n = 0;
         snap.forEach(function(doc){
-          lote.delete(doc.ref);
-          n++;
+          lote.delete(doc.ref); n++;
           if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
         });
         var j;
         for (j = 0; j < registros.length; j++) {
-          var reg = registros[j];
-          lote.set(db.collection('cobranca_status').doc(reg.id), reg);
-          n++;
+          lote.set(db.collection('cobranca_status').doc(registros[j].id), registros[j]); n++;
           if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
         }
         lotes.push(lote);
-
         var seq = Promise.resolve();
         lotes.forEach(function(b){ seq = seq.then(function(){ return b.commit(); }); });
         return seq;
@@ -29932,6 +30042,7 @@ function govCobrancaUpload(ev){
         var av = document.getElementById('cob-atualizado');
         if (av) av.textContent = 'Atualizado em ' + new Date().toLocaleString('pt-BR');
         _cobFiltro = null;
+        _cobSubFiltro = null;
         govCobrancaRender();
         setTimeout(function(){ _cobMsg(''); }, 4000);
       }).catch(function(err){
@@ -29952,14 +30063,15 @@ function _cobEhFast(){
   return (typeof _moduloAtivo !== 'undefined') && _moduloAtivo === 'fast';
 }
 function _cobAplicarModulo(){
-  var btn = document.getElementById('gov-main-tab-cobranca');
+  var btn  = document.getElementById('gov-main-tab-cobranca');
   var pane = document.getElementById('gov-main-content-cobranca');
   var fast = _cobEhFast();
-  if (btn)  btn.style.display = fast ? '' : 'none';
+  if (btn) btn.style.display = fast ? '' : 'none';
   if (!fast) {
     if (pane) pane.style.display = 'none';
     _cobDados = [];
     _cobFiltro = null;
+    _cobSubFiltro = null;
     _cobTipos = [];
   }
 }
