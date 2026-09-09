@@ -4176,7 +4176,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button id="gov-main-tab-pc" onclick="govMainTab('pc',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">🔴 Planilha Crítica</button>
         <button id="gov-main-tab-sla" onclick="govMainTab('sla',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">⏱️ Urgência por SLA</button>
         <button id="gov-main-tab-prazo" onclick="govMainTab('prazo',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">📆 Urgência por Prazo da OP</button>
-        <button id="gov-main-tab-cobranca" onclick="govMainTab(\'cobranca\',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">💳 Cobrança por Status</button>
+        <button id="gov-main-tab-cobranca" onclick="govMainTab('cobranca',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">💳 Cobrança por Status</button>
       </div>
 
       <!-- ── ABA: URGÊNCIA POR SLA ── -->
@@ -4438,13 +4438,14 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div id="gov-urgprazo-cards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:1rem"></div>
         <div id="gov-urgprazo-tabela"></div>
       
+
       <!-- ── ABA: COBRANÇA POR STATUS ── -->
       <div id="gov-main-content-cobranca" style="display:none">
         <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--vm)">
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
             <div>
               <div class="cd-t" style="margin:0">💳 Cobrança por Status</div>
-              <div style="font-size:11px;color:var(--tx2);margin-top:2px">Faça upload de uma planilha para atualizar os status de cobrança automaticamente.</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:2px">Faça upload de uma planilha para atualizar os dados automaticamente.</div>
             </div>
             <button class="btn btn-s" style="font-size:11px" onclick="govCobrancaRender()">↺ Atualizar</button>
           </div>
@@ -4456,8 +4457,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <span id="gov-cobranca-status" style="font-size:11px;color:var(--tx2)"></span>
           </div>
         </div>
-        <div id="gov-cobranca-cards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:1rem"></div>
-        <div id="gov-cobranca-tabela" style="padding:2rem;text-align:center;color:var(--tx2)">📊 Upload uma planilha para visualizar dados</div>
+        <div id="gov-cobranca-tabela" style="padding:2rem;text-align:center;color:var(--tx2)">📊 Upload uma planilha para visualizar</div>
       </div>
 </div>
 
@@ -28815,7 +28815,7 @@ function prodRenderizarPaineis(colab){
   const totalLabel = semMeta ? `Líder: ${cnt.meta} itens` : `Total: ${cnt.meta} / ${metaVal}`;
 
   // Atualizar badges compactos em Gov e PC
-  ['gov','pc','sla','prazo','cobranca'].forEach(origem => {
+  ['gov','pc','sla','prazo'].forEach(origem => {
     const s = id => document.getElementById(`${origem}-kpi-${id}`);
     if(s('1a'))     s('1a').textContent     = `🔍 ${cnt.primeira_analise}`;
     if(s('trat'))   s('trat').textContent   = `⚙️ ${cnt.em_tratativa}`;
@@ -29657,121 +29657,109 @@ if(_goOrig){
 // Adicionar Fechamento do Dia ao PERMS_SIDEBAR e navegação
 PERMS_SIDEBAR['fechamento-dia'] = { icon:'🔒', label:'Fechamento do Dia', mod:'EXECUÇÃO' };
 
-// ═══════════════════════════════════════════════════════════════
-//  COBRANÇA POR STATUS (FAST)
-// ═══════════════════════════════════════════════════════════════
-
-async function govCobrancaRender(){
+// COBRANÇA POR STATUS
+function govCobrancaRender() {
+  var container = document.getElementById('gov-cobranca-tabela');
+  if (!container) return;
+  
+  container.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--tx2)">📊 Upload uma planilha para visualizar</div>';
+  
   try {
-    const container = document.getElementById('gov-cobranca-tabela');
-    if(!container) return;
-    
-    const db = getDB();
-    if(!db) {
-      container.innerHTML = '<div style="padding:2rem;color:var(--tx2)">⚠ Firebase não disponível</div>';
+    var db = getDB();
+    if (!db) {
+      container.innerHTML = '<div style="padding:2rem;color:var(--tx2)">Firebase indisponível</div>';
       return;
     }
     
-    container.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--tx2)">⏳ Carregando...</div>';
-    
-    const snap = await db.collection('cobranca_status').limit(100).get();
-    const dados = snap.docs.map(d => ({id: d.id, ...d.data()}));
-    
-    if(!dados || dados.length === 0) {
-      container.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--tx2)">📊 Nenhum dado. Faça upload de uma planilha.</div>';
-      return;
-    }
-    
-    const thead = '<tr><th>RC</th><th>Status</th><th>Data</th><th>Obs</th></tr>';
-    const tbody = dados.map(d => {
-      return '<tr><td>' + (d.rc || '-') + '</td><td>' + (d.status || '-') + '</td><td>' + (d.data || '-') + '</td><td>' + (d.observacao || '-') + '</td></tr>';
-    }).join('');
-    
-    container.innerHTML = '<div class="tw" style="max-height:600px"><table style="width:100%"><thead>' + thead + '</thead><tbody>' + tbody + '</tbody></table></div>';
-    
+    db.collection('cobranca_status').limit(50).get().then(function(snap) {
+      if (snap.empty) {
+        container.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--tx2)">Nenhum dado. Faça upload.</div>';
+        return;
+      }
+      
+      var html = '<table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--azc)"><th style="padding:8px;border:1px solid var(--brd)">RC</th><th style="padding:8px;border:1px solid var(--brd)">Status</th><th style="padding:8px;border:1px solid var(--brd)">Data</th></tr></thead><tbody>';
+      
+      snap.docs.forEach(function(doc) {
+        var d = doc.data();
+        html += '<tr><td style="padding:8px;border:1px solid var(--brd)">' + (d.rc || '-') + '</td><td style="padding:8px;border:1px solid var(--brd)">' + (d.status || '-') + '</td><td style="padding:8px;border:1px solid var(--brd)">' + (d.data || '-') + '</td></tr>';
+      });
+      
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    });
   } catch(e) {
-    console.error('Erro:', e);
-    const container = document.getElementById('gov-cobranca-tabela');
-    if(container) container.innerHTML = '<div style="padding:2rem;color:var(--vm)">❌ Erro: ' + e.message + '</div>';
+    container.innerHTML = '<div style="padding:2rem;color:var(--vm)">Erro: ' + e.message + '</div>';
   }
 }
 
-async function govCobrancaProcessarUpload(event) {
-  const arquivo = event.target.files[0];
-  if(!arquivo) return;
+function govCobrancaProcessarUpload(event) {
+  var arquivo = event.target.files[0];
+  if (!arquivo) return;
   
-  const statusEl = document.getElementById('gov-cobranca-status');
-  statusEl.textContent = '⏳ Processando...';
-  statusEl.style.color = 'var(--tx2)';
+  var statusEl = document.getElementById('gov-cobranca-status');
+  statusEl.textContent = 'Processando...';
   
   try {
-    if(typeof XLSX === 'undefined') {
-      throw new Error('Biblioteca XLSX indisponível');
+    if (typeof XLSX === 'undefined') {
+      statusEl.textContent = 'Erro: XLSX não carregado';
+      return;
     }
     
-    const buffer = await arquivo.arrayBuffer();
-    const wb = XLSX.read(buffer, {type: 'array'});
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    
-    if(!ws) throw new Error('Nenhuma planilha encontrada');
-    
-    const dados = XLSX.utils.sheet_to_json(ws);
-    if(!dados || dados.length === 0) throw new Error('Planilha vazia');
-    
-    const primeiraLinha = dados[0];
-    const colunas = Object.keys(primeiraLinha).map(c => c.trim().toUpperCase());
-    
-    if(!colunas.some(c => c.includes('RC'))) {
-      throw new Error('Falta coluna RC');
-    }
-    if(!colunas.some(c => c.includes('STATUS'))) {
-      throw new Error('Falta coluna Status');
-    }
-    
-    statusEl.textContent = '⏳ Salvando...';
-    
-    const db = getDB();
-    if(!db) throw new Error('Firebase indisponível');
-    
-    const colRC = Object.keys(primeiraLinha).find(c => c.trim().toUpperCase().includes('RC'));
-    const colStatus = Object.keys(primeiraLinha).find(c => c.trim().toUpperCase().includes('STATUS'));
-    const colData = Object.keys(primeiraLinha).find(c => c.trim().toUpperCase().includes('DATA'));
-    const colObs = Object.keys(primeiraLinha).find(c => c.trim().toUpperCase().includes('OBSERV'));
-    
-    let count = 0;
-    for(const linha of dados) {
-      const rc = String(linha[colRC] || '').trim();
-      const status = String(linha[colStatus] || '').trim();
-      
-      if(!rc || !status) continue;
-      
-      await db.collection('cobranca_status').doc(rc).set({
-        rc: rc,
-        status: status,
-        data: linha[colData] ? String(linha[colData]).substring(0, 10) : new Date().toISOString().split('T')[0],
-        observacao: linha[colObs] || '',
-        atualizadoEm: new Date().toISOString()
-      }, {merge: true});
-      
-      count++;
-    }
-    
-    statusEl.textContent = '✅ ' + count + ' registros atualizados';
-    statusEl.style.color = 'var(--vd)';
-    event.target.value = '';
-    
-    setTimeout(function() {
-      govCobrancaRender();
-      setTimeout(function() {
-        statusEl.textContent = '';
-      }, 2000);
-    }, 1000);
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        var data = new Uint8Array(e.target.result);
+        var wb = XLSX.read(data, {type: 'array'});
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var json = XLSX.utils.sheet_to_json(ws);
+        
+        if (!json || json.length === 0) {
+          statusEl.textContent = 'Erro: Planilha vazia';
+          return;
+        }
+        
+        var db = getDB();
+        if (!db) {
+          statusEl.textContent = 'Firebase indisponível';
+          return;
+        }
+        
+        var count = 0;
+        json.forEach(function(linha) {
+          var colRC = Object.keys(linha).find(function(k) { return k.toUpperCase().includes('RC'); });
+          var colStatus = Object.keys(linha).find(function(k) { return k.toUpperCase().includes('STATUS'); });
+          
+          if (colRC && colStatus) {
+            var rc = String(linha[colRC]).trim();
+            var status = String(linha[colStatus]).trim();
+            
+            if (rc && status) {
+              db.collection('cobranca_status').doc(rc).set({
+                rc: rc,
+                status: status,
+                data: new Date().toISOString().split('T')[0],
+                atualizadoEm: new Date().toISOString()
+              }, {merge: true});
+              count++;
+            }
+          }
+        });
+        
+        statusEl.textContent = 'Sucesso: ' + count + ' registros';
+        event.target.value = '';
+        setTimeout(function() {
+          govCobrancaRender();
+          statusEl.textContent = '';
+        }, 1500);
+        
+      } catch(err) {
+        statusEl.textContent = 'Erro: ' + err.message;
+      }
+    };
+    reader.readAsArrayBuffer(arquivo);
     
   } catch(e) {
-    console.error(e);
-    statusEl.textContent = '❌ Erro: ' + e.message;
-    statusEl.style.color = 'var(--vm)';
-    event.target.value = '';
+    statusEl.textContent = 'Erro: ' + e.message;
   }
 }
 
