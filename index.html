@@ -4202,7 +4202,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
           <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Status, Cobrança, Tipo de Cobrança, Prazo, SLA</strong> — obrigatórias: RC e Status.</div>
         </div>
-        <div id="cob-cards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:.75rem"></div>
+        <div id="cob-cards" style="display:flex;flex-direction:column;gap:10px;margin-bottom:.75rem"></div>
         <div id="cob-subcards" style="display:none;margin-bottom:1rem;padding:.6rem .875rem;background:var(--vmc);border:1px solid var(--vm);border-radius:8px"></div>
         <div id="cob-tabela"></div>
       </div>
@@ -29816,12 +29816,11 @@ function _cobDesenhar(){
   _cobTipos = chaves;
 
   if (cards) {
-    var html = '';
-    for (i = 0; i < chaves.length; i++) {
-      var nome = chaves[i];
+    // um card; idx = posicao em _cobTipos
+    var montaCard = function(nome, idx){
       var ativo = (_cobFiltro === nome);
       var ehCob = _cobEhTipoCobranca(nome);
-      html += '<div onclick="govCobrancaFiltrar(' + i + ')"'
+      return '<div onclick="govCobrancaFiltrar(' + idx + ')"'
         + ' title="' + (ehCob ? 'Clique para ver a quebra por nº de cobranças' : 'Clique para filtrar') + '"'
         + ' style="cursor:pointer;background:' + (ativo ? 'var(--azm)' : 'var(--bg)')
         + ';color:' + (ativo ? '#fff' : 'var(--tx)')
@@ -29831,8 +29830,20 @@ function _cobDesenhar(){
         + '<div style="font-size:19px;font-weight:800">' + grupos[nome] + '</div>'
         + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(nome) + '</div>'
         + '</div>';
+    };
+
+    // linha 1 = solicitações/abertura ; linha 2 = cobranças
+    var htmlSol = '', htmlCob = '';
+    for (i = 0; i < chaves.length; i++) {
+      if (_cobEhTipoCobranca(chaves[i])) htmlCob += montaCard(chaves[i], i);
+      else                               htmlSol += montaCard(chaves[i], i);
     }
-    cards.innerHTML = html;
+
+    var linha = 'display:flex;gap:12px;flex-wrap:wrap';
+    var out = '';
+    if (htmlSol) out += '<div style="' + linha + '">' + htmlSol + '</div>';
+    if (htmlCob) out += '<div style="' + linha + '">' + htmlCob + '</div>';
+    cards.innerHTML = out;
   }
 
   _cobDesenharSub();
