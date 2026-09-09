@@ -4179,6 +4179,32 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button id="gov-main-tab-cobranca" onclick="govMainTab('cobranca',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">💳 Cobrança por Status</button>
       </div>
 
+      <!-- ── ABA: COBRANÇA POR STATUS (exclusiva do módulo FAST) ── -->
+      <div id="gov-main-content-cobranca" style="display:none">
+        <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--vm)">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div>
+              <div class="cd-t" style="margin:0">💳 Cobrança por Status</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:2px">Suba a planilha de cobrança — a base é substituída e os status atualizam automaticamente.</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span id="cob-atualizado" style="font-size:11px;color:var(--tx2)"></span>
+              <button class="btn btn-s" style="font-size:11px" onclick="govCobrancaRender()">↺ Atualizar</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:.875rem;align-items:center">
+            <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;background:var(--azm);color:#fff;padding:8px 18px;border-radius:6px;font-size:12px;font-weight:700">
+              📤 Subir planilha
+              <input id="cob-upload" type="file" accept=".xlsx,.xls" style="display:none" onchange="govCobrancaUpload(event)">
+            </label>
+            <span id="cob-status" style="font-size:11.5px;color:var(--tx2)"></span>
+          </div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Status, Cobrança, Tipo de Cobrança, Prazo, SLA</strong> — obrigatórias: RC e Status.</div>
+        </div>
+        <div id="cob-cards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:1rem"></div>
+        <div id="cob-tabela"></div>
+      </div>
+
       <!-- ── ABA: URGÊNCIA POR SLA ── -->
       <div id="gov-main-content-sla" style="display:none">
         <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--vm)">
@@ -4437,29 +4463,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         </div>
         <div id="gov-urgprazo-cards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:1rem"></div>
         <div id="gov-urgprazo-tabela"></div>
-      
-
-      <!-- ── ABA: COBRANÇA POR STATUS ── -->
-      <div id="gov-main-content-cobranca" style="display:none">
-        <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--vm)">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-            <div>
-              <div class="cd-t" style="margin:0">💳 Cobrança por Status</div>
-              <div style="font-size:11px;color:var(--tx2);margin-top:2px">Faça upload de uma planilha para atualizar os dados automaticamente.</div>
-            </div>
-            <button class="btn btn-s" style="font-size:11px" onclick="govCobrancaRender()">↺ Atualizar</button>
-          </div>
-          <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:1rem;align-items:center">
-            <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;align-items:center;gap:8px;cursor:pointer;background:var(--azm);color:#fff;padding:8px 16px;border-radius:6px;font-weight:700;border:none">
-              📤 Upload Planilha
-              <input id="gov-cobranca-upload" type="file" accept=".xlsx,.xls" style="display:none" onchange="govCobrancaProcessarUpload(event)">
-            </label>
-            <span id="gov-cobranca-status" style="font-size:11px;color:var(--tx2)"></span>
-          </div>
-        </div>
-        <div id="gov-cobranca-tabela" style="padding:2rem;text-align:center;color:var(--tx2)">📊 Upload uma planilha para visualizar</div>
       </div>
-</div>
 
       <!-- ── ABA: GOVERNANÇA ── -->
       <div id="gov-main-content-gov">
@@ -8536,6 +8540,8 @@ function _atualizarColabsPorModulo(){
     GOV_PRAZOS = (_moduloAtivo === 'fast') ? GOV_PRAZOS_FAST : GOV_PRAZOS_ADLV;
     GOV_STATUS_OPCOES = (_moduloAtivo === 'fast') ? GOV_STATUS_OPCOES_FAST : GOV_STATUS_OPCOES_ADLV;
   }
+  // Aba "Cobrança por Status" é exclusiva do FAST — no ADLV nem aparece.
+  try{ _cobAplicarModulo(); }catch(e){}
   // CORREÇÃO BUG (20/06): `registros` começava com HISTORICO_INICIAL (dados
   // reais do ADLV) baseado no módulo ativo NA HORA QUE A PÁGINA CARREGOU —
   // antes do login/escolha de módulo. Como esse array só recebe itens via
@@ -17628,6 +17634,10 @@ function _govUrgPainelSync(){
   try{ const e=window._govUltimoEquipe; if(e && typeof govAtualizarVelocimetroEquipe==='function') govAtualizarVelocimetroEquipe(e.total, e.meta); }catch(e){}
 }
 function govMainTab(aba, btn){
+  // "Cobrança por Status" só existe no FAST — no ADLV cai na Governança
+  if(aba==='cobranca' && typeof _cobEhFast==='function' && !_cobEhFast()){
+    aba = 'gov'; btn = document.getElementById('gov-main-tab-gov');
+  }
   // Alternar entre abas principais: Governança e Planilha Crítica
   ['gov','pc','sla','prazo','cobranca'].forEach(t => {
     const content = document.getElementById('gov-main-content-'+t);
@@ -29657,109 +29667,300 @@ if(_goOrig){
 // Adicionar Fechamento do Dia ao PERMS_SIDEBAR e navegação
 PERMS_SIDEBAR['fechamento-dia'] = { icon:'🔒', label:'Fechamento do Dia', mod:'EXECUÇÃO' };
 
-// COBRANÇA POR STATUS
-function govCobrancaRender() {
-  var container = document.getElementById('gov-cobranca-tabela');
-  if (!container) return;
-  
-  container.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--tx2)">📊 Upload uma planilha para visualizar</div>';
-  
-  try {
-    var db = getDB();
-    if (!db) {
-      container.innerHTML = '<div style="padding:2rem;color:var(--tx2)">Firebase indisponível</div>';
-      return;
-    }
-    
-    db.collection('cobranca_status').limit(50).get().then(function(snap) {
-      if (snap.empty) {
-        container.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--tx2)">Nenhum dado. Faça upload.</div>';
-        return;
-      }
-      
-      var html = '<table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--azc)"><th style="padding:8px;border:1px solid var(--brd)">RC</th><th style="padding:8px;border:1px solid var(--brd)">Status</th><th style="padding:8px;border:1px solid var(--brd)">Data</th></tr></thead><tbody>';
-      
-      snap.docs.forEach(function(doc) {
-        var d = doc.data();
-        html += '<tr><td style="padding:8px;border:1px solid var(--brd)">' + (d.rc || '-') + '</td><td style="padding:8px;border:1px solid var(--brd)">' + (d.status || '-') + '</td><td style="padding:8px;border:1px solid var(--brd)">' + (d.data || '-') + '</td></tr>';
-      });
-      
-      html += '</tbody></table>';
-      container.innerHTML = html;
-    });
-  } catch(e) {
-    container.innerHTML = '<div style="padding:2rem;color:var(--vm)">Erro: ' + e.message + '</div>';
-  }
+// ═══════════════════════════════════════════════════════════════
+//  GOVERNANÇA — COBRANÇA POR STATUS  (exclusivo módulo FAST)
+// ═══════════════════════════════════════════════════════════════
+var _cobDados = [];
+var _cobFiltro = null;
+var _cobTipos = [];
+
+function _cobEsc(v){
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function govCobrancaProcessarUpload(event) {
-  var arquivo = event.target.files[0];
-  if (!arquivo) return;
-  
-  var statusEl = document.getElementById('gov-cobranca-status');
-  statusEl.textContent = 'Processando...';
-  
-  try {
-    if (typeof XLSX === 'undefined') {
-      statusEl.textContent = 'Erro: XLSX não carregado';
-      return;
+// Acha a coluna da planilha por lista de nomes aceitos (normaliza acento/espaco/caixa)
+function _cobNorm(s){
+  return String(s || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+function _cobCol(linha, nomes){
+  var chaves = Object.keys(linha);
+  var i, j, k;
+  // 1) match exato
+  for (i = 0; i < nomes.length; i++) {
+    for (j = 0; j < chaves.length; j++) {
+      if (_cobNorm(chaves[j]) === _cobNorm(nomes[i])) return chaves[j];
     }
-    
-    var reader = new FileReader();
-    reader.onload = function(e) {
-      try {
-        var data = new Uint8Array(e.target.result);
-        var wb = XLSX.read(data, {type: 'array'});
-        var ws = wb.Sheets[wb.SheetNames[0]];
-        var json = XLSX.utils.sheet_to_json(ws);
-        
-        if (!json || json.length === 0) {
-          statusEl.textContent = 'Erro: Planilha vazia';
-          return;
-        }
-        
-        var db = getDB();
-        if (!db) {
-          statusEl.textContent = 'Firebase indisponível';
-          return;
-        }
-        
-        var count = 0;
-        json.forEach(function(linha) {
-          var colRC = Object.keys(linha).find(function(k) { return k.toUpperCase().includes('RC'); });
-          var colStatus = Object.keys(linha).find(function(k) { return k.toUpperCase().includes('STATUS'); });
-          
-          if (colRC && colStatus) {
-            var rc = String(linha[colRC]).trim();
-            var status = String(linha[colStatus]).trim();
-            
-            if (rc && status) {
-              db.collection('cobranca_status').doc(rc).set({
-                rc: rc,
-                status: status,
-                data: new Date().toISOString().split('T')[0],
-                atualizadoEm: new Date().toISOString()
-              }, {merge: true});
-              count++;
-            }
-          }
+  }
+  // 2) match parcial
+  for (i = 0; i < nomes.length; i++) {
+    for (k = 0; k < chaves.length; k++) {
+      if (_cobNorm(chaves[k]).indexOf(_cobNorm(nomes[i])) !== -1) return chaves[k];
+    }
+  }
+  return null;
+}
+
+function _cobStatusEl(){ return document.getElementById('cob-status'); }
+function _cobMsg(txt, cor){
+  var el = _cobStatusEl();
+  if (!el) return;
+  el.textContent = txt || '';
+  el.style.color = cor || 'var(--tx2)';
+}
+
+// ── Carregar do Firebase e desenhar ──
+function govCobrancaRender(){
+  if (!_cobEhFast()) return;   // guarda: modulo ADLV nao usa esta aba
+  var wrap = document.getElementById('cob-tabela');
+  if (!wrap) return;
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!db) {
+    wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⚠ Firebase indisponível.</div>';
+    return;
+  }
+  wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⏳ Carregando cobranças...</div>';
+
+  db.collection('cobranca_status').get().then(function(snap){
+    _cobDados = [];
+    snap.forEach(function(doc){ _cobDados.push(doc.data()); });
+    _cobDados.sort(function(a, b){
+      var pa = (a.prazo === '' || a.prazo == null || isNaN(a.prazo)) ? 99999 : Number(a.prazo);
+      var pb = (b.prazo === '' || b.prazo == null || isNaN(b.prazo)) ? 99999 : Number(b.prazo);
+      return pa - pb;
+    });
+    _cobDesenhar();
+  }).catch(function(err){
+    wrap.innerHTML = '<div style="padding:2rem;color:var(--vm);font-size:13px">❌ ' + _cobEsc(err.message) + '</div>';
+  });
+}
+
+function _cobDesenhar(){
+  var wrap = document.getElementById('cob-tabela');
+  var cards = document.getElementById('cob-cards');
+  if (!wrap) return;
+
+  if (!_cobDados.length) {
+    if (cards) cards.innerHTML = '';
+    wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">'
+      + '📄 Nenhuma cobrança registrada ainda.<br><span style="font-size:11px">Use <strong>📤 Subir planilha</strong> acima para carregar os dados.</span></div>';
+    return;
+  }
+
+  // Cards por Tipo de Cobrança
+  var grupos = {};
+  var i;
+  for (i = 0; i < _cobDados.length; i++) {
+    var t = _cobDados[i].tipoCobranca || 'Sem tipo';
+    grupos[t] = (grupos[t] || 0) + 1;
+  }
+  var chaves = Object.keys(grupos).sort(function(a, b){ return grupos[b] - grupos[a]; });
+
+  if (cards) {
+    var htmlCards = '<div onclick="govCobrancaFiltrar(-1)" style="cursor:pointer;background:'
+      + (_cobFiltro === null ? 'var(--azm)' : 'var(--azc)') + ';color:'
+      + (_cobFiltro === null ? '#fff' : 'var(--azm)')
+      + ';border:1.5px solid var(--azm);border-radius:8px;padding:8px 18px;text-align:center;line-height:1.2">'
+      + '<div style="font-size:19px;font-weight:800">' + _cobDados.length + '</div>'
+      + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">Total</div></div>';
+
+    _cobTipos = chaves;
+    for (i = 0; i < chaves.length; i++) {
+      var nome = chaves[i];
+      var ativo = (_cobFiltro === nome);
+      htmlCards += '<div onclick="govCobrancaFiltrar(' + i + ')"'
+        + ' style="cursor:pointer;background:' + (ativo ? 'var(--azm)' : 'var(--bg)')
+        + ';color:' + (ativo ? '#fff' : 'var(--tx)')
+        + ';border:1.5px solid var(--brd);border-radius:8px;padding:8px 18px;text-align:center;line-height:1.2;max-width:220px">'
+        + '<div style="font-size:19px;font-weight:800">' + grupos[nome] + '</div>'
+        + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(nome) + '</div></div>';
+    }
+    cards.innerHTML = htmlCards;
+  }
+
+  // Tabela
+  var lista = _cobFiltro
+    ? _cobDados.filter(function(r){ return (r.tipoCobranca || 'Sem tipo') === _cobFiltro; })
+    : _cobDados;
+
+  var html = '<table><thead><tr>'
+    + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Status</th>'
+    + '<th>Cobranças</th><th>Tipo de Cobrança</th><th>Prazo</th><th>SLA</th>'
+    + '</tr></thead><tbody>';
+
+  for (i = 0; i < lista.length; i++) {
+    var r = lista[i];
+    var st = String(r.status || '');
+    var corSt = 'var(--tx2)';
+    var bgSt = 'var(--cin)';
+    if (_cobNorm(st).indexOf('atras') !== -1) { corSt = 'var(--vm)'; bgSt = 'var(--vmc)'; }
+    else if (_cobNorm(st).indexOf('dentro') !== -1) { corSt = 'var(--vd)'; bgSt = 'var(--vdc)'; }
+
+    var prazo = (r.prazo === '' || r.prazo == null) ? '—' : r.prazo;
+    var corPrazo = (!isNaN(prazo) && Number(prazo) <= 7) ? 'var(--vm)' : 'var(--tx)';
+
+    html += '<tr>'
+      + '<td>' + _cobEsc(r.analista || '—') + '</td>'
+      + '<td style="font-weight:700">' + _cobEsc(r.rc || '—') + '</td>'
+      + '<td>' + _cobEsc(r.itemRc || '—') + '</td>'
+      + '<td><span style="background:' + bgSt + ';color:' + corSt + ';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">' + _cobEsc(st || '—') + '</span></td>'
+      + '<td style="text-align:center;font-weight:700">' + _cobEsc(r.cobrancas == null ? '0' : r.cobrancas) + '</td>'
+      + '<td>' + _cobEsc(r.tipoCobranca || '—') + '</td>'
+      + '<td style="text-align:center;font-weight:700;color:' + corPrazo + '">' + _cobEsc(prazo) + '</td>'
+      + '<td style="text-align:center">' + _cobEsc(r.sla == null || r.sla === '' ? '—' : r.sla) + '</td>'
+      + '</tr>';
+  }
+  html += '</tbody></table>';
+
+  wrap.innerHTML = '<div class="tw" style="max-height:560px">' + html + '</div>'
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">Mostrando ' + lista.length
+    + ' de ' + _cobDados.length + ' itens. Clique num card para filtrar por tipo de cobrança.</div>';
+}
+
+// idx = indice do card em _cobTipos; null/-1 = mostrar tudo
+function govCobrancaFiltrar(idx){
+  _cobFiltro = (idx === null || idx === -1 || _cobTipos[idx] === undefined) ? null : _cobTipos[idx];
+  _cobDesenhar();
+}
+
+// ── Upload da planilha ──
+function govCobrancaUpload(ev){
+  if (!_cobEhFast()) { ev.target.value = ''; return; }
+  var arq = ev.target.files && ev.target.files[0];
+  if (!arq) return;
+
+  if (typeof XLSX === 'undefined') {
+    _cobMsg('❌ Biblioteca XLSX não carregada — atualize a página (F5).', 'var(--vm)');
+    ev.target.value = '';
+    return;
+  }
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!db) {
+    _cobMsg('❌ Firebase indisponível.', 'var(--vm)');
+    ev.target.value = '';
+    return;
+  }
+
+  _cobMsg('⏳ Lendo planilha...');
+  var reader = new FileReader();
+
+  reader.onerror = function(){
+    _cobMsg('❌ Não foi possível ler o arquivo.', 'var(--vm)');
+    ev.target.value = '';
+  };
+
+  reader.onload = function(e){
+    try {
+      var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      if (!ws) throw new Error('Planilha vazia ou ilegível.');
+
+      var linhas = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      // Ignora linhas totalmente vazias
+      linhas = linhas.filter(function(l){
+        return Object.keys(l).some(function(k){ return String(l[k]).trim() !== ''; });
+      });
+      if (!linhas.length) throw new Error('Nenhuma linha de dados encontrada.');
+
+      var amostra = linhas[0];
+      var cRc    = _cobCol(amostra, ['RC', 'Nº RC', 'Numero RC']);
+      var cStat  = _cobCol(amostra, ['Status']);
+      if (!cRc)   throw new Error('Coluna "RC" não encontrada na planilha.');
+      if (!cStat) throw new Error('Coluna "Status" não encontrada na planilha.');
+
+      var cAnal  = _cobCol(amostra, ['Analista']);
+      var cItem  = _cobCol(amostra, ['Item RC', 'Item']);
+      var cQtd   = _cobCol(amostra, ['Cobranca', 'Cobrança', 'Qtd Cobranca']);
+      var cTipo  = _cobCol(amostra, ['Tipo de Cobranca', 'Tipo de Cobrança', 'Tipo']);
+      var cPrazo = _cobCol(amostra, ['Prazo']);
+      var cSla   = _cobCol(amostra, ['SLA']);
+
+      var limpo = function(v){
+        var s = String(v == null ? '' : v).trim();
+        return (s === '#N/A' || s === '#N/D' || s === 'undefined') ? '' : s;
+      };
+
+      var registros = [];
+      var i;
+      for (i = 0; i < linhas.length; i++) {
+        var l = linhas[i];
+        var rc = limpo(l[cRc]).replace(/\.0$/, '');
+        if (!rc) continue;
+        var item = cItem ? limpo(l[cItem]).replace(/\.0$/, '') : '';
+        registros.push({
+          id: item ? (rc + '_' + item) : rc,
+          rc: rc,
+          itemRc: item,
+          analista: cAnal ? limpo(l[cAnal]) : '',
+          status: limpo(l[cStat]),
+          cobrancas: cQtd ? limpo(l[cQtd]) : '',
+          tipoCobranca: cTipo ? limpo(l[cTipo]) : '',
+          prazo: cPrazo ? limpo(l[cPrazo]) : '',
+          sla: cSla ? limpo(l[cSla]) : '',
+          atualizadoEm: new Date().toISOString()
         });
-        
-        statusEl.textContent = 'Sucesso: ' + count + ' registros';
-        event.target.value = '';
-        setTimeout(function() {
-          govCobrancaRender();
-          statusEl.textContent = '';
-        }, 1500);
-        
-      } catch(err) {
-        statusEl.textContent = 'Erro: ' + err.message;
       }
-    };
-    reader.readAsArrayBuffer(arquivo);
-    
-  } catch(e) {
-    statusEl.textContent = 'Erro: ' + e.message;
+      if (!registros.length) throw new Error('Nenhuma RC válida encontrada.');
+
+      _cobMsg('⏳ Substituindo base (' + registros.length + ' itens)...');
+
+      // Apaga a base antiga e grava a nova — a planilha é sempre a fonte da verdade
+      db.collection('cobranca_status').get().then(function(snap){
+        var lotes = [];
+        var lote = db.batch();
+        var n = 0;
+        snap.forEach(function(doc){
+          lote.delete(doc.ref);
+          n++;
+          if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
+        });
+        var j;
+        for (j = 0; j < registros.length; j++) {
+          var reg = registros[j];
+          lote.set(db.collection('cobranca_status').doc(reg.id), reg);
+          n++;
+          if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
+        }
+        lotes.push(lote);
+
+        var seq = Promise.resolve();
+        lotes.forEach(function(b){ seq = seq.then(function(){ return b.commit(); }); });
+        return seq;
+      }).then(function(){
+        _cobMsg('✅ ' + registros.length + ' itens carregados.', 'var(--vd)');
+        var av = document.getElementById('cob-atualizado');
+        if (av) av.textContent = 'Atualizado em ' + new Date().toLocaleString('pt-BR');
+        _cobFiltro = null;
+        govCobrancaRender();
+        setTimeout(function(){ _cobMsg(''); }, 4000);
+      }).catch(function(err){
+        _cobMsg('❌ Erro ao gravar: ' + err.message, 'var(--vm)');
+      });
+
+    } catch (err) {
+      _cobMsg('❌ ' + err.message, 'var(--vm)');
+    }
+    ev.target.value = '';
+  };
+
+  reader.readAsArrayBuffer(arq);
+}
+
+// ── Exclusividade FAST: no ADLV a aba nem aparece ──
+function _cobEhFast(){
+  return (typeof _moduloAtivo !== 'undefined') && _moduloAtivo === 'fast';
+}
+function _cobAplicarModulo(){
+  var btn = document.getElementById('gov-main-tab-cobranca');
+  var pane = document.getElementById('gov-main-content-cobranca');
+  var fast = _cobEhFast();
+  if (btn)  btn.style.display = fast ? '' : 'none';
+  if (!fast) {
+    if (pane) pane.style.display = 'none';
+    _cobDados = [];
+    _cobFiltro = null;
+    _cobTipos = [];
   }
 }
 
