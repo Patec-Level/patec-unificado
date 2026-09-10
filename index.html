@@ -4200,7 +4200,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             </label>
             <span id="cob-status" style="font-size:11.5px;color:var(--tx2)"></span>
           </div>
-          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Status, Cobrança, Tipo de Cobrança, Prazo, SLA</strong> — obrigatórias: RC e Status.</div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Status, Cobrança, Tipo de Cobrança, Prazo, SLA, Verificar</strong> — obrigatórias: RC e Status.</div>
         </div>
         <div id="cob-cards" style="display:flex;flex-direction:column;gap:10px;margin-bottom:.75rem"></div>
         <div id="cob-subcards" style="display:none;margin-bottom:1rem;padding:.6rem .875rem;background:var(--vmc);border:1px solid var(--vm);border-radius:8px"></div>
@@ -29673,9 +29673,16 @@ PERMS_SIDEBAR['fechamento-dia'] = { icon:'🔒', label:'Fechamento do Dia', mod:
 //  GOVERNANÇA — COBRANÇA POR STATUS  (exclusivo módulo FAST)
 // ═══════════════════════════════════════════════════════════════
 var _cobDados = [];
-var _cobFiltro = null;      // tipo de cobrança selecionado
-var _cobSubFiltro = null;   // nº de cobranças selecionado (só p/ tipos "Cobrança *")
+var _cobFiltro = null;       // tipo de cobrança selecionado
+var _cobSubFiltro = null;    // nº de cobranças selecionado (só p/ tipos "Cobrança *")
+var _cobVerifFiltro = null;  // 'Status B' | 'Nova Reserva' (coluna J - Verificar)
 var _cobTipos = [];
+
+// Processos marcados na coluna "Verificar" da planilha
+var _COB_VERIF = [
+  { nome: 'Status B',     cor: 'var(--vd)',  bg: 'var(--vdc)' },
+  { nome: 'Nova Reserva', cor: '#7c3aed',    bg: '#ede9fe'    }
+];
 
 // Ordem fixa dos cards: solicitações primeiro, depois as cobranças
 var _COB_ORDEM = [
@@ -29727,6 +29734,16 @@ function _cobPeso(tipo){
   var i = _COB_ORDEM.indexOf(_cobNorm(tipo));
   if (i !== -1) return i;
   return _cobEhTipoCobranca(tipo) ? 900 : 500;
+}
+
+// Classifica a coluna "Verificar" -> 'Status B' | 'Nova Reserva' | ''
+// Tolerante a variações de escrita ("STATUS B", "nova reserva", "Reserva Nova"...)
+function _cobVerifTipo(r){
+  var v = _cobNorm(r && r.verificar);
+  if (!v) return '';
+  if (v.indexOf('reserva') !== -1) return 'Nova Reserva';
+  if (v.indexOf('status b') !== -1 || v === 'b' || v === 'sb') return 'Status B';
+  return '';
 }
 
 // nº de cobranças do item, como inteiro
@@ -29839,10 +29856,35 @@ function _cobDesenhar(){
       else                               htmlSol += montaCard(chaves[i], i);
     }
 
+    // linha 3 = processos da coluna "Verificar" (Status B / Nova Reserva)
+    var htmlVer = '';
+    var temVerif = _cobDados.some(function(r){ return _cobVerifTipo(r) !== ''; });
+    if (temVerif) {
+      htmlVer += '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;'
+        + 'letter-spacing:.4px;align-self:center;margin-right:2px">Verificar:</span>';
+      for (i = 0; i < _COB_VERIF.length; i++) {
+        var v = _COB_VERIF[i];
+        var qtd = _cobDados.filter(function(r){ return _cobVerifTipo(r) === v.nome; }).length;
+        var on = (_cobVerifFiltro === v.nome);
+        htmlVer += '<div onclick="govCobrancaVerifFiltrar(' + i + ')" title="Filtrar RCs em ' + v.nome + '"'
+          + ' style="cursor:pointer;background:' + (on ? v.cor : v.bg) + ';color:' + (on ? '#fff' : v.cor)
+          + ';border:1.5px solid ' + v.cor + ';border-radius:8px;padding:8px 18px;text-align:center;'
+          + 'line-height:1.2;min-width:120px">'
+          + '<div style="font-size:19px;font-weight:800">' + qtd + '</div>'
+          + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + v.nome + '</div>'
+          + '</div>';
+      }
+      if (_cobVerifFiltro) {
+        htmlVer += '<button class="btn btn-s" style="font-size:10.5px;align-self:center"'
+          + ' onclick="govCobrancaVerifFiltrar(-1)">✕ limpar</button>';
+      }
+    }
+
     var linha = 'display:flex;gap:12px;flex-wrap:wrap';
     var out = '';
     if (htmlSol) out += '<div style="' + linha + '">' + htmlSol + '</div>';
     if (htmlCob) out += '<div style="' + linha + '">' + htmlCob + '</div>';
+    if (htmlVer) out += '<div style="' + linha + ';align-items:center;padding-top:4px;border-top:1px dashed var(--brd);margin-top:2px">' + htmlVer + '</div>';
     cards.innerHTML = out;
   }
 
@@ -29856,10 +29898,13 @@ function _cobDesenhar(){
   if (_cobSubFiltro !== null) {
     lista = lista.filter(function(r){ return _cobQtd(r) === _cobSubFiltro; });
   }
+  if (_cobVerifFiltro) {
+    lista = lista.filter(function(r){ return _cobVerifTipo(r) === _cobVerifFiltro; });
+  }
 
   var t = '<table><thead><tr>'
     + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Status</th>'
-    + '<th>Cobranças</th><th>Tipo de Cobrança</th><th>Prazo</th><th>SLA</th>'
+    + '<th>Cobranças</th><th>Tipo de Cobrança</th><th>Prazo</th><th>SLA</th><th>Verificar</th>'
     + '</tr></thead><tbody>';
 
   for (i = 0; i < lista.length; i++) {
@@ -29881,6 +29926,7 @@ function _cobDesenhar(){
       + '<td>' + _cobEsc(r.tipoCobranca || '—') + '</td>'
       + '<td style="text-align:center;font-weight:700;color:' + corPrazo + '">' + _cobEsc(prazo) + '</td>'
       + '<td style="text-align:center">' + _cobEsc(r.sla == null || r.sla === '' ? '—' : r.sla) + '</td>'
+      + '<td>' + _cobCelulaVerif(r) + '</td>'
       + '</tr>';
   }
   t += '</tbody></table>';
@@ -29888,6 +29934,7 @@ function _cobDesenhar(){
   var legenda = 'Mostrando ' + lista.length + ' de ' + _cobDados.length + ' itens';
   if (_cobFiltro) legenda += ' — ' + _cobEsc(_cobFiltro);
   if (_cobSubFiltro !== null) legenda += ' com ' + _cobSubFiltro + ' cobrança' + (_cobSubFiltro === 1 ? '' : 's');
+  if (_cobVerifFiltro) legenda += ' — ' + _cobEsc(_cobVerifFiltro);
   legenda += '. Clique num card para filtrar.';
 
   wrap.innerHTML = '<div class="tw" style="max-height:560px">' + t + '</div>'
@@ -29949,6 +29996,26 @@ function govCobrancaFiltrar(idx){
   _cobDesenhar();
 }
 
+// selo colorido da coluna Verificar
+function _cobCelulaVerif(r){
+  var t = _cobVerifTipo(r);
+  if (!t) {
+    var cru = String(r.verificar || '').trim();
+    return cru ? '<span style="color:var(--tx2);font-size:10.5px">' + _cobEsc(cru) + '</span>' : '—';
+  }
+  var i, v = null;
+  for (i = 0; i < _COB_VERIF.length; i++) if (_COB_VERIF[i].nome === t) v = _COB_VERIF[i];
+  return '<span style="background:' + v.bg + ';color:' + v.cor + ';padding:2px 8px;border-radius:4px;'
+       + 'font-size:10px;font-weight:700;white-space:nowrap">' + v.nome + '</span>';
+}
+
+// idx = posicao em _COB_VERIF; -1 = limpar
+function govCobrancaVerifFiltrar(idx){
+  var alvo = (idx === null || idx === -1 || !_COB_VERIF[idx]) ? null : _COB_VERIF[idx].nome;
+  _cobVerifFiltro = (alvo === _cobVerifFiltro) ? null : alvo;
+  _cobDesenhar();
+}
+
 function govCobrancaSubFiltrar(q){
   _cobSubFiltro = (q === null || _cobSubFiltro === q) ? null : q;
   _cobDesenhar();
@@ -30003,6 +30070,7 @@ function govCobrancaUpload(ev){
       var cTipo  = _cobCol(amostra, ['Tipo de Cobranca', 'Tipo de Cobrança', 'Tipo']);
       var cPrazo = _cobCol(amostra, ['Prazo']);
       var cSla   = _cobCol(amostra, ['SLA']);
+      var cVer   = _cobCol(amostra, ['Verificar', 'Verificacao', 'Verificação']);
 
       var limpo = function(v){
         var s = String(v == null ? '' : v).trim();
@@ -30026,6 +30094,7 @@ function govCobrancaUpload(ev){
           tipoCobranca: cTipo ? limpo(l[cTipo]) : '',
           prazo: cPrazo ? limpo(l[cPrazo]) : '',
           sla: cSla ? limpo(l[cSla]) : '',
+          verificar: cVer ? limpo(l[cVer]) : '',
           atualizadoEm: new Date().toISOString()
         });
       }
@@ -30054,6 +30123,7 @@ function govCobrancaUpload(ev){
         if (av) av.textContent = 'Atualizado em ' + new Date().toLocaleString('pt-BR');
         _cobFiltro = null;
         _cobSubFiltro = null;
+        _cobVerifFiltro = null;
         govCobrancaRender();
         setTimeout(function(){ _cobMsg(''); }, 4000);
       }).catch(function(err){
@@ -30083,6 +30153,7 @@ function _cobAplicarModulo(){
     _cobDados = [];
     _cobFiltro = null;
     _cobSubFiltro = null;
+    _cobVerifFiltro = null;
     _cobTipos = [];
   }
 }
