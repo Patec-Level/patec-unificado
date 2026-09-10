@@ -880,6 +880,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button class="stab" id="adm-nav-apresentacao-btn" onclick="setAdmTab('apresentacao',this);admApresentacaoInit()">🖥️ Apresentação</button>
         <button class="stab" id="adm-nav-apresentacao1-btn" onclick="setAdmTab('apresentacao1',this);admApresentacao1Init()">📂 Apresentação 1</button>
         <button class="stab" id="adm-nav-apres-fast-btn" style="display:none" onclick="setAdmTab('apres-fast',this);admApresFastInit()">🖥️ Apresentação</button>
+        <button class="stab" id="adm-nav-apres2-fast-btn" style="display:none" onclick="setAdmTab('apres2-fast',this);admApres2FastInit()">📊 Apresentação 2</button>
         <button class="stab" onclick="setAdmTab('q18-upload',this)">🚫 Q18</button>
         <button class="stab" onclick="setAdmTab('gestao-prod',this)">✏️ Gestão de Produção</button>
         <button class="stab" onclick="setAdmTab('feriados',this);feriadosRender()">📆 Feriados</button>
@@ -2880,6 +2881,42 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <button class="btn btn-p" onclick="admApresFastGerar()" style="width:100%;justify-content:center;font-size:13px;padding:10px">
             🖨️ Gerar Slide para Apresentação
           </button>
+        </div>
+      </div>
+
+      <div id="adm-apres2-fast" class="adm-tab" style="display:none">
+        <div class="cd">
+          <div class="cd-t">🖥️ Gerador de Slide 2 — FAST · Cobrança por Status</div>
+          <div style="font-size:11px;color:var(--tx2);margin:-6px 0 14px">Usa exclusivamente os dados de <strong>Governança › Cobrança por Status</strong> (a planilha subida naquela aba). Nenhuma outra base entra neste slide.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.25rem">
+
+            <div>
+              <div style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px">🏷️ Identificação</div>
+              <div style="font-size:11px;color:var(--tx2);margin-bottom:3px">Título</div>
+              <input type="text" id="apres2F-titulo" value="Cobrança por Status" style="width:100%;font-size:12px;padding:5px 10px;margin-bottom:8px">
+              <div style="font-size:11px;color:var(--tx2);margin-bottom:3px">Subtítulo / Área</div>
+              <input type="text" id="apres2F-subtitulo" value="BPO de Compras · DPV · FAST" style="width:100%;font-size:12px;padding:5px 10px;margin-bottom:8px">
+              <div style="font-size:11px;color:var(--tx2);margin-bottom:3px">Data de Referência</div>
+              <input type="date" id="apres2F-data" style="width:100%;font-size:12px;padding:5px 10px">
+            </div>
+
+            <div>
+              <div style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px">🎯 Critério</div>
+              <div style="font-size:11px;color:var(--tx2);margin-bottom:3px">Prazo crítico — listar itens com prazo até (dias)</div>
+              <input type="number" id="apres2F-prazo-critico" value="7" min="1" max="180" style="width:100%;font-size:12px;padding:5px 10px;margin-bottom:8px">
+              <div style="font-size:10px;color:var(--tx2);line-height:1.45">A tabela de prioridade mostra os 10 itens de menor prazo dentro desse limite.</div>
+            </div>
+
+            <div>
+              <div style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px">🧩 Blocos do slide</div>
+              <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="apres2F-inc-tipos" checked> Distribuição por tipo de cobrança</label>
+              <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="apres2F-inc-reincidencia" checked> Reincidência (1, 2 e 3 cobranças)</label>
+              <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="apres2F-inc-analista" checked> Carteira por analista</label>
+              <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="apres2F-inc-criticos" checked> Tabela de prioridade (prazo curto)</label>
+              <div style="font-size:10px;color:var(--tx2);margin-top:8px;line-height:1.45">O resumo do topo (total, em cobrança, prazo, Status B / Nova Reserva) sai sempre.</div>
+            </div>
+          </div>
+          <button class="btn btn-p" onclick="admApres2FastGerar()" style="font-size:13px;padding:9px 26px">🖥️ Gerar Slide 2</button>
         </div>
       </div>
 
@@ -8613,6 +8650,7 @@ function _atualizarColabsPorModulo(){
   // Aba "Cobrança por Status" é exclusiva do FAST — no ADLV nem aparece.
   try{ _cobAplicarModulo(); }catch(e){}
   try{ _apresFastAplicarModulo(); }catch(e){}
+  try{ _apres2FastAplicarModulo(); }catch(e){}
   // CORREÇÃO BUG (20/06): `registros` começava com HISTORICO_INICIAL (dados
   // reais do ADLV) baseado no módulo ativo NA HORA QUE A PÁGINA CARREGOU —
   // antes do login/escolha de módulo. Como esse array só recebe itens via
@@ -9764,7 +9802,7 @@ function setAdmTab(id,btn){
     return;
   }
   // A Apresentação do FAST é o espelho da do ADLV, com a base do próprio módulo.
-  if(id==='apres-fast' && _moduloAtivo!=='fast'){
+  if((id==='apres-fast' || id==='apres2-fast') && _moduloAtivo!=='fast'){
     alert('Esse recurso é exclusivo do FAST.');
     return;
   }
@@ -30657,6 +30695,413 @@ function _apresFastAplicarModulo(){
     var b = document.getElementById(id);
     if (b) b.style.display = fast ? 'none' : '';
   });
+}
+
+
+
+// ═══════════════════════════════════════════════════════════════
+//  APRESENTAÇÃO 2 — FAST · somente Governança > Cobrança por Status
+// ═══════════════════════════════════════════════════════════════
+
+function admApres2FastInit(){
+  var hoje = new Date().toISOString().split('T')[0];
+  var d = document.getElementById('apres2F-data');
+  if (d && !d.value) d.value = hoje;
+}
+
+async function admApres2FastGerar(){
+  if(typeof _moduloAtivo === 'undefined' || _moduloAtivo !== 'fast'){
+    alert('A Apresentação 2 só pode ser gerada dentro do módulo FAST.');
+    return;
+  }
+  if(typeof _cobCarregarDados === 'function' && (!_cobDados || !_cobDados.length)){
+    try{ await _cobCarregarDados(); }catch(e){ console.warn('Apresentação 2: cobranças indisponíveis', e); }
+  }
+  var base = (typeof _cobDados !== 'undefined' && _cobDados) ? _cobDados.slice() : [];
+  if(!base.length){
+    alert('Nenhum dado de cobrança carregado.\n\nSuba a planilha em Governança > Cobrança por Status e tente de novo.');
+    return;
+  }
+
+  var titulo    = document.getElementById('apres2F-titulo')?.value || 'Cobrança por Status';
+  var subtitulo = document.getElementById('apres2F-subtitulo')?.value || 'BPO de Compras · DPV · FAST';
+  var dataRef   = document.getElementById('apres2F-data')?.value || new Date().toISOString().split('T')[0];
+  var dataFmt   = dataRef.split('-').reverse().join('/');
+  var limPrazo  = parseInt(document.getElementById('apres2F-prazo-critico')?.value) || 7;
+  var incTipos  = document.getElementById('apres2F-inc-tipos')?.checked;
+  var incReinc  = document.getElementById('apres2F-inc-reincidencia')?.checked;
+  var incAnal   = document.getElementById('apres2F-inc-analista')?.checked;
+  var incCrit   = document.getElementById('apres2F-inc-criticos')?.checked;
+
+  var esc = function(v){ return String(v==null?'':v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  var qtdDe = function(r){ return (typeof _cobQtd === 'function') ? _cobQtd(r)
+              : (parseInt(String(r && r.cobrancas || '').trim(), 10) || 0); };
+  var ehCob = function(t){ return (typeof _cobEhTipoCobranca === 'function') ? _cobEhTipoCobranca(t)
+              : /^cobran/i.test(String(t||'')); };
+  var verifDe = function(r){ return (typeof _cobVerifTipo === 'function') ? _cobVerifTipo(r) : ''; };
+  // vazio/#N/A NAO e zero — sem isso itens sem prazo entrariam como prazo 0
+  var num = function(v){
+    var t = String(v == null ? '' : v).trim();
+    if(t === '' || t === '#N/A' || t === '#N/D') return null;
+    var n = Number(t);
+    return isNaN(n) ? null : n;
+  };
+
+  // ── Totais ──
+  var total = base.length;
+  var emCobranca = base.filter(function(r){ return ehCob(r.tipoCobranca); }).length;
+  var aguardando = total - emCobranca;
+  var statusB    = base.filter(function(r){ return verifDe(r) === 'Status B'; }).length;
+  var novaRes    = base.filter(function(r){ return verifDe(r) === 'Nova Reserva'; }).length;
+
+  // ── Situação de prazo ──
+  var atrasados = base.filter(function(r){ return /atras/i.test(String(r.status||'')); }).length;
+  var noPrazo   = base.filter(function(r){ return /dentro/i.test(String(r.status||'')); }).length;
+  var outrosSt  = total - atrasados - noPrazo;
+  var pctPrazo  = total ? Math.round(noPrazo/total*100) : 0;
+  var pctAtraso = total ? Math.round(atrasados/total*100) : 0;
+
+  // ── Por tipo ──
+  var porTipo = {};
+  base.forEach(function(r){
+    var t = (r.tipoCobranca || 'Sem tipo').trim();
+    porTipo[t] = (porTipo[t] || 0) + 1;
+  });
+  var tiposOrd = Object.keys(porTipo).sort(function(a,b){ return porTipo[b] - porTipo[a]; });
+  var maxTipo = tiposOrd.length ? porTipo[tiposOrd[0]] : 1;
+
+  // ── Reincidência (1, 2, 3+ cobranças) ──
+  var porQtd = {}, maxQ = 3;
+  base.forEach(function(r){
+    var q = qtdDe(r);
+    if(q > 0){ porQtd[q] = (porQtd[q]||0) + 1; if(q > maxQ) maxQ = q; }
+  });
+  var cobrados = Object.keys(porQtd).reduce(function(a,k){ return a + porQtd[k]; }, 0);
+
+  // ── Por analista ──
+  var porAn = {};
+  base.forEach(function(r){
+    var a = (r.analista || '—').trim() || '—';
+    if(!porAn[a]) porAn[a] = { tot: 0, cob: 0, atr: 0 };
+    porAn[a].tot++;
+    if(ehCob(r.tipoCobranca)) porAn[a].cob++;
+    if(/atras/i.test(String(r.status||''))) porAn[a].atr++;
+  });
+  var anOrd = Object.keys(porAn).sort(function(a,b){ return porAn[b].tot - porAn[a].tot; });
+  var maxAn = anOrd.length ? porAn[anOrd[0]].tot : 1;
+
+  // ── Críticos: menor prazo ──
+  var criticos = base.filter(function(r){
+    var p = num(r.prazo);
+    return p !== null && p <= limPrazo;
+  }).sort(function(a,b){ return num(a.prazo) - num(b.prazo); });
+
+  var CSS = `
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#eef2f7;color:#1a1a2e}
+.page{width:1200px;background:#fff;margin:0 auto 24px;padding:0;box-shadow:0 4px 32px rgba(0,0,0,.15);position:relative;overflow:hidden}
+/* Header */
+.hdr{background:linear-gradient(90deg,#1b5e20 0%,#2e7d32 60%,#388e3c 100%);padding:10px 20px;display:flex;align-items:center;justify-content:space-between}
+.hdr-title{color:#fff;font-size:20px;font-weight:700;letter-spacing:.3px}
+.hdr-title span{font-weight:700}
+.hdr-right{text-align:right;color:rgba(255,255,255,.9)}
+.hdr-right .brand{font-size:22px;font-weight:900;letter-spacing:-1px}
+.hdr-right .sub{font-size:10px;opacity:.8;margin-top:1px}
+/* Body */
+.body{padding:8px 16px;display:grid;gap:8px}
+/* Section title */
+.sec-title{font-size:10px;font-weight:700;color:#1b5e20;text-transform:uppercase;letter-spacing:.8px;border-bottom:2px solid #1b5e20;padding-bottom:3px;margin-bottom:7px}
+/* Resumo do Mapa */
+.mapa-grid{display:grid;grid-template-columns:repeat(5,1fr) 1.6fr;grid-template-rows:auto auto;gap:8px}
+.mcard{border-radius:6px;padding:6px 8px;border:1px solid #555 !important;background:#f5f5f5 !important;text-align:center;display:flex;flex-direction:column;justify-content:center}
+.mcard-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px;color:#1a1a1a !important}
+.mcard-val{font-size:20px;font-weight:800;line-height:1;margin-bottom:1px;color:#1a1a1a !important}
+.mcard-big{display:flex;flex-direction:column;justify-content:center;grid-row:span 2}
+.mcard-big .mcard-val{font-size:42px}
+.var-up{color:#c62828;font-size:10px;font-weight:700}
+.var-dn{color:#2e7d32;font-size:10px;font-weight:700}
+.var-neutro{color:#777;font-size:10px}
+/* Layout 2 colunas */
+.two-col{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start}
+.three-col{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:16px}
+/* Governança bars */
+.gov-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.gov-lbl{font-size:10px;font-weight:600;color:#333;width:160px;flex-shrink:0}
+.gov-bar-wrap{flex:1;background:#f0f0f0;border-radius:4px;height:14px;overflow:hidden}
+.gov-bar{height:100%;border-radius:4px;transition:width .3s}
+.gov-cnt{font-size:11px;font-weight:700;color:#333;width:60px;text-align:right;flex-shrink:0}
+/* Donut section */
+.donut-wrap{display:flex;align-items:center;gap:20px}
+.donut-img img{max-height:160px}
+.prazo-leg{display:flex;flex-direction:column;gap:8px}
+.pl-row{display:flex;align-items:center;gap:8px;font-size:12px}
+.pl-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.pl-pct{font-size:22px;font-weight:800;min-width:52px}
+/* XGL badge */
+.xgl-badge{display:inline-block;background:#6A1E9E;color:#fff;font-size:13px;font-weight:700;padding:6px 16px;border-radius:8px;margin-top:4px}
+/* Cascata + Sim */
+.cascata-img img{width:100%;height:auto;max-height:360px;border-radius:6px}
+.sim-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.sim-card{border-radius:6px;padding:7px 10px;background:#f5f5f5;border:1px solid #555 !important;text-align:center;display:flex;flex-direction:column;justify-content:center}
+.sim-label{font-size:11px;font-weight:700;text-transform:uppercase;color:#555;margin-bottom:4px}
+.sim-val{font-size:15px;font-weight:800;color:#1a1a1a}
+.sim-sub{font-size:10px;color:#777;margin-top:2px}
+.sim-green .sim-val{color:#1a1a1a}
+.sim-orange .sim-val{color:#1a1a1a}
+.sim-red .sim-val{color:#1a1a1a}
+/* Footer */
+.ftr{background:#1b5e20;padding:7px 28px;display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+.ftr-txt{color:rgba(255,255,255,.7);font-size:9px}
+/* Print */
+@media print{
+  body{background:#fff}
+  .page{box-shadow:none;margin:0;width:100%;page-break-after:always}
+  .no-print{display:none!important}
+  @page{size:A4 landscape;margin:5mm}
+}
+`;
+
+  var html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>${titulo} — ${dataFmt}</title>
+<style>
+${CSS}
+.cob-tbl{width:100%;border-collapse:collapse;font-size:11px}
+.cob-tbl th{background:#1b5e20;color:#fff;padding:3px 6px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.3px}
+.cob-tbl td{padding:2px 6px;border-bottom:1px solid #e3e3e3;color:#333}
+.cob-tbl tr:nth-child(even) td{background:#fafafa}
+.pill{display:inline-block;padding:1px 7px;border-radius:9px;font-size:9px;font-weight:700}
+</style>
+</head>
+<body>
+<div class="no-print" style="text-align:center;padding:10px">
+  <button onclick="window.print()" style="background:#fff;border:1px solid #ccc;border-radius:8px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer">🖨 Imprimir / Salvar PDF</button>
+  <span style="font-size:12px;color:#555;margin-left:10px">Configure sua impressora para A4 Paisagem · Sem margens</span>
+</div>
+
+<div class="page" id="apres-slide">
+  <div id="apres-inner">
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">${titulo} em <span>${dataFmt}</span></div>
+      <div style="color:rgba(255,255,255,.75);font-size:11px;margin-top:2px">${subtitulo} &nbsp;·&nbsp; Fonte: Governança › Cobrança por Status</div>
+    </div>
+    <div class="hdr-right">
+      <div class="brand">level</div>
+      <div class="sub">Gestão PATEC · DPV</div>
+    </div>
+  </div>
+
+  <div class="body">
+
+    <!-- RESUMO -->
+    <div>
+      <div class="sec-title">📋 Resumo da Carteira de Cobrança</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr) 1.5fr;gap:8px">
+        <div class="mcard" style="background:#EBF0FA">
+          <div class="mcard-lbl" style="color:#3266AD">Aguardando abertura</div>
+          <div class="mcard-val" style="color:#3266AD">${aguardando}</div>
+          <div style="font-size:10px;color:#666;font-weight:700">solicitações e aberturas</div>
+        </div>
+        <div class="mcard" style="background:#FDECEA">
+          <div class="mcard-lbl" style="color:#C62828">Em cobrança</div>
+          <div class="mcard-val" style="color:#C62828">${emCobranca}</div>
+          <div style="font-size:10px;color:#666;font-weight:700">${total ? Math.round(emCobranca/total*100) : 0}% da carteira</div>
+        </div>
+        <div class="mcard" style="background:#E8F5E9">
+          <div class="mcard-lbl" style="color:#2E7D32">Dentro do prazo</div>
+          <div class="mcard-val" style="color:#2E7D32">${noPrazo}</div>
+          <div style="font-size:10px;color:#666;font-weight:700">${pctPrazo}%</div>
+        </div>
+        <div class="mcard" style="background:#FDF0E6">
+          <div class="mcard-lbl" style="color:#E87722">Atrasados</div>
+          <div class="mcard-val" style="color:#E87722">${atrasados}</div>
+          <div style="font-size:10px;color:#666;font-weight:700">${pctAtraso}%</div>
+        </div>
+        <div class="mcard" style="background:#F3E9FB">
+          <div class="mcard-lbl" style="color:#6A1E9E">Status B / Nova Reserva</div>
+          <div class="mcard-val" style="color:#6A1E9E">${statusB + novaRes}</div>
+          <div style="font-size:10px;color:#666;font-weight:700">${statusB} · ${novaRes}</div>
+        </div>
+        <div class="mcard mcard-big">
+          <div class="mcard-lbl">Total de itens</div>
+          <div class="mcard-val">${total}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="${incTipos && (incReinc || incAnal) ? 'two-col' : ''}" style="align-items:start">
+
+      ${incTipos ? `
+      <!-- POR TIPO -->
+      <div>
+        <div class="sec-title">🗂️ Distribuição por Tipo de Cobrança</div>
+        ${tiposOrd.map(function(t){
+          const n = porTipo[t];
+          const w = Math.round(n/maxTipo*100);
+          const cor = ehCob(t) ? '#C62828' : '#3266AD';
+          return '<div class="gov-row">'
+            + '<div class="gov-lbl">' + esc(t) + '</div>'
+            + '<div class="gov-bar-wrap"><div class="gov-bar" style="width:' + w + '%;background:' + cor + '"></div></div>'
+            + '<div class="gov-cnt">' + n + ' <span style="color:#888;font-weight:600">(' + (total ? Math.round(n/total*100) : 0) + '%)</span></div>'
+            + '</div>';
+        }).join('')}
+        <div style="font-size:9.5px;color:#777;margin-top:5px">🔵 solicitações / abertura &nbsp;·&nbsp; 🔴 já em cobrança</div>
+      </div>
+      ` : ''}
+
+      <div>
+        ${incReinc && cobrados > 0 ? `
+        <!-- REINCIDÊNCIA -->
+        <div style="margin-bottom:12px">
+          <div class="sec-title">🔁 Reincidência — ${cobrados} itens já cobrados</div>
+          <div style="display:grid;grid-template-columns:repeat(${Math.min(maxQ,4)},1fr);gap:8px">
+            ${(function(){
+              var out = '';
+              for(var q = 1; q <= Math.min(maxQ,4); q++){
+                var n = porQtd[q] || 0;
+                var p = cobrados ? Math.round(n/cobrados*100) : 0;
+                var cor = q === 1 ? '#3266AD' : q === 2 ? '#E87722' : '#C62828';
+                var bg  = q === 1 ? '#EBF0FA' : q === 2 ? '#FDF0E6' : '#FDECEA';
+                out += '<div class="mcard" style="background:' + bg + '">'
+                  + '<div class="mcard-lbl" style="color:' + cor + '">' + q + (q===1?' cobrança':' cobranças') + '</div>'
+                  + '<div class="mcard-val" style="color:' + cor + '">' + n + '</div>'
+                  + '<div style="font-size:10px;color:#666;font-weight:700">' + p + '%</div>'
+                  + '</div>';
+              }
+              return out;
+            })()}
+          </div>
+        </div>
+        ` : ''}
+
+        ${incAnal ? `
+        <!-- POR ANALISTA -->
+        <div>
+          <div class="sec-title">👥 Carteira por Analista</div>
+          ${anOrd.slice(0,8).map(function(a){
+            const g = porAn[a];
+            const w = Math.round(g.tot/maxAn*100);
+            return '<div class="gov-row">'
+              + '<div class="gov-lbl" style="width:110px">' + esc(a) + '</div>'
+              + '<div class="gov-bar-wrap"><div class="gov-bar" style="width:' + w + '%;background:#3A7D44"></div></div>'
+              + '<div class="gov-cnt" style="width:96px">' + g.tot
+              + ' <span style="color:#C62828;font-weight:700">' + g.cob + ' cob</span></div>'
+              + '</div>';
+          }).join('')}
+        </div>
+        ` : ''}
+      </div>
+    </div>
+
+    ${incCrit && criticos.length ? `
+    <!-- CRÍTICOS -->
+    <div>
+      <div class="sec-title">🚨 Prioridade — prazo de até ${limPrazo} dias (${criticos.length} ${criticos.length===1?'item':'itens'})</div>
+      <table class="cob-tbl">
+        <thead><tr>
+          <th>Analista</th><th>RC</th><th>Item</th><th>Tipo de cobrança</th>
+          <th style="text-align:center">Cobranças</th><th style="text-align:center">Prazo</th>
+          <th style="text-align:center">SLA</th><th>Verificar</th>
+        </tr></thead>
+        <tbody>
+          ${criticos.slice(0,10).map(function(r){
+            const v = verifDe(r);
+            const pill = v === 'Status B'     ? '<span class="pill" style="background:#E8F5E9;color:#2E7D32">Status B</span>'
+                       : v === 'Nova Reserva' ? '<span class="pill" style="background:#F3E9FB;color:#6A1E9E">Nova Reserva</span>'
+                       : '<span style="color:#aaa">—</span>';
+            return '<tr>'
+              + '<td>' + esc(r.analista || '—') + '</td>'
+              + '<td style="font-weight:700">' + esc(r.rc || '—') + '</td>'
+              + '<td>' + esc(r.itemRc || '—') + '</td>'
+              + '<td>' + esc(r.tipoCobranca || '—') + '</td>'
+              + '<td style="text-align:center;font-weight:700">' + qtdDe(r) + '</td>'
+              + '<td style="text-align:center;font-weight:800;color:#C62828">' + esc(r.prazo) + '</td>'
+              + '<td style="text-align:center">' + esc(r.sla === '' || r.sla == null ? '—' : r.sla) + '</td>'
+              + '<td>' + pill + '</td>'
+              + '</tr>';
+          }).join('')}
+        </tbody>
+      </table>
+      ${criticos.length > 10 ? '<div style="font-size:9.5px;color:#777;margin-top:4px">Mostrando os 10 de menor prazo, de ' + criticos.length + ' itens.</div>' : ''}
+    </div>
+    ` : ''}
+
+  </div>
+
+  <div class="ftr">
+    <div class="ftr-txt">PATEC · Gestão de Compras · ${dataFmt}</div>
+    <div class="ftr-txt">Gerado em ${new Date().toLocaleString('pt-BR')}</div>
+  </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  function fit(){
+    var p=document.querySelector('.page'); if(!p) return;
+    var inner=document.getElementById('apres-inner');
+    var PW=1280, PH=720;
+    p.style.transform='none';
+    p.style.width=PW+'px'; p.style.height=PH+'px'; p.style.overflow='hidden'; p.style.margin='0 auto';
+    if(inner){
+      inner.style.transform='none';
+      inner.style.width=PW+'px'; inner.style.transformOrigin='top center';
+      inner.style.display=''; inner.style.flexDirection=''; inner.style.height='auto';
+      var cbox=inner.querySelector('.cascata-img');
+      if(cbox){
+        cbox.style.height='240px'; cbox.style.display='flex'; cbox.style.alignItems='center'; cbox.style.justifyContent='center'; cbox.style.overflow='hidden';
+        var im=cbox.querySelector('img');
+        if(im){ im.style.width='100%'; im.style.height='100%'; im.style.objectFit='contain'; im.style.maxHeight='none'; }
+      }
+      var innerH=inner.scrollHeight;
+      var body=inner.querySelector('.body');
+      if(innerH <= PH+2){
+        inner.style.height=PH+'px';
+        inner.style.display='flex'; inner.style.flexDirection='column';
+        if(body){ body.style.flex='1 1 0'; body.style.minHeight='0'; }
+        inner.style.transform='none';
+      } else {
+        if(body){ body.style.flex=''; body.style.minHeight=''; }
+        inner.style.height='auto';
+        inner.style.transform='scale('+(PH/innerH)+')';
+      }
+    }
+    var bar=document.querySelector('.no-print');
+    var topo=bar?bar.offsetHeight:0;
+    var vw=window.innerWidth, vh=window.innerHeight-topo;
+    var s=Math.min(vw/PW, vh/PH, 1);
+    p.style.transformOrigin='top center';
+    p.style.transform='scale('+s+')';
+    document.body.style.overflow='hidden';
+    document.body.style.height=(topo+PH*s)+'px';
+  }
+  window.addEventListener('load',fit);
+  window.addEventListener('resize',fit);
+  window.addEventListener('beforeprint',function(){
+    var q=document.querySelector('.page');
+    if(q){ q.style.transform='none'; q.style.width=''; q.style.height=''; q.style.overflow=''; }
+    var qi=document.getElementById('apres-inner'); if(qi){ qi.style.transform=''; qi.style.height=''; qi.style.display=''; }
+    document.body.style.height=''; document.body.style.overflow='';
+  });
+  window.addEventListener('afterprint',fit);
+  setTimeout(fit,300); setTimeout(fit,1000);
+})();
+<\/script>
+</body></html>`;
+
+  
+  const blob = new Blob([html], {type:'text/html'});
+  window.open(URL.createObjectURL(blob), '_blank');
+}
+
+// visibilidade: só no FAST
+function _apres2FastAplicarModulo(){
+  var b = document.getElementById('adm-nav-apres2-fast-btn');
+  if (b) b.style.display = ((typeof _moduloAtivo !== 'undefined') && _moduloAtivo === 'fast') ? '' : 'none';
 }
 
 
