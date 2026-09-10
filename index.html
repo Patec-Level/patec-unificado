@@ -4202,7 +4202,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
           <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Status, Cobrança, Tipo de Cobrança, Prazo, SLA, Verificar</strong> — obrigatórias: RC e Status.</div>
         </div>
-        <div id="cob-cards" style="display:flex;flex-direction:column;gap:10px;margin-bottom:.75rem"></div>
+        <div id="cob-cards" style="margin-bottom:.75rem"></div>
         <div id="cob-subcards" style="display:none;margin-bottom:1rem;padding:.6rem .875rem;background:var(--vmc);border:1px solid var(--vm);border-radius:8px"></div>
         <div id="cob-tabela"></div>
       </div>
@@ -29856,17 +29856,16 @@ function _cobDesenhar(){
       else                               htmlSol += montaCard(chaves[i], i);
     }
 
-    // linha 3 = processos da coluna "Verificar" (Status B / Nova Reserva)
+    // bloco lateral = processos da coluna "Verificar" (Status B / Nova Reserva)
     var htmlVer = '';
     var temVerif = _cobDados.some(function(r){ return _cobVerifTipo(r) !== ''; });
     if (temVerif) {
-      htmlVer += '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;'
-        + 'letter-spacing:.4px;align-self:center;margin-right:2px">Verificar:</span>';
+      var cardsVer = '';
       for (i = 0; i < _COB_VERIF.length; i++) {
         var v = _COB_VERIF[i];
         var qtd = _cobDados.filter(function(r){ return _cobVerifTipo(r) === v.nome; }).length;
         var on = (_cobVerifFiltro === v.nome);
-        htmlVer += '<div onclick="govCobrancaVerifFiltrar(' + i + ')" title="Filtrar RCs em ' + v.nome + '"'
+        cardsVer += '<div onclick="govCobrancaVerifFiltrar(' + i + ')" title="Filtrar RCs em ' + v.nome + '"'
           + ' style="cursor:pointer;background:' + (on ? v.cor : v.bg) + ';color:' + (on ? '#fff' : v.cor)
           + ';border:1.5px solid ' + v.cor + ';border-radius:8px;padding:8px 18px;text-align:center;'
           + 'line-height:1.2;min-width:120px">'
@@ -29874,18 +29873,29 @@ function _cobDesenhar(){
           + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + v.nome + '</div>'
           + '</div>';
       }
-      if (_cobVerifFiltro) {
-        htmlVer += '<button class="btn btn-s" style="font-size:10.5px;align-self:center"'
-          + ' onclick="govCobrancaVerifFiltrar(-1)">✕ limpar</button>';
-      }
+      // rótulo em cima, cards logo abaixo
+      htmlVer = '<div data-cob="verificar" style="border-left:1px dashed var(--brd);padding-left:18px">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+        + '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">Verificar</span>'
+        + (_cobVerifFiltro
+            ? '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="govCobrancaVerifFiltrar(-1)">✕ limpar</button>'
+            : '')
+        + '</div>'
+        + '<div style="display:flex;gap:12px;flex-wrap:wrap">' + cardsVer + '</div>'
+        + '</div>';
     }
 
     var linha = 'display:flex;gap:12px;flex-wrap:wrap';
-    var out = '';
-    if (htmlSol) out += '<div style="' + linha + '">' + htmlSol + '</div>';
-    if (htmlCob) out += '<div style="' + linha + '">' + htmlCob + '</div>';
-    if (htmlVer) out += '<div style="' + linha + ';align-items:center;padding-top:4px;border-top:1px dashed var(--brd);margin-top:2px">' + htmlVer + '</div>';
-    cards.innerHTML = out;
+    var esq = '';
+    if (htmlSol) esq += '<div data-cob="linha-sol" style="' + linha + '">' + htmlSol + '</div>';
+    if (htmlCob) esq += '<div data-cob="linha-cob" style="' + linha + ';margin-top:10px">' + htmlCob + '</div>';
+
+    // esquerda = tipos de cobrança (2 linhas) | direita = Verificar
+    // padding-right evita que o último card encoste na borda da janela
+    cards.innerHTML = '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
+      + '<div style="flex:1 1 auto">' + esq + '</div>'
+      + htmlVer
+      + '</div>';
   }
 
   _cobDesenharSub();
