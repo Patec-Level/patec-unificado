@@ -30747,53 +30747,70 @@ async function admApres2FastGerar(){
     return isNaN(n) ? null : n;
   };
 
-  // ── Totais (contagens diretas; nada é somado entre categorias) ──
+  // ── Contagens diretas. As filas (coluna L) particionam a base: somam o total. ──
   var total = base.length;
-  var statusB = base.filter(function(r){ return verifDe(r) === 'Status B'; }).length;
-  var novaRes = base.filter(function(r){ return verifDe(r) === 'Nova Reserva'; }).length;
 
-  // ── Detalhamento POR FILA (coluna L) ──
   var porFila = {};
   base.forEach(function(r){
     var f = (r.fila || '').trim() || 'Sem fila';
-    if(!porFila[f]) porFila[f] = { tot:0, tipos:{}, q:{}, sb:0, nr:0, atras:0, prazo:0, cobrados:0, criticos:[] };
+    if(!porFila[f]) porFila[f] = { tot:0, tipos:{}, q:{0:0,1:0,2:0,3:0}, semCob:0, comCob:0,
+                                   sb:0, nr:0, atras:0, prazo:0, criticos:[] };
     var g = porFila[f];
     g.tot++;
     var t = (r.tipoCobranca || 'Sem tipo').trim();
     g.tipos[t] = (g.tipos[t] || 0) + 1;
     var q = qtdDe(r);
-    if(q > 0){ g.q[q] = (g.q[q] || 0) + 1; g.cobrados++; }
+    if(q > 3) q = 3;                 // 4 ou mais entra no balde de 3+
+    g.q[q] = (g.q[q] || 0) + 1;
+    if(q > 0) g.comCob++; else g.semCob++;
     var v = verifDe(r);
     if(v === 'Status B') g.sb++;
     if(v === 'Nova Reserva') g.nr++;
     if(/atras/i.test(String(r.status||''))) g.atras++;
     if(/dentro/i.test(String(r.status||''))) g.prazo++;
     var pz = num(r.prazo);
-    if(pz !== null && pz <= limPrazo) g.criticos.push({ rc:r.rc, item:r.itemRc, prazo:pz, tipo:t });
+    if(pz !== null && pz <= limPrazo) g.criticos.push({ rc:r.rc, item:r.itemRc, prazo:pz });
   });
   var filasOrd = Object.keys(porFila).sort(function(a,b){ return porFila[b].tot - porFila[a].tot; });
   filasOrd.forEach(function(f){
     porFila[f].criticos.sort(function(a,b){ return a.prazo - b.prazo; });
-    // tipos da fila: solicitações antes das cobranças, como na aba
     porFila[f].tiposOrd = Object.keys(porFila[f].tipos).sort(function(a,b){
       var ga = ehCob(a) ? 1000 : 0, gb = ehCob(b) ? 1000 : 0;
       if(ga !== gb) return ga - gb;
       return porFila[f].tipos[b] - porFila[f].tipos[a];
     });
   });
-  var maxFila = filasOrd.length ? porFila[filasOrd[0]].tot : 1;
+  // conferência: a soma das filas tem de fechar com o total
+  var somaFilas = filasOrd.reduce(function(a,f){ return a + porFila[f].tot; }, 0);
 
-  // ── Marcadores da coluna Verificar, detalhados por fila ──
+  // ── Impacto na operação: quanto da carteira já precisou ser cobrado ──
+  var gTot = { 0:0, 1:0, 2:0, 3:0 };
+  base.forEach(function(r){ var q = qtdDe(r); if(q > 3) q = 3; gTot[q]++; });
+  var semCobTot = gTot[0];
+  var comCobTot = total - semCobTot;
+
+  // ── Por tipo de cobrança (barras, como na aba) ──
+  var porTipo = {};
+  base.forEach(function(r){ var t = (r.tipoCobranca || 'Sem tipo').trim(); porTipo[t] = (porTipo[t]||0)+1; });
+  var tiposOrd = Object.keys(porTipo).sort(function(a,b){
+    var ga = ehCob(a) ? 1000 : 0, gb = ehCob(b) ? 1000 : 0;
+    if(ga !== gb) return ga - gb;
+    return porTipo[b] - porTipo[a];
+  });
+  var maxTipo = tiposOrd.length ? Math.max.apply(null, tiposOrd.map(function(t){ return porTipo[t]; })) : 1;
+
+  // ── Marcadores da coluna Verificar (NÃO entram na soma das filas) ──
   var verifDet = _COB_VERIF_NOMES.map(function(nome){
     var itens = base.filter(function(r){ return verifDe(r) === nome; });
     var porF = {};
-    itens.forEach(function(r){
-      var f = (r.fila || '').trim() || 'Sem fila';
-      porF[f] = (porF[f] || 0) + 1;
-    });
+    itens.forEach(function(r){ var f = (r.fila||'').trim() || 'Sem fila'; porF[f] = (porF[f]||0)+1; });
     return { nome: nome, tot: itens.length, porFila: porF,
-             ordem: Object.keys(porF).sort(function(a,b){ return porF[b] - porF[a]; }) };
+             ordem: Object.keys(porF).sort(function(a,b){ return porF[b]-porF[a]; }) };
   }).filter(function(v){ return v.tot > 0; });
+
+  // paleta do impacto
+  var COR_Q = { 0:'#2E7D32', 1:'#F9A825', 2:'#E87722', 3:'#C62828' };
+  var LBL_Q = { 0:'sem cobrança', 1:'1 cobrança', 2:'2 cobranças', 3:'3+ cobranças' };
 
   var CSS = `
 *{margin:0;padding:0;box-sizing:border-box}
@@ -30895,71 +30912,121 @@ ${CSS}
 
   <div class="body">
 
-    <!-- FILAS — cada uma com seu próprio número, sem somar -->
+    <!-- CARTEIRA POR FILA — as filas particionam a base e somam o total -->
     <div>
-      <div class="sec-title">📊 Carteira por Fila — ${total} itens em ${filasOrd.length} fila${filasOrd.length===1?'':'s'}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="sec-title">📊 Carteira por Fila &nbsp;·&nbsp; ${filasOrd.length} filas somando ${somaFilas} ${somaFilas === total ? 'itens' : 'de ' + total + ' itens'}</div>
+      <div data-sec="filas" style="display:flex;gap:8px;flex-wrap:wrap;align-items:stretch">
         ${filasOrd.map(function(f){
           const g = porFila[f];
-          return '<div class="mcard" style="background:#EEF2F7;flex:1;min-width:110px">'
+          return '<div class="mcard" style="background:#EEF2F7 !important;flex:1;min-width:104px">'
             + '<div class="mcard-lbl" style="color:#1A2D4F">' + esc(f) + '</div>'
             + '<div class="mcard-val" style="color:#1A2D4F">' + g.tot + '</div>'
             + '<div style="font-size:9.5px;color:#666;font-weight:700">'
-            + g.cobrados + ' em cobrança · ' + g.atras + ' atrasado' + (g.atras===1?'':'s') + '</div>'
+            + g.semCob + ' sem cobrança · <span style="color:#C62828">' + g.comCob + ' cobrado' + (g.comCob===1?'':'s') + '</span></div>'
             + '</div>';
         }).join('')}
-        ${verifDet.map(function(v){
-          const cor = v.nome === 'Status B' ? '#2E7D32' : '#6A1E9E';
-          const bg  = v.nome === 'Status B' ? '#E8F5E9' : '#F3E9FB';
-          return '<div class="mcard" style="background:' + bg + ';flex:1;min-width:110px;border-color:' + cor + ' !important">'
-            + '<div class="mcard-lbl" style="color:' + cor + '">' + v.nome + '</div>'
-            + '<div class="mcard-val" style="color:' + cor + '">' + v.tot + '</div>'
-            + '<div style="font-size:9.5px;color:#666;font-weight:700">em ' + v.ordem.length + ' fila' + (v.ordem.length===1?'':'s') + '</div>'
-            + '</div>';
-        }).join('')}
+        <div class="mcard" data-card="total" style="background:#1A2D4F !important;border-color:#1A2D4F !important;min-width:118px">
+          <div class="mcard-lbl" style="color:#fff !important">Total de itens</div>
+          <div class="mcard-val" style="color:#fff !important;font-size:30px">${total}</div>
+          <div style="font-size:9.5px;color:rgba(255,255,255,.8);font-weight:700">soma das filas</div>
+        </div>
       </div>
     </div>
 
-    <!-- DETALHE DE CADA FILA -->
+    <!-- IMPACTO: quanto de cada fila já precisou ser cobrado -->
     <div>
-      <div class="sec-title">🗂️ Detalhamento de cada fila</div>
-      <div style="display:grid;grid-template-columns:repeat(${Math.min(filasOrd.length,3)},1fr);gap:10px">
+      <div class="sec-title">📉 Impacto na Operação — aberto no prazo × já em cobrança</div>
+      <div style="display:grid;grid-template-columns:1.55fr 1fr;gap:16px;align-items:start">
+
+        <div>
+          ${filasOrd.map(function(f){
+            const g = porFila[f];
+            let segs = '';
+            [0,1,2,3].forEach(function(q){
+              const n = g.q[q] || 0;
+              if(!n) return;
+              const w = (n / g.tot * 100);
+              segs += '<div title="' + n + ' ' + LBL_Q[q] + '" style="width:' + w + '%;background:' + COR_Q[q]
+                + ';display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:800">'
+                + (w >= 7 ? n : '') + '</div>';
+            });
+            return '<div class="gov-row" style="margin-bottom:7px">'
+              + '<div class="gov-lbl" style="width:132px">' + esc(f) + '</div>'
+              + '<div class="gov-bar-wrap" style="height:17px;display:flex">' + segs + '</div>'
+              + '<div class="gov-cnt" style="width:34px">' + g.tot + '</div>'
+              + '</div>';
+          }).join('')}
+          <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:9.5px;color:#555;margin-top:2px">
+            ${[0,1,2,3].map(function(q){
+              return '<span style="display:inline-flex;align-items:center;gap:4px">'
+                + '<span style="width:9px;height:9px;border-radius:2px;background:' + COR_Q[q] + ';display:inline-block"></span>'
+                + LBL_Q[q] + '</span>';
+            }).join('')}
+          </div>
+        </div>
+
+        <div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <div class="mcard" style="background:#E8F5E9 !important;flex:1">
+              <div class="mcard-lbl" style="color:#2E7D32">Aberto, sem cobrança</div>
+              <div class="mcard-val" style="color:#2E7D32">${semCobTot}</div>
+              <div style="font-size:10px;color:#666;font-weight:700">${total ? Math.round(semCobTot/total*100) : 0}% da carteira</div>
+            </div>
+            <div class="mcard" style="background:#FDECEA !important;flex:1">
+              <div class="mcard-lbl" style="color:#C62828">Já em cobrança</div>
+              <div class="mcard-val" style="color:#C62828">${comCobTot}</div>
+              <div style="font-size:10px;color:#666;font-weight:700">${total ? Math.round(comCobTot/total*100) : 0}% da carteira</div>
+            </div>
+          </div>
+          <div style="border:1px solid #555;border-radius:6px;background:#fafafa;padding:5px 9px">
+            <div style="font-size:9.5px;font-weight:800;color:#1a1a1a;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px">Esforço de cobrança</div>
+            ${[1,2,3].map(function(q){
+              const n = gTot[q] || 0;
+              const w = comCobTot ? Math.round(n/comCobTot*100) : 0;
+              return '<div style="display:flex;align-items:center;gap:7px;margin-bottom:3px">'
+                + '<span style="font-size:10px;color:#333;width:78px">' + LBL_Q[q] + '</span>'
+                + '<div style="flex:1;background:#eee;border-radius:3px;height:11px;overflow:hidden">'
+                + '<div style="width:' + w + '%;height:100%;background:' + COR_Q[q] + '"></div></div>'
+                + '<span style="font-size:11px;font-weight:800;color:' + COR_Q[q] + ';width:26px;text-align:right">' + n + '</span>'
+                + '</div>';
+            }).join('')}
+            <div style="font-size:9px;color:#666;margin-top:4px;line-height:1.35">
+              ${gTot[2] + gTot[3]} ${gTot[2] + gTot[3] === 1 ? 'item exigiu' : 'itens exigiram'} 2 ou mais cobranças${total ? ' — ' + Math.round((gTot[2]+gTot[3])/total*100) + '% da carteira' : ''}.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DETALHE POR FILA + TIPO -->
+    <div>
+      <div class="sec-title">🗂️ Tipos de cobrança dentro de cada fila</div>
+      <div style="display:grid;grid-template-columns:repeat(${Math.min(filasOrd.length,3)},1fr);gap:9px">
         ${filasOrd.map(function(f){
           const g = porFila[f];
-          const pctP = g.tot ? Math.round(g.prazo/g.tot*100) : 0;
           let h = '<div style="border:1px solid #555;border-radius:6px;background:#fafafa;overflow:hidden">'
-            + '<div style="background:#1A2D4F;color:#fff;padding:3px 8px;display:flex;justify-content:space-between;align-items:center">'
-            + '<span style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px">' + esc(f) + '</span>'
-            + '<span style="font-size:15px;font-weight:800">' + g.tot + '</span></div>'
-            + '<div style="padding:5px 8px">'
-            + '<table style="width:100%;border-collapse:collapse;font-size:10px">';
+            + '<div style="background:#1A2D4F;color:#fff;padding:2px 8px;display:flex;justify-content:space-between;align-items:center">'
+            + '<span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.3px">' + esc(f) + '</span>'
+            + '<span style="font-size:14px;font-weight:800">' + g.tot + '</span></div>'
+            + '<div style="padding:4px 8px"><table style="width:100%;border-collapse:collapse;font-size:10px">';
           g.tiposOrd.forEach(function(t){
             const cob = ehCob(t);
-            h += '<tr>'
-              + '<td style="padding:1px 0;color:' + (cob ? '#C62828' : '#3266AD') + ';font-weight:' + (cob ? '700' : '600') + '">'
+            h += '<tr><td style="padding:1px 0;color:' + (cob ? '#C62828' : '#3266AD') + ';font-weight:' + (cob ? '700' : '600') + '">'
               + (cob ? '● ' : '○ ') + esc(t) + '</td>'
-              + '<td style="padding:1px 0;text-align:right;font-weight:800;color:#1a1a1a">' + g.tipos[t] + '</td></tr>';
+              + '<td style="padding:1px 0;text-align:right;font-weight:800">' + g.tipos[t] + '</td></tr>';
           });
           h += '</table>';
-          if(g.cobrados > 0){
-            h += '<div style="margin-top:4px;padding-top:3px;border-top:1px dashed #bbb;font-size:9.5px;color:#333">'
-              + '<span style="font-weight:700">Cobranças:</span> ';
-            const partes = [];
-            for(let q = 1; q <= 3; q++){ if(g.q[q]) partes.push('<strong>' + g.q[q] + '</strong> com ' + q + 'x'); }
-            h += partes.join(' · ') + '</div>';
-          }
-          h += '<div style="margin-top:3px;font-size:9.5px;color:#333;display:flex;gap:8px;flex-wrap:wrap">'
-            + '<span><strong style="color:#2E7D32">' + g.prazo + '</strong> no prazo (' + pctP + '%)</span>'
-            + '<span><strong style="color:#E87722">' + g.atras + '</strong> atrasado' + (g.atras===1?'':'s') + '</span>'
+          h += '<div style="margin-top:3px;padding-top:3px;border-top:1px dashed #bbb;font-size:9.5px;color:#333;display:flex;gap:7px;flex-wrap:wrap">'
+            + '<span><strong style="color:#2E7D32">' + g.prazo + '</strong> no prazo</span>'
+            + (g.atras ? '<span><strong style="color:#E87722">' + g.atras + '</strong> atrasado' + (g.atras===1?'':'s') + '</span>' : '')
             + (g.sb ? '<span><strong style="color:#2E7D32">' + g.sb + '</strong> Status B</span>' : '')
             + (g.nr ? '<span><strong style="color:#6A1E9E">' + g.nr + '</strong> N. Reserva</span>' : '')
             + '</div>';
           if(incCrit && g.criticos.length){
-            h += '<div style="margin-top:3px;padding-top:3px;border-top:1px dashed #bbb;font-size:9px;color:#C62828">'
+            h += '<div style="margin-top:2px;font-size:8.5px;color:#C62828">'
               + '<strong>≤ ' + limPrazo + 'd:</strong> '
-              + g.criticos.slice(0,4).map(function(c){ return c.rc + '/' + c.item + ' (' + c.prazo + 'd)'; }).join(', ')
-              + (g.criticos.length > 4 ? ' +' + (g.criticos.length - 4) : '')
-              + '</div>';
+              + g.criticos.slice(0,3).map(function(c){ return c.rc + '/' + c.item + ' (' + c.prazo + 'd)'; }).join(', ')
+              + (g.criticos.length > 3 ? ' +' + (g.criticos.length - 3) : '') + '</div>';
           }
           h += '</div></div>';
           return h;
@@ -30967,28 +31034,44 @@ ${CSS}
       </div>
     </div>
 
-    ${verifDet.length ? `
-    <!-- STATUS B / NOVA RESERVA, por fila -->
-    <div>
-      <div class="sec-title">🔎 Verificar — onde estão esses itens</div>
-      <div style="display:grid;grid-template-columns:repeat(${verifDet.length},1fr);gap:10px">
-        ${verifDet.map(function(v){
-          const cor = v.nome === 'Status B' ? '#2E7D32' : '#6A1E9E';
-          const bg  = v.nome === 'Status B' ? '#E8F5E9' : '#F3E9FB';
-          return '<div style="border:1px solid ' + cor + ';border-radius:6px;overflow:hidden">'
-            + '<div style="background:' + bg + ';color:' + cor + ';padding:3px 8px;display:flex;justify-content:space-between">'
-            + '<span style="font-size:10.5px;font-weight:800;text-transform:uppercase">' + v.nome + '</span>'
-            + '<span style="font-size:14px;font-weight:800">' + v.tot + '</span></div>'
-            + '<div style="padding:4px 8px;font-size:10px;color:#333">'
-            + v.ordem.map(function(f){
-                return '<div style="display:flex;justify-content:space-between;padding:1px 0">'
-                  + '<span>' + esc(f) + '</span><strong>' + v.porFila[f] + '</strong></div>';
-              }).join('')
-            + '</div></div>';
+    <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:start">
+      <div>
+        <div class="sec-title">📋 Distribuição por Tipo de Cobrança</div>
+        ${tiposOrd.map(function(t){
+          const n = porTipo[t];
+          const w = Math.round(n/maxTipo*100);
+          const cor = ehCob(t) ? '#C62828' : '#3266AD';
+          return '<div class="gov-row"><div class="gov-lbl">' + esc(t) + '</div>'
+            + '<div class="gov-bar-wrap"><div class="gov-bar" style="width:' + w + '%;background:' + cor + '"></div></div>'
+            + '<div class="gov-cnt">' + n + ' <span style="color:#888;font-weight:600">(' + (total ? Math.round(n/total*100) : 0) + '%)</span></div>'
+            + '</div>';
         }).join('')}
       </div>
+
+      ${verifDet.length ? `
+      <div>
+        <div class="sec-title">🔎 Verificar — marcação à parte das filas</div>
+        <div style="display:grid;grid-template-columns:repeat(${verifDet.length},1fr);gap:9px">
+          ${verifDet.map(function(v){
+            const cor = v.nome === 'Status B' ? '#2E7D32' : '#6A1E9E';
+            const bg  = v.nome === 'Status B' ? '#E8F5E9' : '#F3E9FB';
+            return '<div style="border:1px solid ' + cor + ';border-radius:6px;overflow:hidden">'
+              + '<div style="background:' + bg + ';color:' + cor + ';padding:2px 8px;display:flex;justify-content:space-between">'
+              + '<span style="font-size:10px;font-weight:800;text-transform:uppercase">' + v.nome + '</span>'
+              + '<span style="font-size:13px;font-weight:800">' + v.tot + '</span></div>'
+              + '<div style="padding:3px 8px;font-size:9.5px;color:#333">'
+              + v.ordem.map(function(f){
+                  return '<div style="display:flex;justify-content:space-between;padding:1px 0">'
+                    + '<span>' + esc(f) + '</span><strong>' + v.porFila[f] + '</strong></div>';
+                }).join('') + '</div></div>';
+          }).join('')}
+        </div>
+        <div style="font-size:9px;color:#777;margin-top:4px;line-height:1.35">
+          Marcação da coluna <em>Verificar</em>. Estes itens já estão contados nas filas acima — não somam à carteira.
+        </div>
+      </div>
+      ` : '<div></div>'}
     </div>
-    ` : ''}
 
     </div>
 
