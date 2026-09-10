@@ -2909,11 +2909,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
             <div>
               <div style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px">🧩 Blocos do slide</div>
-              <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="apres2F-inc-tipos" checked> Distribuição por tipo de cobrança</label>
-              <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="apres2F-inc-reincidencia" checked> Reincidência (1, 2 e 3 cobranças)</label>
-              <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="apres2F-inc-analista" checked> Carteira por analista</label>
-              <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="apres2F-inc-criticos" checked> Tabela de prioridade (prazo curto)</label>
-              <div style="font-size:10px;color:var(--tx2);margin-top:8px;line-height:1.45">O resumo do topo (total, em cobrança, prazo, Status B / Nova Reserva) sai sempre.</div>
+              <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="apres2F-inc-criticos" checked> Mostrar RCs de prazo curto em cada fila</label>
+              <div style="font-size:10px;color:var(--tx2);margin-top:8px;line-height:1.45">Cada fila da coluna <em>Fila</em> ganha seu próprio bloco no slide, com os tipos de cobrança, a reincidência e a situação de prazo dela. Nada é somado entre filas.</div>
             </div>
           </div>
           <button class="btn btn-p" onclick="admApres2FastGerar()" style="font-size:13px;padding:9px 26px">🖥️ Gerar Slide 2</button>
@@ -30703,6 +30700,8 @@ function _apresFastAplicarModulo(){
 //  APRESENTAÇÃO 2 — FAST · somente Governança > Cobrança por Status
 // ═══════════════════════════════════════════════════════════════
 
+var _COB_VERIF_NOMES = ['Status B', 'Nova Reserva'];
+
 function admApres2FastInit(){
   var hoje = new Date().toISOString().split('T')[0];
   var d = document.getElementById('apres2F-data');
@@ -30748,54 +30747,53 @@ async function admApres2FastGerar(){
     return isNaN(n) ? null : n;
   };
 
-  // ── Totais ──
+  // ── Totais (contagens diretas; nada é somado entre categorias) ──
   var total = base.length;
-  var emCobranca = base.filter(function(r){ return ehCob(r.tipoCobranca); }).length;
-  var aguardando = total - emCobranca;
-  var statusB    = base.filter(function(r){ return verifDe(r) === 'Status B'; }).length;
-  var novaRes    = base.filter(function(r){ return verifDe(r) === 'Nova Reserva'; }).length;
+  var statusB = base.filter(function(r){ return verifDe(r) === 'Status B'; }).length;
+  var novaRes = base.filter(function(r){ return verifDe(r) === 'Nova Reserva'; }).length;
 
-  // ── Situação de prazo ──
-  var atrasados = base.filter(function(r){ return /atras/i.test(String(r.status||'')); }).length;
-  var noPrazo   = base.filter(function(r){ return /dentro/i.test(String(r.status||'')); }).length;
-  var outrosSt  = total - atrasados - noPrazo;
-  var pctPrazo  = total ? Math.round(noPrazo/total*100) : 0;
-  var pctAtraso = total ? Math.round(atrasados/total*100) : 0;
-
-  // ── Por tipo ──
-  var porTipo = {};
+  // ── Detalhamento POR FILA (coluna L) ──
+  var porFila = {};
   base.forEach(function(r){
+    var f = (r.fila || '').trim() || 'Sem fila';
+    if(!porFila[f]) porFila[f] = { tot:0, tipos:{}, q:{}, sb:0, nr:0, atras:0, prazo:0, cobrados:0, criticos:[] };
+    var g = porFila[f];
+    g.tot++;
     var t = (r.tipoCobranca || 'Sem tipo').trim();
-    porTipo[t] = (porTipo[t] || 0) + 1;
-  });
-  var tiposOrd = Object.keys(porTipo).sort(function(a,b){ return porTipo[b] - porTipo[a]; });
-  var maxTipo = tiposOrd.length ? porTipo[tiposOrd[0]] : 1;
-
-  // ── Reincidência (1, 2, 3+ cobranças) ──
-  var porQtd = {}, maxQ = 3;
-  base.forEach(function(r){
+    g.tipos[t] = (g.tipos[t] || 0) + 1;
     var q = qtdDe(r);
-    if(q > 0){ porQtd[q] = (porQtd[q]||0) + 1; if(q > maxQ) maxQ = q; }
+    if(q > 0){ g.q[q] = (g.q[q] || 0) + 1; g.cobrados++; }
+    var v = verifDe(r);
+    if(v === 'Status B') g.sb++;
+    if(v === 'Nova Reserva') g.nr++;
+    if(/atras/i.test(String(r.status||''))) g.atras++;
+    if(/dentro/i.test(String(r.status||''))) g.prazo++;
+    var pz = num(r.prazo);
+    if(pz !== null && pz <= limPrazo) g.criticos.push({ rc:r.rc, item:r.itemRc, prazo:pz, tipo:t });
   });
-  var cobrados = Object.keys(porQtd).reduce(function(a,k){ return a + porQtd[k]; }, 0);
-
-  // ── Por analista ──
-  var porAn = {};
-  base.forEach(function(r){
-    var a = (r.analista || '—').trim() || '—';
-    if(!porAn[a]) porAn[a] = { tot: 0, cob: 0, atr: 0 };
-    porAn[a].tot++;
-    if(ehCob(r.tipoCobranca)) porAn[a].cob++;
-    if(/atras/i.test(String(r.status||''))) porAn[a].atr++;
+  var filasOrd = Object.keys(porFila).sort(function(a,b){ return porFila[b].tot - porFila[a].tot; });
+  filasOrd.forEach(function(f){
+    porFila[f].criticos.sort(function(a,b){ return a.prazo - b.prazo; });
+    // tipos da fila: solicitações antes das cobranças, como na aba
+    porFila[f].tiposOrd = Object.keys(porFila[f].tipos).sort(function(a,b){
+      var ga = ehCob(a) ? 1000 : 0, gb = ehCob(b) ? 1000 : 0;
+      if(ga !== gb) return ga - gb;
+      return porFila[f].tipos[b] - porFila[f].tipos[a];
+    });
   });
-  var anOrd = Object.keys(porAn).sort(function(a,b){ return porAn[b].tot - porAn[a].tot; });
-  var maxAn = anOrd.length ? porAn[anOrd[0]].tot : 1;
+  var maxFila = filasOrd.length ? porFila[filasOrd[0]].tot : 1;
 
-  // ── Críticos: menor prazo ──
-  var criticos = base.filter(function(r){
-    var p = num(r.prazo);
-    return p !== null && p <= limPrazo;
-  }).sort(function(a,b){ return num(a.prazo) - num(b.prazo); });
+  // ── Marcadores da coluna Verificar, detalhados por fila ──
+  var verifDet = _COB_VERIF_NOMES.map(function(nome){
+    var itens = base.filter(function(r){ return verifDe(r) === nome; });
+    var porF = {};
+    itens.forEach(function(r){
+      var f = (r.fila || '').trim() || 'Sem fila';
+      porF[f] = (porF[f] || 0) + 1;
+    });
+    return { nome: nome, tot: itens.length, porFila: porF,
+             ordem: Object.keys(porF).sort(function(a,b){ return porF[b] - porF[a]; }) };
+  }).filter(function(v){ return v.tot > 0; });
 
   var CSS = `
 *{margin:0;padding:0;box-sizing:border-box}
@@ -30897,140 +30895,102 @@ ${CSS}
 
   <div class="body">
 
-    <!-- RESUMO -->
+    <!-- FILAS — cada uma com seu próprio número, sem somar -->
     <div>
-      <div class="sec-title">📋 Resumo da Carteira de Cobrança</div>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr) 1.5fr;gap:8px">
-        <div class="mcard" style="background:#EBF0FA">
-          <div class="mcard-lbl" style="color:#3266AD">Aguardando abertura</div>
-          <div class="mcard-val" style="color:#3266AD">${aguardando}</div>
-          <div style="font-size:10px;color:#666;font-weight:700">solicitações e aberturas</div>
-        </div>
-        <div class="mcard" style="background:#FDECEA">
-          <div class="mcard-lbl" style="color:#C62828">Em cobrança</div>
-          <div class="mcard-val" style="color:#C62828">${emCobranca}</div>
-          <div style="font-size:10px;color:#666;font-weight:700">${total ? Math.round(emCobranca/total*100) : 0}% da carteira</div>
-        </div>
-        <div class="mcard" style="background:#E8F5E9">
-          <div class="mcard-lbl" style="color:#2E7D32">Dentro do prazo</div>
-          <div class="mcard-val" style="color:#2E7D32">${noPrazo}</div>
-          <div style="font-size:10px;color:#666;font-weight:700">${pctPrazo}%</div>
-        </div>
-        <div class="mcard" style="background:#FDF0E6">
-          <div class="mcard-lbl" style="color:#E87722">Atrasados</div>
-          <div class="mcard-val" style="color:#E87722">${atrasados}</div>
-          <div style="font-size:10px;color:#666;font-weight:700">${pctAtraso}%</div>
-        </div>
-        <div class="mcard" style="background:#F3E9FB">
-          <div class="mcard-lbl" style="color:#6A1E9E">Status B / Nova Reserva</div>
-          <div class="mcard-val" style="color:#6A1E9E">${statusB + novaRes}</div>
-          <div style="font-size:10px;color:#666;font-weight:700">${statusB} · ${novaRes}</div>
-        </div>
-        <div class="mcard mcard-big">
-          <div class="mcard-lbl">Total de itens</div>
-          <div class="mcard-val">${total}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="${incTipos && (incReinc || incAnal) ? 'two-col' : ''}" style="align-items:start">
-
-      ${incTipos ? `
-      <!-- POR TIPO -->
-      <div>
-        <div class="sec-title">🗂️ Distribuição por Tipo de Cobrança</div>
-        ${tiposOrd.map(function(t){
-          const n = porTipo[t];
-          const w = Math.round(n/maxTipo*100);
-          const cor = ehCob(t) ? '#C62828' : '#3266AD';
-          return '<div class="gov-row">'
-            + '<div class="gov-lbl">' + esc(t) + '</div>'
-            + '<div class="gov-bar-wrap"><div class="gov-bar" style="width:' + w + '%;background:' + cor + '"></div></div>'
-            + '<div class="gov-cnt">' + n + ' <span style="color:#888;font-weight:600">(' + (total ? Math.round(n/total*100) : 0) + '%)</span></div>'
+      <div class="sec-title">📊 Carteira por Fila — ${total} itens em ${filasOrd.length} fila${filasOrd.length===1?'':'s'}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${filasOrd.map(function(f){
+          const g = porFila[f];
+          return '<div class="mcard" style="background:#EEF2F7;flex:1;min-width:110px">'
+            + '<div class="mcard-lbl" style="color:#1A2D4F">' + esc(f) + '</div>'
+            + '<div class="mcard-val" style="color:#1A2D4F">' + g.tot + '</div>'
+            + '<div style="font-size:9.5px;color:#666;font-weight:700">'
+            + g.cobrados + ' em cobrança · ' + g.atras + ' atrasado' + (g.atras===1?'':'s') + '</div>'
             + '</div>';
         }).join('')}
-        <div style="font-size:9.5px;color:#777;margin-top:5px">🔵 solicitações / abertura &nbsp;·&nbsp; 🔴 já em cobrança</div>
-      </div>
-      ` : ''}
-
-      <div>
-        ${incReinc && cobrados > 0 ? `
-        <!-- REINCIDÊNCIA -->
-        <div style="margin-bottom:12px">
-          <div class="sec-title">🔁 Reincidência — ${cobrados} itens já cobrados</div>
-          <div style="display:grid;grid-template-columns:repeat(${Math.min(maxQ,4)},1fr);gap:8px">
-            ${(function(){
-              var out = '';
-              for(var q = 1; q <= Math.min(maxQ,4); q++){
-                var n = porQtd[q] || 0;
-                var p = cobrados ? Math.round(n/cobrados*100) : 0;
-                var cor = q === 1 ? '#3266AD' : q === 2 ? '#E87722' : '#C62828';
-                var bg  = q === 1 ? '#EBF0FA' : q === 2 ? '#FDF0E6' : '#FDECEA';
-                out += '<div class="mcard" style="background:' + bg + '">'
-                  + '<div class="mcard-lbl" style="color:' + cor + '">' + q + (q===1?' cobrança':' cobranças') + '</div>'
-                  + '<div class="mcard-val" style="color:' + cor + '">' + n + '</div>'
-                  + '<div style="font-size:10px;color:#666;font-weight:700">' + p + '%</div>'
-                  + '</div>';
-              }
-              return out;
-            })()}
-          </div>
-        </div>
-        ` : ''}
-
-        ${incAnal ? `
-        <!-- POR ANALISTA -->
-        <div>
-          <div class="sec-title">👥 Carteira por Analista</div>
-          ${anOrd.slice(0,8).map(function(a){
-            const g = porAn[a];
-            const w = Math.round(g.tot/maxAn*100);
-            return '<div class="gov-row">'
-              + '<div class="gov-lbl" style="width:110px">' + esc(a) + '</div>'
-              + '<div class="gov-bar-wrap"><div class="gov-bar" style="width:' + w + '%;background:#3A7D44"></div></div>'
-              + '<div class="gov-cnt" style="width:96px">' + g.tot
-              + ' <span style="color:#C62828;font-weight:700">' + g.cob + ' cob</span></div>'
-              + '</div>';
-          }).join('')}
-        </div>
-        ` : ''}
+        ${verifDet.map(function(v){
+          const cor = v.nome === 'Status B' ? '#2E7D32' : '#6A1E9E';
+          const bg  = v.nome === 'Status B' ? '#E8F5E9' : '#F3E9FB';
+          return '<div class="mcard" style="background:' + bg + ';flex:1;min-width:110px;border-color:' + cor + ' !important">'
+            + '<div class="mcard-lbl" style="color:' + cor + '">' + v.nome + '</div>'
+            + '<div class="mcard-val" style="color:' + cor + '">' + v.tot + '</div>'
+            + '<div style="font-size:9.5px;color:#666;font-weight:700">em ' + v.ordem.length + ' fila' + (v.ordem.length===1?'':'s') + '</div>'
+            + '</div>';
+        }).join('')}
       </div>
     </div>
 
-    ${incCrit && criticos.length ? `
-    <!-- CRÍTICOS -->
+    <!-- DETALHE DE CADA FILA -->
     <div>
-      <div class="sec-title">🚨 Prioridade — prazo de até ${limPrazo} dias (${criticos.length} ${criticos.length===1?'item':'itens'})</div>
-      <table class="cob-tbl">
-        <thead><tr>
-          <th>Analista</th><th>RC</th><th>Item</th><th>Tipo de cobrança</th>
-          <th style="text-align:center">Cobranças</th><th style="text-align:center">Prazo</th>
-          <th style="text-align:center">SLA</th><th>Verificar</th>
-        </tr></thead>
-        <tbody>
-          ${criticos.slice(0,10).map(function(r){
-            const v = verifDe(r);
-            const pill = v === 'Status B'     ? '<span class="pill" style="background:#E8F5E9;color:#2E7D32">Status B</span>'
-                       : v === 'Nova Reserva' ? '<span class="pill" style="background:#F3E9FB;color:#6A1E9E">Nova Reserva</span>'
-                       : '<span style="color:#aaa">—</span>';
-            return '<tr>'
-              + '<td>' + esc(r.analista || '—') + '</td>'
-              + '<td style="font-weight:700">' + esc(r.rc || '—') + '</td>'
-              + '<td>' + esc(r.itemRc || '—') + '</td>'
-              + '<td>' + esc(r.tipoCobranca || '—') + '</td>'
-              + '<td style="text-align:center;font-weight:700">' + qtdDe(r) + '</td>'
-              + '<td style="text-align:center;font-weight:800;color:#C62828">' + esc(r.prazo) + '</td>'
-              + '<td style="text-align:center">' + esc(r.sla === '' || r.sla == null ? '—' : r.sla) + '</td>'
-              + '<td>' + pill + '</td>'
-              + '</tr>';
-          }).join('')}
-        </tbody>
-      </table>
-      ${criticos.length > 10 ? '<div style="font-size:9.5px;color:#777;margin-top:4px">Mostrando os 10 de menor prazo, de ' + criticos.length + ' itens.</div>' : ''}
+      <div class="sec-title">🗂️ Detalhamento de cada fila</div>
+      <div style="display:grid;grid-template-columns:repeat(${Math.min(filasOrd.length,3)},1fr);gap:10px">
+        ${filasOrd.map(function(f){
+          const g = porFila[f];
+          const pctP = g.tot ? Math.round(g.prazo/g.tot*100) : 0;
+          let h = '<div style="border:1px solid #555;border-radius:6px;background:#fafafa;overflow:hidden">'
+            + '<div style="background:#1A2D4F;color:#fff;padding:3px 8px;display:flex;justify-content:space-between;align-items:center">'
+            + '<span style="font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px">' + esc(f) + '</span>'
+            + '<span style="font-size:15px;font-weight:800">' + g.tot + '</span></div>'
+            + '<div style="padding:5px 8px">'
+            + '<table style="width:100%;border-collapse:collapse;font-size:10px">';
+          g.tiposOrd.forEach(function(t){
+            const cob = ehCob(t);
+            h += '<tr>'
+              + '<td style="padding:1px 0;color:' + (cob ? '#C62828' : '#3266AD') + ';font-weight:' + (cob ? '700' : '600') + '">'
+              + (cob ? '● ' : '○ ') + esc(t) + '</td>'
+              + '<td style="padding:1px 0;text-align:right;font-weight:800;color:#1a1a1a">' + g.tipos[t] + '</td></tr>';
+          });
+          h += '</table>';
+          if(g.cobrados > 0){
+            h += '<div style="margin-top:4px;padding-top:3px;border-top:1px dashed #bbb;font-size:9.5px;color:#333">'
+              + '<span style="font-weight:700">Cobranças:</span> ';
+            const partes = [];
+            for(let q = 1; q <= 3; q++){ if(g.q[q]) partes.push('<strong>' + g.q[q] + '</strong> com ' + q + 'x'); }
+            h += partes.join(' · ') + '</div>';
+          }
+          h += '<div style="margin-top:3px;font-size:9.5px;color:#333;display:flex;gap:8px;flex-wrap:wrap">'
+            + '<span><strong style="color:#2E7D32">' + g.prazo + '</strong> no prazo (' + pctP + '%)</span>'
+            + '<span><strong style="color:#E87722">' + g.atras + '</strong> atrasado' + (g.atras===1?'':'s') + '</span>'
+            + (g.sb ? '<span><strong style="color:#2E7D32">' + g.sb + '</strong> Status B</span>' : '')
+            + (g.nr ? '<span><strong style="color:#6A1E9E">' + g.nr + '</strong> N. Reserva</span>' : '')
+            + '</div>';
+          if(incCrit && g.criticos.length){
+            h += '<div style="margin-top:3px;padding-top:3px;border-top:1px dashed #bbb;font-size:9px;color:#C62828">'
+              + '<strong>≤ ' + limPrazo + 'd:</strong> '
+              + g.criticos.slice(0,4).map(function(c){ return c.rc + '/' + c.item + ' (' + c.prazo + 'd)'; }).join(', ')
+              + (g.criticos.length > 4 ? ' +' + (g.criticos.length - 4) : '')
+              + '</div>';
+          }
+          h += '</div></div>';
+          return h;
+        }).join('')}
+      </div>
+    </div>
+
+    ${verifDet.length ? `
+    <!-- STATUS B / NOVA RESERVA, por fila -->
+    <div>
+      <div class="sec-title">🔎 Verificar — onde estão esses itens</div>
+      <div style="display:grid;grid-template-columns:repeat(${verifDet.length},1fr);gap:10px">
+        ${verifDet.map(function(v){
+          const cor = v.nome === 'Status B' ? '#2E7D32' : '#6A1E9E';
+          const bg  = v.nome === 'Status B' ? '#E8F5E9' : '#F3E9FB';
+          return '<div style="border:1px solid ' + cor + ';border-radius:6px;overflow:hidden">'
+            + '<div style="background:' + bg + ';color:' + cor + ';padding:3px 8px;display:flex;justify-content:space-between">'
+            + '<span style="font-size:10.5px;font-weight:800;text-transform:uppercase">' + v.nome + '</span>'
+            + '<span style="font-size:14px;font-weight:800">' + v.tot + '</span></div>'
+            + '<div style="padding:4px 8px;font-size:10px;color:#333">'
+            + v.ordem.map(function(f){
+                return '<div style="display:flex;justify-content:space-between;padding:1px 0">'
+                  + '<span>' + esc(f) + '</span><strong>' + v.porFila[f] + '</strong></div>';
+              }).join('')
+            + '</div></div>';
+        }).join('')}
+      </div>
     </div>
     ` : ''}
 
-  </div>
+    </div>
 
   <div class="ftr">
     <div class="ftr-txt">PATEC · Gestão de Compras · ${dataFmt}</div>
