@@ -31334,20 +31334,20 @@ function _cobDesenhar(){
           if (pa !== pb) return pa - pb;
           return gT[b] - gT[a];
         });
-        var hSol = '', hCob = '';
+        // Todos os tipos da fila numa linha só (solicitações primeiro, depois
+        // as cobranças) — dentro de uma fila são poucos, separar em duas
+        // linhas só desperdiçava espaço.
+        var hTipos = '';
         for (i = 0; i < _cobTipos.length; i++) {
-          var nt = _cobTipos[i];
-          if (_cobEhTipoCobranca(nt)) hCob += montaCard(nt, i, gT[nt]);
-          else                        hSol += montaCard(nt, i, gT[nt]);
+          hTipos += montaCard(_cobTipos[i], i, gT[_cobTipos[i]]);
         }
         esq += '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--brd)">'
           + '<div style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;'
           + 'letter-spacing:.4px;margin-bottom:7px">↳ ' + _cobEsc(_cobFilaFiltro)
           + ' — tipos de cobrança <span style="font-weight:600;text-transform:none;letter-spacing:0">('
-          + doFiltro.length + ' itens)</span></div>';
-        if (hSol) esq += '<div data-cob="linha-sol" style="' + linha + '">' + hSol + '</div>';
-        if (hCob) esq += '<div data-cob="linha-cob" style="' + linha + (hSol ? ';margin-top:10px' : '') + '">' + hCob + '</div>';
-        esq += '</div>';
+          + doFiltro.length + ' itens)</span></div>'
+          + '<div data-cob="linha-tipos" style="' + linha + '">' + hTipos + '</div>'
+          + '</div>';
       } else {
         _cobTipos = [];
       }
