@@ -31168,11 +31168,15 @@ function _cobEhTipoCobranca(tipo){
   return _cobNorm(tipo).indexOf('cobranca') === 0;
 }
 
-// posicao do tipo na ordem fixa; desconhecido vai pro fim do seu grupo
+// Ordena os tipos. O GRUPO manda primeiro: toda solicitação/abertura vem
+// antes de qualquer cobrança, mesmo que o tipo não esteja na lista fixa
+// (era o caso de "Patec Aberto", que caía como desconhecido — peso 500 — e
+// aparecia depois de "Cobrança Patec em Andamento", que está na lista).
+// Dentro do grupo vale a ordem da lista; tipo novo vai para o fim do grupo.
 function _cobPeso(tipo){
+  var grupo = _cobEhTipoCobranca(tipo) ? 1000 : 0;
   var i = _COB_ORDEM.indexOf(_cobNorm(tipo));
-  if (i !== -1) return i;
-  return _cobEhTipoCobranca(tipo) ? 900 : 500;
+  return grupo + (i !== -1 ? i : 900);
 }
 
 // Classifica a coluna "Verificar" -> 'Status B' | 'Nova Reserva' | ''
