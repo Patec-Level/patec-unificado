@@ -30750,56 +30750,56 @@ async function admApres2FastGerar(){
   // ── Contagens diretas. As filas (coluna L) particionam a base: somam o total. ──
   var total = base.length;
 
+  // "em cobrança" é definido pelo TIPO (coluna G), igual à aba — e não pelo
+  // número da coluna Cobrança. Havia divergência: item com tipo "Cobrança ..."
+  // e 0 na coluna de contagem aparecia como "sem cobrança" (dava 27/4 onde a
+  // aba mostra 26/5). O tipo é a fonte da verdade.
   var porFila = {};
   base.forEach(function(r){
     var f = (r.fila || '').trim() || 'Sem fila';
-    if(!porFila[f]) porFila[f] = { tot:0, tipos:{}, q:{0:0,1:0,2:0,3:0}, semCob:0, comCob:0,
-                                   sb:0, nr:0, atras:0, prazo:0, criticos:[] };
+    if(!porFila[f]) porFila[f] = { tot:0, semCob:0, comCob:0, q:{1:0,2:0,3:0}, semNum:0,
+                                   sb:0, nr:0, atras:0, prazo:0 };
     var g = porFila[f];
     g.tot++;
-    var t = (r.tipoCobranca || 'Sem tipo').trim();
-    g.tipos[t] = (g.tipos[t] || 0) + 1;
-    var q = qtdDe(r);
-    if(q > 3) q = 3;                 // 4 ou mais entra no balde de 3+
-    g.q[q] = (g.q[q] || 0) + 1;
-    if(q > 0) g.comCob++; else g.semCob++;
+    var emCobranca = ehCob(r.tipoCobranca);
+    if(emCobranca){
+      g.comCob++;
+      var q = qtdDe(r);
+      if(q > 3) q = 3;
+      if(q >= 1) g.q[q]++; else g.semNum++;   // tipo diz cobrança, mas sem nº registrado
+    } else {
+      g.semCob++;
+    }
     var v = verifDe(r);
     if(v === 'Status B') g.sb++;
     if(v === 'Nova Reserva') g.nr++;
     if(/atras/i.test(String(r.status||''))) g.atras++;
     if(/dentro/i.test(String(r.status||''))) g.prazo++;
-    var pz = num(r.prazo);
-    if(pz !== null && pz <= limPrazo) g.criticos.push({ rc:r.rc, item:r.itemRc, prazo:pz });
   });
   var filasOrd = Object.keys(porFila).sort(function(a,b){ return porFila[b].tot - porFila[a].tot; });
-  filasOrd.forEach(function(f){
-    porFila[f].criticos.sort(function(a,b){ return a.prazo - b.prazo; });
-    porFila[f].tiposOrd = Object.keys(porFila[f].tipos).sort(function(a,b){
-      var ga = ehCob(a) ? 1000 : 0, gb = ehCob(b) ? 1000 : 0;
-      if(ga !== gb) return ga - gb;
-      return porFila[f].tipos[b] - porFila[f].tipos[a];
-    });
-  });
-  // conferência: a soma das filas tem de fechar com o total
   var somaFilas = filasOrd.reduce(function(a,f){ return a + porFila[f].tot; }, 0);
 
-  // ── Impacto na operação: quanto da carteira já precisou ser cobrado ──
-  var gTot = { 0:0, 1:0, 2:0, 3:0 };
-  base.forEach(function(r){ var q = qtdDe(r); if(q > 3) q = 3; gTot[q]++; });
-  var semCobTot = gTot[0];
+  // ── Carteira inteira ──
+  var semCobTot = base.filter(function(r){ return !ehCob(r.tipoCobranca); }).length;
   var comCobTot = total - semCobTot;
 
-  // ── Por tipo de cobrança (barras, como na aba) ──
-  var porTipo = {};
-  base.forEach(function(r){ var t = (r.tipoCobranca || 'Sem tipo').trim(); porTipo[t] = (porTipo[t]||0)+1; });
-  var tiposOrd = Object.keys(porTipo).sort(function(a,b){
-    var ga = ehCob(a) ? 1000 : 0, gb = ehCob(b) ? 1000 : 0;
-    if(ga !== gb) return ga - gb;
-    return porTipo[b] - porTipo[a];
+  // Níveis de cobrança (1ª, 2ª, 3ª) — só entre os que estão em cobrança
+  var nivel = { 1:{n:0, filas:{}}, 2:{n:0, filas:{}}, 3:{n:0, filas:{}} };
+  var semNumTot = 0;
+  base.forEach(function(r){
+    if(!ehCob(r.tipoCobranca)) return;
+    var q = qtdDe(r);
+    if(q > 3) q = 3;
+    if(q < 1){ semNumTot++; return; }
+    nivel[q].n++;
+    var f = (r.fila || '').trim() || 'Sem fila';
+    nivel[q].filas[f] = (nivel[q].filas[f] || 0) + 1;
   });
-  var maxTipo = tiposOrd.length ? Math.max.apply(null, tiposOrd.map(function(t){ return porTipo[t]; })) : 1;
+  [1,2,3].forEach(function(q){
+    nivel[q].ordem = Object.keys(nivel[q].filas).sort(function(a,b){ return nivel[q].filas[b] - nivel[q].filas[a]; });
+  });
 
-  // ── Marcadores da coluna Verificar (NÃO entram na soma das filas) ──
+  // ── Marcadores da coluna Verificar (não somam à carteira) ──
   var verifDet = _COB_VERIF_NOMES.map(function(nome){
     var itens = base.filter(function(r){ return verifDe(r) === nome; });
     var porF = {};
@@ -30808,9 +30808,9 @@ async function admApres2FastGerar(){
              ordem: Object.keys(porF).sort(function(a,b){ return porF[b]-porF[a]; }) };
   }).filter(function(v){ return v.tot > 0; });
 
-  // paleta do impacto
+  var pct = function(n){ return total ? Math.round(n/total*1000)/10 : 0; };
   var COR_Q = { 0:'#2E7D32', 1:'#F9A825', 2:'#E87722', 3:'#C62828' };
-  var LBL_Q = { 0:'sem cobrança', 1:'1 cobrança', 2:'2 cobranças', 3:'3+ cobranças' };
+  var LBL_Q = { 0:'sem cobrança', 1:'1ª cobrança', 2:'2ª cobrança', 3:'3ª cobrança' };
 
   var CSS = `
 *{margin:0;padding:0;box-sizing:border-box}
@@ -30912,7 +30912,7 @@ ${CSS}
 
   <div class="body">
 
-    <!-- CARTEIRA POR FILA — as filas particionam a base e somam o total -->
+    <!-- CARTEIRA POR FILA -->
     <div>
       <div class="sec-title">📊 Carteira por Fila &nbsp;·&nbsp; ${filasOrd.length} filas somando ${somaFilas} ${somaFilas === total ? 'itens' : 'de ' + total + ' itens'}</div>
       <div data-sec="filas" style="display:flex;gap:8px;flex-wrap:wrap;align-items:stretch">
@@ -30922,7 +30922,7 @@ ${CSS}
             + '<div class="mcard-lbl" style="color:#1A2D4F">' + esc(f) + '</div>'
             + '<div class="mcard-val" style="color:#1A2D4F">' + g.tot + '</div>'
             + '<div style="font-size:9.5px;color:#666;font-weight:700">'
-            + g.semCob + ' sem cobrança · <span style="color:#C62828">' + g.comCob + ' cobrado' + (g.comCob===1?'':'s') + '</span></div>'
+            + g.semCob + ' sem cobrança · <span style="color:#C62828">' + g.comCob + ' em cobrança</span></div>'
             + '</div>';
         }).join('')}
         <div class="mcard" data-card="total" style="background:#1A2D4F !important;border-color:#1A2D4F !important;min-width:118px">
@@ -30933,145 +30933,126 @@ ${CSS}
       </div>
     </div>
 
-    <!-- IMPACTO: quanto de cada fila já precisou ser cobrado -->
+    <!-- IMPACTO POR FILA -->
     <div>
-      <div class="sec-title">📉 Impacto na Operação — aberto no prazo × já em cobrança</div>
-      <div style="display:grid;grid-template-columns:1.55fr 1fr;gap:16px;align-items:start">
-
+      <div class="sec-title">📉 Impacto na Operação — aberto sem cobrança × já em cobrança</div>
+      <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:start">
         <div>
           ${filasOrd.map(function(f){
             const g = porFila[f];
             let segs = '';
-            [0,1,2,3].forEach(function(q){
-              const n = g.q[q] || 0;
+            const add = function(n, cor, tit){
               if(!n) return;
               const w = (n / g.tot * 100);
-              segs += '<div title="' + n + ' ' + LBL_Q[q] + '" style="width:' + w + '%;background:' + COR_Q[q]
-                + ';display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:800">'
+              segs += '<div title="' + n + ' ' + tit + '" style="width:' + w + '%;background:' + cor
+                + ';display:flex;align-items:center;justify-content:center;color:#fff;font-size:9.5px;font-weight:800">'
                 + (w >= 7 ? n : '') + '</div>';
-            });
-            return '<div class="gov-row" style="margin-bottom:7px">'
-              + '<div class="gov-lbl" style="width:132px">' + esc(f) + '</div>'
-              + '<div class="gov-bar-wrap" style="height:17px;display:flex">' + segs + '</div>'
+            };
+            add(g.semCob, COR_Q[0], 'sem cobrança');
+            add(g.q[1], COR_Q[1], '1ª cobrança');
+            add(g.q[2], COR_Q[2], '2ª cobrança');
+            add(g.q[3], COR_Q[3], '3ª cobrança');
+            add(g.semNum, '#9E9E9E', 'em cobrança, sem nº registrado');
+            return '<div class="gov-row" style="margin-bottom:8px">'
+              + '<div class="gov-lbl" style="width:138px">' + esc(f) + '</div>'
+              + '<div class="gov-bar-wrap" style="height:19px;display:flex">' + segs + '</div>'
               + '<div class="gov-cnt" style="width:34px">' + g.tot + '</div>'
               + '</div>';
           }).join('')}
-          <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:9.5px;color:#555;margin-top:2px">
+          <div style="display:flex;gap:13px;flex-wrap:wrap;font-size:10px;color:#555;margin-top:3px">
             ${[0,1,2,3].map(function(q){
               return '<span style="display:inline-flex;align-items:center;gap:4px">'
-                + '<span style="width:9px;height:9px;border-radius:2px;background:' + COR_Q[q] + ';display:inline-block"></span>'
+                + '<span style="width:10px;height:10px;border-radius:2px;background:' + COR_Q[q] + ';display:inline-block"></span>'
                 + LBL_Q[q] + '</span>';
             }).join('')}
+            ${semNumTot ? '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#9E9E9E;display:inline-block"></span>sem nº registrado</span>' : ''}
           </div>
         </div>
 
-        <div>
-          <div style="display:flex;gap:8px;margin-bottom:8px">
-            <div class="mcard" style="background:#E8F5E9 !important;flex:1">
-              <div class="mcard-lbl" style="color:#2E7D32">Aberto, sem cobrança</div>
-              <div class="mcard-val" style="color:#2E7D32">${semCobTot}</div>
-              <div style="font-size:10px;color:#666;font-weight:700">${total ? Math.round(semCobTot/total*100) : 0}% da carteira</div>
-            </div>
-            <div class="mcard" style="background:#FDECEA !important;flex:1">
-              <div class="mcard-lbl" style="color:#C62828">Já em cobrança</div>
-              <div class="mcard-val" style="color:#C62828">${comCobTot}</div>
-              <div style="font-size:10px;color:#666;font-weight:700">${total ? Math.round(comCobTot/total*100) : 0}% da carteira</div>
-            </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="mcard" style="background:#E8F5E9 !important">
+            <div class="mcard-lbl" style="color:#2E7D32">Aberto, sem cobrança</div>
+            <div class="mcard-val" style="color:#2E7D32;font-size:34px">${semCobTot}</div>
+            <div style="font-size:11px;color:#555;font-weight:700">${pct(semCobTot)}% da carteira</div>
           </div>
-          <div style="border:1px solid #555;border-radius:6px;background:#fafafa;padding:5px 9px">
-            <div style="font-size:9.5px;font-weight:800;color:#1a1a1a;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px">Esforço de cobrança</div>
-            ${[1,2,3].map(function(q){
-              const n = gTot[q] || 0;
-              const w = comCobTot ? Math.round(n/comCobTot*100) : 0;
-              return '<div style="display:flex;align-items:center;gap:7px;margin-bottom:3px">'
-                + '<span style="font-size:10px;color:#333;width:78px">' + LBL_Q[q] + '</span>'
-                + '<div style="flex:1;background:#eee;border-radius:3px;height:11px;overflow:hidden">'
-                + '<div style="width:' + w + '%;height:100%;background:' + COR_Q[q] + '"></div></div>'
-                + '<span style="font-size:11px;font-weight:800;color:' + COR_Q[q] + ';width:26px;text-align:right">' + n + '</span>'
-                + '</div>';
-            }).join('')}
-            <div style="font-size:9px;color:#666;margin-top:4px;line-height:1.35">
-              ${gTot[2] + gTot[3]} ${gTot[2] + gTot[3] === 1 ? 'item exigiu' : 'itens exigiram'} 2 ou mais cobranças${total ? ' — ' + Math.round((gTot[2]+gTot[3])/total*100) + '% da carteira' : ''}.
-            </div>
+          <div class="mcard" style="background:#FDECEA !important">
+            <div class="mcard-lbl" style="color:#C62828">Já em cobrança</div>
+            <div class="mcard-val" style="color:#C62828;font-size:34px">${comCobTot}</div>
+            <div style="font-size:11px;color:#555;font-weight:700">${pct(comCobTot)}% da carteira</div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- DETALHE POR FILA + TIPO -->
+    <!-- NÍVEIS DE COBRANÇA — % da carteira -->
     <div>
-      <div class="sec-title">🗂️ Tipos de cobrança dentro de cada fila</div>
-      <div style="display:grid;grid-template-columns:repeat(${Math.min(filasOrd.length,3)},1fr);gap:9px">
-        ${filasOrd.map(function(f){
-          const g = porFila[f];
-          let h = '<div style="border:1px solid #555;border-radius:6px;background:#fafafa;overflow:hidden">'
-            + '<div style="background:#1A2D4F;color:#fff;padding:2px 8px;display:flex;justify-content:space-between;align-items:center">'
-            + '<span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.3px">' + esc(f) + '</span>'
-            + '<span style="font-size:14px;font-weight:800">' + g.tot + '</span></div>'
-            + '<div style="padding:4px 8px"><table style="width:100%;border-collapse:collapse;font-size:10px">';
-          g.tiposOrd.forEach(function(t){
-            const cob = ehCob(t);
-            h += '<tr><td style="padding:1px 0;color:' + (cob ? '#C62828' : '#3266AD') + ';font-weight:' + (cob ? '700' : '600') + '">'
-              + (cob ? '● ' : '○ ') + esc(t) + '</td>'
-              + '<td style="padding:1px 0;text-align:right;font-weight:800">' + g.tipos[t] + '</td></tr>';
-          });
-          h += '</table>';
-          h += '<div style="margin-top:3px;padding-top:3px;border-top:1px dashed #bbb;font-size:9.5px;color:#333;display:flex;gap:7px;flex-wrap:wrap">'
-            + '<span><strong style="color:#2E7D32">' + g.prazo + '</strong> no prazo</span>'
-            + (g.atras ? '<span><strong style="color:#E87722">' + g.atras + '</strong> atrasado' + (g.atras===1?'':'s') + '</span>' : '')
-            + (g.sb ? '<span><strong style="color:#2E7D32">' + g.sb + '</strong> Status B</span>' : '')
-            + (g.nr ? '<span><strong style="color:#6A1E9E">' + g.nr + '</strong> N. Reserva</span>' : '')
-            + '</div>';
-          if(incCrit && g.criticos.length){
-            h += '<div style="margin-top:2px;font-size:8.5px;color:#C62828">'
-              + '<strong>≤ ' + limPrazo + 'd:</strong> '
-              + g.criticos.slice(0,3).map(function(c){ return c.rc + '/' + c.item + ' (' + c.prazo + 'd)'; }).join(', ')
-              + (g.criticos.length > 3 ? ' +' + (g.criticos.length - 3) : '') + '</div>';
-          }
-          h += '</div></div>';
-          return h;
+      <div class="sec-title">🔁 Níveis de Cobrança — quanto da carteira já foi cobrado ${comCobTot ? 'e quantas vezes' : ''}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr) 1.15fr;gap:11px;align-items:stretch">
+        ${[1,2,3].map(function(q){
+          const nv = nivel[q];
+          const pCart = pct(nv.n);
+          const pCob  = comCobTot ? Math.round(nv.n/comCobTot*1000)/10 : 0;
+          return '<div style="border:1px solid ' + COR_Q[q] + ';border-radius:6px;overflow:hidden;background:#fff">'
+            + '<div style="background:' + COR_Q[q] + ';color:#fff;padding:3px 9px;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px">'
+            + LBL_Q[q] + '</div>'
+            + '<div style="padding:6px 9px">'
+            + '<div style="display:flex;align-items:baseline;gap:7px">'
+            + '<span style="font-size:30px;font-weight:800;color:' + COR_Q[q] + ';line-height:1">' + nv.n + '</span>'
+            + '<span style="font-size:11px;color:#555;font-weight:700">itens</span></div>'
+            + '<div style="margin-top:5px;background:#eee;border-radius:3px;height:9px;overflow:hidden">'
+            + '<div style="width:' + Math.min(pCart,100) + '%;height:100%;background:' + COR_Q[q] + '"></div></div>'
+            + '<div style="font-size:11px;color:#1a1a1a;margin-top:4px;font-weight:700">'
+            + '<span style="color:' + COR_Q[q] + '">' + pCart + '%</span> da carteira'
+            + '<span style="color:#777;font-weight:600"> · ' + pCob + '% do que está em cobrança</span></div>'
+            + (nv.ordem.length
+                ? '<div style="margin-top:4px;padding-top:4px;border-top:1px dashed #ccc;font-size:9.5px;color:#333">'
+                  + nv.ordem.slice(0,4).map(function(f){
+                      return '<div style="display:flex;justify-content:space-between;padding:.5px 0">'
+                        + '<span>' + esc(f) + '</span><strong>' + nv.filas[f] + '</strong></div>';
+                    }).join('')
+                  + (nv.ordem.length > 4 ? '<div style="color:#888">+' + (nv.ordem.length - 4) + ' fila(s)</div>' : '')
+                  + '</div>'
+                : '<div style="margin-top:4px;font-size:9.5px;color:#999">nenhum item neste nível</div>')
+            + '</div></div>';
         }).join('')}
+
+        <div style="border:1px solid #1A2D4F;border-radius:6px;overflow:hidden;background:#fff">
+          <div style="background:#1A2D4F;color:#fff;padding:3px 9px;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px">Leitura da operação</div>
+          <div style="padding:6px 9px;font-size:10.5px;color:#1a1a1a;line-height:1.5">
+            <div style="margin-bottom:4px"><strong style="color:#2E7D32;font-size:13px">${pct(semCobTot)}%</strong> da carteira segue aberta sem nenhuma cobrança.</div>
+            <div style="margin-bottom:4px"><strong style="color:#C62828;font-size:13px">${pct(comCobTot)}%</strong> já exigiu ao menos uma cobrança.</div>
+            <div style="margin-bottom:4px"><strong style="color:#E87722;font-size:13px">${pct(nivel[2].n + nivel[3].n)}%</strong> precisou de <strong>2 ou mais</strong> cobranças — retrabalho.</div>
+            ${nivel[3].n ? '<div style="padding-top:4px;border-top:1px dashed #ccc"><strong style="color:#C62828">' + nivel[3].n + '</strong> ' + (nivel[3].n===1?'item chegou':'itens chegaram') + ' à 3ª cobrança' + (nivel[3].ordem.length ? ', concentrado' + (nivel[3].n===1?'':'s') + ' em <strong>' + esc(nivel[3].ordem[0]) + '</strong>' : '') + '.</div>' : ''}
+            ${semNumTot ? '<div style="color:#777;font-size:9.5px;padding-top:4px">' + semNumTot + ' item(ns) com tipo de cobrança mas sem nº registrado na planilha.</div>' : ''}
+          </div>
+        </div>
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px;align-items:start">
-      <div>
-        <div class="sec-title">📋 Distribuição por Tipo de Cobrança</div>
-        ${tiposOrd.map(function(t){
-          const n = porTipo[t];
-          const w = Math.round(n/maxTipo*100);
-          const cor = ehCob(t) ? '#C62828' : '#3266AD';
-          return '<div class="gov-row"><div class="gov-lbl">' + esc(t) + '</div>'
-            + '<div class="gov-bar-wrap"><div class="gov-bar" style="width:' + w + '%;background:' + cor + '"></div></div>'
-            + '<div class="gov-cnt">' + n + ' <span style="color:#888;font-weight:600">(' + (total ? Math.round(n/total*100) : 0) + '%)</span></div>'
-            + '</div>';
+    ${verifDet.length ? `
+    <!-- VERIFICAR -->
+    <div>
+      <div class="sec-title">🔎 Verificar — marcação à parte das filas</div>
+      <div style="display:grid;grid-template-columns:repeat(${verifDet.length},1fr) 2fr;gap:11px">
+        ${verifDet.map(function(v){
+          const cor = v.nome === 'Status B' ? '#2E7D32' : '#6A1E9E';
+          const bg  = v.nome === 'Status B' ? '#E8F5E9' : '#F3E9FB';
+          return '<div style="border:1px solid ' + cor + ';border-radius:6px;overflow:hidden">'
+            + '<div style="background:' + bg + ';color:' + cor + ';padding:3px 9px;display:flex;justify-content:space-between">'
+            + '<span style="font-size:10.5px;font-weight:800;text-transform:uppercase">' + v.nome + '</span>'
+            + '<span style="font-size:14px;font-weight:800">' + v.tot + '</span></div>'
+            + '<div style="padding:4px 9px;font-size:10px;color:#333">'
+            + v.ordem.map(function(f){
+                return '<div style="display:flex;justify-content:space-between;padding:1px 0">'
+                  + '<span>' + esc(f) + '</span><strong>' + v.porFila[f] + '</strong></div>';
+              }).join('') + '</div></div>';
         }).join('')}
-      </div>
-
-      ${verifDet.length ? `
-      <div>
-        <div class="sec-title">🔎 Verificar — marcação à parte das filas</div>
-        <div style="display:grid;grid-template-columns:repeat(${verifDet.length},1fr);gap:9px">
-          ${verifDet.map(function(v){
-            const cor = v.nome === 'Status B' ? '#2E7D32' : '#6A1E9E';
-            const bg  = v.nome === 'Status B' ? '#E8F5E9' : '#F3E9FB';
-            return '<div style="border:1px solid ' + cor + ';border-radius:6px;overflow:hidden">'
-              + '<div style="background:' + bg + ';color:' + cor + ';padding:2px 8px;display:flex;justify-content:space-between">'
-              + '<span style="font-size:10px;font-weight:800;text-transform:uppercase">' + v.nome + '</span>'
-              + '<span style="font-size:13px;font-weight:800">' + v.tot + '</span></div>'
-              + '<div style="padding:3px 8px;font-size:9.5px;color:#333">'
-              + v.ordem.map(function(f){
-                  return '<div style="display:flex;justify-content:space-between;padding:1px 0">'
-                    + '<span>' + esc(f) + '</span><strong>' + v.porFila[f] + '</strong></div>';
-                }).join('') + '</div></div>';
-          }).join('')}
-        </div>
-        <div style="font-size:9px;color:#777;margin-top:4px;line-height:1.35">
+        <div style="display:flex;align-items:center;font-size:10px;color:#777;line-height:1.5;padding-left:4px">
           Marcação da coluna <em>Verificar</em>. Estes itens já estão contados nas filas acima — não somam à carteira.
         </div>
       </div>
-      ` : '<div></div>'}
     </div>
+    ` : ''}
 
     </div>
 
