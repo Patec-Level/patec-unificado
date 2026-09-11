@@ -4295,6 +4295,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <span id="cob-status" style="font-size:11.5px;color:var(--tx2)"></span>
           </div>
           <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Status, Verificar, Cobrança, Tipo de Cobrança, Fila</strong> — obrigatórias: RC e Status. As colunas <em>MAPA GUI</em> e <em>Fila GOV</em> são ignoradas. A ordem das colunas não importa: a leitura é pelo nome.</div>
+          <div id="cob-resumo"></div>
         </div>
         <div id="cob-cards" style="margin-bottom:.75rem"></div>
         <div id="cob-subcards" style="display:none;margin-bottom:1rem;padding:.6rem .875rem;background:var(--vmc);border:1px solid var(--vm);border-radius:8px"></div>
@@ -31120,6 +31121,8 @@ var _cobSubFiltro = null;    // nº de cobranças selecionado (só p/ tipos "Cob
 var _cobVerifFiltro = null;  // 'Status B' | 'Nova Reserva' (coluna J - Verificar)
 var _cobTipos = [];
 var _cobFilas = [];
+// resumo do último upload: linhas lidas x itens gravados x duplicatas ignoradas
+var _cobResumo = null;
 
 // Processos marcados na coluna "Verificar" da planilha
 var _COB_VERIF = [
@@ -31235,7 +31238,12 @@ function govCobrancaRender(){
 
   db.collection('cobranca_status').get().then(function(snap){
     _cobDados = [];
-    snap.forEach(function(doc){ _cobDados.push(doc.data()); });
+    _cobResumo = null;
+    snap.forEach(function(doc){
+      // documento de controle do upload — não é um item da carteira
+      if (doc.id === '__resumo__') { _cobResumo = doc.data(); return; }
+      _cobDados.push(doc.data());
+    });
     // a planilha não traz mais Prazo/SLA — ordena pelos mais cobrados
     _cobDados.sort(function(a, b){
       var d = _cobQtd(b) - _cobQtd(a);
@@ -31264,6 +31272,47 @@ function _cobDesenharTotal(){
     + '</div>';
 }
 
+// ── Aviso de conferência do último upload (linhas x itens gravados) ──
+function _cobDesenharResumo(){
+  var el = document.getElementById('cob-resumo');
+  if (!el) return;
+  var r = _cobResumo;
+  if (!r || !r.linhas) { el.innerHTML = ''; return; }
+
+  var perdidas = (r.qtdDuplicadas || 0) + (r.semRc || 0);
+  if (!perdidas) {
+    el.innerHTML = '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">'
+      + '✔ Planilha com <strong>' + r.linhas + '</strong> linha(s) — todas carregadas.</div>';
+    return;
+  }
+
+  var det = '';
+  var d = r.duplicadas || [];
+  if (d.length) {
+    var li = '';
+    for (var i = 0; i < d.length; i++) {
+      li += '<li style="margin:1px 0">RC <strong>' + _cobEsc(d[i].rc) + '</strong>'
+          + (d[i].itemRc ? ' · item ' + _cobEsc(d[i].itemRc) : '')
+          + ' — linha ' + d[i].linha + ' repete a linha ' + d[i].primeira + '</li>';
+    }
+    det = '<details style="margin-top:4px"><summary style="cursor:pointer;font-size:10.5px;font-weight:700;color:#b45309">'
+        + 'ver as ' + (r.qtdDuplicadas || d.length) + ' linha(s) repetida(s)</summary>'
+        + '<ul style="margin:4px 0 0 16px;padding:0;font-size:10.5px;color:var(--tx2)">' + li + '</ul>'
+        + (r.qtdDuplicadas > d.length ? '<div style="font-size:10px;color:var(--tx2);margin-left:16px">…e mais ' + (r.qtdDuplicadas - d.length) + '</div>' : '')
+        + '</details>';
+  }
+
+  el.innerHTML =
+    '<div style="margin-top:8px;padding:7px 10px;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;font-size:10.5px;color:#78350f">'
+    + '⚠ A planilha tinha <strong>' + r.linhas + '</strong> linha(s) e a base ficou com <strong>' + r.gravados + '</strong> item(ns): '
+    + (r.qtdDuplicadas ? '<strong>' + r.qtdDuplicadas + '</strong> linha(s) com o mesmo <em>RC + Item RC</em> de outra linha' : '')
+    + (r.qtdDuplicadas && r.semRc ? ' e ' : '')
+    + (r.semRc ? '<strong>' + r.semRc + '</strong> linha(s) sem RC' : '')
+    + '. O mesmo item não é contado duas vezes.'
+    + det
+    + '</div>';
+}
+
 function _cobDesenhar(){
   var wrap  = document.getElementById('cob-tabela');
   var cards = document.getElementById('cob-cards');
@@ -31274,12 +31323,14 @@ function _cobDesenhar(){
     if (cards) cards.innerHTML = '';
     if (subs)  { subs.innerHTML = ''; subs.style.display = 'none'; }
     _cobDesenharTotal();
+    _cobDesenharResumo();
     wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">'
       + '📄 Nenhuma cobrança registrada ainda.<br><span style="font-size:11px">Use <strong>📤 Subir planilha</strong> acima para carregar os dados.</span></div>';
     return;
   }
 
   _cobDesenharTotal();
+  _cobDesenharResumo();
 
   var i;
 
@@ -31632,14 +31683,25 @@ function govCobrancaUpload(ev){
       };
 
       var registros = [];
+      var vistos = {};       // id -> nº da linha em que apareceu primeiro
+      var duplicadas = [];   // RC/item repetidos na planilha (contados uma vez só)
+      var semRc = 0;
       var i;
       for (i = 0; i < linhas.length; i++) {
         var l = linhas[i];
         var rc = limpo(l[cRc]).replace(/\.0$/, '');
-        if (!rc) continue;
+        if (!rc) { semRc++; continue; }
         var item = cItem ? limpo(l[cItem]).replace(/\.0$/, '') : '';
+        var id = item ? (rc + '_' + item) : rc;
+        // o mesmo RC+item não pode entrar duas vezes: seria o mesmo item contado
+        // em dobro nos cards e no total
+        if (vistos[id]) {
+          duplicadas.push({ id: id, rc: rc, itemRc: item, linha: i + 2, primeira: vistos[id] });
+          continue;
+        }
+        vistos[id] = i + 2;
         registros.push({
-          id: item ? (rc + '_' + item) : rc,
+          id: id,
           rc: rc,
           itemRc: item,
           analista: cAnal ? limpo(l[cAnal]) : '',
@@ -31652,6 +31714,17 @@ function govCobrancaUpload(ev){
         });
       }
       if (!registros.length) throw new Error('Nenhuma RC válida encontrada.');
+
+      var resumo = {
+        id: '__resumo__',
+        linhas: linhas.length,
+        gravados: registros.length,
+        semRc: semRc,
+        duplicadas: duplicadas.slice(0, 60),
+        qtdDuplicadas: duplicadas.length,
+        arquivo: arq.name || '',
+        atualizadoEm: new Date().toISOString()
+      };
 
       _cobMsg('⏳ Substituindo base (' + registros.length + ' itens)...');
 
@@ -31666,12 +31739,15 @@ function govCobrancaUpload(ev){
           lote.set(db.collection('cobranca_status').doc(registros[j].id), registros[j]); n++;
           if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
         }
+        lote.set(db.collection('cobranca_status').doc('__resumo__'), resumo);
         lotes.push(lote);
         var seq = Promise.resolve();
         lotes.forEach(function(b){ seq = seq.then(function(){ return b.commit(); }); });
         return seq;
       }).then(function(){
-        _cobMsg('✅ ' + registros.length + ' itens carregados.', 'var(--vd)');
+        _cobMsg('✅ ' + registros.length + ' itens carregados'
+          + (duplicadas.length ? ' — ' + duplicadas.length + ' linha(s) repetida(s) ignorada(s)' : '')
+          + '.', duplicadas.length ? '#b45309' : 'var(--vd)');
         var av = document.getElementById('cob-atualizado');
         if (av) av.textContent = 'Atualizado em ' + new Date().toLocaleString('pt-BR');
         _cobFilaFiltro = null;
