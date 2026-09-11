@@ -2888,7 +2888,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div class="cd">
           <div class="cd-t">🖥️ Gerador de Slide 2 — FAST · Cobrança por Status</div>
           <div style="font-size:11px;color:var(--tx2);margin:-6px 0 14px">Usa exclusivamente os dados de <strong>Governança › Cobrança por Status</strong> (a planilha subida naquela aba). Nenhuma outra base entra neste slide.</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.25rem">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.25rem">
 
             <div>
               <div style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px">🏷️ Identificação</div>
@@ -2901,15 +2901,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             </div>
 
             <div>
-              <div style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px">🎯 Critério</div>
-              <div style="font-size:11px;color:var(--tx2);margin-bottom:3px">Prazo crítico — listar itens com prazo até (dias)</div>
-              <input type="number" id="apres2F-prazo-critico" value="7" min="1" max="180" style="width:100%;font-size:12px;padding:5px 10px;margin-bottom:8px">
-              <div style="font-size:10px;color:var(--tx2);line-height:1.45">A tabela de prioridade mostra os 10 itens de menor prazo dentro desse limite.</div>
-            </div>
-
-            <div>
               <div style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px">🧩 Blocos do slide</div>
-              <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="apres2F-inc-criticos" checked> Mostrar RCs de prazo curto em cada fila</label>
               <div style="font-size:10px;color:var(--tx2);margin-top:8px;line-height:1.45">Cada fila da coluna <em>Fila</em> ganha seu próprio bloco no slide, com os tipos de cobrança, a reincidência e a situação de prazo dela. Nada é somado entre filas.</div>
             </div>
           </div>
@@ -4302,7 +4294,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             </label>
             <span id="cob-status" style="font-size:11.5px;color:var(--tx2)"></span>
           </div>
-          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Status, Cobrança, Tipo de Cobrança, Prazo, SLA, Verificar, Fila</strong> — obrigatórias: RC e Status. A coluna <em>Fila Gov</em> é ignorada.</div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Status, Verificar, Cobrança, Tipo de Cobrança, Fila</strong> — obrigatórias: RC e Status. As colunas <em>MAPA GUI</em> e <em>Fila GOV</em> são ignoradas. A ordem das colunas não importa: a leitura é pelo nome.</div>
         </div>
         <div id="cob-cards" style="margin-bottom:.75rem"></div>
         <div id="cob-subcards" style="display:none;margin-bottom:1rem;padding:.6rem .875rem;background:var(--vmc);border:1px solid var(--vm);border-radius:8px"></div>
@@ -30726,11 +30718,9 @@ async function admApres2FastGerar(){
   var subtitulo = document.getElementById('apres2F-subtitulo')?.value || 'BPO de Compras · DPV · FAST';
   var dataRef   = document.getElementById('apres2F-data')?.value || new Date().toISOString().split('T')[0];
   var dataFmt   = dataRef.split('-').reverse().join('/');
-  var limPrazo  = parseInt(document.getElementById('apres2F-prazo-critico')?.value) || 7;
   var incTipos  = document.getElementById('apres2F-inc-tipos')?.checked;
   var incReinc  = document.getElementById('apres2F-inc-reincidencia')?.checked;
   var incAnal   = document.getElementById('apres2F-inc-analista')?.checked;
-  var incCrit   = document.getElementById('apres2F-inc-criticos')?.checked;
 
   var esc = function(v){ return String(v==null?'':v)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
@@ -30739,13 +30729,6 @@ async function admApres2FastGerar(){
   var ehCob = function(t){ return (typeof _cobEhTipoCobranca === 'function') ? _cobEhTipoCobranca(t)
               : /^cobran/i.test(String(t||'')); };
   var verifDe = function(r){ return (typeof _cobVerifTipo === 'function') ? _cobVerifTipo(r) : ''; };
-  // vazio/#N/A NAO e zero — sem isso itens sem prazo entrariam como prazo 0
-  var num = function(v){
-    var t = String(v == null ? '' : v).trim();
-    if(t === '' || t === '#N/A' || t === '#N/D') return null;
-    var n = Number(t);
-    return isNaN(n) ? null : n;
-  };
 
   // ── Contagens diretas. As filas (coluna L) particionam a base: somam o total. ──
   var total = base.length;
@@ -31253,10 +31236,11 @@ function govCobrancaRender(){
   db.collection('cobranca_status').get().then(function(snap){
     _cobDados = [];
     snap.forEach(function(doc){ _cobDados.push(doc.data()); });
+    // a planilha não traz mais Prazo/SLA — ordena pelos mais cobrados
     _cobDados.sort(function(a, b){
-      var pa = (a.prazo === '' || a.prazo == null || isNaN(a.prazo)) ? 99999 : Number(a.prazo);
-      var pb = (b.prazo === '' || b.prazo == null || isNaN(b.prazo)) ? 99999 : Number(b.prazo);
-      return pa - pb;
+      var d = _cobQtd(b) - _cobQtd(a);
+      if (d) return d;
+      return String(a.rc || '').localeCompare(String(b.rc || ''));
     });
     _cobDesenhar();
   }).catch(function(err){
@@ -31456,7 +31440,7 @@ function _cobDesenhar(){
 
   var t = '<table><thead><tr>'
     + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Status</th>'
-    + '<th>Cobranças</th><th>Tipo de Cobrança</th><th>Fila</th><th>Prazo</th><th>SLA</th><th>Verificar</th>'
+    + '<th>Cobranças</th><th>Tipo de Cobrança</th><th>Fila</th><th>Verificar</th>'
     + '</tr></thead><tbody>';
 
   for (i = 0; i < lista.length; i++) {
@@ -31466,9 +31450,6 @@ function _cobDesenhar(){
     if (_cobNorm(st).indexOf('atras') !== -1) { corSt = 'var(--vm)'; bgSt = 'var(--vmc)'; }
     else if (_cobNorm(st).indexOf('dentro') !== -1) { corSt = 'var(--vd)'; bgSt = 'var(--vdc)'; }
 
-    var prazo = (r.prazo === '' || r.prazo == null) ? '—' : r.prazo;
-    var corPrazo = (!isNaN(prazo) && Number(prazo) <= 7) ? 'var(--vm)' : 'var(--tx)';
-
     t += '<tr>'
       + '<td>' + _cobEsc(r.analista || '—') + '</td>'
       + '<td style="font-weight:700">' + _cobEsc(r.rc || '—') + '</td>'
@@ -31477,8 +31458,6 @@ function _cobDesenhar(){
       + '<td style="text-align:center;font-weight:700">' + _cobQtd(r) + '</td>'
       + '<td>' + _cobEsc(r.tipoCobranca || '—') + '</td>'
       + '<td>' + _cobEsc(_cobFila(r) || '—') + '</td>'
-      + '<td style="text-align:center;font-weight:700;color:' + corPrazo + '">' + _cobEsc(prazo) + '</td>'
-      + '<td style="text-align:center">' + _cobEsc(r.sla == null || r.sla === '' ? '—' : r.sla) + '</td>'
       + '<td>' + _cobCelulaVerif(r) + '</td>'
       + '</tr>';
   }
@@ -31643,8 +31622,6 @@ function govCobrancaUpload(ev){
       var cItem  = _cobCol(amostra, ['Item RC', 'Item']);
       var cQtd   = _cobCol(amostra, ['Cobranca', 'Cobrança', 'Qtd Cobranca']);
       var cTipo  = _cobCol(amostra, ['Tipo de Cobranca', 'Tipo de Cobrança', 'Tipo']);
-      var cPrazo = _cobCol(amostra, ['Prazo']);
-      var cSla   = _cobCol(amostra, ['SLA']);
       var cVer   = _cobCol(amostra, ['Verificar', 'Verificacao', 'Verificação']);
       // Coluna L = "Fila". A coluna K ("Fila Gov") é ignorada de propósito.
       var cFila  = _cobColFila(amostra);
@@ -31669,8 +31646,6 @@ function govCobrancaUpload(ev){
           status: limpo(l[cStat]),
           cobrancas: cQtd ? limpo(l[cQtd]) : '',
           tipoCobranca: cTipo ? limpo(l[cTipo]) : '',
-          prazo: cPrazo ? limpo(l[cPrazo]) : '',
-          sla: cSla ? limpo(l[cSla]) : '',
           verificar: cVer ? limpo(l[cVer]) : '',
           fila: cFila ? limpo(l[cFila]) : '',
           atualizadoEm: new Date().toISOString()
