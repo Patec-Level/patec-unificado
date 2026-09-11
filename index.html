@@ -31347,7 +31347,8 @@ function _cobDesenhar(){
         + ';color:' + (ativo ? '#fff' : 'var(--tx)')
         + ';border:1.5px solid ' + (ativo ? 'var(--azm)' : 'var(--brd)')
         + (ehCob && !ativo ? ';border-left:3px solid var(--vm)' : '')
-        + ';border-radius:8px;padding:8px 18px;text-align:center;line-height:1.2;min-width:120px;max-width:230px">'
+        + ';border-radius:8px;padding:8px 18px;text-align:center;line-height:1.2;'
+        + 'flex:1 1 0;min-width:130px;max-width:' + _COB_MAXW + '">'
         + '<div style="font-size:19px;font-weight:800">' + cont + '</div>'
         + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(nome) + '</div>'
         + '</div>';
@@ -31355,6 +31356,10 @@ function _cobDesenhar(){
 
     var linha = 'display:flex;gap:12px;flex-wrap:wrap';
     var esq = '';
+
+    // Os cards preenchem a largura disponível (flex:1). O teto por card evita
+    // que uma linha com 2 ou 3 cards vire um bloco gigante e vazio por dentro.
+    var _COB_MAXW = 'none';
 
     if (temFila) {
       // ── 1º NÍVEL: filas (coluna L) ──
@@ -31374,7 +31379,7 @@ function _cobDesenhar(){
           + ';color:' + (on ? '#fff' : 'var(--tx)')
           + ';border:1.5px solid ' + (on ? '#1A2D4F' : 'var(--brd)')
           + ';border-top:3px solid #1A2D4F;border-radius:8px;padding:8px 18px;text-align:center;'
-          + 'line-height:1.2;min-width:130px;max-width:230px">'
+          + 'line-height:1.2;flex:1 1 0;min-width:130px;max-width:' + _COB_MAXW + '">'
           + '<div style="font-size:19px;font-weight:800">' + filas[nf] + '</div>'
           + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(nf) + '</div>'
           + '</div>';
