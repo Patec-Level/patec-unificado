@@ -31032,8 +31032,8 @@ ${CSS}
     ${verifDet.length ? `
     <!-- VERIFICAR -->
     <div>
-      <div class="sec-title">🔎 Verificar — marcação à parte das filas</div>
-      <div style="display:grid;grid-template-columns:repeat(${verifDet.length},1fr) 2fr;gap:11px">
+      <div class="sec-title">🔎 Verificar</div>
+      <div style="display:grid;grid-template-columns:repeat(${verifDet.length},1fr);gap:11px;max-width:640px">
         ${verifDet.map(function(v){
           const cor = v.nome === 'Status B' ? '#2E7D32' : '#6A1E9E';
           const bg  = v.nome === 'Status B' ? '#E8F5E9' : '#F3E9FB';
@@ -31047,9 +31047,6 @@ ${CSS}
                   + '<span>' + esc(f) + '</span><strong>' + v.porFila[f] + '</strong></div>';
               }).join('') + '</div></div>';
         }).join('')}
-        <div style="display:flex;align-items:center;font-size:10px;color:#777;line-height:1.5;padding-left:4px">
-          Marcação da coluna <em>Verificar</em>. Estes itens já estão contados nas filas acima — não somam à carteira.
-        </div>
       </div>
     </div>
     ` : ''}
