@@ -4298,74 +4298,184 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div id="cob-resumo"></div>
         </div>
 
-        <!-- ── BUSCA RC (COBRANÇA POR STATUS) ── -->
-        <div class="cd" style="margin-bottom:1rem;padding:.875rem 1rem">
-          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-            <div style="flex:1;min-width:220px">
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                <span style="font-size:12px;font-weight:600;color:var(--az)">🔍 Buscar RC</span>
-                <input type="text" id="cob-busca-rc" placeholder="Digite o número da RC..." oninput="govBuscarRC(this.value,'cob-busca-resultado')"
-                  style="font-size:12px;padding:5px 10px;flex:1;min-width:160px;max-width:280px">
-                <button class="btn btn-s" style="font-size:11px" onclick="govLimparBusca()">✕ Limpar</button>
-              </div>
+        <!-- ── BUSCA RC + PRODUÇÃO DO DIA (COBRANÇA POR STATUS) ── -->
+<div class="cd" style="margin-bottom:1rem;padding:.875rem 1rem">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+
+          <!-- Coluna esquerda: busca + KPIs -->
+          <div style="flex:1;min-width:220px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:.75rem">
+              <span style="font-size:12px;font-weight:600;color:var(--az)">🔍 Buscar RC</span>
+              <input type="text" id="cob-busca-rc" placeholder="Digite o número da RC..." oninput="govBuscarRC(this.value,'cob-busca-resultado')"
+                style="font-size:12px;padding:5px 10px;flex:1;min-width:160px;max-width:280px">
+              <button class="btn btn-s" style="font-size:11px" onclick="govLimparBusca()">✕ Limpar</button>
+            </div>
+            <!-- Mini KPIs do dia -->
+            <div id="cob-prod-kpis-bar" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <span style="font-size:10px;color:var(--tx2);font-weight:600">Hoje:</span>
+              <span id="cob-kpi-1a" title="1ª Análise" style="font-size:11px;font-weight:700;color:var(--azm);background:var(--azc);padding:2px 10px;border-radius:20px;cursor:default">🔍 0</span>
+              <span id="cob-kpi-trat" title="Em Tratativa" style="font-size:11px;font-weight:700;color:var(--azm);background:var(--azc);padding:2px 10px;border-radius:20px;cursor:default">⚙️ 0</span>
+              <span id="cob-kpi-sb" title="Status B" style="font-size:11px;font-weight:700;color:var(--vd);background:var(--vdc);padding:2px 10px;border-radius:20px;cursor:default">✅ 0</span>
+              <span id="cob-kpi-agp" title="Ag Parecer" style="font-size:11px;font-weight:700;color:#7c3aed;background:#ede9fe;padding:2px 10px;border-radius:20px;cursor:default">📝 0</span>
+              <span id="cob-kpi-outros" title="Outros" style="font-size:11px;font-weight:700;color:var(--am);background:var(--amc);padding:2px 10px;border-radius:20px;cursor:default">📋 0</span>
+              <span id="cob-kpi-total" title="Total do dia / Meta" style="font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;background:var(--cin);color:var(--tx2);cursor:default">Total: 0 / 30</span>
+              <span class="rt-dot" style="margin-left:2px" title="Tempo real"></span>
             </div>
           </div>
-          <div id="cob-busca-resultado" style="display:none;margin-top:.5rem"></div>
+
+          <!-- Velocímetros: individual + equipe -->
+          <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;justify-content:center">
+          <div style="display:flex;flex-direction:column;align-items:center;min-width:150px">
+            <span style="font-size:10px;font-weight:800;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1px">👤 Individual</span>
+            <svg id="cobv-velocimetro" viewBox="0 0 160 105" width="160" height="105" style="overflow:visible">
+              <!-- Segmentos -->
+              <path id="cobv-seg-0" d="M28.0,77.7 A52,52 0 0,0 28.6,70.2 L40.5,72.0 A40,40 0 0,1 40.0,77.8 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-1" d="M28.7,69.6 A52,52 0 0,0 30.4,62.2 L41.9,65.9 A40,40 0 0,1 40.5,71.5 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-2" d="M30.6,61.6 A52,52 0 0,0 33.5,54.7 L44.2,60.1 A40,40 0 0,1 42.0,65.4 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-3" d="M33.8,54.1 A52,52 0 0,0 37.7,47.7 L47.5,54.7 A40,40 0 0,1 44.5,59.6 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-4" d="M38.1,47.2 A52,52 0 0,0 43.0,41.5 L51.5,49.9 A40,40 0 0,1 47.8,54.3 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-5" d="M43.5,41.0 A52,52 0 0,0 49.2,36.1 L56.3,45.8 A40,40 0 0,1 51.9,49.5 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-6" d="M49.7,35.7 A52,52 0 0,0 56.1,31.8 L61.6,42.5 A40,40 0 0,1 56.7,45.5 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-7" d="M56.7,31.5 A52,52 0 0,0 63.6,28.6 L67.4,40.0 A40,40 0 0,1 62.1,42.2 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-8" d="M64.2,28.4 A52,52 0 0,0 71.6,26.7 L73.5,38.5 A40,40 0 0,1 67.9,39.9 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-9" d="M72.2,26.6 A52,52 0 0,0 79.7,26.0 L79.8,38.0 A40,40 0 0,1 74.0,38.5 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-10" d="M80.3,26.0 A52,52 0 0,0 87.8,26.6 L86.0,38.5 A40,40 0 0,1 80.2,38.0 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-11" d="M88.4,26.7 A52,52 0 0,0 95.8,28.4 L92.1,39.9 A40,40 0 0,1 86.5,38.5 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-12" d="M96.4,28.6 A52,52 0 0,0 103.3,31.5 L97.9,42.2 A40,40 0 0,1 92.6,40.0 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-13" d="M103.9,31.8 A52,52 0 0,0 110.3,35.7 L103.3,45.5 A40,40 0 0,1 98.4,42.5 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-14" d="M110.8,36.1 A52,52 0 0,0 116.5,41.0 L108.1,49.5 A40,40 0 0,1 103.7,45.8 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-15" d="M117.0,41.5 A52,52 0 0,0 121.9,47.2 L112.2,54.3 A40,40 0 0,1 108.5,49.9 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-16" d="M122.3,47.7 A52,52 0 0,0 126.2,54.1 L115.5,59.6 A40,40 0 0,1 112.5,54.7 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-17" d="M126.5,54.7 A52,52 0 0,0 129.4,61.6 L118.0,65.4 A40,40 0 0,1 115.8,60.1 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-18" d="M129.6,62.2 A52,52 0 0,0 131.3,69.6 L119.5,71.5 A40,40 0 0,1 118.1,65.9 Z" fill="#E0E5EE"/>
+              <path id="cobv-seg-19" d="M131.4,70.2 A52,52 0 0,0 132.0,77.7 L120.0,77.8 A40,40 0 0,1 119.5,72.0 Z" fill="#E0E5EE"/>
+              <!-- Agulha -->
+              <line id="cobv-vel-agulha" x1="80" y1="78" x2="80" y2="32"
+                stroke="#1A2D4F" stroke-width="2.5" stroke-linecap="round"
+                style="transform-origin:80px 78px;transform:rotate(-90deg);transition:transform .5s cubic-bezier(.4,0,.2,1)"/>
+              <!-- Pivot -->
+              <circle cx="80" cy="78" r="7" fill="#1A2D4F"/>
+              <circle cx="80" cy="78" r="3.5" fill="#fff"/>
+              <!-- Badge -->
+              <rect id="cobv-vel-badge" x="53" y="86" width="54" height="17" rx="5" fill="#1A2D4F"/>
+              <text id="cobv-vel-pct" x="80" y="98" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">0%</text>
+            </svg>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;min-width:150px">
+            <span style="font-size:10px;font-weight:800;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1px">👥 Equipe</span>
+            <svg id="cobeq-velocimetro" viewBox="0 0 160 105" width="160" height="105" style="overflow:visible">
+              <!-- Segmentos -->
+              <path id="cobeq-seg-0" d="M28.0,77.7 A52,52 0 0,0 28.6,70.2 L40.5,72.0 A40,40 0 0,1 40.0,77.8 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-1" d="M28.7,69.6 A52,52 0 0,0 30.4,62.2 L41.9,65.9 A40,40 0 0,1 40.5,71.5 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-2" d="M30.6,61.6 A52,52 0 0,0 33.5,54.7 L44.2,60.1 A40,40 0 0,1 42.0,65.4 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-3" d="M33.8,54.1 A52,52 0 0,0 37.7,47.7 L47.5,54.7 A40,40 0 0,1 44.5,59.6 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-4" d="M38.1,47.2 A52,52 0 0,0 43.0,41.5 L51.5,49.9 A40,40 0 0,1 47.8,54.3 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-5" d="M43.5,41.0 A52,52 0 0,0 49.2,36.1 L56.3,45.8 A40,40 0 0,1 51.9,49.5 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-6" d="M49.7,35.7 A52,52 0 0,0 56.1,31.8 L61.6,42.5 A40,40 0 0,1 56.7,45.5 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-7" d="M56.7,31.5 A52,52 0 0,0 63.6,28.6 L67.4,40.0 A40,40 0 0,1 62.1,42.2 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-8" d="M64.2,28.4 A52,52 0 0,0 71.6,26.7 L73.5,38.5 A40,40 0 0,1 67.9,39.9 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-9" d="M72.2,26.6 A52,52 0 0,0 79.7,26.0 L79.8,38.0 A40,40 0 0,1 74.0,38.5 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-10" d="M80.3,26.0 A52,52 0 0,0 87.8,26.6 L86.0,38.5 A40,40 0 0,1 80.2,38.0 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-11" d="M88.4,26.7 A52,52 0 0,0 95.8,28.4 L92.1,39.9 A40,40 0 0,1 86.5,38.5 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-12" d="M96.4,28.6 A52,52 0 0,0 103.3,31.5 L97.9,42.2 A40,40 0 0,1 92.6,40.0 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-13" d="M103.9,31.8 A52,52 0 0,0 110.3,35.7 L103.3,45.5 A40,40 0 0,1 98.4,42.5 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-14" d="M110.8,36.1 A52,52 0 0,0 116.5,41.0 L108.1,49.5 A40,40 0 0,1 103.7,45.8 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-15" d="M117.0,41.5 A52,52 0 0,0 121.9,47.2 L112.2,54.3 A40,40 0 0,1 108.5,49.9 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-16" d="M122.3,47.7 A52,52 0 0,0 126.2,54.1 L115.5,59.6 A40,40 0 0,1 112.5,54.7 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-17" d="M126.5,54.7 A52,52 0 0,0 129.4,61.6 L118.0,65.4 A40,40 0 0,1 115.8,60.1 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-18" d="M129.6,62.2 A52,52 0 0,0 131.3,69.6 L119.5,71.5 A40,40 0 0,1 118.1,65.9 Z" fill="#E0E5EE"/>
+              <path id="cobeq-seg-19" d="M131.4,70.2 A52,52 0 0,0 132.0,77.7 L120.0,77.8 A40,40 0 0,1 119.5,72.0 Z" fill="#E0E5EE"/>
+              <!-- Agulha -->
+              <line id="cobeq-vel-agulha" x1="80" y1="78" x2="80" y2="32"
+                stroke="#1A2D4F" stroke-width="2.5" stroke-linecap="round"
+                style="transform-origin:80px 78px;transform:rotate(-90deg);transition:transform .5s cubic-bezier(.4,0,.2,1)"/>
+              <!-- Pivot -->
+              <circle cx="80" cy="78" r="7" fill="#1A2D4F"/>
+              <circle cx="80" cy="78" r="3.5" fill="#fff"/>
+              <!-- Badge (com tooltip do absoluto ao passar o mouse) -->
+              <g><title id="cobeq-vel-tip"></title>
+              <rect id="cobeq-vel-badge" x="53" y="86" width="54" height="17" rx="5" fill="#1A2D4F"/>
+              <text id="cobeq-vel-pct" x="80" y="98" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">0%</text>
+              </g>
+            </svg>
+          </div>
+          </div>
+
         </div>
+        <div id="cob-busca-resultado" style="display:none;margin-top:.5rem"></div>
+      </div>
 
-        <!-- ── REGISTRO MANUAL DE ITENS (ITENS NÃO NA GOVERNANÇA) ── -->
+        <!-- ── REGISTRO MANUAL DE ITENS (fora da Governança) → conta na produção ── -->
         <div class="cd" style="margin-bottom:1rem;padding:.875rem 1rem;border-left:3px solid var(--am)">
-          <div style="margin-bottom:.875rem">
-            <div class="cd-t" style="margin:0;font-size:13px;display:flex;align-items:center;gap:8px">
-              <span>📝 Registrar Item Manual</span>
-              <span style="font-size:10px;font-weight:600;background:var(--amc);color:var(--am);padding:2px 8px;border-radius:4px">Itens fora da Governança</span>
+          <div style="margin-bottom:.75rem">
+            <div class="cd-t" style="margin:0;font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span>📝 Registrar item tratado a parte</span>
+              <span style="font-size:10px;font-weight:700;background:var(--amc);color:var(--am);padding:2px 8px;border-radius:4px">Não aparece na Governança</span>
             </div>
-            <div style="font-size:10.5px;color:var(--tx2);margin-top:4px">Registre itens tratados a parte que não aparecem na governança (prazo curto, processo temporário). Esses registros serão contabilizados apenas em Produção Individual/Equipe.</div>
+            <div style="font-size:10.5px;color:var(--tx2);margin-top:4px">Para o item que você tratou e que não está na Governança. O registro entra na <strong>produção individual e da equipe</strong> — chips do dia, velocímetros e Monitoramento em Tempo Real. A Governança não é alterada.</div>
           </div>
 
-          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));gap:12px;margin-bottom:.875rem">
-            <div class="field-wrap">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+            <div class="field-wrap" style="margin:0;min-width:130px;flex:0 1 150px">
               <span class="field-label">RC *</span>
-              <input type="text" id="cob-manual-rc" placeholder="Ex: 36181159" style="width:100%;font-size:12px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:6px" inputmode="numeric">
+              <input type="text" id="cob-manual-rc" placeholder="Ex: 36181159" inputmode="numeric" autocomplete="off"
+                style="width:100%;font-size:12px;padding:6px 10px"
+                oninput="this.value=this.value.replace(/\D/g,'')"
+                onkeydown="if(event.key==='Enter')document.getElementById('cob-manual-item').focus()">
             </div>
-            <div class="field-wrap">
+            <div class="field-wrap" style="margin:0;min-width:85px;flex:0 1 95px">
               <span class="field-label">Item *</span>
-              <input type="text" id="cob-manual-item" placeholder="Ex: 20" style="width:100%;font-size:12px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:6px" inputmode="numeric">
+              <input type="text" id="cob-manual-item" placeholder="Ex: 20" inputmode="numeric" autocomplete="off"
+                style="width:100%;font-size:12px;padding:6px 10px"
+                oninput="this.value=this.value.replace(/\D/g,'')"
+                onkeydown="if(event.key==='Enter')cobManualRegistrar()">
             </div>
-            <div class="field-wrap">
-              <span class="field-label">Status de Tratamento *</span>
-              <select id="cob-manual-status" style="width:100%;font-size:12px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:6px;background:var(--bg);color:var(--tx)">
+            <div class="field-wrap" style="margin:0;min-width:185px;flex:1 1 205px">
+              <span class="field-label">Status de tratamento *</span>
+              <select id="cob-manual-tipo" style="width:100%;font-size:12px;padding:6px 10px;background:var(--bg);color:var(--tx)">
                 <option value="">— Selecione —</option>
-                <option value="1a-analise">🔍 1ª Análise</option>
-                <option value="em-tratativa">⚙️ Em Tratativa</option>
-                <option value="status-b">✅ Status B</option>
-                <option value="ag-parecer">📝 Ag Parecer</option>
-                <option value="novo-fornecedor">🆕 Novo Fornecedor</option>
-                <option value="retorno-esperado">⏳ Retorno Esperado</option>
+                <option value="primeira_analise">🔍 1ª Análise</option>
+                <option value="em_tratativa">⚙️ Em Tratativa</option>
+                <option value="status_b">✅ Status B</option>
+                <option value="ag_parecer">📝 Ag Parecer</option>
+                <option value="outros">📋 Outros</option>
               </select>
             </div>
+            <div class="field-wrap" style="margin:0;min-width:160px;flex:1 1 180px">
+              <span class="field-label">Encaminhado para</span>
+              <select id="cob-manual-trat" style="width:100%;font-size:12px;padding:6px 10px;background:var(--bg);color:var(--tx)">
+                <option value="">— Opcional —</option>
+              </select>
+            </div>
+            <div class="field-wrap" style="margin:0;min-width:150px;flex:1 1 190px">
+              <span class="field-label">Observação</span>
+              <input type="text" id="cob-manual-obs" placeholder="Opcional" autocomplete="off"
+                style="width:100%;font-size:12px;padding:6px 10px"
+                onkeydown="if(event.key==='Enter')cobManualRegistrar()">
+            </div>
             <div style="display:flex;gap:8px;align-items:flex-end">
-              <button class="btn btn-g" style="font-size:11px;font-weight:700;padding:6px 16px" onclick="cobAdicionarItemManual()">➕ Adicionar</button>
-              <button class="btn btn-s" style="font-size:11px" onclick="cobLimparManual()">Limpar</button>
+              <button class="btn btn-g" id="cob-manual-btn" style="font-size:11px;font-weight:700;padding:7px 16px" onclick="cobManualRegistrar()">➕ Registrar na produção</button>
+              <button class="btn btn-s" style="font-size:11px" onclick="cobManualLimparCampos()">Limpar</button>
             </div>
           </div>
 
-          <!-- Tabela de itens registrados manualmente -->
-          <div id="cob-manual-tabela" style="display:none;margin-top:.875rem">
-            <div style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:8px">📋 Itens Registrados Hoje:</div>
-            <div class="tw" style="max-height:300px">
+          <div id="cob-manual-msg" style="font-size:11.5px;font-weight:600;color:var(--tx2);margin-top:8px;min-height:15px"></div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:2px">1ª Análise, Em Tratativa, Status B e Ag Parecer contam para a meta. <em>Outros</em> soma no total mas não na meta do analista — mesma regra dos itens da Governança.</div>
+
+          <!-- Itens manuais registrados hoje -->
+          <div id="cob-manual-tabela" style="display:none;margin-top:.75rem;padding-top:.75rem;border-top:1px dashed var(--brd)">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+              <span style="font-size:11px;font-weight:700;color:var(--tx2)">📋 Registrados hoje por você</span>
+              <span id="cob-manual-resumo" style="font-size:10.5px;color:var(--tx2)"></span>
+            </div>
+            <div class="tw" style="max-height:280px">
               <table style="width:100%;font-size:11px">
                 <thead>
-                  <tr style="background:var(--azc);border-bottom:2px solid var(--azm)">
-                    <th style="padding:8px;text-align:left;font-weight:700;color:var(--azm)">RC</th>
-                    <th style="padding:8px;text-align:left;font-weight:700;color:var(--azm)">Item</th>
-                    <th style="padding:8px;text-align:left;font-weight:700;color:var(--azm)">Status</th>
-                    <th style="padding:8px;text-align:left;font-weight:700;color:var(--azm)">Hora</th>
-                    <th style="padding:8px;text-align:center;font-weight:700;color:var(--azm)">Ação</th>
+                  <tr>
+                    <th>Hora</th><th>RC</th><th>Item</th><th>Status de tratamento</th><th>Encaminhado</th><th style="text-align:center">Anular</th>
                   </tr>
                 </thead>
-                <tbody id="cob-manual-tbody">
-                </tbody>
+                <tbody id="cob-manual-tbody"></tbody>
               </table>
             </div>
           </div>
@@ -17829,7 +17939,7 @@ function govMainTab(aba, btn){
   });
   if(aba==='sla')   { _govUrgGarantirDados().then(govUrgSlaRender); _govUrgPainelSync(); }
   if(aba==='prazo') { _govUrgGarantirDados().then(govUrgPrazoRender); _govUrgPainelSync(); }
-  if(aba==='cobranca') { govCobrancaRender(); }
+  if(aba==='cobranca') { govCobrancaRender(); _govUrgPainelSync(); }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -19222,7 +19332,7 @@ function govBuscarRC(rc, alvo){
   const el = document.getElementById(alvo || 'gov-busca-resultado');
   if(!el) return;
   // Evita IDs duplicados: só um container de resultado ativo por vez entre as abas
-  ['gov-busca-resultado','sla-busca-resultado','prazo-busca-resultado'].forEach(function(_id){ if(_id!==el.id){ var _o=document.getElementById(_id); if(_o){ _o.innerHTML=''; _o.style.display='none'; } } });
+  ['gov-busca-resultado','sla-busca-resultado','prazo-busca-resultado','cob-busca-resultado'].forEach(function(_id){ if(_id!==el.id){ var _o=document.getElementById(_id); if(_o){ _o.innerHTML=''; _o.style.display='none'; } } });
   const rcBusca = rc.trim();
   if(!rcBusca){ el.style.display='none'; el.innerHTML=''; return; }
 
@@ -20464,8 +20574,8 @@ async function fastResetExecutar(){
 }
 
 function govLimparBusca(){
-  ['gov-busca-rc','sla-busca-rc','prazo-busca-rc'].forEach(function(id){ const el=document.getElementById(id); if(el) el.value=''; });
-  ['gov-busca-resultado','sla-busca-resultado','prazo-busca-resultado'].forEach(function(id){ const res=document.getElementById(id); if(res){ res.style.display='none'; res.innerHTML=''; } });
+  ['gov-busca-rc','sla-busca-rc','prazo-busca-rc','cob-busca-rc'].forEach(function(id){ const el=document.getElementById(id); if(el) el.value=''; });
+  ['gov-busca-resultado','sla-busca-resultado','prazo-busca-resultado','cob-busca-resultado'].forEach(function(id){ const res=document.getElementById(id); if(res){ res.style.display='none'; res.innerHTML=''; } });
 }
 
 
@@ -28989,6 +29099,7 @@ function govAtualizarVelocimetroEquipe(total, metaVal){
   _velAtualizarPrefixo('pceq',  total, metaVal);
   _velAtualizarPrefixo('slaeq', total, metaVal);
   _velAtualizarPrefixo('prazoeq', total, metaVal);
+  _velAtualizarPrefixo('cobeq', total, metaVal);
 }
 
 function prodRenderizarPaineis(colab){
@@ -29002,8 +29113,8 @@ function prodRenderizarPaineis(colab){
   const cor = semMeta ? 'var(--azm)' : cnt.meta >= metaVal ? 'var(--vd)' : cnt.meta >= metaVal*.8 ? 'var(--am)' : 'var(--vm)';
   const totalLabel = semMeta ? `Líder: ${cnt.meta} itens` : `Total: ${cnt.meta} / ${metaVal}`;
 
-  // Atualizar badges compactos em Gov e PC
-  ['gov','pc','sla','prazo'].forEach(origem => {
+  // Atualizar badges compactos em Gov, PC, SLA, Prazo e Cobrança por Status
+  ['gov','pc','sla','prazo','cob'].forEach(origem => {
     const s = id => document.getElementById(`${origem}-kpi-${id}`);
     if(s('1a'))     s('1a').textContent     = `🔍 ${cnt.primeira_analise}`;
     if(s('trat'))   s('trat').textContent   = `⚙️ ${cnt.em_tratativa}`;
@@ -29024,6 +29135,7 @@ function prodRenderizarPaineis(colab){
   pcAtualizarVelocimetro(_velTotal, _velMeta);
   _velAtualizarPrefixo('slav', _velTotal, _velMeta);
   _velAtualizarPrefixo('prazov', _velTotal, _velMeta);
+  _velAtualizarPrefixo('cobv', _velTotal, _velMeta);
 
   // Renderizar gráfico (gov)
   prodRenderGrafico('gov-prod-chart', '_prodChartGov', colab);
@@ -31198,16 +31310,9 @@ var _cobFilas = [];
 // resumo do último upload: linhas lidas x itens gravados x duplicatas ignoradas
 var _cobResumo = null;
 
-// Itens registrados manualmente (não aparecem na governança)
-var _cobManualItems = [];
-
-// Inicializar itens manuais do localStorage
-try {
-  var savedManual = localStorage.getItem('cobManualItems_' + new Date().toISOString().split('T')[0]);
-  if (savedManual) {
-    _cobManualItems = JSON.parse(savedManual);
-  }
-} catch (e) {}
+// Ações manuais de hoje (itens fora da Governança) — vindas de producao_acoes
+var _cobManualHoje = [];
+var _COB_MANUAL_ORIGEM = 'cobranca_manual';
 
 // Processos marcados na coluna "Verificar" da planilha
 var _COB_VERIF = [
@@ -31312,6 +31417,12 @@ function _cobMsg(txt, cor){
 // ── Carregar do Firebase ──
 function govCobrancaRender(){
   if (!_cobEhFast()) return;
+  // itens manuais do dia + produção do colaborador (chips e velocímetros da aba)
+  try{ cobManualCarregar(); }catch(e){}
+  try{
+    var _cCol = _cobManualColab();
+    if (_cCol && typeof prodRenderizarPaineis === 'function') prodRenderizarPaineis(_cCol);
+  }catch(e){}
   var wrap = document.getElementById('cob-tabela');
   if (!wrap) return;
   var db = (typeof getDB === 'function') ? getDB() : null;
@@ -31614,8 +31725,6 @@ function _cobDesenhar(){
   wrap.innerHTML = '<div class="tw" style="max-height:560px">' + t + '</div>'
     + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">' + legenda + '</div>';
 
-  // Atualizar tabela de itens manuais registrados hoje
-  cobAtualizarTabelaManual();
 }
 
 // ── Sub-cards: quebra por nº de cobranças (só p/ tipos "Cobrança *") ──
@@ -31863,118 +31972,228 @@ function govCobrancaUpload(ev){
 }
 
 // ═════════════════════════════════════════════════════════════════
-// REGISTRO MANUAL DE ITENS (NÃO APARECEM NA GOVERNANÇA)
+// REGISTRO MANUAL DE ITENS (fora da Governança)
+// Grava em producao_acoes — a MESMA base dos itens da Governança. Com isso
+// o item entra automaticamente nos chips do dia, no velocímetro individual,
+// no velocímetro da equipe e no Monitoramento em Tempo Real, sem contagem
+// paralela. A Governança (status da RC, envio, finalizado) não é tocada.
 // ═════════════════════════════════════════════════════════════════
 
-var _cobManualItems = []; // Armazena itens registrados manualmente durante a sessão
+var _COB_MANUAL_META = ['primeira_analise','em_tratativa','status_b','ag_parecer'];
 
-function cobAdicionarItemManual(){
-  var rcInput = document.getElementById('cob-manual-rc');
-  var itemInput = document.getElementById('cob-manual-item');
-  var statusSelect = document.getElementById('cob-manual-status');
+function _cobManualColab(){
+  try{ if (window._authPerfil && window._authPerfil.colabNome) return window._authPerfil.colabNome; }catch(e){}
+  try{ if (typeof _authPerfil !== 'undefined' && _authPerfil && _authPerfil.colabNome) return _authPerfil.colabNome; }catch(e){}
+  try{ if (typeof colabLogado !== 'undefined' && colabLogado) return colabLogado; }catch(e){}
+  return '';
+}
 
-  var rc = (rcInput?.value || '').trim();
-  var item = (itemInput?.value || '').trim();
-  var status = (statusSelect?.value || '').trim();
+function _cobManualHojeStr(){
+  if (typeof _fdiaHojeLocal === 'function') return _fdiaHojeLocal();
+  var n = new Date();
+  return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+}
 
-  // Validação
-  if (!rc) { alert('⚠️ Preencha o número da RC'); rcInput?.focus(); return; }
-  if (!item) { alert('⚠️ Preencha o Item'); itemInput?.focus(); return; }
-  if (!status) { alert('⚠️ Selecione o Status de Tratamento'); statusSelect?.focus(); return; }
+function _cobManualMsg(txt, cor){
+  var el = document.getElementById('cob-manual-msg');
+  if (!el) return;
+  el.textContent = txt || '';
+  el.style.color = cor || 'var(--tx2)';
+}
 
-  // Validar se RC e Item são números
-  if (!/^\d+$/.test(rc)) { alert('⚠️ RC deve conter apenas números'); rcInput?.focus(); return; }
-  if (!/^\d+$/.test(item)) { alert('⚠️ Item deve conter apenas números'); itemInput?.focus(); return; }
+// Rótulo do tipo de produção, tolerante a ordem de carga do script
+function _cobManualLabel(tipo){
+  try{
+    if (typeof PROD_TIPO_LABELS !== 'undefined' && PROD_TIPO_LABELS[tipo]) return PROD_TIPO_LABELS[tipo];
+  }catch(e){}
+  var fb = {
+    primeira_analise:{emoji:'🔍',label:'1ª Análise'}, em_tratativa:{emoji:'⚙️',label:'Em Tratativa'},
+    status_b:{emoji:'✅',label:'Status B'}, ag_parecer:{emoji:'📝',label:'Ag Parecer'},
+    outros:{emoji:'📋',label:'Outros'}
+  };
+  return fb[tipo] || { emoji:'•', label: tipo || '?' };
+}
 
-  var id = rc + '_' + item;
-  var agora = new Date();
-  var horaStr = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+// O "Encaminhado para" acompanha as opções de status da Governança do módulo
+function _cobManualInitSelects(){
+  var sel = document.getElementById('cob-manual-trat');
+  if (!sel) return;
+  var atual = sel.value;
+  var ops = [];
+  try{ if (typeof GOV_STATUS_OPCOES !== 'undefined' && GOV_STATUS_OPCOES) ops = GOV_STATUS_OPCOES; }catch(e){}
+  var html = '<option value="">— Opcional —</option>';
+  for (var i = 0; i < ops.length; i++) html += '<option value="' + _cobEsc(ops[i]) + '">' + _cobEsc(ops[i]) + '</option>';
+  sel.innerHTML = html;
+  if (atual) sel.value = atual;
+}
 
-  // Verificar duplicata na sessão
-  if (_cobManualItems.some(function(r){ return r.id === id; })) {
-    alert('⚠️ Este RC+Item já foi registrado hoje');
+function cobManualLimparCampos(){
+  ['cob-manual-rc','cob-manual-item','cob-manual-obs'].forEach(function(id){
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
+  var t = document.getElementById('cob-manual-tipo'); if (t) t.value = '';
+  var e = document.getElementById('cob-manual-trat'); if (e) e.value = '';
+  _cobManualMsg('');
+  var rc = document.getElementById('cob-manual-rc'); if (rc) rc.focus();
+}
+
+async function cobManualRegistrar(){
+  var elRc   = document.getElementById('cob-manual-rc');
+  var elItem = document.getElementById('cob-manual-item');
+  var elTipo = document.getElementById('cob-manual-tipo');
+  var elTrat = document.getElementById('cob-manual-trat');
+  var elObs  = document.getElementById('cob-manual-obs');
+  var btn    = document.getElementById('cob-manual-btn');
+
+  var rc   = ((elRc   && elRc.value)   || '').replace(/\D/g,'');
+  var item = ((elItem && elItem.value) || '').replace(/\D/g,'');
+  var tipo = ((elTipo && elTipo.value) || '').trim();
+  var trat = ((elTrat && elTrat.value) || '').trim();
+  var obs  = ((elObs  && elObs.value)  || '').trim();
+
+  if (!rc)   { _cobManualMsg('Informe o número da RC.', 'var(--vm)'); if(elRc) elRc.focus(); return; }
+  if (!item) { _cobManualMsg('Informe o item da RC.', 'var(--vm)'); if(elItem) elItem.focus(); return; }
+  if (!tipo) { _cobManualMsg('Escolha o status de tratamento — é ele que conta na produção.', 'var(--vm)'); if(elTipo) elTipo.focus(); return; }
+
+  var colab = _cobManualColab();
+  if (!colab){
+    _cobManualMsg('Não consegui identificar o colaborador logado — entre de novo para o item contar na produção.', 'var(--vm)');
+    return;
+  }
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!db){ _cobManualMsg('Firebase indisponível — não deu para registrar agora.', 'var(--vm)'); return; }
+
+  // o mesmo RC+item não pode contar duas vezes no dia
+  var repetido = _cobManualHoje.some(function(a){
+    return !a.anulada && String(a.rc) === rc && String(a.itemRc) === item;
+  });
+  if (repetido){
+    _cobManualMsg('RC ' + rc + ' item ' + item + ' já foi registrada hoje — não conta em dobro.', 'var(--am)');
     return;
   }
 
-  // Adicionar ao array
-  _cobManualItems.push({
-    id: id,
+  var registro = {
+    colab: colab,
+    data: _cobManualHojeStr(),
+    tipo: tipo,
+    tratamento: trat,
+    conclusao: '',
+    obs: obs,
+    origem: _COB_MANUAL_ORIGEM,
+    ts: new Date().toISOString(),
     rc: rc,
-    item: item,
-    status: status,
-    hora: horaStr,
-    timestamp: agora.getTime(),
-    adicionadoEm: agora.toISOString()
-  });
+    itemRc: item,
+    manual: true
+  };
 
-  // Limpar inputs
-  rcInput.value = '';
-  itemInput.value = '';
-  statusSelect.value = '';
-  rcInput.focus();
-
-  // Atualizar tabela
-  cobAtualizarTabelaManual();
-
-  // Salvar no localStorage (por dia)
-  try {
-    var hoje = new Date().toISOString().split('T')[0];
-    localStorage.setItem('cobManualItems_' + hoje, JSON.stringify(_cobManualItems));
-  } catch (e) {}
-
-  // Feedback visual
-  alert('✅ Item registrado com sucesso!');
+  if (btn) btn.disabled = true;
+  _cobManualMsg('⏳ Registrando...');
+  try{
+    await db.collection('producao_acoes').add(registro);
+    if (elRc)   elRc.value = '';
+    if (elItem) elItem.value = '';
+    if (elObs)  elObs.value = '';
+    if (elRc)   elRc.focus();
+    var cfg = _cobManualLabel(tipo);
+    var contaMeta = _COB_MANUAL_META.indexOf(tipo) !== -1;
+    _cobManualMsg('✅ RC ' + rc + ' item ' + item + ' registrada como ' + cfg.label
+      + (contaMeta ? ' — entrou na sua produção e na da equipe.' : ' — entrou no total (não conta na meta).'),
+      'var(--vd)');
+    await _cobManualSincronizarProducao(colab);
+  }catch(err){
+    _cobManualMsg('❌ Erro ao registrar: ' + (err.message || err), 'var(--vm)');
+  }finally{
+    if (btn) btn.disabled = false;
+  }
 }
 
-function cobLimparManual(){
-  document.getElementById('cob-manual-rc').value = '';
-  document.getElementById('cob-manual-item').value = '';
-  document.getElementById('cob-manual-status').value = '';
-  document.getElementById('cob-manual-rc').focus();
+// Recarrega a produção do dia e repinta chips + velocímetros.
+// O velocímetro da EQUIPE vem do listener de producao_acoes (tempo real),
+// que dispara sozinho no add/update — aqui só garantimos o individual na hora.
+async function _cobManualSincronizarProducao(colab){
+  try{
+    if (typeof prodCarregarHoje === 'function') await prodCarregarHoje(colab);
+    if (typeof prodRenderizarPaineis === 'function') prodRenderizarPaineis(colab);
+  }catch(e){ console.warn('cobManual produção:', e); }
+  try{ await cobManualCarregar(); }catch(e){}
 }
 
-function cobAtualizarTabelaManual(){
-  var tbody = document.getElementById('cob-manual-tbody');
+async function cobManualCarregar(){
+  _cobManualInitSelects();
   var tabela = document.getElementById('cob-manual-tabela');
+  var tbody  = document.getElementById('cob-manual-tbody');
+  if (!tbody) return;
 
-  if (!_cobManualItems.length) {
+  var colab = _cobManualColab();
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!colab || !db){ if (tabela) tabela.style.display = 'none'; return; }
+
+  try{
+    var snap = await db.collection('producao_acoes')
+      .where('colab','==',colab)
+      .where('data','==',_cobManualHojeStr())
+      .get();
+    _cobManualHoje = snap.docs
+      .map(function(d){ var o = d.data(); o._docId = d.id; return o; })
+      .filter(function(a){ return a.origem === _COB_MANUAL_ORIGEM; })
+      .sort(function(a,b){ return String(b.ts||'').localeCompare(String(a.ts||'')); });
+  }catch(e){
+    console.warn('cobManualCarregar:', e);
     if (tabela) tabela.style.display = 'none';
     return;
   }
+  _cobManualDesenhar();
+}
 
-  // Mostrar tabela
-  if (tabela) tabela.style.display = '';
+function _cobManualDesenhar(){
+  var tabela = document.getElementById('cob-manual-tabela');
+  var tbody  = document.getElementById('cob-manual-tbody');
+  var resumo = document.getElementById('cob-manual-resumo');
   if (!tbody) return;
 
-  var statusLabels = {
-    '1a-analise': '🔍 1ª Análise',
-    'em-tratativa': '⚙️ Em Tratativa',
-    'status-b': '✅ Status B',
-    'ag-parecer': '📝 Ag Parecer',
-    'novo-fornecedor': '🆕 Novo Fornecedor',
-    'retorno-esperado': '⏳ Retorno Esperado'
-  };
+  if (!_cobManualHoje.length){ if (tabela) tabela.style.display = 'none'; return; }
+  if (tabela) tabela.style.display = '';
 
-  tbody.innerHTML = _cobManualItems.map(function(item, idx){
-    return '<tr style="border-bottom:1px solid var(--brd)">' +
-      '<td style="padding:8px">' + item.rc + '</td>' +
-      '<td style="padding:8px">' + item.item + '</td>' +
-      '<td style="padding:8px"><span style="background:var(--azc);color:var(--azm);padding:2px 8px;border-radius:4px;font-weight:600;font-size:10px">' + (statusLabels[item.status] || item.status) + '</span></td>' +
-      '<td style="padding:8px;color:var(--tx2);font-size:10px">' + item.hora + '</td>' +
-      '<td style="padding:8px;text-align:center"><button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="cobRemoverItemManual(' + idx + ')">🗑️</button></td>' +
-      '</tr>';
+  var ativas = _cobManualHoje.filter(function(a){ return !a.anulada; });
+  var naMeta = ativas.filter(function(a){ return _COB_MANUAL_META.indexOf(a.tipo) !== -1; }).length;
+  if (resumo){
+    resumo.textContent = ativas.length + ' item(ns) — ' + naMeta + ' contando na meta'
+      + (ativas.length - naMeta ? ', ' + (ativas.length - naMeta) + ' só no total' : '') + '.';
+  }
+
+  tbody.innerHTML = _cobManualHoje.map(function(a){
+    var cfg = _cobManualLabel(a.tipo);
+    var hr  = a.ts ? new Date(a.ts).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }) : '—';
+    return '<tr style="' + (a.anulada ? 'opacity:.45' : '') + '">'
+      + '<td style="color:var(--tx2)">' + hr + '</td>'
+      + '<td style="font-weight:700">' + _cobEsc(a.rc || '—') + '</td>'
+      + '<td>' + _cobEsc(a.itemRc || '—') + '</td>'
+      + '<td><span style="background:var(--azc);color:var(--azm);padding:2px 8px;border-radius:10px;font-weight:700;font-size:10px">'
+        + cfg.emoji + ' ' + _cobEsc(cfg.label) + '</span></td>'
+      + '<td style="color:var(--tx2)">' + _cobEsc(a.tratamento || '—') + '</td>'
+      + '<td style="text-align:center">'
+      + (a.anulada
+          ? '<span style="font-size:10px;color:var(--tx2);font-style:italic">anulada</span>'
+          : '<button title="Anular — desconta da produção" onclick="cobManualAnular(\'' + a._docId + '\')"'
+            + ' style="background:var(--vmc);border:1px solid var(--vm);border-radius:5px;padding:2px 8px;'
+            + 'cursor:pointer;font-size:10px;color:var(--vm);font-weight:700">🗑</button>')
+      + '</td></tr>';
   }).join('');
 }
 
-function cobRemoverItemManual(idx){
-  if (confirm('Deseja remover este registro?')) {
-    _cobManualItems.splice(idx, 1);
-    cobAtualizarTabelaManual();
-    // Salvar no localStorage
-    try {
-      var hoje = new Date().toISOString().split('T')[0];
-      localStorage.setItem('cobManualItems_' + hoje, JSON.stringify(_cobManualItems));
-    } catch (e) {}
+async function cobManualAnular(docId){
+  if (!docId) return;
+  if (!confirm('Anular este item da produção?\n\nEle deixa de contar na produção individual e na da equipe. A Governança não é afetada.')) return;
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!db) return;
+  try{
+    await db.collection('producao_acoes').doc(docId).update({
+      anulada: true, anuladaEm: new Date().toISOString(), anuladaPor: 'colab'
+    });
+    _cobManualMsg('Item anulado — produção atualizada.', 'var(--tx2)');
+    await _cobManualSincronizarProducao(_cobManualColab());
+  }catch(err){
+    _cobManualMsg('❌ Erro ao anular: ' + (err.message || err), 'var(--vm)');
   }
 }
 
