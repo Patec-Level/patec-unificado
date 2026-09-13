@@ -6010,7 +6010,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <thead><tr>
                 <th>Data</th><th>Presença</th>
                 <th>1ª Anál.</th><th>Em Trat.</th><th>Status B</th><th>Ag Par.</th><th>Outros</th>
-                <th>Forn.</th><th>Req.</th><th>MDG</th><th>Val.Thiago</th><th>Parecerista</th><th>XGL</th><th>Rep.</th><th>Pedidos</th><th>Dev.</th><th>Nova Res.</th>
+                <th>Forn.</th><th>Req.</th><th>MDG</th><th>MDG SCOMP</th><th>Val.Thiago</th><th>Parecerista</th><th>XGL</th><th>Rep.</th><th>Pedidos</th><th>Dev.</th><th>Nova Res.</th>
                 <th>Total</th><th>%</th><th>Status</th>
               </tr></thead>
               <tbody id="fdia-hist-tbody"></tbody>
@@ -8081,12 +8081,13 @@ function renderEstPCP(){
   if(regsEstDia.length===0 && _acoesDia.length){
     const cnt=(pred)=>_acoesDia.filter(a=>!a.anulada&&pred(a)).length;
     const comp=(nome)=>_acoesDia.filter(a=>!a.anulada&&(a.tratamento===nome||a.conclusao===nome)).length;
-    const _f=Array(16).fill(0);
+    const _f=Array(17).fill(0);
     _f[0]=cnt(a=>a.tipo==='primeira_analise'); _f[1]=cnt(a=>a.tipo==='em_tratativa');
     _f[2]=cnt(a=>a.tipo==='status_b'); _f[12]=cnt(a=>a.tipo==='ag_parecer'); _f[11]=cnt(a=>a.tipo==='outros');
     _f[3]=comp('Fornecedor'); _f[4]=comp('Requisitante'); _f[5]=comp('MDG');
     _f[6]=comp('Val. Thiago')+comp('Thiago'); _f[7]=comp('XGL');
     _f[8]=comp('Republicação'); _f[9]=comp('Pedido'); _f[10]=comp('Devolução'); _f[14]=comp('Nova Reserva'); _f[15]=cnt(a=>a.tipo==='nova_reserva');
+    _f[13]=comp('Parecerista'); _f[16]=comp('MDG Equipe SCOMP');
     regsEstDia = [{colab:'(ações)', data:dt, pres:'', f:_f}];
   }
   const somaF = (idx) => regsEstDia.reduce((s,r)=>s+(r.f[idx]||0),0);
@@ -10519,7 +10520,8 @@ function _sincronizarRegistrosComAcoes(){
                   comp('Fornecedor'), comp('Requisitante'), comp('MDG'),
                   comp('Val. Thiago')+comp('Thiago'), comp('XGL'),
                   comp('Republicação'), comp('Pedido'), comp('Devolução'),
-                  cnt('outros'), cnt('ag_parecer'), 0, comp('Nova Reserva'), cnt('nova_reserva') ];
+                  cnt('outros'), cnt('ag_parecer'), comp('Parecerista'), comp('Nova Reserva'), cnt('nova_reserva'),
+                  comp('MDG Equipe SCOMP') ];
         if(f.some(function(v){return v>0;})){
           registros.push({colab:colab, data:dt, pres:'', f:f, justif:'', _daAcoes:true});
           existentes.add(key); add++;
@@ -11534,19 +11536,24 @@ async function expRelatorioFechamentos(){
       .where('data','>=',de).where('data','<=',ate)
       .orderBy('data','desc').get();
 
-    const rows = [['Data','Colaborador','Presença','1ª Análise','Em Tratativa','Status B','Outros','Fornecedor','Requisitante','MDG','Val.Thiago','XGL','Republicação','Pedido','Devolução','Nova Reserva','Total','Meta','%','Motivo','Observação','Horário Fechamento']];
+    const rows = [['Data','Colaborador','Presença','1ª Análise','Em Tratativa','Status B','Ag Parecer','Outros','Fornecedor','Requisitante','MDG','MDG Equipe SCOMP','Val.Thiago','Parecerista','XGL','Republicação','Pedido','Devolução','Nova Reserva','Total','Meta','%','Motivo','Observação','Horário Fechamento']];
     snap.forEach(d=>{
       const r=d.data();
-      const tot=(r.primeira_analise||0)+(r.em_tratativa||0)+(r.status_b||0)+(r.outros||0);
+      // o fechamento grava em r.breakdown / r.composicao; o fallback no nível
+      // raiz mantém a leitura dos registros antigos
+      const b = r.breakdown || {}, c = r.composicao || {};
+      const bv = k => b[k] ?? r[k] ?? 0;
+      const cv = k => c[k] ?? r[k] ?? 0;
+      const tot = r.total ?? (bv('primeira_analise')+bv('em_tratativa')+bv('status_b')+bv('ag_parecer'));
       const meta=r.meta||30;
       const ts = r.ts ? new Date(r.ts).toLocaleString('pt-BR') : '';
       rows.push([
         r.data?.split('-').reverse().join('/')||'', r.colab||'', r.presenca||'',
-        r.primeira_analise||0, r.em_tratativa||0, r.status_b||0, r.outros||0,
-        r.forn||0, r.req||0, r.mdg||0, r.thiago||0, r.xgl||0,
-        r.republicacao||0, r.pedido||0, r.devolucao||0, r.nova_reserva||0,
-        tot, meta, Math.round(tot/meta*100)+'%',
-        r.motivo||'', r.obs||'', ts
+        bv('primeira_analise'), bv('em_tratativa'), bv('status_b'), bv('ag_parecer'), bv('outros'),
+        cv('forn'), cv('req'), cv('mdg'), cv('mdgScomp'), cv('thiago'), cv('parecerista'), cv('xgl'),
+        cv('republicacao'), cv('pedido'), cv('devolucao'), cv('nova_reserva'),
+        tot, meta, (meta>0 ? Math.round(tot/meta*100) : 0)+'%',
+        r.motivo||'', r.obs||r.detalhe||'', ts
       ]);
     });
 
@@ -29479,6 +29486,8 @@ async function fdiaInicializar(){
   if(mo) mo.textContent = regHoje?.pres || '—';
 
   // Contar composição (conclusões dos itens tratados)
+  // Atenção: comparação exata. "MDG" e "MDG Equipe SCOMP" são destinos
+  // diferentes — sem a linha do SCOMP os itens sumiam da composição.
   const cntComp = {
     pedido:      acoes.filter(a=>a.conclusao==='Pedido'||a.tratamento==='Pedido').length,
     republicacao:acoes.filter(a=>a.conclusao==='Republicação'||a.tratamento==='Republicação').length,
@@ -29486,6 +29495,10 @@ async function fdiaInicializar(){
     thiago:      acoes.filter(a=>a.conclusao==='Validação Thiago'||a.tratamento==='Validação Thiago'||a.conclusao==='VALIDAÇÃO DO THIAGO').length,
     devolucao:   acoes.filter(a=>a.conclusao==='Devolução'||a.tratamento==='Devolução').length,
     mdg:         acoes.filter(a=>a.conclusao==='MDG'||a.tratamento==='MDG').length,
+    mdgScomp:    acoes.filter(a=>a.conclusao==='MDG Equipe SCOMP'||a.tratamento==='MDG Equipe SCOMP'||a.conclusao==='MDG EQUIPE SCOMP'||a.tratamento==='MDG EQUIPE SCOMP').length,
+    parecerista: acoes.filter(a=>a.conclusao==='Parecerista'||a.tratamento==='Parecerista'||a.conclusao==='PARECERISTA'||a.tratamento==='PARECERISTA').length,
+    nova_reserva:acoes.filter(a=>a.conclusao==='Nova Reserva'||a.tratamento==='Nova Reserva').length,
+    nova_reserva_acao: acoes.filter(a=>a.tipo==='nova_reserva').length,
     forn:        acoes.filter(a=>a.conclusao==='Fornecedor'||a.tratamento==='Fornecedor'||a.conclusao==='FORNECEDOR').length,
     req:         acoes.filter(a=>a.conclusao==='Requisitante'||a.tratamento==='Requisitante'||a.conclusao==='REQUISITANTE').length,
   };
@@ -29525,10 +29538,13 @@ async function fdiaInicializar(){
       <span style="font-size:15px;font-weight:700;color:var(--az);background:var(--cin);
         min-width:36px;text-align:center;border-radius:6px;padding:2px 6px">${val}</span>
      </div>`;
+  // MDG Equipe SCOMP é destino exclusivo do FAST — no ADLV só aparece se houver item
+  const _mostraScomp = ((typeof _moduloAtivo !== 'undefined') && _moduloAtivo === 'fast') || cntComp.mdgScomp > 0;
   if(compEl) compEl.innerHTML =
     compRow(cntComp.forn,        'Fornecedor') +
     compRow(cntComp.req,         'Requisitante') +
     compRow(cntComp.mdg,         'MDG') +
+    (_mostraScomp ? compRow(cntComp.mdgScomp, 'MDG Equipe SCOMP') : '') +
     compRow(cntComp.thiago,      'Validação Thiago') +
     compRow(cntComp.parecerista||0, 'Parecerista') +
     compRow(cntComp.xgl,         'XGL') +
@@ -29629,6 +29645,7 @@ async function fdiaInicializar(){
             c.parecerista||r.parecerista||0,             // f[13]
             c.nova_reserva||r.nova_reserva||0,           // f[14]
             c.nova_reserva_acao||r.nova_reserva_acao||0, // f[15]
+            c.mdgScomp||r.mdgScomp||0,                   // f[16] — MDG Equipe SCOMP
           ];
           mapH[r.data] = { data:r.data, pres:r.presenca||'—', f, total:r.total||0, _origem:'fechamento_dia' };
         });
@@ -29644,8 +29661,11 @@ async function fdiaInicializar(){
       } else {
         const _semMetaH = (typeof COLABS_SEM_META_RT !== 'undefined') && COLABS_SEM_META_RT.includes(colab);
         tbHist.innerHTML = histRegs.map(r=>{
-          const f = [...(r.f||[])]; while(f.length<14) f.push(0);
-          const tot = _semMetaH ? f.reduce((s,v)=>s+v,0) : (f[0]||0)+(f[1]||0)+(f[2]||0)+(f[12]||0);
+          const f = [...(r.f||[])]; while(f.length<17) f.push(0);
+          // slice(0,16): o total do líder soma as posições históricas. A nova
+          // f[16] (MDG SCOMP) fica fora do somatório para não mudar números já
+          // fechados — ela é destino, não tipo de produção.
+          const tot = _semMetaH ? f.slice(0,16).reduce((s,v)=>s+v,0) : (f[0]||0)+(f[1]||0)+(f[2]||0)+(f[12]||0);
           const pctH = metaVal>0 ? Math.round(tot/metaVal*100) : 0;
           const corPct = pctH>=100?'var(--vd)':pctH>=80?'var(--am)':'var(--vm)';
           let metaPill;
@@ -29669,6 +29689,7 @@ async function fdiaInicializar(){
             <td style="text-align:center">${f[3]||'—'}</td>
             <td style="text-align:center">${f[4]||'—'}</td>
             <td style="text-align:center">${f[5]||'—'}</td>
+            <td style="text-align:center">${f[16]||'—'}</td>
             <td style="text-align:center">${f[6]||'—'}</td>
             <td style="text-align:center;color:#7c3aed">${f[13]||'—'}</td>
             <td style="text-align:center">${f[7]||'—'}</td>
@@ -29871,7 +29892,8 @@ async function fdiaSalvar(){
     cnt.ag_parecer,        // pf12 — Ag Parecer
     cntComp.parecerista,   // pf13 — Parecerista
     cntComp.nova_reserva,  // pf14 — Nova Reserva
-    cntComp.nova_reserva_acao // pf15 — ação Nova Reserva (produção)
+    cntComp.nova_reserva_acao, // pf15 — ação Nova Reserva (produção)
+    cntComp.mdgScomp       // pf16 — MDG Equipe SCOMP (FAST)
   ];
   const regProd = {
     colab, data: hoje, pres: _fdiaPresenca,
