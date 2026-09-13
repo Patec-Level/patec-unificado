@@ -19957,6 +19957,7 @@ function estRenderDevolucoes(){
     'PATEC cancelado',
     'Falta de retorno fornecedor',
     'Falta de retorno cadastro (Thiago)',
+    'Falta de retorno parecerista',
     'Preço excessivo',
     'Proposta vencida',
   ];
@@ -19997,14 +19998,14 @@ function estRenderDevolucoes(){
 
   document.getElementById('est-dev-total-label').textContent = `${totalDevs} devolução${totalDevs!==1?'s':''} registrada${totalDevs!==1?'s':''}`;
 
-  const cores = ['#D94040','#C07A12','#1A4A8A','#0E9E6A','#7C3AED','#EA580C','#0891B2','#B45309','#6B21A8'];
+  const cores = ['#D94040','#C07A12','#1A4A8A','#0E9E6A','#7C3AED','#EA580C','#0891B2','#B45309','#6B21A8','#BE185D','#15803D','#4338CA'];
   const cardsEl = document.getElementById('est-dev-cards');
   cardsEl.innerHTML = MOTIVOS.map((m,i)=>{
     const cnt = contMotivo[m]||0;
     const pct = totalDevs>0 ? Math.round(cnt/totalDevs*100) : 0;
-    return `<div style="background:var(--cin);border-radius:8px;padding:.75rem;border:1px solid var(--brd);border-left:3px solid ${cores[i]}">
+    return `<div style="background:var(--cin);border-radius:8px;padding:.75rem;border:1px solid var(--brd);border-left:3px solid ${cores[i%cores.length]}">
       <div style="font-size:10px;color:var(--tx2);margin-bottom:3px;line-height:1.3">${m}</div>
-      <div style="font-size:22px;font-weight:700;color:${cnt>0?cores[i]:'var(--tx2)'}">${cnt}</div>
+      <div style="font-size:22px;font-weight:700;color:${cnt>0?cores[i%cores.length]:'var(--tx2)'}">${cnt}</div>
       <div style="font-size:10px;color:var(--tx2)">${pct}% do total</div>
     </div>`;
   }).join('');
@@ -20067,6 +20068,7 @@ function radarRenderDevolucoes(){
     'PATEC cancelado',
     'Falta de retorno fornecedor',
     'Falta de retorno cadastro (Thiago)',
+    'Falta de retorno parecerista',
     'Preço excessivo',
     'Proposta vencida',
   ];
@@ -20094,7 +20096,7 @@ function radarRenderDevolucoes(){
   const lblEl = document.getElementById('radar-dev-total-label');
   if(lblEl) lblEl.textContent = `${totalDevs} devolução${totalDevs!==1?'s':''} registrada${totalDevs!==1?'s':''}`;
 
-  const cores = ['#D94040','#C07A12','#1A4A8A','#0E9E6A','#7C3AED','#EA580C','#0891B2','#B45309','#6B21A8'];
+  const cores = ['#D94040','#C07A12','#1A4A8A','#0E9E6A','#7C3AED','#EA580C','#0891B2','#B45309','#6B21A8','#BE185D','#15803D','#4338CA'];
   const cardsEl = document.getElementById('radar-dev-cards');
   if(cardsEl){
     // No Radar Estratégico, o motivo "Proposta vencida" não é exibido (pedido específico)
@@ -20102,9 +20104,9 @@ function radarRenderDevolucoes(){
     cardsEl.innerHTML = MOTIVOS_RADAR.map((m,i)=>{
       const cnt = contMotivo[m]||0;
       const pct = totalDevs>0 ? Math.round(cnt/totalDevs*100) : 0;
-      return `<div style="background:var(--cin);border-radius:8px;padding:.75rem;border:1px solid var(--brd);border-left:3px solid ${cores[i]}">
+      return `<div style="background:var(--cin);border-radius:8px;padding:.75rem;border:1px solid var(--brd);border-left:3px solid ${cores[i%cores.length]}">
         <div style="font-size:10px;color:var(--tx2);margin-bottom:3px;line-height:1.3">${m}</div>
-        <div style="font-size:22px;font-weight:700;color:${cnt>0?cores[i]:'var(--tx2)'}">${cnt}</div>
+        <div style="font-size:22px;font-weight:700;color:${cnt>0?cores[i%cores.length]:'var(--tx2)'}">${cnt}</div>
         <div style="font-size:10px;color:var(--tx2)">${pct}% do total</div>
       </div>`;
     }).join('');
@@ -25007,6 +25009,7 @@ function q18Consultar(valor){
           <option>PATEC cancelado</option>
           <option>Falta de retorno fornecedor</option>
           <option>Falta de retorno cadastro (Thiago)</option>
+          <option>Falta de retorno parecerista</option>
           <option>Preço excessivo</option>
           <option>Proposta vencida</option>
           <option>Q18</option>
@@ -25106,6 +25109,7 @@ function q18Consultar(valor){
             <option>PATEC cancelado</option>
             <option>Falta de retorno fornecedor</option>
             <option>Falta de retorno cadastro (Thiago)</option>
+            <option>Falta de retorno parecerista</option>
             <option>Preço excessivo</option>
             <option>Proposta vencida</option>
             <option>Q18</option>
