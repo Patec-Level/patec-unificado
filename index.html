@@ -31335,6 +31335,10 @@ var _cobTipos = [];
 var _cobFilas = [];
 // resumo do último upload: linhas lidas x itens gravados x duplicatas ignoradas
 var _cobResumo = null;
+// id do documento de controle. O Firestore RECUSA ids no formato __xxx__
+// ("Resource id is invalid because it is reserved"), por isso sem os
+// underscores duplicados nas pontas.
+var _COB_DOC_RESUMO = 'resumo_upload';
 
 // Ações manuais de hoje (itens fora da Governança) — vindas de producao_acoes
 var _cobManualHoje = [];
@@ -31463,7 +31467,7 @@ function govCobrancaRender(){
     _cobResumo = null;
     snap.forEach(function(doc){
       // documento de controle do upload — não é um item da carteira
-      if (doc.id === '__resumo__') { _cobResumo = doc.data(); return; }
+      if (doc.id === _COB_DOC_RESUMO || /^__.*__$/.test(doc.id)) { _cobResumo = doc.data(); return; }
       _cobDados.push(doc.data());
     });
     // a planilha não traz mais Prazo/SLA — ordena pelos mais cobrados
@@ -31944,7 +31948,7 @@ function govCobrancaUpload(ev){
       if (!registros.length) throw new Error('Nenhuma RC válida encontrada.');
 
       var resumo = {
-        id: '__resumo__',
+        id: _COB_DOC_RESUMO,
         linhas: linhas.length,
         gravados: registros.length,
         semRc: semRc,
@@ -31967,11 +31971,14 @@ function govCobrancaUpload(ev){
           lote.set(db.collection('cobranca_status').doc(registros[j].id), registros[j]); n++;
           if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
         }
-        lote.set(db.collection('cobranca_status').doc('__resumo__'), resumo);
         lotes.push(lote);
         var seq = Promise.resolve();
         lotes.forEach(function(b){ seq = seq.then(function(){ return b.commit(); }); });
         return seq;
+      }).then(function(){
+        // resumo gravado por último e em separado: se falhar, a base já está salva
+        return db.collection('cobranca_status').doc(_COB_DOC_RESUMO).set(resumo)
+          .catch(function(){ return null; });
       }).then(function(){
         _cobMsg('✅ ' + registros.length + ' itens carregados'
           + (duplicadas.length ? ' — ' + duplicadas.length + ' linha(s) repetida(s) ignorada(s)' : '')
