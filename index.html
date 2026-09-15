@@ -4268,12 +4268,20 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
     <div id="p-reuniao" class="page">
 
       <div style="display:flex;gap:0;margin-bottom:1.25rem;border-bottom:2px solid var(--brd)">
-        <button id="reu-tab-cobranca" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:default;color:var(--azm);border-bottom:3px solid var(--azm);margin-bottom:-2px">💳 PATEC</button>
+        <button id="reu-tab-cobranca" onclick="reuTab('patec',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--azm);border-bottom:3px solid var(--azm);margin-bottom:-2px">💳 PATEC</button>
+        <button id="reu-tab-pedidos" onclick="reuTab('pedidos',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">📦 Pedidos</button>
       </div>
 
-      <div id="reu-cards" style="margin-bottom:.75rem"></div>
-      <div id="reu-subcards" style="display:none;margin-bottom:1rem;padding:.6rem .875rem;background:var(--vmc);border:1px solid var(--vm);border-radius:8px"></div>
-      <div id="reu-tabela"></div>
+      <div id="reu-conteudo-patec">
+        <div id="reu-cards" style="margin-bottom:.75rem"></div>
+        <div id="reu-subcards" style="display:none;margin-bottom:1rem;padding:.6rem .875rem;background:var(--vmc);border:1px solid var(--vm);border-radius:8px"></div>
+        <div id="reu-tabela"></div>
+      </div>
+
+      <div id="reu-conteudo-pedidos" style="display:none">
+        <div id="reuped-cards" style="margin-bottom:.75rem"></div>
+        <div id="reuped-tabela"></div>
+      </div>
     </div><!-- /p-reuniao -->
 
     <!-- ══════════════════════════════════════════
@@ -32427,22 +32435,27 @@ function _pedMsg(txt, cor){
   el.style.color = cor || 'var(--tx2)';
 }
 
-function _pedSet(id, html){
-  var el = document.getElementById(id);
-  if (el) el.innerHTML = html;
+// Os Pedidos aparecem em dois lugares: Governança › Pedidos (com upload) e
+// Reunião › Pedidos (só cards e tabela). Mesma base, mesmos filtros.
+function _pedAlvos(nome){
+  var out = [], i, ids = ['ped-' + nome, 'reuped-' + nome], el;
+  for (i = 0; i < ids.length; i++) { el = document.getElementById(ids[i]); if (el) out.push(el); }
+  return out;
+}
+function _pedSet(nome, html){
+  _pedAlvos(nome).forEach(function(el){ el.innerHTML = html; });
 }
 
 // ── Carregar do Firebase ──
 function govPedidosRender(){
   if (!_pedEhFast()) return;
-  var wrap = document.getElementById('ped-tabela');
-  if (!wrap) return;
+  if (!_pedAlvos('tabela').length) return;
   var db = (typeof getDB === 'function') ? getDB() : null;
   if (!db) {
-    wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⚠ Firebase indisponível.</div>';
+    _pedSet('tabela', '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⚠ Firebase indisponível.</div>');
     return;
   }
-  wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⏳ Carregando pedidos...</div>';
+  _pedSet('tabela', '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⏳ Carregando pedidos...</div>');
 
   db.collection(_PED_COLECAO).get().then(function(snap){
     _pedDados = [];
@@ -32460,7 +32473,7 @@ function govPedidosRender(){
     });
     _pedDesenhar();
   }).catch(function(err){
-    wrap.innerHTML = '<div style="padding:2rem;color:var(--vm);font-size:13px">❌ ' + _cobEsc(err.message) + '</div>';
+    _pedSet('tabela', '<div style="padding:2rem;color:var(--vm);font-size:13px">❌ ' + _cobEsc(err.message) + '</div>');
   });
 }
 
@@ -32515,22 +32528,20 @@ function _pedDesenharResumo(){
 }
 
 function _pedDesenhar(){
-  var wrap = document.getElementById('ped-tabela');
-  if (!wrap) return;
-  var cards = document.getElementById('ped-cards');
+  if (!_pedAlvos('tabela').length) return;
 
   _pedDesenharResumo();
 
   if (!_pedDados.length) {
-    if (cards) cards.innerHTML = '';
-    wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">'
-      + '📄 Nenhum pedido registrado ainda.<br><span style="font-size:11px">Use <strong>📤 Subir planilha</strong> acima para carregar os dados.</span></div>';
+    _pedSet('cards', '');
+    _pedSet('tabela', '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">'
+      + '📄 Nenhum pedido registrado ainda.<br><span style="font-size:11px">Use <strong>📤 Subir planilha</strong> em Governança › Pedidos para carregar os dados.</span></div>');
     return;
   }
 
   var i;
 
-  if (cards) {
+  if (_pedAlvos('cards').length) {
     // ── 1º nível: Status ──
     var porStatus = {};
     for (i = 0; i < _pedDados.length; i++) {
@@ -32616,10 +32627,10 @@ function _pedDesenhar(){
           : '')
       + '</div>';
 
-    cards.innerHTML = '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
+    _pedSet('cards', '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
       + '<div style="flex:1 1 0;min-width:0">' + esq + '</div>'
       + lateral
-      + '</div>';
+      + '</div>');
   }
 
   // ── Tabela ──
@@ -32657,8 +32668,8 @@ function _pedDesenhar(){
   if (_pedLibFiltro)    legenda += ' — ' + _cobEsc(_pedLibFiltro);
   legenda += '. Clique num card para filtrar.';
 
-  wrap.innerHTML = '<div class="tw" style="max-height:560px">' + t + '</div>'
-    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">' + legenda + '</div>';
+  _pedSet('tabela', '<div class="tw" style="max-height:560px">' + t + '</div>'
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">' + legenda + '</div>');
 }
 
 // ── Filtros ──
@@ -32842,13 +32853,36 @@ function _pedAplicarModulo(){
 }
 
 // ── Tópico Reunião: só espelha o que já está carregado ──
+var _reuAba = 'patec';
+
+function reuTab(aba, btn){
+  _reuAba = (aba === 'pedidos') ? 'pedidos' : 'patec';
+  ['patec', 'pedidos'].forEach(function(t){
+    var c = document.getElementById('reu-conteudo-' + t);
+    if (c) c.style.display = (t === _reuAba) ? '' : 'none';
+  });
+  [['patec', 'reu-tab-cobranca'], ['pedidos', 'reu-tab-pedidos']].forEach(function(par){
+    var b = document.getElementById(par[1]);
+    if (!b) return;
+    var on = (par[0] === _reuAba);
+    b.style.color = on ? 'var(--azm)' : 'var(--tx2)';
+    b.style.borderBottomColor = on ? 'var(--azm)' : 'transparent';
+  });
+  reuniaoAbrir();
+}
+
 function reuniaoAbrir(){
   if (!_cobEhFast()) return;
   // não existe botão de atualizar aqui: entrar no tópico já busca a base
   // mais recente do Firebase. Se algo der errado, o que está em memória
   // continua na tela.
-  if (_cobDados && _cobDados.length) _cobDesenhar();
-  govCobrancaRender();
+  if (_reuAba === 'pedidos') {
+    if (_pedDados && _pedDados.length) _pedDesenhar();
+    govPedidosRender();
+  } else {
+    if (_cobDados && _cobDados.length) _cobDesenhar();
+    govCobrancaRender();
+  }
 }
 
 function _cobAplicarModulo(){
