@@ -31720,8 +31720,8 @@ function _cobDesenhar(){
       // 1ª linha = Total | 2ª linha = as três marcações, lado a lado
       htmlVer = '<div data-cob="verificar" style="border-left:1px dashed var(--brd);padding-left:18px;min-width:360px">'
         + _cobCardTotal()
-        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
-        + '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">Verificar</span>'
+        + '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">'
+        + '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">Tipo de Processo</span>'
         + ((_cobVerifFiltro || _cobProcFiltro)
             ? '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="govCobrancaMarcaLimpar()">✕ limpar</button>'
             : '')
@@ -31764,7 +31764,7 @@ function _cobDesenhar(){
 
   var t = '<table><thead><tr>'
     + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Status</th>'
-    + '<th>Cobranças</th><th>Tipo de Cobrança</th><th>Fila</th><th>Verificar</th><th>Processo</th>'
+    + '<th>Cobranças</th><th>Tipo de Cobrança</th><th>Fila</th><th>Tipo de Processo</th><th>Processo</th>'
     + '</tr></thead><tbody>';
 
   for (i = 0; i < lista.length; i++) {
