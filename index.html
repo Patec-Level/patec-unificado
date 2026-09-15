@@ -4288,6 +4288,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button id="gov-main-tab-sla" onclick="govMainTab('sla',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">⏱️ Urgência por SLA</button>
         <button id="gov-main-tab-prazo" onclick="govMainTab('prazo',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">📆 Urgência por Prazo da OP</button>
         <button id="gov-main-tab-cobranca" onclick="govMainTab('cobranca',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">💳 Cobrança por Status</button>
+        <button id="gov-main-tab-pedidos" onclick="govMainTab('pedidos',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">📦 Pedidos</button>
       </div>
 
       <!-- ── ABA: COBRANÇA POR STATUS (exclusiva do módulo FAST) ── -->
@@ -4502,6 +4503,34 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div id="cob-subcards" style="display:none;margin-bottom:1rem;padding:.6rem .875rem;background:var(--vmc);border:1px solid var(--vm);border-radius:8px"></div>
         <div id="cob-tabela"></div>
       </div>
+
+      <!-- ── ABA: PEDIDOS (exclusiva do módulo FAST) ── -->
+      <div id="gov-main-content-pedidos" style="display:none">
+        <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--vm)">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div>
+              <div class="cd-t" style="margin:0">📦 Pedidos</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:2px">Suba a planilha de pedidos — a base é substituída e os status atualizam automaticamente.</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span id="ped-atualizado" style="font-size:11px;color:var(--tx2)"></span>
+              <button class="btn btn-s" style="font-size:11px" onclick="govPedidosRender()">↺ Atualizar</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:.875rem;align-items:center">
+            <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;background:var(--azm);color:#fff;padding:8px 18px;border-radius:6px;font-size:12px;font-weight:700">
+              📤 Subir planilha
+              <input id="ped-upload" type="file" accept=".xlsx,.xls" style="display:none" onchange="govPedidosUpload(event)">
+            </label>
+            <span id="ped-status-msg" style="font-size:11.5px;color:var(--tx2)"></span>
+          </div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Liberado E&amp;P, Fila GOV, Status</strong> — obrigatória: RC. Os cards de cima somam por <em>Status</em>; clicando num deles aparecem as <em>Filas GOV</em> daquele status. A ordem das colunas não importa: a leitura é pelo nome.</div>
+          <div id="ped-resumo"></div>
+        </div>
+        <div id="ped-cards" style="margin-bottom:.75rem"></div>
+        <div id="ped-tabela"></div>
+      </div>
+
 
       <!-- ── ABA: URGÊNCIA POR SLA ── -->
       <div id="gov-main-content-sla" style="display:none">
@@ -8848,6 +8877,7 @@ function _atualizarColabsPorModulo(){
   }
   // Aba "Cobrança por Status" é exclusiva do FAST — no ADLV nem aparece.
   try{ _cobAplicarModulo(); }catch(e){}
+  try{ _pedAplicarModulo(); }catch(e){}
   try{ _apresFastAplicarModulo(); }catch(e){}
   try{ _apres2FastAplicarModulo(); }catch(e){}
   // CORREÇÃO BUG (20/06): `registros` começava com HISTORICO_INICIAL (dados
@@ -17957,8 +17987,12 @@ function govMainTab(aba, btn){
   if(aba==='cobranca' && typeof _cobEhFast==='function' && !_cobEhFast()){
     aba = 'gov'; btn = document.getElementById('gov-main-tab-gov');
   }
+  // "Pedidos" também é exclusiva do FAST
+  if(aba==='pedidos' && typeof _pedEhFast==='function' && !_pedEhFast()){
+    aba = 'gov'; btn = document.getElementById('gov-main-tab-gov');
+  }
   // Alternar entre abas principais: Governança e Planilha Crítica
-  ['gov','pc','sla','prazo','cobranca'].forEach(t => {
+  ['gov','pc','sla','prazo','cobranca','pedidos'].forEach(t => {
     const content = document.getElementById('gov-main-content-'+t);
     const tabBtn  = document.getElementById('gov-main-tab-'+t);
     if(content) content.style.display = t===aba ? '' : 'none';
@@ -17971,6 +18005,7 @@ function govMainTab(aba, btn){
   if(aba==='sla')   { _govUrgGarantirDados().then(govUrgSlaRender); _govUrgPainelSync(); }
   if(aba==='prazo') { _govUrgGarantirDados().then(govUrgPrazoRender); _govUrgPainelSync(); }
   if(aba==='cobranca') { govCobrancaRender(); _govUrgPainelSync(); }
+  if(aba==='pedidos')  { govPedidosRender(); _govUrgPainelSync(); }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -32348,6 +32383,464 @@ async function cobManualAnular(docId){
 function _cobEhFast(){
   return (typeof _moduloAtivo !== 'undefined') && _moduloAtivo === 'fast';
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  GOVERNANÇA — PEDIDOS  (exclusivo módulo FAST)
+//  Planilha: Analista | RC | Item RC | Liberado E&P | Fila GOV | Status
+//  1º nível  = Status (em que situação o pedido está)
+//  2º nível  = Fila GOV (em que fase da fila ele está, dentro do status)
+//  Lateral   = Total de itens + marcação "Liberados E&P" (coluna Liberado E&P)
+//  A leitura é pelo NOME da coluna — a ordem na planilha não importa.
+// ═══════════════════════════════════════════════════════════════
+var _pedDados = [];
+var _pedStatusFiltro = null;   // 1º nível
+var _pedFilaFiltro   = null;   // 2º nível
+var _pedLibFiltro    = null;   // marcação lateral
+var _pedStatusLista  = [];
+var _pedFilasLista   = [];
+var _pedResumo = null;
+// ids no formato __xxx__ são reservados pelo Firestore
+var _PED_DOC_RESUMO = 'resumo_upload';
+var _PED_COLECAO = 'pedidos_status';
+var _PED_LIB = { nome: 'Liberados E&P', cor: '#0369a1', bg: '#e0f2fe' };
+var _PED_SEM_STATUS = 'Sem status';
+var _PED_MAXW = 'none';
+
+// A planilha pode vir sem a coluna Status preenchida em parte das linhas —
+// esses itens continuam contando, num card próprio.
+function _pedStatus(r){ return String((r && r.status) || '').trim() || _PED_SEM_STATUS; }
+function _pedFila(r){ return String((r && r.filaGov) || '').trim() || 'Sem fila'; }
+
+// Marcação da coluna "Liberado E&P": qualquer valor preenchido conta
+function _pedLibTipo(r){
+  return String((r && r.liberado) || '').trim() ? _PED_LIB.nome : '';
+}
+
+function _pedEhFast(){
+  return (typeof _moduloAtivo !== 'undefined') && _moduloAtivo === 'fast';
+}
+
+function _pedMsg(txt, cor){
+  var el = document.getElementById('ped-status-msg');
+  if (!el) return;
+  el.textContent = txt || '';
+  el.style.color = cor || 'var(--tx2)';
+}
+
+function _pedSet(id, html){
+  var el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+}
+
+// ── Carregar do Firebase ──
+function govPedidosRender(){
+  if (!_pedEhFast()) return;
+  var wrap = document.getElementById('ped-tabela');
+  if (!wrap) return;
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!db) {
+    wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⚠ Firebase indisponível.</div>';
+    return;
+  }
+  wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⏳ Carregando pedidos...</div>';
+
+  db.collection(_PED_COLECAO).get().then(function(snap){
+    _pedDados = [];
+    _pedResumo = null;
+    snap.forEach(function(doc){
+      if (doc.id === _PED_DOC_RESUMO || /^__.*__$/.test(doc.id)) { _pedResumo = doc.data(); return; }
+      _pedDados.push(doc.data());
+    });
+    _pedDados.sort(function(a, b){
+      var d = _pedStatus(a).localeCompare(_pedStatus(b));
+      if (d) return d;
+      d = _pedFila(a).localeCompare(_pedFila(b));
+      if (d) return d;
+      return String(a.rc || '').localeCompare(String(b.rc || ''));
+    });
+    _pedDesenhar();
+  }).catch(function(err){
+    wrap.innerHTML = '<div style="padding:2rem;color:var(--vm);font-size:13px">❌ ' + _cobEsc(err.message) + '</div>';
+  });
+}
+
+// ── Card do TOTAL (1ª linha do bloco lateral) ──
+function _pedCardTotal(){
+  if (!_pedDados.length) return '';
+  var ativo = (_pedStatusFiltro === null && _pedFilaFiltro === null && _pedLibFiltro === null);
+  return '<div data-ped="linha-total" style="display:flex;margin-bottom:10px">'
+    + '<div onclick="govPedidosLimparTudo()" title="Mostrar todos os itens"'
+    + ' style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;flex:1 1 auto;'
+    + 'background:' + (ativo ? 'var(--azm)' : 'var(--azc)') + ';color:' + (ativo ? '#fff' : 'var(--azm)')
+    + ';border:1.5px solid var(--azm);border-radius:8px;padding:7px 18px;line-height:1.1">'
+    + '<span style="font-size:22px;font-weight:800">' + _pedDados.length + '</span>'
+    + '<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Total<br>de itens</span>'
+    + '</div></div>';
+}
+
+// ── Aviso de conferência do último upload ──
+function _pedDesenharResumo(){
+  var el = document.getElementById('ped-resumo');
+  if (!el) return;
+  var r = _pedResumo;
+  if (!r || !r.linhas) { el.innerHTML = ''; return; }
+
+  var perdidas = (r.qtdDuplicadas || 0) + (r.semRc || 0);
+  if (!perdidas) {
+    el.innerHTML = '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">'
+      + '✔ Planilha com <strong>' + r.linhas + '</strong> linha(s) — todas carregadas.</div>';
+    return;
+  }
+
+  var det = '', d = r.duplicadas || [], i, li = '';
+  if (d.length) {
+    for (i = 0; i < d.length; i++) {
+      li += '<li style="margin:1px 0">RC <strong>' + _cobEsc(d[i].rc) + '</strong>'
+          + (d[i].itemRc ? ' · item ' + _cobEsc(d[i].itemRc) : '')
+          + ' — linha ' + d[i].linha + ' repete a linha ' + d[i].primeira + '</li>';
+    }
+    det = '<details style="margin-top:4px"><summary style="cursor:pointer;font-size:10.5px;font-weight:700;color:#b45309">'
+        + 'ver as ' + (r.qtdDuplicadas || d.length) + ' linha(s) repetida(s)</summary>'
+        + '<ul style="margin:4px 0 0 16px;padding:0;font-size:10.5px;color:var(--tx2)">' + li + '</ul></details>';
+  }
+
+  el.innerHTML =
+    '<div style="margin-top:8px;padding:7px 10px;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;font-size:10.5px;color:#78350f">'
+    + '⚠ A planilha tinha <strong>' + r.linhas + '</strong> linha(s) e a base ficou com <strong>' + r.gravados + '</strong> item(ns): '
+    + (r.qtdDuplicadas ? '<strong>' + r.qtdDuplicadas + '</strong> linha(s) com o mesmo <em>RC + Item RC</em> de outra linha' : '')
+    + (r.qtdDuplicadas && r.semRc ? ' e ' : '')
+    + (r.semRc ? '<strong>' + r.semRc + '</strong> linha(s) sem RC' : '')
+    + '. O mesmo item não é contado duas vezes.'
+    + det + '</div>';
+}
+
+function _pedDesenhar(){
+  var wrap = document.getElementById('ped-tabela');
+  if (!wrap) return;
+  var cards = document.getElementById('ped-cards');
+
+  _pedDesenharResumo();
+
+  if (!_pedDados.length) {
+    if (cards) cards.innerHTML = '';
+    wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">'
+      + '📄 Nenhum pedido registrado ainda.<br><span style="font-size:11px">Use <strong>📤 Subir planilha</strong> acima para carregar os dados.</span></div>';
+    return;
+  }
+
+  var i;
+
+  if (cards) {
+    // ── 1º nível: Status ──
+    var porStatus = {};
+    for (i = 0; i < _pedDados.length; i++) {
+      var s = _pedStatus(_pedDados[i]);
+      porStatus[s] = (porStatus[s] || 0) + 1;
+    }
+    // mais volumosos primeiro; "Sem status" sempre por último
+    _pedStatusLista = Object.keys(porStatus).sort(function(a, b){
+      if (a === _PED_SEM_STATUS) return 1;
+      if (b === _PED_SEM_STATUS) return -1;
+      return porStatus[b] - porStatus[a];
+    });
+
+    var htmlStatus = '';
+    for (i = 0; i < _pedStatusLista.length; i++) {
+      var ns = _pedStatusLista[i];
+      var on = (_pedStatusFiltro === ns);
+      htmlStatus += '<div onclick="govPedidosStatusFiltrar(' + i + ')" title="Ver as filas deste status"'
+        + ' style="cursor:pointer;background:' + (on ? '#1A2D4F' : 'var(--bg)')
+        + ';color:' + (on ? '#fff' : 'var(--tx)')
+        + ';border:1.5px solid ' + (on ? '#1A2D4F' : 'var(--brd)')
+        + ';border-top:3px solid #1A2D4F;border-radius:8px;padding:8px 18px;text-align:center;'
+        + 'line-height:1.2;flex:1 1 0;min-width:130px;max-width:' + _PED_MAXW + '">'
+        + '<div style="font-size:19px;font-weight:800">' + porStatus[ns] + '</div>'
+        + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(ns) + '</div>'
+        + '</div>';
+    }
+    var esq = '<div data-ped="linha-status" style="display:flex;gap:12px;flex-wrap:wrap">' + htmlStatus + '</div>';
+
+    // ── 2º nível: filas do status escolhido ──
+    if (_pedStatusFiltro) {
+      var doStatus = _pedDados.filter(function(r){ return _pedStatus(r) === _pedStatusFiltro; });
+      var porFila = {};
+      doStatus.forEach(function(r){ var f = _pedFila(r); porFila[f] = (porFila[f] || 0) + 1; });
+      _pedFilasLista = Object.keys(porFila).sort(function(a, b){ return porFila[b] - porFila[a]; });
+
+      var htmlFila = '';
+      for (i = 0; i < _pedFilasLista.length; i++) {
+        var nf = _pedFilasLista[i];
+        var onF = (_pedFilaFiltro === nf);
+        htmlFila += '<div onclick="govPedidosFilaFiltrar(' + i + ')" title="Clique para filtrar"'
+          + ' style="cursor:pointer;background:' + (onF ? 'var(--azm)' : 'var(--bg)')
+          + ';color:' + (onF ? '#fff' : 'var(--tx)')
+          + ';border:1.5px solid ' + (onF ? 'var(--azm)' : 'var(--brd)')
+          + (onF ? '' : ';border-left:3px solid var(--vm)')
+          + ';border-radius:8px;padding:8px 18px;text-align:center;line-height:1.2;'
+          + 'flex:1 1 0;min-width:130px;max-width:' + _PED_MAXW + '">'
+          + '<div style="font-size:19px;font-weight:800">' + porFila[nf] + '</div>'
+          + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(nf) + '</div>'
+          + '</div>';
+      }
+      esq += '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--brd)">'
+        + '<div style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;'
+        + 'letter-spacing:.4px;margin-bottom:7px">↳ ' + _cobEsc(_pedStatusFiltro)
+        + ' — filas <span style="font-weight:600;text-transform:none;letter-spacing:0">('
+        + doStatus.length + ' itens)</span></div>'
+        + '<div data-ped="linha-fila" style="display:flex;gap:12px;flex-wrap:wrap">' + htmlFila + '</div>'
+        + '</div>';
+    } else {
+      _pedFilasLista = [];
+    }
+
+    // ── Bloco lateral: Total + Liberados E&P ──
+    var qtdLib = _pedDados.filter(function(r){ return _pedLibTipo(r) !== ''; }).length;
+    var temLib = qtdLib > 0;
+    var onL = (_pedLibFiltro === _PED_LIB.nome);
+    var lateral = '<div data-ped="lateral" style="border-left:1px dashed var(--brd);padding-left:18px;min-width:220px">'
+      + _pedCardTotal()
+      + (temLib
+          ? '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">'
+            + '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">Liberação</span>'
+            + (_pedLibFiltro ? '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="govPedidosLibFiltrar(-1)">✕ limpar</button>' : '')
+            + '</div>'
+            + '<div data-ped="linha-lib" style="display:flex;gap:10px;flex-wrap:wrap">'
+            + '<div onclick="govPedidosLibFiltrar(0)" title="Filtrar os itens liberados para E&P"'
+            + ' style="cursor:pointer;background:' + (onL ? _PED_LIB.cor : _PED_LIB.bg)
+            + ';color:' + (onL ? '#fff' : _PED_LIB.cor)
+            + ';border:1.5px solid ' + _PED_LIB.cor + ';border-radius:8px;padding:8px 14px;text-align:center;'
+            + 'line-height:1.2;flex:1 1 0;min-width:104px">'
+            + '<div style="font-size:19px;font-weight:800">' + qtdLib + '</div>'
+            + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(_PED_LIB.nome) + '</div>'
+            + '</div></div>'
+          : '')
+      + '</div>';
+
+    cards.innerHTML = '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
+      + '<div style="flex:1 1 0;min-width:0">' + esq + '</div>'
+      + lateral
+      + '</div>';
+  }
+
+  // ── Tabela ──
+  var lista = _pedDados;
+  if (_pedStatusFiltro) lista = lista.filter(function(r){ return _pedStatus(r) === _pedStatusFiltro; });
+  if (_pedFilaFiltro)   lista = lista.filter(function(r){ return _pedFila(r) === _pedFilaFiltro; });
+  if (_pedLibFiltro)    lista = lista.filter(function(r){ return _pedLibTipo(r) === _pedLibFiltro; });
+
+  var t = '<table><thead><tr>'
+    + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Status</th><th>Fila GOV</th><th>Liberado E&amp;P</th>'
+    + '</tr></thead><tbody>';
+
+  for (i = 0; i < lista.length; i++) {
+    var r2 = lista[i];
+    var st2 = String(r2.status || '').trim();
+    var lib = _pedLibTipo(r2);
+    t += '<tr>'
+      + '<td>' + _cobEsc(r2.analista || '—') + '</td>'
+      + '<td style="font-weight:700">' + _cobEsc(r2.rc || '—') + '</td>'
+      + '<td>' + _cobEsc(r2.itemRc || '—') + '</td>'
+      + '<td>' + (st2
+          ? '<span style="background:var(--azc);color:var(--azm);padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap">' + _cobEsc(st2) + '</span>'
+          : '<span style="color:var(--tx2);font-size:10.5px">—</span>') + '</td>'
+      + '<td>' + _cobEsc(String(r2.filaGov || '').trim() || '—') + '</td>'
+      + '<td>' + (lib
+          ? '<span style="background:' + _PED_LIB.bg + ';color:' + _PED_LIB.cor + ';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap">' + _cobEsc(String(r2.liberado).trim()) + '</span>'
+          : '—') + '</td>'
+      + '</tr>';
+  }
+  t += '</tbody></table>';
+
+  var legenda = 'Mostrando ' + lista.length + ' de ' + _pedDados.length + ' itens';
+  if (_pedStatusFiltro) legenda += ' — ' + _cobEsc(_pedStatusFiltro);
+  if (_pedFilaFiltro)   legenda += ' — fila ' + _cobEsc(_pedFilaFiltro);
+  if (_pedLibFiltro)    legenda += ' — ' + _cobEsc(_pedLibFiltro);
+  legenda += '. Clique num card para filtrar.';
+
+  wrap.innerHTML = '<div class="tw" style="max-height:560px">' + t + '</div>'
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">' + legenda + '</div>';
+}
+
+// ── Filtros ──
+function govPedidosLimparTudo(){
+  _pedStatusFiltro = null; _pedFilaFiltro = null; _pedLibFiltro = null;
+  _pedDesenhar();
+}
+
+// 1º nível: trocar de status zera a fila escolhida
+function govPedidosStatusFiltrar(idx){
+  var novo = (idx === null || idx === -1 || _pedStatusLista[idx] === undefined) ? null : _pedStatusLista[idx];
+  if (novo === _pedStatusFiltro) novo = null;
+  _pedStatusFiltro = novo;
+  _pedFilaFiltro = null;
+  _pedDesenhar();
+}
+
+function govPedidosFilaFiltrar(idx){
+  var nova = (idx === null || idx === -1 || _pedFilasLista[idx] === undefined) ? null : _pedFilasLista[idx];
+  if (nova === _pedFilaFiltro) nova = null;
+  _pedFilaFiltro = nova;
+  _pedDesenhar();
+}
+
+function govPedidosLibFiltrar(idx){
+  _pedLibFiltro = (idx === -1 || _pedLibFiltro === _PED_LIB.nome) ? null : _PED_LIB.nome;
+  _pedDesenhar();
+}
+
+// ── Upload da planilha ──
+function govPedidosUpload(ev){
+  var arq = ev && ev.target && ev.target.files && ev.target.files[0];
+  if (!arq) return;
+
+  if (!_pedEhFast()) {
+    _pedMsg('❌ A aba Pedidos é exclusiva do módulo FAST.', 'var(--vm)');
+    ev.target.value = '';
+    return;
+  }
+  if (typeof XLSX === 'undefined') {
+    _pedMsg('❌ Biblioteca XLSX não carregada — atualize a página (F5).', 'var(--vm)');
+    ev.target.value = '';
+    return;
+  }
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!db) {
+    _pedMsg('❌ Firebase indisponível.', 'var(--vm)');
+    ev.target.value = '';
+    return;
+  }
+
+  _pedMsg('⏳ Lendo planilha...');
+  var reader = new FileReader();
+
+  reader.onerror = function(){
+    _pedMsg('❌ Não foi possível ler o arquivo.', 'var(--vm)');
+    ev.target.value = '';
+  };
+
+  reader.onload = function(e){
+    try {
+      var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      if (!ws) throw new Error('Planilha vazia ou ilegível.');
+
+      var linhas = XLSX.utils.sheet_to_json(ws, { defval: '' }).filter(function(l){
+        return Object.keys(l).some(function(k){ return String(l[k]).trim() !== ''; });
+      });
+      if (!linhas.length) throw new Error('Nenhuma linha de dados encontrada.');
+
+      var amostra = linhas[0];
+      var cRc = _cobCol(amostra, ['RC', 'Nº RC', 'Numero RC']);
+      if (!cRc) throw new Error('Coluna "RC" não encontrada na planilha.');
+
+      var cAnal = _cobCol(amostra, ['Analista']);
+      var cItem = _cobCol(amostra, ['Item RC', 'Item']);
+      var cStat = _cobCol(amostra, ['Status']);
+      var cFila = _cobCol(amostra, ['Fila GOV', 'Fila Gov']);
+      var cLib  = _cobCol(amostra, ['Liberado E&P', 'Liberado EP', 'Liberado']);
+
+      var limpo = function(v){
+        var s = String(v == null ? '' : v).trim();
+        return (s === '#N/A' || s === '#N/D' || s === 'undefined') ? '' : s;
+      };
+
+      var registros = [], vistos = {}, duplicadas = [], semRc = 0, i;
+      for (i = 0; i < linhas.length; i++) {
+        var l = linhas[i];
+        var rc = limpo(l[cRc]).replace(/\.0$/, '');
+        if (!rc) { semRc++; continue; }
+        var item = cItem ? limpo(l[cItem]).replace(/\.0$/, '') : '';
+        var id = item ? (rc + '_' + item) : rc;
+        if (vistos[id]) {
+          duplicadas.push({ id: id, rc: rc, itemRc: item, linha: i + 2, primeira: vistos[id] });
+          continue;
+        }
+        vistos[id] = i + 2;
+        registros.push({
+          id: id,
+          rc: rc,
+          itemRc: item,
+          analista: cAnal ? limpo(l[cAnal]) : '',
+          status: cStat ? limpo(l[cStat]) : '',
+          filaGov: cFila ? limpo(l[cFila]) : '',
+          liberado: cLib ? limpo(l[cLib]) : '',
+          atualizadoEm: new Date().toISOString()
+        });
+      }
+      if (!registros.length) throw new Error('Nenhuma RC válida encontrada.');
+
+      var resumo = {
+        id: _PED_DOC_RESUMO,
+        linhas: linhas.length,
+        gravados: registros.length,
+        semRc: semRc,
+        duplicadas: duplicadas.slice(0, 60),
+        qtdDuplicadas: duplicadas.length,
+        arquivo: arq.name || '',
+        atualizadoEm: new Date().toISOString()
+      };
+
+      _pedMsg('⏳ Substituindo base (' + registros.length + ' itens)...');
+
+      db.collection(_PED_COLECAO).get().then(function(snap){
+        var lotes = [], lote = db.batch(), n = 0;
+        snap.forEach(function(doc){
+          lote.delete(doc.ref); n++;
+          if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
+        });
+        var j;
+        for (j = 0; j < registros.length; j++) {
+          lote.set(db.collection(_PED_COLECAO).doc(registros[j].id), registros[j]); n++;
+          if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
+        }
+        lotes.push(lote);
+        var seq = Promise.resolve();
+        lotes.forEach(function(b){ seq = seq.then(function(){ return b.commit(); }); });
+        return seq;
+      }).then(function(){
+        // resumo em separado: se falhar, a base já está salva
+        return db.collection(_PED_COLECAO).doc(_PED_DOC_RESUMO).set(resumo)
+          .catch(function(){ return null; });
+      }).then(function(){
+        _pedMsg('✅ ' + registros.length + ' itens carregados'
+          + (duplicadas.length ? ' — ' + duplicadas.length + ' linha(s) repetida(s) ignorada(s)' : '')
+          + '.', duplicadas.length ? '#b45309' : 'var(--vd)');
+        var av = document.getElementById('ped-atualizado');
+        if (av) av.textContent = 'Atualizado em ' + new Date().toLocaleString('pt-BR');
+        _pedStatusFiltro = null; _pedFilaFiltro = null; _pedLibFiltro = null;
+        govPedidosRender();
+        setTimeout(function(){ _pedMsg(''); }, 4000);
+      }).catch(function(err){
+        _pedMsg('❌ Erro ao gravar: ' + err.message, 'var(--vm)');
+      });
+
+    } catch (err) {
+      _pedMsg('❌ ' + err.message, 'var(--vm)');
+    }
+    ev.target.value = '';
+  };
+
+  reader.readAsArrayBuffer(arq);
+}
+
+// ── Exclusividade FAST: no ADLV a aba nem aparece ──
+function _pedAplicarModulo(){
+  var btn  = document.getElementById('gov-main-tab-pedidos');
+  var pane = document.getElementById('gov-main-content-pedidos');
+  var fast = _pedEhFast();
+  if (btn) btn.style.display = fast ? '' : 'none';
+  if (!fast) {
+    if (pane) pane.style.display = 'none';
+    _pedDados = [];
+    _pedStatusFiltro = null;
+    _pedFilaFiltro = null;
+    _pedLibFiltro = null;
+    _pedStatusLista = [];
+    _pedFilasLista = [];
+    _pedResumo = null;
+  }
+}
+
 // ── Tópico Reunião: só espelha o que já está carregado ──
 function reuniaoAbrir(){
   if (!_cobEhFast()) return;
