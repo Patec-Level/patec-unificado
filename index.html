@@ -32419,9 +32419,11 @@ var _PED_MAXW = 'none';
 function _pedStatus(r){ return String((r && r.status) || '').trim() || _PED_SEM_STATUS; }
 function _pedFila(r){ return String((r && r.filaGov) || '').trim() || 'Sem fila'; }
 
-// Marcação da coluna "Liberado E&P": qualquer valor preenchido conta
+// Marcação da coluna "Liberado E&P": conta SÓ quem está escrito "Liberado".
+// Comparação exata de propósito — "Não liberado" e "Abaixo de 85k" não entram
+// (um "contém liberado" pegaria o "Não liberado" junto).
 function _pedLibTipo(r){
-  return String((r && r.liberado) || '').trim() ? _PED_LIB.nome : '';
+  return _cobNorm(r && r.liberado) === 'liberado' ? _PED_LIB.nome : '';
 }
 
 function _pedEhFast(){
@@ -32657,7 +32659,9 @@ function _pedDesenhar(){
       + '<td>' + _cobEsc(String(r2.filaGov || '').trim() || '—') + '</td>'
       + '<td>' + (lib
           ? '<span style="background:' + _PED_LIB.bg + ';color:' + _PED_LIB.cor + ';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap">' + _cobEsc(String(r2.liberado).trim()) + '</span>'
-          : '—') + '</td>'
+          : (String(r2.liberado || '').trim()
+              ? '<span style="color:var(--tx2);font-size:10.5px">' + _cobEsc(String(r2.liberado).trim()) + '</span>'
+              : '—')) + '</td>'
       + '</tr>';
   }
   t += '</tbody></table>';
