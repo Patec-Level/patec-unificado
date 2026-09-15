@@ -632,6 +632,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
   <div class="sb-mod">◈ ESTRATÉGICO</div>
   <div class="sb-it active" onclick="go('vg-mercado',this)">🌐 Indicadores de Mercado</div>
+  <div class="sb-it" id="sb-reuniao-it" onclick="go('reuniao',this)" style="display:none">🗣️ Reunião</div>
   <div class="sb-it" onclick="go('radar',this)">📡 Radar Estratégico</div>
   <div class="sb-it" onclick="go('plano-acao',this)">🎯 Plano de Ação</div>
   <div class="sb-mod">◈ EXECUÇÃO</div>
@@ -4260,6 +4261,35 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
     </div><!-- /p-analista-auto -->
 
     <!-- ══════════════════════════════════════════
+         REUNIÃO  (exclusivo do módulo FAST)
+         Espelho de Governança › Cobrança por Status: mesmos dados e mesmos
+         filtros, só os cards e a tabela — sem upload e sem os avisos.
+    ══════════════════════════════════════════ -->
+    <div id="p-reuniao" class="page">
+
+      <div style="display:flex;gap:0;margin-bottom:1.25rem;border-bottom:2px solid var(--brd)">
+        <button id="reu-tab-cobranca" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:default;color:var(--azm);border-bottom:3px solid var(--azm);margin-bottom:-2px">💳 Cobrança por Status</button>
+      </div>
+
+      <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--vm)">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <div>
+            <div class="cd-t" style="margin:0">💳 Cobrança por Status</div>
+            <div style="font-size:11px;color:var(--tx2);margin-top:2px">Mesma base da Governança. Clique nos cards para filtrar durante a reunião.</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span id="reu-atualizado" style="font-size:11px;color:var(--tx2)"></span>
+            <button class="btn btn-s" style="font-size:11px" onclick="govCobrancaRender()">↺ Atualizar</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="reu-cards" style="margin-bottom:.75rem"></div>
+      <div id="reu-subcards" style="display:none;margin-bottom:1rem;padding:.6rem .875rem;background:var(--vmc);border:1px solid var(--vm);border-radius:8px"></div>
+      <div id="reu-tabela"></div>
+    </div><!-- /p-reuniao -->
+
+    <!-- ══════════════════════════════════════════
          GOVERNANÇA + PLANILHA CRÍTICA (UNIFICADO)
     ══════════════════════════════════════════ -->
     <div id="p-governanca" class="page">
@@ -6802,6 +6832,7 @@ function go(id, el) {
   // evitando mostrar o id cru (ex: "radar", "plano-acao") como título da página
   const labelSidebar = (typeof PERMS_SIDEBAR !== 'undefined' && PERMS_SIDEBAR[id]) ? PERMS_SIDEBAR[id].label : null;
   document.getElementById('ttl').textContent = titles[id] || labelSidebar || id;
+  if(id==='reuniao'){ if(typeof reuniaoAbrir==='function') reuniaoAbrir(); }
   if(id==='pr-bancoferias'){ renderFerias(); renderBanco(); setTimeout(()=>{ fbCarregarBHE().then(()=>{ bheArquivarVencidos(); renderBHECards(); }); }, 100); }
   document.getElementById('sb').classList.remove('mob-open');
   if(id==='vg-mercado') {
@@ -25172,6 +25203,7 @@ function q18Consultar(valor){
 // Mapa de permissões: chave sidebar → id da página
 const PERMS_SIDEBAR = {
   'vg-mercado':     { icon:'🌐', label:'Indicadores de Mercado',  mod:'ESTRATÉGICO' },
+  'reuniao':        { icon:'🗣️', label:'Reunião',                   mod:'ESTRATÉGICO' },
   'radar':          { icon:'📡', label:'Radar Estratégico',        mod:'ESTRATÉGICO' },
   'plano-acao':     { icon:'🎯', label:'Plano de Ação',            mod:'ESTRATÉGICO' },
   'pr-estrategico': { icon:'🎯', label:'Painel Estratégico',       mod:'EXECUÇÃO' },
@@ -25713,10 +25745,15 @@ function authMontarSidebar(emailParam){
   const ordemMods = ['ESTRATÉGICO','EXECUÇÃO'];
   // Plano de Ação: liberado para ADLV e FAST (cada módulo usa sua própria base)
   const PAGINAS_ADLV_ONLY = [];
+  // Reunião é exclusiva do FAST. Como é só um espelho da Governança ›
+  // Cobrança por Status, quem já tem acesso à Governança enxerga o tópico
+  // (perfis antigos não têm 'reuniao' na lista de permissões salva).
+  const PAGINAS_FAST_ONLY = ['reuniao'];
   Object.entries(PERMS_SIDEBAR).forEach(([key, cfg]) => {
     if(_moduloAtivo === 'fast' && PAGINAS_ADLV_ONLY.includes(key)) return;
+    if(_moduloAtivo !== 'fast' && PAGINAS_FAST_ONLY.includes(key)) return;
     if(cfg.hidden) return; // item oculto do menu (integrado em outra página)
-    if(podeVerTudo || perms.includes(key)){
+    if(podeVerTudo || perms.includes(key) || (key === 'reuniao' && perms.includes('governanca'))){
       if(!mods[cfg.mod]) mods[cfg.mod] = [];
       mods[cfg.mod].push({key, ...cfg});
     }
@@ -31465,14 +31502,13 @@ function govCobrancaRender(){
     var _cCol = _cobManualColab();
     if (_cCol && typeof prodRenderizarPaineis === 'function') prodRenderizarPaineis(_cCol);
   }catch(e){}
-  var wrap = document.getElementById('cob-tabela');
-  if (!wrap) return;
+  if (!_cobAlvos('tabela').length) return;
   var db = (typeof getDB === 'function') ? getDB() : null;
   if (!db) {
-    wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⚠ Firebase indisponível.</div>';
+    _cobSet('tabela', '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⚠ Firebase indisponível.</div>');
     return;
   }
-  wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⏳ Carregando cobranças...</div>';
+  _cobSet('tabela', '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⏳ Carregando cobranças...</div>');
 
   db.collection('cobranca_status').get().then(function(snap){
     _cobDados = [];
@@ -31490,7 +31526,7 @@ function govCobrancaRender(){
     });
     _cobDesenhar();
   }).catch(function(err){
-    wrap.innerHTML = '<div style="padding:2rem;color:var(--vm);font-size:13px">❌ ' + _cobEsc(err.message) + '</div>';
+    _cobSet('tabela', '<div style="padding:2rem;color:var(--vm);font-size:13px">❌ ' + _cobEsc(err.message) + '</div>');
   });
 }
 
@@ -31557,19 +31593,35 @@ function _cobDesenharResumo(){
     + '</div>';
 }
 
+// A mesma tela aparece em dois lugares: Governança › Cobrança por Status
+// (com upload) e no tópico Reunião (só os cards e a tabela). Os dois usam
+// os MESMOS dados e os MESMOS filtros — desenhar nos dois destinos evita
+// duplicar o código de montagem.
+function _cobAlvos(nome){
+  var out = [], i, ids = ['cob-' + nome, 'reu-' + nome], el;
+  for (i = 0; i < ids.length; i++) { el = document.getElementById(ids[i]); if (el) out.push(el); }
+  return out;
+}
+function _cobSet(nome, html){
+  _cobAlvos(nome).forEach(function(el){ el.innerHTML = html; });
+}
+function _cobSetDisplay(nome, html, mostrar){
+  _cobAlvos(nome).forEach(function(el){
+    el.innerHTML = html;
+    el.style.display = mostrar ? '' : 'none';
+  });
+}
+
 function _cobDesenhar(){
-  var wrap  = document.getElementById('cob-tabela');
-  var cards = document.getElementById('cob-cards');
-  var subs  = document.getElementById('cob-subcards');
-  if (!wrap) return;
+  if (!_cobAlvos('tabela').length) return;
 
   if (!_cobDados.length) {
-    if (cards) cards.innerHTML = '';
-    if (subs)  { subs.innerHTML = ''; subs.style.display = 'none'; }
+    _cobSet('cards', '');
+    _cobSetDisplay('subcards', '', false);
     _cobDesenharTotal();
     _cobDesenharResumo();
-    wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">'
-      + '📄 Nenhuma cobrança registrada ainda.<br><span style="font-size:11px">Use <strong>📤 Subir planilha</strong> acima para carregar os dados.</span></div>';
+    _cobSet('tabela', '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">'
+      + '📄 Nenhuma cobrança registrada ainda.<br><span style="font-size:11px">Use <strong>📤 Subir planilha</strong> em Governança › Cobrança por Status para carregar os dados.</span></div>');
     return;
   }
 
@@ -31578,7 +31630,7 @@ function _cobDesenhar(){
 
   var i;
 
-  if (cards) {
+  if (_cobAlvos('cards').length) {
     var temFila = _cobTemFila();
 
     // card de tipo de cobrança (2º nível) — mesmo estilo de sempre
@@ -31736,10 +31788,10 @@ function _cobDesenhar(){
 
     // esquerda = filas + tipos | direita = Verificar
     // padding-right evita que o último card encoste na borda da janela
-    cards.innerHTML = '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
+    _cobSet('cards', '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
       + '<div style="flex:1 1 auto">' + esq + '</div>'
       + htmlVer
-      + '</div>';
+      + '</div>');
   }
 
   _cobDesenharSub();
@@ -31796,19 +31848,17 @@ function _cobDesenhar(){
   if (_cobProcFiltro) legenda += ' — processo ' + _cobEsc(_cobProcFiltro);
   legenda += '. Clique num card para filtrar.';
 
-  wrap.innerHTML = '<div class="tw" style="max-height:560px">' + t + '</div>'
-    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">' + legenda + '</div>';
+  _cobSet('tabela', '<div class="tw" style="max-height:560px">' + t + '</div>'
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">' + legenda + '</div>');
 
 }
 
 // ── Sub-cards: quebra por nº de cobranças (só p/ tipos "Cobrança *") ──
 function _cobDesenharSub(){
-  var el = document.getElementById('cob-subcards');
-  if (!el) return;
+  if (!_cobAlvos('subcards').length) return;
 
   if (!_cobFiltro || !_cobEhTipoCobranca(_cobFiltro)) {
-    el.innerHTML = '';
-    el.style.display = 'none';
+    _cobSetDisplay('subcards', '', false);
     return;
   }
 
@@ -31849,8 +31899,7 @@ function _cobDesenharSub(){
   }
   html += '</div>';
 
-  el.innerHTML = html;
-  el.style.display = '';
+  _cobSetDisplay('subcards', html, true);
 }
 
 function govCobrancaLimparTudo(){
@@ -32306,12 +32355,29 @@ async function cobManualAnular(docId){
 function _cobEhFast(){
   return (typeof _moduloAtivo !== 'undefined') && _moduloAtivo === 'fast';
 }
+// ── Tópico Reunião: só espelha o que já está carregado ──
+function reuniaoAbrir(){
+  if (!_cobEhFast()) return;
+  if (_cobDados && _cobDados.length) _cobDesenhar();
+  else govCobrancaRender();
+  var av = document.getElementById('reu-atualizado');
+  if (av) {
+    var q = (_cobResumo && _cobResumo.atualizadoEm) ? new Date(_cobResumo.atualizadoEm) : null;
+    av.textContent = (q && !isNaN(q)) ? ('Planilha de ' + q.toLocaleString('pt-BR')) : '';
+  }
+}
+
 function _cobAplicarModulo(){
   var btn  = document.getElementById('gov-main-tab-cobranca');
   var pane = document.getElementById('gov-main-content-cobranca');
   var fast = _cobEhFast();
   if (btn) btn.style.display = fast ? '' : 'none';
+  // o tópico Reunião também é exclusivo do FAST
+  var itReu = document.getElementById('sb-reuniao-it');
+  if (itReu) itReu.style.display = fast ? '' : 'none';
   if (!fast) {
+    var pgReu = document.getElementById('p-reuniao');
+    if (pgReu) pgReu.classList.remove('active');
     if (pane) pane.style.display = 'none';
     _cobDados = [];
     _cobFilaFiltro = null;
