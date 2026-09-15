@@ -6792,6 +6792,12 @@ function go(id, el) {
     });
   }
   if (el) el.classList.add('active');
+  // O container .ct tem flex:1 e engole o espaço que sobra na tela. Como a
+  // maioria das páginas fica FORA dele, uma página curta (ex.: Reunião com um
+  // filtro de poucos itens) era empurrada para baixo, deixando uma faixa vazia
+  // no topo. Só deixa o .ct crescer quando a página ativa está dentro dele.
+  var _ct = document.querySelector('.ct');
+  if (_ct) _ct.style.flex = _ct.querySelector('.page.active') ? '1' : '0 0 auto';
   // Rolar para o topo ao trocar de aba
   const mn = document.getElementById('mn');
   if(mn) mn.scrollTop = 0;
