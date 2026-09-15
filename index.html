@@ -32613,10 +32613,11 @@ function _pedDesenhar(){
     var lateral = '<div data-ped="lateral" style="border-left:1px dashed var(--brd);padding-left:18px;min-width:220px">'
       + _pedCardTotal()
       + (temLib
-          ? '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">'
-            + '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">Liberação</span>'
-            + (_pedLibFiltro ? '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="govPedidosLibFiltrar(-1)">✕ limpar</button>' : '')
-            + '</div>'
+          // sem rótulo aqui: o próprio card já diz o que é
+          ? (_pedLibFiltro
+              ? '<div style="display:flex;align-items:center;justify-content:center;margin-bottom:6px">'
+                + '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="govPedidosLibFiltrar(-1)">✕ limpar</button></div>'
+              : '')
             + '<div data-ped="linha-lib" style="display:flex;gap:10px;flex-wrap:wrap">'
             + '<div onclick="govPedidosLibFiltrar(0)" title="Filtrar os itens liberados para E&P"'
             + ' style="cursor:pointer;background:' + (onL ? _PED_LIB.cor : _PED_LIB.bg)
