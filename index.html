@@ -4268,20 +4268,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
     <div id="p-reuniao" class="page">
 
       <div style="display:flex;gap:0;margin-bottom:1.25rem;border-bottom:2px solid var(--brd)">
-        <button id="reu-tab-cobranca" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:default;color:var(--azm);border-bottom:3px solid var(--azm);margin-bottom:-2px">💳 Cobrança por Status</button>
-      </div>
-
-      <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--vm)">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-          <div>
-            <div class="cd-t" style="margin:0">💳 Cobrança por Status</div>
-            <div style="font-size:11px;color:var(--tx2);margin-top:2px">Mesma base da Governança. Clique nos cards para filtrar durante a reunião.</div>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <span id="reu-atualizado" style="font-size:11px;color:var(--tx2)"></span>
-            <button class="btn btn-s" style="font-size:11px" onclick="govCobrancaRender()">↺ Atualizar</button>
-          </div>
-        </div>
+        <button id="reu-tab-cobranca" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:default;color:var(--azm);border-bottom:3px solid var(--azm);margin-bottom:-2px">💳 PATEC</button>
       </div>
 
       <div id="reu-cards" style="margin-bottom:.75rem"></div>
@@ -31789,7 +31776,7 @@ function _cobDesenhar(){
     // esquerda = filas + tipos | direita = Verificar
     // padding-right evita que o último card encoste na borda da janela
     _cobSet('cards', '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
-      + '<div style="flex:1 1 auto">' + esq + '</div>'
+      + '<div style="flex:1 1 0;min-width:0">' + esq + '</div>'
       + htmlVer
       + '</div>');
   }
@@ -32358,13 +32345,11 @@ function _cobEhFast(){
 // ── Tópico Reunião: só espelha o que já está carregado ──
 function reuniaoAbrir(){
   if (!_cobEhFast()) return;
+  // não existe botão de atualizar aqui: entrar no tópico já busca a base
+  // mais recente do Firebase. Se algo der errado, o que está em memória
+  // continua na tela.
   if (_cobDados && _cobDados.length) _cobDesenhar();
-  else govCobrancaRender();
-  var av = document.getElementById('reu-atualizado');
-  if (av) {
-    var q = (_cobResumo && _cobResumo.atualizadoEm) ? new Date(_cobResumo.atualizadoEm) : null;
-    av.textContent = (q && !isNaN(q)) ? ('Planilha de ' + q.toLocaleString('pt-BR')) : '';
-  }
+  govCobrancaRender();
 }
 
 function _cobAplicarModulo(){
