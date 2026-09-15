@@ -4294,7 +4294,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             </label>
             <span id="cob-status" style="font-size:11.5px;color:var(--tx2)"></span>
           </div>
-          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Status, Verificar, Cobrança, Tipo de Cobrança, Fila</strong> — obrigatórias: RC e Status. As colunas <em>MAPA GUI</em> e <em>Fila GOV</em> são ignoradas. A ordem das colunas não importa: a leitura é pelo nome.</div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Status, Verificar, Processo, Cobrança, Tipo de Cobrança, Fila</strong> — obrigatórias: RC e Status. As colunas <em>MAPA GUI</em> e <em>Fila GOV</em> são ignoradas. A ordem das colunas não importa: a leitura é pelo nome.</div>
           <div id="cob-resumo"></div>
         </div>
 
@@ -31330,7 +31330,8 @@ var _cobDados = [];
 var _cobFilaFiltro = null;   // fila selecionada (coluna L) — 1º nível
 var _cobFiltro = null;       // tipo de cobrança selecionado (coluna G) — 2º nível
 var _cobSubFiltro = null;    // nº de cobranças selecionado (só p/ tipos "Cobrança *")
-var _cobVerifFiltro = null;  // 'Status B' | 'Nova Reserva' (coluna J - Verificar)
+var _cobVerifFiltro = null;  // 'Status B' | 'Nova Reserva' (coluna Verificar)
+var _cobProcFiltro = null;   // 'E&P' (coluna Processo)
 var _cobTipos = [];
 var _cobFilas = [];
 // resumo do último upload: linhas lidas x itens gravados x duplicatas ignoradas
@@ -31349,6 +31350,10 @@ var _COB_VERIF = [
   { nome: 'Status B',     cor: 'var(--vd)',  bg: 'var(--vdc)' },
   { nome: 'Nova Reserva', cor: '#7c3aed',    bg: '#ede9fe'    }
 ];
+
+// Coluna "Processo" — mesma mecânica da coluna Verificar: é só uma marcação
+// à parte, não entra na soma das filas.
+var _COB_PROC = { nome: 'E&P', cor: '#0369a1', bg: '#e0f2fe' };
 
 // Ordem fixa dos cards: solicitações primeiro, depois as cobranças
 var _COB_ORDEM = [
@@ -31414,6 +31419,13 @@ function _cobVerifTipo(r){
   if (v.indexOf('reserva') !== -1) return 'Nova Reserva';
   if (v.indexOf('status b') !== -1 || v === 'b' || v === 'sb') return 'Status B';
   return '';
+}
+
+// Classifica a coluna "Processo" -> 'E&P' | ''
+// Tolerante a "E&P", "E & P", "EP", "e&p"
+function _cobProcTipo(r){
+  var v = _cobNorm(r && r.processo).replace(/[^a-z]/g, '');
+  return v === 'ep' ? _COB_PROC.nome : '';
 }
 
 // Acha a coluna L ("Fila") sem confundir com a K ("Fila Gov"), que é ignorada
@@ -31483,19 +31495,25 @@ function govCobrancaRender(){
 }
 
 // ── Card do TOTAL, no cabeçalho ──
-function _cobDesenharTotal(){
-  var el = document.getElementById('cob-total-head');
-  if (!el) return;
-  if (!_cobDados.length) { el.innerHTML = ''; return; }
-  var ativo = (_cobFiltro === null);
-  el.innerHTML =
-    '<div onclick="govCobrancaLimparTudo()" title="Mostrar todos os itens"'
-    + ' style="cursor:pointer;display:inline-flex;align-items:center;gap:10px;'
+// Card do TOTAL — fica na 1ª linha do bloco lateral, acima das marcações
+function _cobCardTotal(){
+  if (!_cobDados.length) return '';
+  var ativo = (_cobFiltro === null && _cobFilaFiltro === null
+            && _cobVerifFiltro === null && _cobProcFiltro === null);
+  return '<div data-cob="linha-total" style="display:flex;margin-bottom:10px">'
+    + '<div onclick="govCobrancaLimparTudo()" title="Mostrar todos os itens"'
+    + ' style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;flex:1 1 auto;'
     + 'background:' + (ativo ? 'var(--azm)' : 'var(--azc)') + ';color:' + (ativo ? '#fff' : 'var(--azm)')
-    + ';border:1.5px solid var(--azm);border-radius:8px;padding:6px 18px;line-height:1.1">'
+    + ';border:1.5px solid var(--azm);border-radius:8px;padding:7px 18px;line-height:1.1">'
     + '<span style="font-size:22px;font-weight:800">' + _cobDados.length + '</span>'
     + '<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Total<br>de itens</span>'
-    + '</div>';
+    + '</div></div>';
+}
+
+function _cobDesenharTotal(){
+  // o card mudou de lugar: agora é desenhado dentro de #cob-cards
+  var el = document.getElementById('cob-total-head');
+  if (el) el.innerHTML = '';
 }
 
 // ── Aviso de conferência do último upload (linhas x itens gravados) ──
@@ -31666,33 +31684,54 @@ function _cobDesenhar(){
       if (s2) esq += '<div data-cob="linha-cob" style="' + linha + ';margin-top:10px">' + s2 + '</div>';
     }
 
-    // bloco lateral = processos da coluna "Verificar" (Status B / Nova Reserva)
+    // bloco lateral: 1ª linha = card do Total; 2ª linha = as marcações
+    // (Status B, Nova Reserva e E&P) lado a lado. Marcação não entra na
+    // soma das filas — é só um recorte para conferência.
     var htmlVer = '';
     var temVerif = _cobDados.some(function(r){ return _cobVerifTipo(r) !== ''; });
-    if (temVerif) {
+    var temProc  = _cobDados.some(function(r){ return _cobProcTipo(r) !== ''; });
+    if (temVerif || temProc) {
       var cardsVer = '';
-      for (i = 0; i < _COB_VERIF.length; i++) {
+      for (i = 0; temVerif && i < _COB_VERIF.length; i++) {
         var v = _COB_VERIF[i];
         var qtd = _cobDados.filter(function(r){ return _cobVerifTipo(r) === v.nome; }).length;
         var on = (_cobVerifFiltro === v.nome);
         cardsVer += '<div onclick="govCobrancaVerifFiltrar(' + i + ')" title="Filtrar RCs em ' + v.nome + '"'
           + ' style="cursor:pointer;background:' + (on ? v.cor : v.bg) + ';color:' + (on ? '#fff' : v.cor)
-          + ';border:1.5px solid ' + v.cor + ';border-radius:8px;padding:8px 18px;text-align:center;'
-          + 'line-height:1.2;min-width:120px">'
+          + ';border:1.5px solid ' + v.cor + ';border-radius:8px;padding:8px 14px;text-align:center;'
+          + 'line-height:1.2;flex:1 1 0;min-width:104px">'
           + '<div style="font-size:19px;font-weight:800">' + qtd + '</div>'
           + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + v.nome + '</div>'
           + '</div>';
       }
-      // rótulo em cima, cards logo abaixo
-      htmlVer = '<div data-cob="verificar" style="border-left:1px dashed var(--brd);padding-left:18px">'
+      // E&P entra na MESMA linha de Status B / Nova Reserva
+      if (temProc) {
+        var qtdP = _cobDados.filter(function(r){ return _cobProcTipo(r) !== ''; }).length;
+        var onP  = (_cobProcFiltro === _COB_PROC.nome);
+        cardsVer += '<div onclick="govCobrancaProcFiltrar()" title="Filtrar os itens do processo ' + _COB_PROC.nome + '"'
+          + ' style="cursor:pointer;background:' + (onP ? _COB_PROC.cor : _COB_PROC.bg)
+          + ';color:' + (onP ? '#fff' : _COB_PROC.cor)
+          + ';border:1.5px solid ' + _COB_PROC.cor + ';border-radius:8px;padding:8px 14px;text-align:center;'
+          + 'line-height:1.2;flex:1 1 0;min-width:104px">'
+          + '<div style="font-size:19px;font-weight:800">' + qtdP + '</div>'
+          + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(_COB_PROC.nome) + '</div>'
+          + '</div>';
+      }
+      // 1ª linha = Total | 2ª linha = as três marcações, lado a lado
+      htmlVer = '<div data-cob="verificar" style="border-left:1px dashed var(--brd);padding-left:18px;min-width:360px">'
+        + _cobCardTotal()
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
         + '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">Verificar</span>'
-        + (_cobVerifFiltro
-            ? '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="govCobrancaVerifFiltrar(-1)">✕ limpar</button>'
+        + ((_cobVerifFiltro || _cobProcFiltro)
+            ? '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="govCobrancaMarcaLimpar()">✕ limpar</button>'
             : '')
         + '</div>'
-        + '<div style="display:flex;gap:12px;flex-wrap:wrap">' + cardsVer + '</div>'
+        + '<div data-cob="linha-verif" style="display:flex;gap:10px;flex-wrap:wrap">' + cardsVer + '</div>'
         + '</div>';
+    } else {
+      // sem marcações na planilha, o card de Total continua aparecendo sozinho
+      htmlVer = '<div data-cob="verificar" style="border-left:1px dashed var(--brd);padding-left:18px;min-width:200px">'
+        + _cobCardTotal() + '</div>';
     }
 
     // esquerda = filas + tipos | direita = Verificar
@@ -31719,10 +31758,13 @@ function _cobDesenhar(){
   if (_cobVerifFiltro) {
     lista = lista.filter(function(r){ return _cobVerifTipo(r) === _cobVerifFiltro; });
   }
+  if (_cobProcFiltro) {
+    lista = lista.filter(function(r){ return _cobProcTipo(r) === _cobProcFiltro; });
+  }
 
   var t = '<table><thead><tr>'
     + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Status</th>'
-    + '<th>Cobranças</th><th>Tipo de Cobrança</th><th>Fila</th><th>Verificar</th>'
+    + '<th>Cobranças</th><th>Tipo de Cobrança</th><th>Fila</th><th>Verificar</th><th>Processo</th>'
     + '</tr></thead><tbody>';
 
   for (i = 0; i < lista.length; i++) {
@@ -31741,6 +31783,7 @@ function _cobDesenhar(){
       + '<td>' + _cobEsc(r.tipoCobranca || '—') + '</td>'
       + '<td>' + _cobEsc(_cobFila(r) || '—') + '</td>'
       + '<td>' + _cobCelulaVerif(r) + '</td>'
+      + '<td>' + _cobCelulaProc(r) + '</td>'
       + '</tr>';
   }
   t += '</tbody></table>';
@@ -31750,6 +31793,7 @@ function _cobDesenhar(){
   if (_cobFiltro) legenda += ' — ' + _cobEsc(_cobFiltro);
   if (_cobSubFiltro !== null) legenda += ' com ' + _cobSubFiltro + ' cobrança' + (_cobSubFiltro === 1 ? '' : 's');
   if (_cobVerifFiltro) legenda += ' — ' + _cobEsc(_cobVerifFiltro);
+  if (_cobProcFiltro) legenda += ' — processo ' + _cobEsc(_cobProcFiltro);
   legenda += '. Clique num card para filtrar.';
 
   wrap.innerHTML = '<div class="tw" style="max-height:560px">' + t + '</div>'
@@ -31810,7 +31854,8 @@ function _cobDesenharSub(){
 }
 
 function govCobrancaLimparTudo(){
-  _cobFilaFiltro = null; _cobFiltro = null; _cobSubFiltro = null; _cobVerifFiltro = null;
+  _cobFilaFiltro = null; _cobFiltro = null; _cobSubFiltro = null;
+  _cobVerifFiltro = null; _cobProcFiltro = null;
   _cobDesenhar();
 }
 
@@ -31846,10 +31891,34 @@ function _cobCelulaVerif(r){
        + 'font-size:10px;font-weight:700;white-space:nowrap">' + v.nome + '</span>';
 }
 
+// selo colorido da coluna Processo
+function _cobCelulaProc(r){
+  var t = _cobProcTipo(r);
+  if (!t) {
+    var cru = String(r.processo || '').trim();
+    return cru ? '<span style="color:var(--tx2);font-size:10.5px">' + _cobEsc(cru) + '</span>' : '—';
+  }
+  return '<span style="background:' + _COB_PROC.bg + ';color:' + _COB_PROC.cor + ';padding:2px 8px;'
+       + 'border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap">' + _cobEsc(t) + '</span>';
+}
+
 // idx = posicao em _COB_VERIF; -1 = limpar
 function govCobrancaVerifFiltrar(idx){
   var alvo = (idx === null || idx === -1 || !_COB_VERIF[idx]) ? null : _COB_VERIF[idx].nome;
   _cobVerifFiltro = (alvo === _cobVerifFiltro) ? null : alvo;
+  _cobDesenhar();
+}
+
+// card do processo (E&P) — clicar de novo desmarca
+function govCobrancaProcFiltrar(){
+  _cobProcFiltro = (_cobProcFiltro === _COB_PROC.nome) ? null : _COB_PROC.nome;
+  _cobDesenhar();
+}
+
+// limpa as duas marcações do bloco lateral de uma vez
+function govCobrancaMarcaLimpar(){
+  _cobVerifFiltro = null;
+  _cobProcFiltro = null;
   _cobDesenhar();
 }
 
@@ -31906,6 +31975,7 @@ function govCobrancaUpload(ev){
       var cQtd   = _cobCol(amostra, ['Cobranca', 'Cobrança', 'Qtd Cobranca']);
       var cTipo  = _cobCol(amostra, ['Tipo de Cobranca', 'Tipo de Cobrança', 'Tipo']);
       var cVer   = _cobCol(amostra, ['Verificar', 'Verificacao', 'Verificação']);
+      var cProc  = _cobCol(amostra, ['Processo', 'Processos']);
       // Coluna L = "Fila". A coluna K ("Fila Gov") é ignorada de propósito.
       var cFila  = _cobColFila(amostra);
 
@@ -31941,6 +32011,7 @@ function govCobrancaUpload(ev){
           cobrancas: cQtd ? limpo(l[cQtd]) : '',
           tipoCobranca: cTipo ? limpo(l[cTipo]) : '',
           verificar: cVer ? limpo(l[cVer]) : '',
+          processo: cProc ? limpo(l[cProc]) : '',
           fila: cFila ? limpo(l[cFila]) : '',
           atualizadoEm: new Date().toISOString()
         });
@@ -31989,6 +32060,7 @@ function govCobrancaUpload(ev){
         _cobFiltro = null;
         _cobSubFiltro = null;
         _cobVerifFiltro = null;
+        _cobProcFiltro = null;
         govCobrancaRender();
         setTimeout(function(){ _cobMsg(''); }, 4000);
       }).catch(function(err){
@@ -32246,6 +32318,7 @@ function _cobAplicarModulo(){
     _cobFiltro = null;
     _cobSubFiltro = null;
     _cobVerifFiltro = null;
+    _cobProcFiltro = null;
     _cobTipos = [];
     _cobFilas = [];
   }
