@@ -4269,7 +4269,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
       <div style="display:flex;gap:0;margin-bottom:1.25rem;border-bottom:2px solid var(--brd);align-items:center">
         <button id="reu-tab-cobranca" onclick="reuTab('patec',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--azm);border-bottom:3px solid var(--azm);margin-bottom:-2px">💳 PATEC</button>
-        <button id="reu-tab-pedidos" onclick="reuTab('pedidos',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">📦 Pedidos</button>
+        <button id="reu-tab-pedidos" onclick="reuTab('pedidos',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">📦 Análise e Emissão</button>
         <div style="margin-left:auto;display:flex;align-items:center;gap:10px;padding-bottom:6px">
           <span id="reu-export-msg" style="font-size:11px;color:var(--tx2)"></span>
           <button class="btn btn-s" style="font-size:11.5px;font-weight:700" onclick="reuniaoExportar()">⬇ Exportar PATEC + Pedidos</button>
@@ -32469,6 +32469,19 @@ var _PED_DOC_RESUMO = 'resumo_upload';
 var _PED_COLECAO = 'pedidos_status';
 var _PED_LIB = { nome: 'Liberados E&P', cor: '#0369a1', bg: '#e0f2fe' };
 var _PED_SEM_STATUS = 'Sem status';
+// Ordem de apresentação dos cards de status (a contagem não manda aqui).
+// Status fora da lista entram depois, e "Sem status" fica sempre por último.
+var _PED_ORDEM = [
+  'pedido memorizado',
+  'pedido rejeitado',
+  'pedido emitido',
+  'em analise para emissao de pedido'
+];
+function _pedPesoStatus(nome){
+  if (nome === _PED_SEM_STATUS) return 999;
+  var i = _PED_ORDEM.indexOf(_cobNorm(nome));
+  return i !== -1 ? i : 900;
+}
 var _PED_MAXW = 'none';
 
 // A planilha pode vir sem a coluna Status preenchida em parte das linhas —
@@ -32607,10 +32620,10 @@ function _pedDesenhar(){
       var s = _pedStatus(_pedDados[i]);
       porStatus[s] = (porStatus[s] || 0) + 1;
     }
-    // mais volumosos primeiro; "Sem status" sempre por último
+    // ordem fixa (_PED_ORDEM); empate entre status desconhecidos vai pelo volume
     _pedStatusLista = Object.keys(porStatus).sort(function(a, b){
-      if (a === _PED_SEM_STATUS) return 1;
-      if (b === _PED_SEM_STATUS) return -1;
+      var pa = _pedPesoStatus(a), pb = _pedPesoStatus(b);
+      if (pa !== pb) return pa - pb;
       return porStatus[b] - porStatus[a];
     });
 
