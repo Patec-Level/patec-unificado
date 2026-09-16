@@ -31472,6 +31472,29 @@ function _cobCol(linha, nomes){
   return null;
 }
 
+// Agrupa valores que só diferem em maiúscula/acento/espaço ("E-FORM em
+// Aprovação" e "E-FORM em aprovação" viravam dois cards). O rótulo exibido é
+// a grafia mais usada na planilha; a contagem é a soma de todas.
+function _cobAgrupar(lista, fn){
+  var mapa = {}, i, v, k;
+  for (i = 0; i < lista.length; i++) {
+    v = fn(lista[i]);
+    k = _cobNorm(v);
+    if (!mapa[k]) mapa[k] = { n: 0, variantes: {} };
+    mapa[k].n++;
+    mapa[k].variantes[v] = (mapa[k].variantes[v] || 0) + 1;
+  }
+  var out = {};
+  Object.keys(mapa).forEach(function(k2){
+    var vs = Object.keys(mapa[k2].variantes);
+    vs.sort(function(a, b){ return mapa[k2].variantes[b] - mapa[k2].variantes[a]; });
+    out[vs[0]] = mapa[k2].n;
+  });
+  return out;
+}
+// comparação de rótulo, tolerante às mesmas diferenças
+function _cobIgual(a, b){ return _cobNorm(a) === _cobNorm(b); }
+
 // "Cobrança Requisitante" -> true ; "Solicitação Scomp" -> false
 function _cobEhTipoCobranca(tipo){
   return _cobNorm(tipo).indexOf('cobranca') === 0;
@@ -31699,7 +31722,7 @@ function _cobDesenhar(){
 
     // card de tipo de cobrança (2º nível) — mesmo estilo de sempre
     var montaCard = function(nome, idx, cont){
-      var ativo = (_cobFiltro === nome);
+      var ativo = _cobIgual(_cobFiltro, nome) && _cobFiltro !== null;
       var ehCob = _cobEhTipoCobranca(nome);
       return '<div onclick="govCobrancaFiltrar(' + idx + ')"'
         + ' title="' + (ehCob ? 'Clique para ver a quebra por nº de cobranças' : 'Clique para filtrar') + '"'
@@ -31723,17 +31746,13 @@ function _cobDesenhar(){
 
     if (temFila) {
       // ── 1º NÍVEL: filas (coluna L) ──
-      var filas = {};
-      for (i = 0; i < _cobDados.length; i++) {
-        var f = _cobFila(_cobDados[i]) || 'Sem fila';
-        filas[f] = (filas[f] || 0) + 1;
-      }
+      var filas = _cobAgrupar(_cobDados, function(r){ return _cobFila(r) || 'Sem fila'; });
       _cobFilas = Object.keys(filas).sort(function(a, b){ return filas[b] - filas[a]; });
 
       var htmlFila = '';
       for (i = 0; i < _cobFilas.length; i++) {
         var nf = _cobFilas[i];
-        var on = (_cobFilaFiltro === nf);
+        var on = (_cobFilaFiltro !== null && _cobIgual(_cobFilaFiltro, nf));
         htmlFila += '<div onclick="govCobrancaFilaFiltrar(' + i + ')" title="Ver os tipos de cobrança desta fila"'
           + ' style="cursor:pointer;background:' + (on ? '#1A2D4F' : 'var(--bg)')
           + ';color:' + (on ? '#fff' : 'var(--tx)')
@@ -31748,12 +31767,8 @@ function _cobDesenhar(){
 
       // ── 2º NÍVEL: tipos de cobrança da fila escolhida ──
       if (_cobFilaFiltro) {
-        var doFiltro = _cobDados.filter(function(r){ return _cobFila(r) === _cobFilaFiltro; });
-        var gT = {};
-        doFiltro.forEach(function(r){
-          var t = r.tipoCobranca || 'Sem tipo';
-          gT[t] = (gT[t] || 0) + 1;
-        });
+        var doFiltro = _cobDados.filter(function(r){ return _cobIgual(_cobFila(r), _cobFilaFiltro); });
+        var gT = _cobAgrupar(doFiltro, function(r){ return r.tipoCobranca || 'Sem tipo'; });
         _cobTipos = Object.keys(gT).sort(function(a, b){
           var pa = _cobPeso(a), pb = _cobPeso(b);
           if (pa !== pb) return pa - pb;
@@ -31779,11 +31794,7 @@ function _cobDesenhar(){
 
     } else {
       // ── Planilha sem a coluna Fila: comportamento anterior (tipos direto) ──
-      var g2 = {};
-      for (i = 0; i < _cobDados.length; i++) {
-        var t2 = _cobDados[i].tipoCobranca || 'Sem tipo';
-        g2[t2] = (g2[t2] || 0) + 1;
-      }
+      var g2 = _cobAgrupar(_cobDados, function(r){ return r.tipoCobranca || 'Sem tipo'; });
       _cobTipos = Object.keys(g2).sort(function(a, b){
         var pa = _cobPeso(a), pb = _cobPeso(b);
         if (pa !== pb) return pa - pb;
@@ -31879,10 +31890,10 @@ function _cobDesenhar(){
   // ── Tabela ──
   var lista = _cobDados;
   if (_cobFilaFiltro) {
-    lista = lista.filter(function(r){ return _cobFila(r) === _cobFilaFiltro; });
+    lista = lista.filter(function(r){ return _cobIgual(_cobFila(r), _cobFilaFiltro); });
   }
   if (_cobFiltro) {
-    lista = lista.filter(function(r){ return (r.tipoCobranca || 'Sem tipo') === _cobFiltro; });
+    lista = lista.filter(function(r){ return _cobIgual(r.tipoCobranca || 'Sem tipo', _cobFiltro); });
   }
   if (_cobSubFiltro !== null) {
     lista = lista.filter(function(r){ return _cobQtd(r) === _cobSubFiltro; });
@@ -31950,8 +31961,8 @@ function _cobDesenharSub(){
   // respeita a fila selecionada — sem isso a quebra mostraria o total do tipo
   // na base inteira, e nao o recorte da fila escolhida
   var itens = _cobDados.filter(function(r){
-    if ((r.tipoCobranca || 'Sem tipo') !== _cobFiltro) return false;
-    if (_cobFilaFiltro && _cobFila(r) !== _cobFilaFiltro) return false;
+    if (!_cobIgual(r.tipoCobranca || 'Sem tipo', _cobFiltro)) return false;
+    if (_cobFilaFiltro && !_cobIgual(_cobFila(r), _cobFilaFiltro)) return false;
     return true;
   });
   var porQtd = {};
@@ -32615,11 +32626,7 @@ function _pedDesenhar(){
 
   if (_pedAlvos('cards').length) {
     // ── 1º nível: Status ──
-    var porStatus = {};
-    for (i = 0; i < _pedDados.length; i++) {
-      var s = _pedStatus(_pedDados[i]);
-      porStatus[s] = (porStatus[s] || 0) + 1;
-    }
+    var porStatus = _cobAgrupar(_pedDados, _pedStatus);
     // ordem fixa (_PED_ORDEM); empate entre status desconhecidos vai pelo volume
     _pedStatusLista = Object.keys(porStatus).sort(function(a, b){
       var pa = _pedPesoStatus(a), pb = _pedPesoStatus(b);
@@ -32630,7 +32637,7 @@ function _pedDesenhar(){
     var htmlStatus = '';
     for (i = 0; i < _pedStatusLista.length; i++) {
       var ns = _pedStatusLista[i];
-      var on = (_pedStatusFiltro === ns);
+      var on = (_pedStatusFiltro !== null && _cobIgual(_pedStatusFiltro, ns));
       htmlStatus += '<div onclick="govPedidosStatusFiltrar(' + i + ')" title="Ver as filas deste status"'
         + ' style="cursor:pointer;background:' + (on ? '#1A2D4F' : 'var(--bg)')
         + ';color:' + (on ? '#fff' : 'var(--tx)')
@@ -32645,15 +32652,14 @@ function _pedDesenhar(){
 
     // ── 2º nível: filas do status escolhido ──
     if (_pedStatusFiltro) {
-      var doStatus = _pedDados.filter(function(r){ return _pedStatus(r) === _pedStatusFiltro; });
-      var porFila = {};
-      doStatus.forEach(function(r){ var f = _pedFila(r); porFila[f] = (porFila[f] || 0) + 1; });
+      var doStatus = _pedDados.filter(function(r){ return _cobIgual(_pedStatus(r), _pedStatusFiltro); });
+      var porFila = _cobAgrupar(doStatus, _pedFila);
       _pedFilasLista = Object.keys(porFila).sort(function(a, b){ return porFila[b] - porFila[a]; });
 
       var htmlFila = '';
       for (i = 0; i < _pedFilasLista.length; i++) {
         var nf = _pedFilasLista[i];
-        var onF = (_pedFilaFiltro === nf);
+        var onF = (_pedFilaFiltro !== null && _cobIgual(_pedFilaFiltro, nf));
         htmlFila += '<div onclick="govPedidosFilaFiltrar(' + i + ')" title="Clique para filtrar"'
           + ' style="cursor:pointer;background:' + (onF ? 'var(--azm)' : 'var(--bg)')
           + ';color:' + (onF ? '#fff' : 'var(--tx)')
@@ -32709,8 +32715,8 @@ function _pedDesenhar(){
 
   // ── Tabela ──
   var lista = _pedDados;
-  if (_pedStatusFiltro) lista = lista.filter(function(r){ return _pedStatus(r) === _pedStatusFiltro; });
-  if (_pedFilaFiltro)   lista = lista.filter(function(r){ return _pedFila(r) === _pedFilaFiltro; });
+  if (_pedStatusFiltro) lista = lista.filter(function(r){ return _cobIgual(_pedStatus(r), _pedStatusFiltro); });
+  if (_pedFilaFiltro)   lista = lista.filter(function(r){ return _cobIgual(_pedFila(r), _pedFilaFiltro); });
   if (_pedLibFiltro)    lista = lista.filter(function(r){ return _pedLibTipo(r) === _pedLibFiltro; });
 
   var t = '<table><thead><tr>'
