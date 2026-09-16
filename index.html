@@ -31830,7 +31830,7 @@ function _cobDesenhar(){
           + '</div>';
       }
       // 1ª linha = Total | 2ª linha = as três marcações, lado a lado
-      htmlVer = '<div data-cob="verificar" style="border-left:1px dashed var(--brd);padding-left:18px;min-width:360px">'
+      htmlVer = '<div data-cob="verificar" style="border-right:1px dashed var(--brd);padding-right:18px;min-width:360px">'
         + _cobCardTotal()
         + '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">'
         + '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">Tipo de Processo</span>'
@@ -31842,15 +31842,15 @@ function _cobDesenhar(){
         + '</div>';
     } else {
       // sem marcações na planilha, o card de Total continua aparecendo sozinho
-      htmlVer = '<div data-cob="verificar" style="border-left:1px dashed var(--brd);padding-left:18px;min-width:200px">'
+      htmlVer = '<div data-cob="verificar" style="border-right:1px dashed var(--brd);padding-right:18px;min-width:200px">'
         + _cobCardTotal() + '</div>';
     }
 
-    // esquerda = filas + tipos | direita = Verificar
-    // padding-right evita que o último card encoste na borda da janela
+    // A apresentação começa pelo total: Total + marcações à ESQUERDA, e a
+    // composição (filas e tipos) em seguida.
     _cobSet('cards', '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
-      + '<div style="flex:1 1 0;min-width:0">' + esq + '</div>'
       + htmlVer
+      + '<div style="flex:1 1 0;min-width:0">' + esq + '</div>'
       + '</div>');
   }
 
@@ -32644,7 +32644,7 @@ function _pedDesenhar(){
     var qtdLib = _pedDados.filter(function(r){ return _pedLibTipo(r) !== ''; }).length;
     var temLib = qtdLib > 0;
     var onL = (_pedLibFiltro === _PED_LIB.nome);
-    var lateral = '<div data-ped="lateral" style="border-left:1px dashed var(--brd);padding-left:18px;min-width:220px">'
+    var lateral = '<div data-ped="lateral" style="border-right:1px dashed var(--brd);padding-right:18px;min-width:220px">'
       + _pedCardTotal()
       + (temLib
           // sem rótulo aqui: o próprio card já diz o que é
@@ -32664,9 +32664,10 @@ function _pedDesenhar(){
           : '')
       + '</div>';
 
+    // mesma ordem da aba PATEC: total primeiro, composição depois
     _pedSet('cards', '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
-      + '<div style="flex:1 1 0;min-width:0">' + esq + '</div>'
       + lateral
+      + '<div style="flex:1 1 0;min-width:0">' + esq + '</div>'
       + '</div>');
   }
 
