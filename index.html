@@ -4267,9 +4267,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
     ══════════════════════════════════════════ -->
     <div id="p-reuniao" class="page">
 
-      <div style="display:flex;gap:0;margin-bottom:1.25rem;border-bottom:2px solid var(--brd)">
+      <div style="display:flex;gap:0;margin-bottom:1.25rem;border-bottom:2px solid var(--brd);align-items:center">
         <button id="reu-tab-cobranca" onclick="reuTab('patec',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--azm);border-bottom:3px solid var(--azm);margin-bottom:-2px">💳 PATEC</button>
         <button id="reu-tab-pedidos" onclick="reuTab('pedidos',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">📦 Pedidos</button>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:10px;padding-bottom:6px">
+          <span id="reu-export-msg" style="font-size:11px;color:var(--tx2)"></span>
+          <button class="btn btn-s" style="font-size:11.5px;font-weight:700" onclick="reuniaoExportar()">⬇ Exportar PATEC + Pedidos</button>
+        </div>
       </div>
 
       <div id="reu-conteudo-patec">
@@ -31799,22 +31803,26 @@ function _cobDesenhar(){
     // bloco lateral: 1ª linha = card do Total; 2ª linha = as marcações
     // (Status B, Nova Reserva e E&P) lado a lado. Marcação não entra na
     // soma das filas — é só um recorte para conferência.
-    var htmlVer = '';
+    var htmlVer = '', htmlVerReu = '';
     var temVerif = _cobDados.some(function(r){ return _cobVerifTipo(r) !== ''; });
     var temProc  = _cobDados.some(function(r){ return _cobProcTipo(r) !== ''; });
     if (temVerif || temProc) {
+      // guarda card a card: a Reunião não mostra o Status B (só a Governança)
       var cardsVer = '';
+      var _cardStatusB = '';
       for (i = 0; temVerif && i < _COB_VERIF.length; i++) {
         var v = _COB_VERIF[i];
         var qtd = _cobDados.filter(function(r){ return _cobVerifTipo(r) === v.nome; }).length;
         var on = (_cobVerifFiltro === v.nome);
-        cardsVer += '<div onclick="govCobrancaVerifFiltrar(' + i + ')" title="Filtrar RCs em ' + v.nome + '"'
+        var _umCard = '<div onclick="govCobrancaVerifFiltrar(' + i + ')" title="Filtrar RCs em ' + v.nome + '"'
           + ' style="cursor:pointer;background:' + (on ? v.cor : v.bg) + ';color:' + (on ? '#fff' : v.cor)
           + ';border:1.5px solid ' + v.cor + ';border-radius:8px;padding:8px 14px;text-align:center;'
           + 'line-height:1.2;flex:1 1 0;min-width:104px">'
           + '<div style="font-size:19px;font-weight:800">' + qtd + '</div>'
           + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + v.nome + '</div>'
           + '</div>';
+        cardsVer += _umCard;
+        if (v.nome === 'Status B') _cardStatusB = _umCard;
       }
       // E&P entra na MESMA linha de Status B / Nova Reserva
       if (temProc) {
@@ -31829,29 +31837,41 @@ function _cobDesenhar(){
           + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(_COB_PROC.nome) + '</div>'
           + '</div>';
       }
-      // 1ª linha = Total | 2ª linha = as três marcações, lado a lado
-      htmlVer = '<div data-cob="verificar" style="border-right:1px dashed var(--brd);padding-right:18px;min-width:360px">'
-        + _cobCardTotal()
-        + '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">'
-        + '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">Tipo de Processo</span>'
-        + ((_cobVerifFiltro || _cobProcFiltro)
-            ? '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="govCobrancaMarcaLimpar()">✕ limpar</button>'
-            : '')
-        + '</div>'
-        + '<div data-cob="linha-verif" style="display:flex;gap:10px;flex-wrap:wrap">' + cardsVer + '</div>'
-        + '</div>';
+      // 1ª linha = Total | 2ª linha = as marcações, lado a lado
+      var _montaLateral = function(cards){
+        return '<div data-cob="verificar" style="border-right:1px dashed var(--brd);padding-right:18px;min-width:360px">'
+          + _cobCardTotal()
+          + '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">'
+          + '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">Tipo de Processo</span>'
+          + ((_cobVerifFiltro || _cobProcFiltro)
+              ? '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="govCobrancaMarcaLimpar()">✕ limpar</button>'
+              : '')
+          + '</div>'
+          + '<div data-cob="linha-verif" style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div>'
+          + '</div>';
+      };
+      htmlVer = _montaLateral(cardsVer);
+      // na Reunião o card Status B não entra
+      htmlVerReu = _montaLateral(_cardStatusB ? cardsVer.split(_cardStatusB).join('') : cardsVer);
     } else {
       // sem marcações na planilha, o card de Total continua aparecendo sozinho
       htmlVer = '<div data-cob="verificar" style="border-right:1px dashed var(--brd);padding-right:18px;min-width:200px">'
         + _cobCardTotal() + '</div>';
+      htmlVerReu = htmlVer;
     }
 
     // A apresentação começa pelo total: Total + marcações à ESQUERDA, e a
     // composição (filas e tipos) em seguida.
-    _cobSet('cards', '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
-      + htmlVer
-      + '<div style="flex:1 1 0;min-width:0">' + esq + '</div>'
-      + '</div>');
+    var _envolve = function(lateral){
+      return '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
+        + lateral
+        + '<div style="flex:1 1 0;min-width:0">' + esq + '</div>'
+        + '</div>';
+    };
+    var _elGov = document.getElementById('cob-cards');
+    var _elReu = document.getElementById('reu-cards');
+    if (_elGov) _elGov.innerHTML = _envolve(htmlVer);
+    if (_elReu) _elReu.innerHTML = _envolve(htmlVerReu);
   }
 
   _cobDesenharSub();
@@ -32909,6 +32929,106 @@ function reuTab(aba, btn){
     b.style.borderBottomColor = on ? 'var(--azm)' : 'transparent';
   });
   reuniaoAbrir();
+}
+
+// ── Exportar as duas bases da Reunião num Excel (uma aba cada) ──
+function _reuExpMsg(txt, cor){
+  var el = document.getElementById('reu-export-msg');
+  if (!el) return;
+  el.textContent = txt || '';
+  el.style.color = cor || 'var(--tx2)';
+}
+
+// lê a coleção direto do Firebase, para não depender da aba que está aberta
+function _reuLerColecao(nome, idResumo){
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!db) return Promise.resolve(null);
+  return db.collection(nome).get().then(function(snap){
+    var out = [];
+    snap.forEach(function(doc){
+      if (doc.id === idResumo || /^__.*__$/.test(doc.id)) return;
+      out.push(doc.data());
+    });
+    return out;
+  }).catch(function(){ return null; });
+}
+
+function reuniaoExportar(){
+  if (!_cobEhFast()) return;
+  if (typeof XLSX === 'undefined') {
+    _reuExpMsg('❌ Biblioteca XLSX não carregada — atualize a página (F5).', 'var(--vm)');
+    return;
+  }
+  _reuExpMsg('⏳ Montando o arquivo...');
+
+  Promise.all([
+    _reuLerColecao('cobranca_status', _COB_DOC_RESUMO),
+    _reuLerColecao(_PED_COLECAO, _PED_DOC_RESUMO)
+  ]).then(function(res){
+    // se o Firebase falhar, usa o que já está carregado na tela
+    var patec   = res[0] || _cobDados || [];
+    var pedidos = res[1] || _pedDados || [];
+
+    if (!patec.length && !pedidos.length) {
+      _reuExpMsg('⚠ Não há dados para exportar.', '#b45309');
+      setTimeout(function(){ _reuExpMsg(''); }, 4000);
+      return;
+    }
+
+    patec = patec.slice().sort(function(a, b){
+      var d = _cobQtd(b) - _cobQtd(a);
+      if (d) return d;
+      return String(a.rc || '').localeCompare(String(b.rc || ''));
+    });
+    pedidos = pedidos.slice().sort(function(a, b){
+      var d = _pedStatus(a).localeCompare(_pedStatus(b));
+      if (d) return d;
+      d = _pedFila(a).localeCompare(_pedFila(b));
+      if (d) return d;
+      return String(a.rc || '').localeCompare(String(b.rc || ''));
+    });
+
+    var linhasPatec = patec.map(function(r){
+      return {
+        'Analista': r.analista || '',
+        'RC': r.rc || '',
+        'Item RC': r.itemRc || '',
+        'Data de Retorno': r.dataRetorno || '',
+        'Status': r.status || '',
+        'Cobranças': _cobQtd(r),
+        'Tipo de Cobrança': r.tipoCobranca || '',
+        'Fila': _cobFila(r),
+        'Prazo': r.prazo || '',
+        'SLA': r.sla || '',
+        'Tipo de Processo': _cobVerifTipo(r) || (r.verificar || ''),
+        'Processo': r.processo || ''
+      };
+    });
+    var linhasPedidos = pedidos.map(function(r){
+      return {
+        'Analista': r.analista || '',
+        'RC': r.rc || '',
+        'Item RC': r.itemRc || '',
+        'Status': r.status || '',
+        'Fila GOV': r.filaGov || '',
+        'Liberado E&P': r.liberado || ''
+      };
+    });
+
+    var wb = XLSX.utils.book_new();
+    if (linhasPatec.length)   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhasPatec), 'PATEC');
+    if (linhasPedidos.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhasPedidos), 'Pedidos');
+
+    var d = new Date();
+    var nome = 'Reuniao_PATEC_Pedidos_'
+      + d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2) + '.xlsx';
+    XLSX.writeFile(wb, nome);
+
+    _reuExpMsg('✅ ' + linhasPatec.length + ' PATEC + ' + linhasPedidos.length + ' pedidos exportados.', 'var(--vd)');
+    setTimeout(function(){ _reuExpMsg(''); }, 5000);
+  }).catch(function(err){
+    _reuExpMsg('❌ ' + (err && err.message ? err.message : 'falha ao exportar'), 'var(--vm)');
+  });
 }
 
 function reuniaoAbrir(){
