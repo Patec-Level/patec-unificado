@@ -4536,7 +4536,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             </label>
             <span id="ped-status-msg" style="font-size:11.5px;color:var(--tx2)"></span>
           </div>
-          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Liberado E&amp;P, Fila GOV, Status</strong> — obrigatória: RC. Os cards de cima somam por <em>Status</em>; clicando num deles aparecem as <em>Filas GOV</em> daquele status. A ordem das colunas não importa: a leitura é pelo nome.</div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Liberado E&amp;P, Fila GOV, Status, SLA, Prazo</strong> — obrigatória: RC. Os cards de cima somam por <em>Status</em>; clicando num deles aparecem as <em>Filas GOV</em> daquele status. A ordem das colunas não importa: a leitura é pelo nome.</div>
           <div id="ped-resumo"></div>
         </div>
         <div id="ped-cards" style="margin-bottom:.75rem"></div>
@@ -32715,6 +32715,7 @@ function _pedDesenhar(){
 
   var t = '<table><thead><tr>'
     + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Status</th><th>Fila GOV</th><th>Liberado E&amp;P</th>'
+    + '<th>SLA</th><th>Prazo</th>'
     + '</tr></thead><tbody>';
 
   for (i = 0; i < lista.length; i++) {
@@ -32734,6 +32735,8 @@ function _pedDesenhar(){
           : (String(r2.liberado || '').trim()
               ? '<span style="color:var(--tx2);font-size:10.5px">' + _cobEsc(String(r2.liberado).trim()) + '</span>'
               : '—')) + '</td>'
+      + '<td style="text-align:center">' + _cobEsc(String(r2.sla || '').trim() || '—') + '</td>'
+      + '<td style="text-align:center">' + _cobEsc(String(r2.prazo || '').trim() || '—') + '</td>'
       + '</tr>';
   }
   t += '</tbody></table>';
@@ -32825,6 +32828,8 @@ function govPedidosUpload(ev){
       var cStat = _cobCol(amostra, ['Status']);
       var cFila = _cobCol(amostra, ['Fila GOV', 'Fila Gov']);
       var cLib  = _cobCol(amostra, ['Liberado E&P', 'Liberado EP', 'Liberado']);
+      var cSla   = _cobCol(amostra, ['SLA']);
+      var cPrazo = _cobCol(amostra, ['Prazo']);
 
       var limpo = function(v){
         var s = String(v == null ? '' : v).trim();
@@ -32851,6 +32856,8 @@ function govPedidosUpload(ev){
           status: cStat ? limpo(l[cStat]) : '',
           filaGov: cFila ? limpo(l[cFila]) : '',
           liberado: cLib ? limpo(l[cLib]) : '',
+          sla: cSla ? limpo(l[cSla]) : '',
+          prazo: cPrazo ? limpo(l[cPrazo]) : '',
           atualizadoEm: new Date().toISOString()
         });
       }
@@ -33028,7 +33035,9 @@ function reuniaoExportar(){
         'Item RC': r.itemRc || '',
         'Status': r.status || '',
         'Fila GOV': r.filaGov || '',
-        'Liberado E&P': r.liberado || ''
+        'Liberado E&P': r.liberado || '',
+        'SLA': r.sla || '',
+        'Prazo': r.prazo || ''
       };
     });
 
