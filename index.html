@@ -4324,7 +4324,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             </label>
             <span id="cob-status" style="font-size:11.5px;color:var(--tx2)"></span>
           </div>
-          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Data de Retorno, Status, Verificar, Processo, Cobrança, Tipo de Cobrança, Fila, Prazo, SLA</strong> — obrigatórias: RC e Status. As colunas <em>MAPA GUI</em>, <em>Fila GOV</em> e as sem título são ignoradas. A ordem das colunas não importa: a leitura é pelo nome.</div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Data de Retorno, Status, Centro, Verificar, Processo, Cobrança, Tipo de Cobrança, Fila, Prazo, SLA</strong> — obrigatórias: RC e Status. As colunas <em>MAPA GUI</em>, <em>Fila GOV</em> e as sem título são ignoradas. A ordem das colunas não importa: a leitura é pelo nome.</div>
           <div id="cob-resumo"></div>
         </div>
 
@@ -31895,7 +31895,7 @@ function _cobDesenhar(){
   }
 
   var t = '<table><thead><tr>'
-    + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Data de Retorno</th><th>Status</th>'
+    + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Data de Retorno</th><th>Status</th><th>Centro</th>'
     + '<th>Cobranças</th><th>Tipo de Cobrança</th><th>Fila</th><th>Prazo</th><th>SLA</th>'
     + '<th>Tipo de Processo</th><th>Processo</th>'
     + '</tr></thead><tbody>';
@@ -31913,6 +31913,7 @@ function _cobDesenhar(){
       + '<td>' + _cobEsc(r.itemRc || '—') + '</td>'
       + '<td style="white-space:nowrap">' + _cobEsc(r.dataRetorno || '—') + '</td>'
       + '<td><span style="background:' + bgSt + ';color:' + corSt + ';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">' + _cobEsc(st || '—') + '</span></td>'
+      + '<td>' + _cobEsc(String(r.centro || '').trim() || '—') + '</td>'
       + '<td style="text-align:center;font-weight:700">' + _cobQtd(r) + '</td>'
       + '<td>' + _cobEsc(r.tipoCobranca || '—') + '</td>'
       + '<td>' + _cobEsc(_cobFila(r) || '—') + '</td>'
@@ -32110,6 +32111,7 @@ function govCobrancaUpload(ev){
       var cVer   = _cobCol(amostra, ['Verificar', 'Verificacao', 'Verificação']);
       var cProc  = _cobCol(amostra, ['Processo', 'Processos']);
       var cDtRet = _cobCol(amostra, ['Data de Retorno', 'Data Retorno', 'Data de retorno']);
+      var cCentro = _cobCol(amostra, ['Centro']);
       var cPrazo = _cobCol(amostra, ['Prazo']);
       var cSla   = _cobCol(amostra, ['SLA']);
       // Coluna L = "Fila". A coluna K ("Fila Gov") é ignorada de propósito.
@@ -32149,6 +32151,7 @@ function govCobrancaUpload(ev){
           verificar: cVer ? limpo(l[cVer]) : '',
           processo: cProc ? limpo(l[cProc]) : '',
           dataRetorno: cDtRet ? _cobDataBR(l[cDtRet]) : '',
+          centro: cCentro ? limpo(l[cCentro]) : '',
           prazo: cPrazo ? limpo(l[cPrazo]) : '',
           sla: cSla ? limpo(l[cSla]) : '',
           fila: cFila ? limpo(l[cFila]) : '',
@@ -32995,6 +32998,7 @@ function reuniaoExportar(){
         'Item RC': r.itemRc || '',
         'Data de Retorno': r.dataRetorno || '',
         'Status': r.status || '',
+        'Centro': r.centro || '',
         'Cobranças': _cobQtd(r),
         'Tipo de Cobrança': r.tipoCobranca || '',
         'Fila': _cobFila(r),
