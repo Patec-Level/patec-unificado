@@ -4320,7 +4320,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             </label>
             <span id="cob-status" style="font-size:11.5px;color:var(--tx2)"></span>
           </div>
-          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Status, Verificar, Processo, Cobrança, Tipo de Cobrança, Fila</strong> — obrigatórias: RC e Status. As colunas <em>MAPA GUI</em> e <em>Fila GOV</em> são ignoradas. A ordem das colunas não importa: a leitura é pelo nome.</div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Data de Retorno, Status, Verificar, Processo, Cobrança, Tipo de Cobrança, Fila, Prazo, SLA</strong> — obrigatórias: RC e Status. As colunas <em>MAPA GUI</em>, <em>Fila GOV</em> e as sem título são ignoradas. A ordem das colunas não importa: a leitura é pelo nome.</div>
           <div id="cob-resumo"></div>
         </div>
 
@@ -31494,6 +31494,30 @@ function _cobVerifTipo(r){
   return '';
 }
 
+// A "Data de Retorno" pode chegar como número de série do Excel (46280),
+// como Date ou já como texto. Normaliza tudo para dd/mm/aaaa. Contas em UTC
+// de propósito: com fuso local a data escorrega um dia.
+function _cobDataBR(v){
+  if (v == null || v === '') return '';
+  if (v instanceof Date && !isNaN(v)) {
+    return ('0' + v.getUTCDate()).slice(-2) + '/' + ('0' + (v.getUTCMonth() + 1)).slice(-2)
+         + '/' + v.getUTCFullYear();
+  }
+  var txt = String(v).trim();
+  if (!txt) return '';
+  var num = Number(txt.replace(',', '.'));
+  // faixa de segurança: 1970..2100 em série do Excel
+  if (!isNaN(num) && num > 25000 && num < 74000) {
+    var ms = Math.round((num - 25569) * 86400000);
+    var d = new Date(ms);
+    if (!isNaN(d)) {
+      return ('0' + d.getUTCDate()).slice(-2) + '/' + ('0' + (d.getUTCMonth() + 1)).slice(-2)
+           + '/' + d.getUTCFullYear();
+    }
+  }
+  return txt;   // já veio escrito (ex.: "17/09/2026")
+}
+
 // Classifica a coluna "Processo" -> 'E&P' | ''
 // Tolerante a "E&P", "E & P", "EP", "e&p"
 function _cobProcTipo(r){
@@ -31851,8 +31875,9 @@ function _cobDesenhar(){
   }
 
   var t = '<table><thead><tr>'
-    + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Status</th>'
-    + '<th>Cobranças</th><th>Tipo de Cobrança</th><th>Fila</th><th>Tipo de Processo</th><th>Processo</th>'
+    + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Data de Retorno</th><th>Status</th>'
+    + '<th>Cobranças</th><th>Tipo de Cobrança</th><th>Fila</th><th>Prazo</th><th>SLA</th>'
+    + '<th>Tipo de Processo</th><th>Processo</th>'
     + '</tr></thead><tbody>';
 
   for (i = 0; i < lista.length; i++) {
@@ -31866,10 +31891,13 @@ function _cobDesenhar(){
       + '<td>' + _cobEsc(r.analista || '—') + '</td>'
       + '<td style="font-weight:700">' + _cobEsc(r.rc || '—') + '</td>'
       + '<td>' + _cobEsc(r.itemRc || '—') + '</td>'
+      + '<td style="white-space:nowrap">' + _cobEsc(r.dataRetorno || '—') + '</td>'
       + '<td><span style="background:' + bgSt + ';color:' + corSt + ';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">' + _cobEsc(st || '—') + '</span></td>'
       + '<td style="text-align:center;font-weight:700">' + _cobQtd(r) + '</td>'
       + '<td>' + _cobEsc(r.tipoCobranca || '—') + '</td>'
       + '<td>' + _cobEsc(_cobFila(r) || '—') + '</td>'
+      + '<td style="text-align:center">' + _cobEsc(String(r.prazo || '').trim() || '—') + '</td>'
+      + '<td style="text-align:center">' + _cobEsc(String(r.sla || '').trim() || '—') + '</td>'
       + '<td>' + _cobCelulaVerif(r) + '</td>'
       + '<td>' + _cobCelulaProc(r) + '</td>'
       + '</tr>';
@@ -32061,6 +32089,9 @@ function govCobrancaUpload(ev){
       var cTipo  = _cobCol(amostra, ['Tipo de Cobranca', 'Tipo de Cobrança', 'Tipo']);
       var cVer   = _cobCol(amostra, ['Verificar', 'Verificacao', 'Verificação']);
       var cProc  = _cobCol(amostra, ['Processo', 'Processos']);
+      var cDtRet = _cobCol(amostra, ['Data de Retorno', 'Data Retorno', 'Data de retorno']);
+      var cPrazo = _cobCol(amostra, ['Prazo']);
+      var cSla   = _cobCol(amostra, ['SLA']);
       // Coluna L = "Fila". A coluna K ("Fila Gov") é ignorada de propósito.
       var cFila  = _cobColFila(amostra);
 
@@ -32097,6 +32128,9 @@ function govCobrancaUpload(ev){
           tipoCobranca: cTipo ? limpo(l[cTipo]) : '',
           verificar: cVer ? limpo(l[cVer]) : '',
           processo: cProc ? limpo(l[cProc]) : '',
+          dataRetorno: cDtRet ? _cobDataBR(l[cDtRet]) : '',
+          prazo: cPrazo ? limpo(l[cPrazo]) : '',
+          sla: cSla ? limpo(l[cSla]) : '',
           fila: cFila ? limpo(l[cFila]) : '',
           atualizadoEm: new Date().toISOString()
         });
