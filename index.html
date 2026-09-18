@@ -6867,6 +6867,7 @@ function go(id, el) {
   const labelSidebar = (typeof PERMS_SIDEBAR !== 'undefined' && PERMS_SIDEBAR[id]) ? PERMS_SIDEBAR[id].label : null;
   document.getElementById('ttl').textContent = titles[id] || labelSidebar || id;
   if(id==='reuniao'){ if(typeof reuniaoAbrir==='function') reuniaoAbrir(); }
+  if(typeof _fcAgendarVarredura==='function') _fcAgendarVarredura();
   if(id==='pr-bancoferias'){ renderFerias(); renderBanco(); setTimeout(()=>{ fbCarregarBHE().then(()=>{ bheArquivarVencidos(); renderBHECards(); }); }, 100); }
   document.getElementById('sb').classList.remove('mob-open');
   if(id==='vg-mercado') {
@@ -18018,6 +18019,7 @@ function govMainTab(aba, btn){
   if(aba==='prazo') { _govUrgGarantirDados().then(govUrgPrazoRender); _govUrgPainelSync(); }
   if(aba==='cobranca') { govCobrancaRender(); _govUrgPainelSync(); }
   if(aba==='pedidos')  { govPedidosRender(); _govUrgPainelSync(); }
+  if(typeof _fcAgendarVarredura==='function') _fcAgendarVarredura();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -23393,6 +23395,7 @@ function aaSetTab(aba){
   });
   if(aba==='completo' && !_aacDados.length) aaCompletoCarregar();
   if(aba==='nm') aNmAAAbrir();
+  if(typeof _fcAgendarVarredura==='function') _fcAgendarVarredura();
 }
 
 // ── Análise NM dentro do Analista Automático (mesma lógica/compute; superfície própria) ──
@@ -32460,6 +32463,354 @@ function _cobEhFast(){
   return (typeof _moduloAtivo !== 'undefined') && _moduloAtivo === 'fast';
 }
 
+
+// ═══════════════════════════════════════════════════════════════
+//  FILTRO DE COLUNA (estilo planilha)
+//  Um ▾ em cada cabeçalho abre a lista de valores daquela coluna,
+//  com busca, Todos/Nenhum e caixinhas. Vários filtros se somam (E).
+//
+//  Funciona em cima do HTML já renderizado: não precisa conhecer a
+//  função que desenhou a tabela. Como várias telas redesenham a
+//  tabela inteira (upload, clique num card, troca de aba), um
+//  MutationObserver reinstala os ▾ e reaplica o que estava filtrado.
+// ═══════════════════════════════════════════════════════════════
+
+// ÁREAS: todas as telas do sistema, nos dois módulos (ADLV e FAST).
+// O filtro trabalha em cima do HTML já desenhado, então não depende de
+// qual módulo está ativo nem de quem desenhou a tabela. Para deixar uma
+// tabela (ou um bloco inteiro) de fora, basta marcar data-fc-off nela.
+function _fcAreas(){
+  var todas = document.querySelectorAll('.page'), out = [], i;
+  for (i = 0; i < todas.length; i++) out.push(todas[i]);
+  return out;
+}
+
+var _FC_ESTADO = {};    // "chaveTabela" -> { "Coluna": [valores marcados] }
+var _FC_MENU = null;    // dropdown aberto
+var _FC_TIMER = null;
+
+function _fcTxt(el){ return String(el && el.textContent || '').trim(); }
+
+// chave estável da tabela: id do próprio elemento ou do ancestral com id
+function _fcChave(tab){
+  if (tab.id) return tab.id;
+  var p = tab.parentElement;
+  while (p && !p.id) p = p.parentElement;
+  var base = (p && p.id) || 'tab';
+  // há telas (ex.: Admin) com várias tabelas dentro do mesmo bloco:
+  // sem a posição elas dividiriam o mesmo filtro
+  if (p) {
+    var irmas = p.querySelectorAll('table');
+    if (irmas.length > 1) {
+      var i;
+      for (i = 0; i < irmas.length; i++) if (irmas[i] === tab) return base + '#' + i;
+    }
+  }
+  return base;
+}
+
+function _fcCabecalhos(tab){
+  var thead = tab.tHead;
+  if (!thead || !thead.rows.length) return null;
+  var lin = thead.rows[0];
+  var i, out = [], c, nome;
+  for (i = 0; i < lin.cells.length; i++) {
+    c = lin.cells[i];
+    if (c.colSpan > 1) return null;   // cabeçalho agrupado: não mexe
+    nome = c.getAttribute('data-fc-nome');
+    if (nome === null) nome = _fcTxt(c).replace(/[\s▾▼]+$/, '');
+    out.push(nome);
+  }
+  return out;
+}
+
+function _fcLinhas(tab){
+  return (tab.tBodies[0] ? [].slice.call(tab.tBodies[0].rows) : []);
+}
+
+// valores permitidos de uma coluna (null = todos)
+function _fcFiltro(chave, col){
+  var e = _FC_ESTADO[chave];
+  return (e && e[col]) ? e[col] : null;
+}
+
+function _fcTemFiltro(chave){
+  var e = _FC_ESTADO[chave];
+  return !!(e && Object.keys(e).length);
+}
+
+// a linha passa nos filtros de todas as colunas (ou de todas menos `exceto`)
+function _fcPassa(tr, cols, chave, exceto){
+  var i, f, v;
+  for (i = 0; i < cols.length; i++) {
+    if (i === exceto) continue;
+    f = _fcFiltro(chave, cols[i]);
+    if (!f) continue;
+    v = _fcTxt(tr.cells[i]);
+    if (f.indexOf(v) === -1) return false;
+  }
+  return true;
+}
+
+function _fcAplicar(tab){
+  var cols = _fcCabecalhos(tab);
+  if (!cols) return;
+  var chave = _fcChave(tab);
+  var linhas = _fcLinhas(tab);
+  var i, vis = 0;
+  for (i = 0; i < linhas.length; i++) {
+    var ok = _fcPassa(linhas[i], cols, chave, -1);
+    linhas[i].style.display = ok ? '' : 'none';
+    if (ok) vis++;
+  }
+  _fcMarcarCabecalho(tab, cols, chave);
+  _fcChip(tab, chave, vis, linhas.length);
+}
+
+// pinta o ▾ das colunas que estão filtrando
+function _fcMarcarCabecalho(tab, cols, chave){
+  var lin = tab.tHead.rows[0], i, b;
+  for (i = 0; i < lin.cells.length; i++) {
+    b = lin.cells[i].querySelector('[data-fc-btn]');
+    if (!b) continue;
+    var ativo = !!_fcFiltro(chave, cols[i]);
+    b.textContent = ativo ? '▼' : '▾';
+    b.style.color = ativo ? 'var(--azm)' : 'var(--tx2)';
+    b.style.opacity = ativo ? '1' : '.55';
+    b.style.fontWeight = ativo ? '800' : '400';
+  }
+}
+
+// tarja acima da tabela, só quando há filtro de coluna ligado
+function _fcChip(tab, chave, vis, tot){
+  var casca = tab.closest('.tw') || tab;
+  var host = casca.parentElement;
+  if (!host) return;
+  var chip = host.querySelector('[data-fc-chip="' + chave + '"]');
+  if (!_fcTemFiltro(chave)) { if (chip) chip.remove(); return; }
+  if (!chip) {
+    chip = document.createElement('div');
+    chip.setAttribute('data-fc-chip', chave);
+    chip.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;'
+      + 'padding:5px 10px;background:var(--azc);border:1px solid var(--azm);border-radius:6px;font-size:10.5px;color:var(--azm)';
+    host.insertBefore(chip, casca);
+  }
+  var e = _FC_ESTADO[chave] || {};
+  var nomes = Object.keys(e);
+  chip.innerHTML = '<strong>🔎 ' + vis + '</strong> de ' + tot + ' linha(s)'
+    + ' — filtro em: ' + nomes.map(function(n){ return _cobEsc(n); }).join(', ')
+    + ' <button class="btn btn-s" style="font-size:10px;padding:1px 8px" '
+    + 'onclick="fcLimparTabela(\'' + chave + '\')">✕ limpar filtros</button>';
+}
+
+function fcLimparTabela(chave){
+  delete _FC_ESTADO[chave];
+  _fcVarrer(true);
+}
+
+// ── dropdown ──
+function _fcFechar(){
+  if (_FC_MENU && _FC_MENU.parentElement) _FC_MENU.parentElement.removeChild(_FC_MENU);
+  _FC_MENU = null;
+}
+
+function _fcAbrir(tab, idx, botao){
+  _fcFechar();
+  var cols = _fcCabecalhos(tab);
+  if (!cols) return;
+  var chave = _fcChave(tab), col = cols[idx];
+
+  // valores disponíveis considerando os filtros das OUTRAS colunas
+  var linhas = _fcLinhas(tab), cont = {}, i, v;
+  for (i = 0; i < linhas.length; i++) {
+    if (!_fcPassa(linhas[i], cols, chave, idx)) continue;
+    v = _fcTxt(linhas[i].cells[idx]);
+    cont[v] = (cont[v] || 0) + 1;
+  }
+  var valores = Object.keys(cont).sort(function(a, b){
+    var na = parseFloat(String(a).replace(',', '.')), nb = parseFloat(String(b).replace(',', '.'));
+    var ehNum = !isNaN(na) && !isNaN(nb) && /^[\d.,\-]+$/.test(a) && /^[\d.,\-]+$/.test(b);
+    if (ehNum) return na - nb;
+    return String(a).localeCompare(String(b), 'pt-BR');
+  });
+  var atual = _fcFiltro(chave, col);
+  var marcado = {};
+  valores.forEach(function(x){ marcado[x] = atual ? (atual.indexOf(x) !== -1) : true; });
+
+  var m = document.createElement('div');
+  _FC_MENU = m;
+  m.setAttribute('data-fc-menu', '1');
+  m.style.cssText = 'position:fixed;z-index:9999;background:var(--bg);border:1px solid var(--brd);'
+    + 'border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:10px;width:270px;font-size:12px';
+  m.innerHTML =
+      '<input data-fc-busca type="text" placeholder="Buscar na lista..." '
+    + 'style="width:100%;box-sizing:border-box;padding:6px 9px;font-size:12px;border:1px solid var(--brd);border-radius:6px;margin-bottom:8px">'
+    + '<div style="display:flex;gap:6px;margin-bottom:8px">'
+    + '<button class="btn btn-s" data-fc-todos style="font-size:10.5px;padding:2px 10px">Todos</button>'
+    + '<button class="btn btn-s" data-fc-nenhum style="font-size:10.5px;padding:2px 10px">Nenhum</button>'
+    + '</div>'
+    + '<div data-fc-lista style="max-height:210px;overflow-y:auto;border:1px solid var(--brd);border-radius:6px;padding:4px"></div>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:9px">'
+    + '<button class="btn btn-s" data-fc-limpar style="font-size:11px;padding:3px 12px">Limpar</button>'
+    + '<button class="btn" data-fc-aplicar style="font-size:11px;padding:3px 14px;background:var(--vd);color:#fff;border:none">Aplicar</button>'
+    + '</div>';
+  document.body.appendChild(m);
+
+  var lista = m.querySelector('[data-fc-lista]');
+  var busca = m.querySelector('[data-fc-busca]');
+
+  var desenhar = function(){
+    var t = _cobNorm(busca.value);
+    var html = '';
+    valores.forEach(function(x, j){
+      if (t && _cobNorm(x).indexOf(t) === -1) return;
+      html += '<label style="display:flex;align-items:center;gap:7px;padding:3px 5px;cursor:pointer;border-radius:4px">'
+        + '<input type="checkbox" data-fc-i="' + j + '"' + (marcado[x] ? ' checked' : '') + '>'
+        + '<span style="flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+        + _cobEsc(x === '' ? '(vazio)' : x) + '</span>'
+        + '<span style="color:var(--tx2);font-size:10.5px">(' + cont[x] + ')</span></label>';
+    });
+    lista.innerHTML = html || '<div style="padding:10px;color:var(--tx2);font-size:11px">Nada encontrado.</div>';
+    [].slice.call(lista.querySelectorAll('input[type=checkbox]')).forEach(function(c){
+      c.onchange = function(){ marcado[valores[+c.getAttribute('data-fc-i')]] = c.checked; };
+    });
+  };
+  desenhar();
+  busca.oninput = desenhar;
+
+  var visiveis = function(){
+    var t = _cobNorm(busca.value);
+    return valores.filter(function(x){ return !t || _cobNorm(x).indexOf(t) !== -1; });
+  };
+  m.querySelector('[data-fc-todos]').onclick = function(){
+    visiveis().forEach(function(x){ marcado[x] = true; }); desenhar();
+  };
+  m.querySelector('[data-fc-nenhum]').onclick = function(){
+    visiveis().forEach(function(x){ marcado[x] = false; }); desenhar();
+  };
+  m.querySelector('[data-fc-limpar]').onclick = function(){
+    if (_FC_ESTADO[chave]) { delete _FC_ESTADO[chave][col];
+      if (!Object.keys(_FC_ESTADO[chave]).length) delete _FC_ESTADO[chave]; }
+    _fcFechar(); _fcAplicar(tab);
+  };
+  m.querySelector('[data-fc-aplicar]').onclick = function(){
+    var sel = valores.filter(function(x){ return marcado[x]; });
+    if (!_FC_ESTADO[chave]) _FC_ESTADO[chave] = {};
+    if (sel.length === valores.length) delete _FC_ESTADO[chave][col];   // tudo marcado = sem filtro
+    else _FC_ESTADO[chave][col] = sel;
+    if (!Object.keys(_FC_ESTADO[chave]).length) delete _FC_ESTADO[chave];
+    _fcFechar(); _fcAplicar(tab);
+  };
+
+  // posiciona logo abaixo do ▾, sem sair da tela
+  var r = botao.getBoundingClientRect();
+  var larg = 270, alt = m.offsetHeight || 330;
+  var esq = Math.min(Math.max(8, r.left - 8), window.innerWidth - larg - 8);
+  var topo = (r.bottom + alt + 8 > window.innerHeight) ? Math.max(8, r.top - alt - 6) : r.bottom + 4;
+  m.style.left = esq + 'px';
+  m.style.top = topo + 'px';
+  setTimeout(function(){ busca.focus(); }, 30);
+}
+
+// ── instalação ──
+function _fcAssinatura(tab){
+  var cols = _fcCabecalhos(tab);
+  return (cols ? cols.join('§') : '') + '#' + _fcLinhas(tab).length;
+}
+
+function _fcInstalar(tab){
+  var cols = _fcCabecalhos(tab);
+  if (!cols || cols.length < 2) return;
+  if (tab.closest('[data-fc-menu]')) return;
+  if (tab.closest('[data-fc-off]')) return;           // marcada para ficar de fora
+  if (_fcLinhas(tab).length < 2) return;              // sem dados: não há o que filtrar
+
+  var lin = tab.tHead.rows[0];
+  // cabeçalho que já é um formulário (campo de busca, select) fica como está
+  if (lin.querySelector('input,select,textarea')) return;
+  var temBotoes = !!lin.cells[0].querySelector('[data-fc-btn]');
+  var sig = _fcAssinatura(tab);
+  if (temBotoes && tab.getAttribute('data-fc-sig') === sig) return;   // nada mudou
+
+  var i;
+  for (i = 0; i < lin.cells.length; i++) {
+    var th = lin.cells[i];
+    if (th.getAttribute('data-fc-nome') === null) th.setAttribute('data-fc-nome', _fcTxt(th));
+    if (th.querySelector('[data-fc-btn]')) continue;
+    var b = document.createElement('span');
+    b.setAttribute('data-fc-btn', String(i));
+    b.textContent = '▾';
+    b.title = 'Filtrar por esta coluna';
+    b.style.cssText = 'display:inline-block;margin-left:6px;cursor:pointer;color:var(--tx2);'
+      + 'opacity:.55;font-size:11px;user-select:none';
+    b.onclick = (function(idx, botao){
+      return function(ev){
+        ev.stopPropagation();
+        if (_FC_MENU && _FC_MENU.getAttribute('data-fc-de') === _fcChave(tab) + '|' + idx) { _fcFechar(); return; }
+        _fcAbrir(tab, idx, botao);
+        if (_FC_MENU) _FC_MENU.setAttribute('data-fc-de', _fcChave(tab) + '|' + idx);
+      };
+    })(i, b);
+    th.appendChild(b);
+  }
+  tab.setAttribute('data-fc-sig', sig);
+  _fcAplicar(tab);
+}
+
+function _fcVarrer(forcar){
+  var areas = _fcAreas(), i, j;
+  for (i = 0; i < areas.length; i++) {
+    var area = areas[i];
+    // tela fechada não precisa de ▾ agora: go() varre de novo quando abrir
+    if (!forcar && !area.classList.contains('active')) continue;
+    var tabs = area.querySelectorAll('table');
+    for (j = 0; j < tabs.length; j++) {
+      if (forcar) tabs[j].removeAttribute('data-fc-sig');
+      try { _fcInstalar(tabs[j]); } catch (e) {}
+    }
+  }
+}
+
+function _fcAgendarVarredura(){
+  if (_FC_TIMER) clearTimeout(_FC_TIMER);
+  _FC_TIMER = setTimeout(function(){ _FC_TIMER = null; _fcVarrer(false); }, 90);
+}
+
+function _fcIniciar(){
+  var areas = _fcAreas(), i;
+  for (i = 0; i < areas.length; i++) {
+    var area = areas[i];
+    if (!area || area.getAttribute('data-fc-obs')) continue;
+    area.setAttribute('data-fc-obs', '1');
+    try {
+      new MutationObserver(function(muts){
+        var k;
+        for (k = 0; k < muts.length; k++) {
+          var alvo = muts[k].target;
+          // ignora o que o próprio filtro escreve na tela
+          if (alvo && alvo.closest && (alvo.closest('[data-fc-menu]') || alvo.closest('[data-fc-chip]'))) continue;
+          _fcAgendarVarredura();
+          return;
+        }
+      }).observe(area, { childList: true, subtree: true });
+    } catch (e) {}
+  }
+  _fcVarrer(false);
+}
+
+// fechar o dropdown ao clicar fora, rolar ou apertar Esc
+document.addEventListener('click', function(ev){
+  if (!_FC_MENU) return;
+  if (ev.target.closest && (ev.target.closest('[data-fc-menu]') || ev.target.closest('[data-fc-btn]'))) return;
+  _fcFechar();
+}, true);
+document.addEventListener('keydown', function(ev){ if (ev.key === 'Escape') _fcFechar(); });
+window.addEventListener('scroll', function(){ _fcFechar(); }, true);
+window.addEventListener('resize', function(){ _fcFechar(); });
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _fcIniciar);
+else setTimeout(_fcIniciar, 0);
+
 // ═══════════════════════════════════════════════════════════════
 //  GOVERNANÇA — PEDIDOS  (exclusivo módulo FAST)
 //  Planilha: Analista | RC | Item RC | Liberado E&P | Fila GOV | Status
@@ -32958,6 +33309,7 @@ function reuTab(aba, btn){
     b.style.borderBottomColor = on ? 'var(--azm)' : 'transparent';
   });
   reuniaoAbrir();
+  if (typeof _fcAgendarVarredura === 'function') _fcAgendarVarredura();
 }
 
 // ── Exportar as duas bases da Reunião num Excel (uma aba cada) ──
