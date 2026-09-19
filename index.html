@@ -854,6 +854,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <!-- ABAS ADM -->
       <div class="stabs" id="adm-tabs">
         <button class="stab active" onclick="setAdmTab('ciclos',this)">🔄 Gestão de Ciclos</button>
+        <button class="stab" onclick="setAdmTab('direcionamento',this)">📣 Direcionamento</button>
         <button class="stab" id="adm-nav-usuarios-btn" onclick="setAdmTab('usuarios',this)">👥 Usuários</button>
         <button class="stab" id="adm-nav-equipe-btn" onclick="setAdmTab('equipe',this)">🧑‍🤝‍🧑 Equipe (Metas RT)</button>
         <button class="stab" id="adm-nav-online-btn" onclick="setAdmTab('online',this)">🕐 Último Acesso</button>
@@ -888,6 +889,29 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       </div>
 
       <!-- ── FERIADOS E PONTOS FACULTATIVOS ── -->
+      <!-- ── DIRECIONAMENTO DA EQUIPE — card pronto para e-mail e Teams ── -->
+      <div id="adm-direcionamento" class="adm-tab" style="display:none">
+        <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--azm)">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+            <div style="flex:1 1 320px;min-width:0">
+              <div class="cd-t" style="margin:0">📣 Direcionamento da Equipe — <span id="dir-mod-lbl">ADLV</span></div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:4px">Panorama do dia, as 2 prioridades da equipe e o alerta de risco, com os mesmos números das telas de origem. O conteúdo acompanha o módulo aberto: no ADLV entram Planilha Crítica, Urgência por Prazo/SLA e Analista Pedido; no FAST, a Cobrança por Status.</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <input type="date" id="dir-dia" style="font-size:12px;padding:5px 9px;border:1.5px solid var(--brd);border-radius:6px;color:var(--az);font-weight:600" onchange="dirGerar()">
+              <button class="btn btn-s" style="font-size:11px" onclick="dirGerar()">↺ Atualizar</button>
+              <button class="btn" style="font-size:11px;padding:5px 14px;background:var(--azm);color:#fff;border:none" onclick="dirCopiar()">📋 Copiar formatado</button>
+              <button class="btn" style="font-size:11px;padding:5px 14px;background:var(--vd);color:#fff;border:none" onclick="dirPng()">🖼 Baixar imagem</button>
+              <button class="btn btn-s" style="font-size:11px" onclick="dirCopiarTexto()">📝 Copiar texto</button>
+            </div>
+          </div>
+          <div id="dir-msg" style="font-size:11px;color:var(--tx2);margin-top:8px"></div>
+        </div>
+        <div class="cd">
+          <div id="dir-card" style="overflow-x:auto"></div>
+        </div>
+      </div>
+
       <div id="adm-feriados" class="adm-tab" style="display:none">
         <div class="cd-t">📆 Feriados e Pontos Facultativos</div>
         <div class="al al-b" style="margin-bottom:1rem">ℹ Estas datas são tratadas como <strong>dia não útil</strong> em todo o sistema: eixo do Monitoramento do PATEC, cascata do Plano de Ação, Controle das Equipes, prazos da Governança, Fechamento do Dia e Gestão de Jornada. Um dia que está aqui não aparece no gráfico e não é cobrado como dia sem upload. A lista vale para o ADLV e o FAST.</div>
@@ -10049,6 +10073,7 @@ function setAdmTab(id,btn){
     return;
   }
   if(id==='ciclos') setTimeout(()=>{cicloCarregarAtivo().then(initCicloADM);},50);
+  if(id==='direcionamento') setTimeout(dirAbrir,50);
   if(id==='online') setTimeout(admUltimoAcessoCarregar,50);
   if(id==='equipe') setTimeout(equipeAbrirEditor,50);
   if(id==='resultado-medicao') setTimeout(renderResultadoMedicao,50);
@@ -33480,5 +33505,720 @@ function _cobCarregarDados(){
     return _cobDados;
   });
 }
+
+
+// ══════════════════════════════════════════════════════════════════
+//  DIRECIONAMENTO DA EQUIPE  (ADM)
+//  Monta um card curto — panorama, 2 prioridades do dia e alerta de
+//  risco — pronto para colar no e-mail e no Teams.
+//
+//  Regra de ouro deste módulo: ele NÃO inventa número nenhum. Cada
+//  bloco lê exatamente a mesma fonte da tela de origem (Resumo do dia,
+//  Planilha Crítica, Urgência por Prazo/SLA, Analista Pedido,
+//  Cobrança por Status), para o card nunca divergir do dashboard.
+//
+//  O conteúdo muda conforme o módulo aberto: ADLV e FAST acompanham
+//  coisas diferentes. A aba é a mesma nos dois.
+// ══════════════════════════════════════════════════════════════════
+
+var _DIR = null;          // último pacote de dados coletado
+
+function _dirEsc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function _dirNum(n){ return String(n == null ? 0 : n); }
+function _dirMod(){ return (typeof _moduloAtivo !== 'undefined' && _moduloAtivo === 'fast') ? 'fast' : 'adlv'; }
+function _dirModNome(){ return _dirMod() === 'fast' ? 'FAST' : 'ADLV'; }
+function _dirDataBR(iso){
+  if (!iso) return '—';
+  var p = String(iso).split('-');
+  return p.length === 3 ? (p[2] + '/' + p[1] + '/' + p[0]) : String(iso);
+}
+function _dirHojeISO(){
+  var h = new Date();
+  return h.getFullYear() + '-' + String(h.getMonth() + 1).padStart(2, '0') + '-' + String(h.getDate()).padStart(2, '0');
+}
+function _dirMsg(txt, cor){
+  var e = document.getElementById('dir-msg');
+  if (e) { e.textContent = txt || ''; e.style.color = cor || 'var(--tx2)'; }
+}
+
+// ── 1. garantir que as bases já estejam em memória ────────────────
+function _dirGarantirDados(){
+  var ps = [];
+  try {
+    if (typeof _govUrgGarantirDados === 'function') ps.push(_govUrgGarantirDados());
+  } catch (e) {}
+  try {
+    if (typeof mapaFirebase !== 'undefined' && (!mapaFirebase || !mapaFirebase.length)
+        && typeof fbCarregarMapaDiario === 'function') ps.push(fbCarregarMapaDiario());
+  } catch (e) {}
+  try {
+    // dias sem ação do Top SLA vêm do cache de ações do ciclo
+    if (typeof _garantirCacheAcoes === 'function' && !window._prodCacheOK) _garantirCacheAcoes();
+  } catch (e) {}
+
+  if (_dirMod() === 'fast') {
+    try {
+      if (typeof _cobDados !== 'undefined' && (!_cobDados || !_cobDados.length)
+          && typeof _cobCarregarDados === 'function') ps.push(_cobCarregarDados());
+    } catch (e) {}
+  } else {
+    try {
+      if ((typeof _bkDados === 'undefined' || !_bkDados || !_bkDados.rows || !_bkDados.rows.length)
+          && typeof bkCarregarFirebase === 'function') ps.push(bkCarregarFirebase());
+    } catch (e) {}
+    try {
+      if ((typeof _aaPub === 'undefined' || !_aaPub || !_aaPub.length)
+          && typeof aaPublicoCarregar === 'function') ps.push(aaPublicoCarregar());
+    } catch (e) {}
+  }
+  return Promise.all(ps.map(function(p){
+    return (p && typeof p.then === 'function') ? p.catch(function(){ return null; }) : Promise.resolve(p);
+  }));
+}
+
+// ── 2. Resumo do dia (mesma leitura do Plano de Ação › Monitoramento)
+function _dirMapaDoDia(d){
+  try {
+    var fb = (typeof mapaFirebase !== 'undefined' ? mapaFirebase : []).find(function(r){ return r.data === d; });
+    if (fb) return fb;
+    if (typeof DATAS_ISO_MAPA !== 'undefined' && typeof L !== 'undefined') {
+      var i = DATAS_ISO_MAPA.indexOf(d);
+      if (i >= 0) return { l3:L[3][i]||0, l4:L[4][i]||0, l5:L[5][i]||0, l6:L[6][i]||0, l7:L[7][i]||0, l8:L[8][i]||0 };
+    }
+  } catch (e) {}
+  return null;
+}
+function _dirResumo(dt){
+  var m = _dirMapaDoDia(dt);
+  var dtAnt = (typeof estGetDiaAnterior === 'function') ? estGetDiaAnterior(dt) : null;
+  var ma = dtAnt ? _dirMapaDoDia(dtAnt) : null;
+  var g = function(o, k){ return o ? (+o[k] || 0) : 0; };
+  var r = {
+    dt: dt, dtAnt: dtAnt, temMapa: !!m,
+    l3:g(m,'l3'), l4:g(m,'l4'), l5:g(m,'l5'), l6:g(m,'l6'), l7:g(m,'l7'), l8:g(m,'l8'),
+    a3:ma?g(ma,'l3'):null, a4:ma?g(ma,'l4'):null, a5:ma?g(ma,'l5'):null,
+    a6:ma?g(ma,'l6'):null, a7:ma?g(ma,'l7'):null, a8:ma?g(ma,'l8'):null
+  };
+  r.totPatec = r.l3 + r.l4 + r.l5 + r.l6;
+  r.totAbrir = r.l7 + r.l8;
+  r.totGeral = r.totPatec + r.totAbrir;
+  r.totPatecAnt = ma ? (r.a3 + r.a4 + r.a5 + r.a6) : null;
+  r.totAbrirAnt = ma ? (r.a7 + r.a8) : null;
+  r.totGeralAnt = ma ? (r.totPatecAnt + r.totAbrirAnt) : null;
+  return r;
+}
+
+// ── 3. coleta dos blocos ──────────────────────────────────────────
+function _dirPlanilhaCritica(){
+  var base = (typeof pcDadosBase === 'function') ? pcDadosBase() : [];
+  var vencidos = base.filter(function(r){ return (r.validade||'').toLowerCase().indexOf('vencid') !== -1; });
+  var criticos = base.filter(function(r){
+    var ctrl = (r.status_ctrl||'').toUpperCase();
+    var val = (r.validade||'').toLowerCase();
+    var ehVenc = val.indexOf('vencimento') !== -1 || val.indexOf('vencid') !== -1;
+    return (ctrl === 'CRÍTICO' || ctrl === 'CRITICO') && !ehVenc;
+  });
+  return {
+    vencidos: vencidos,
+    reprovados: (typeof pcDadosReprovado === 'function') ? pcDadosReprovado() : [],
+    cancelados: (typeof pcDadosCancelado === 'function') ? pcDadosCancelado() : [],
+    criticos: criticos
+  };
+}
+
+// "Tirar do Fluxo" — mesma leitura da aba (coluna TIRAR ... = LIBERAR),
+// sem os filtros de tela: o card fala da carteira inteira.
+function _dirTirarFluxo(){
+  var out = [];
+  try {
+    if (!_bkDados || !_bkDados.rows || !_bkDados.rows.length) return out;
+    var rows = _bkDados.rows, headers = _bkDados.headers || [];
+    var iAnalista = 0, iFila = 2, iRC = 4, iSEQ = 5, iOP = 6, iIOP = 7;
+    var idx = headers.findIndex(function(h){ return String(h||'').toUpperCase().indexOf('TIRAR') !== -1; });
+    if (idx < 0) idx = 30;
+    var vistos = {};
+    rows.forEach(function(r){
+      if (String(r[idx]||'').trim().toUpperCase().indexOf('LIBERAR') === -1) return;
+      var ch = [r[iRC], r[iSEQ], r[iOP], r[iIOP]].map(function(v){ return String(v||'').trim(); }).join('|');
+      if (vistos[ch]) return;
+      vistos[ch] = 1;
+      out.push({ analista:String(r[iAnalista]||'').trim(), fila:String(r[iFila]||'').trim(),
+                 rc:String(r[iRC]||'').trim(), item:String(r[iSEQ]||'').trim() });
+    });
+  } catch (e) {}
+  return out;
+}
+
+// Urgência por Prazo — vencida + urgência máxima, PATEC Finalizado e AG. AÇÃO.
+// São os itens que precisam de prorrogação da oportunidade.
+function _dirProrrogacao(){
+  var out = [];
+  try {
+    if (typeof _govUrgPrazoUniverso !== 'function') return out;
+    var uni = _govUrgPrazoUniverso();
+    out = uni.filter(function(r){
+      var f = _govUrgPrazoFaixa(Number(r.prazoOp||0));
+      return (f === 'vencida' || f === 'max')
+          && r.statusPatec === 'PATEC Finalizado'
+          && String(r.statusTrat||'').toUpperCase() === 'AG. AÇÃO';
+    }).sort(function(a, b){ return (b.prazoOp||0) - (a.prazoOp||0); });
+  } catch (e) {}
+  return out;
+}
+
+// Top N de SLA — mesma base e mesmos rótulos do bloco "Top 5 — Maior SLA"
+function _dirTopSla(n){
+  var out = [];
+  try {
+    var BASE = (typeof _radarDados !== 'undefined' ? (_radarDados||[]) : []).filter(function(r){
+      return (r.analista_auto||'').trim() === 'Analisar PATEC Finalizado';
+    });
+    if (!BASE.length) return out;
+    var porRC = {};
+    BASE.forEach(function(r){
+      var rc = String(r.rc||'').trim();
+      if (!rc) return;
+      var sla = Number(r.sla) || 0;
+      if (!porRC[rc] || sla > porRC[rc].slaMax) {
+        porRC[rc] = { rc:rc, fila:r.fila||'—', slaMax:sla,
+          analista:(r.analista && r.analista !== '#N/A') ? r.analista : '—', _ref:r };
+      }
+    });
+    var top = Object.keys(porRC).map(function(k){ return porRC[k]; })
+      .filter(function(r){ return r.slaMax > 0; })
+      .sort(function(a, b){ return b.slaMax - a.slaMax; })
+      .slice(0, n || 10);
+
+    var acoes = [];
+    try {
+      var c = window._prodAcoesCache || {};
+      Object.keys(c).forEach(function(d){ acoes = acoes.concat(c[d] || []); });
+      acoes = acoes.filter(function(a){ return !a.anulada; });
+    } catch (e) {}
+    var hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    var dias = function(rc){
+      var lista = acoes.filter(function(a){
+        return String(a.rc||'').trim() === String(rc).trim() || String(a.rcChave||'').indexOf(String(rc) + '|') === 0;
+      });
+      if (!lista.length) return null;
+      var ds = lista.map(function(a){ return new Date(a.data + 'T00:00:00'); }).filter(function(d){ return !isNaN(d); });
+      if (!ds.length) return null;
+      return Math.floor((hoje - new Date(Math.max.apply(null, ds))) / 86400000);
+    };
+
+    out = top.map(function(it){
+      var m = {};
+      try { m = (typeof _govDados !== 'undefined' && _govDados[govChave(it._ref)]) || {}; } catch (e) {}
+      var fase;
+      try {
+        var sg = govCalcStatus(govCalcPrazo(m.status||'', m.envio||''), m.finalizado||'');
+        if (!m.status && !m.envio) fase = 'Precisa de ação';
+        else if (sg === 'ATRASADO') fase = 'Fora do prazo';
+        else if (sg === 'DENTRO DO PRAZO') fase = 'Dentro do prazo';
+        else if (sg === 'CONCLUÍDO') fase = 'Concluído';
+        else fase = 'Precisa de ação';
+      } catch (e) { fase = '—'; }
+      var d = dias(it.rc);
+      return { rc:it.rc, analista:it.analista, fila:it.fila, sla:it.slaMax, fase:fase, dias:d,
+               diasTxt: d === null ? 'sem ação registrada' : (d === 0 ? 'movimentado hoje' : d + ' dia(s) sem ação') };
+    });
+  } catch (e) {}
+  return out;
+}
+
+// Analista Pedido — Regra 3 pede conferência no SAP; o resto pode virar pedido.
+function _dirAnalistaPedido(){
+  var r = { pedido:0, pedidoRc:0, regra3:0, regra3Rc:0, total:0, temBase:false };
+  try {
+    var lista = (typeof _aaPub !== 'undefined' && _aaPub) ? _aaPub : [];
+    r.temBase = !!lista.length;
+    r.total = lista.length;
+    var ehR3 = function(a){ return String(a.regra||'').toLowerCase().indexOf('regra 3') !== -1; };
+    var p = lista.filter(function(a){ return !ehR3(a); });
+    var t = lista.filter(ehR3);
+    r.pedido = p.length;
+    r.regra3 = t.length;
+    r.pedidoRc = Object.keys(p.reduce(function(o, a){ o[a.rc] = 1; return o; }, {})).length;
+    r.regra3Rc = Object.keys(t.reduce(function(o, a){ o[a.rc] = 1; return o; }, {})).length;
+  } catch (e) {}
+  return r;
+}
+
+// FAST — Cobrança por Status: itens vencidos (status Atrasado)
+function _dirCobVencidos(){
+  var out = [];
+  try {
+    var lista = (typeof _cobDados !== 'undefined' && _cobDados) ? _cobDados : [];
+    out = lista.filter(function(r){
+      return String(_cobNorm(r.status || '')).indexOf('atras') !== -1;
+    }).map(function(r){
+      return { rc:r.rc||'—', item:r.itemRc||'—', status:r.status||'—',
+               fila:(typeof _cobFila === 'function' ? (_cobFila(r) || '—') : (r.fila || '—')) };
+    }).sort(function(a, b){ return String(a.fila).localeCompare(String(b.fila), 'pt-BR') || String(a.rc).localeCompare(String(b.rc)); });
+  } catch (e) {}
+  return out;
+}
+
+function _dirColetar(){
+  var sel = document.getElementById('dir-dia');
+  var dt = (sel && sel.value) || ((typeof estGetDia === 'function') ? estGetDia() : _dirHojeISO());
+  if (sel && !sel.value) sel.value = dt;
+
+  var d = { mod:_dirMod(), gerado:_dirHojeISO(), resumo:_dirResumo(dt) };
+  if (d.mod === 'fast') {
+    d.cob = _dirCobVencidos();
+    d.cobTotal = (typeof _cobDados !== 'undefined' && _cobDados) ? _cobDados.length : 0;
+  } else {
+    d.pc = _dirPlanilhaCritica();
+    d.fluxo = _dirTirarFluxo();
+    d.prorr = _dirProrrogacao();
+    d.sla = _dirTopSla(10);
+    d.aa = _dirAnalistaPedido();
+  }
+  d.prioridades = _dirPrioridades(d);
+  d.risco = _dirRisco(d);
+  return d;
+}
+
+// ── 4. leitura de gestor: prioridades e risco ─────────────────────
+function _dirPrioridades(d){
+  var cand = [];
+  if (d.mod === 'fast') {
+    if (d.cob.length) cand.push({
+      titulo: 'Zerar os itens vencidos da Cobrança por Status',
+      num: d.cob.length + ' item(ns) vencido(s)',
+      texto: 'Todo item vencido precisa de tratativa hoje. A lista completa está no fim deste card — cada um deve sair do dia com cobrança registrada ou com o status atualizado.'
+    });
+    if (d.resumo.l4 > 0) cand.push({
+      titulo: 'Reduzir o Ag. PATEC Finalizar',
+      num: d.resumo.l4 + ' item(ns)',
+      texto: 'É a fila que mais segura o Total PATEC. Priorize os itens mais antigos para o número cair no fechamento de hoje.'
+    });
+    if (d.resumo.totAbrirAnt !== null && d.resumo.totAbrir > d.resumo.totAbrirAnt) cand.push({
+      titulo: 'Conter a entrada de Abrir PATEC',
+      num: '+' + (d.resumo.totAbrir - d.resumo.totAbrirAnt) + ' vs dia anterior',
+      texto: 'O Total Abrir PATEC subiu. Atacar as entradas do dia evita que a carteira cresça de novo amanhã.'
+    });
+    if (d.resumo.l3 > 0) cand.push({
+      titulo: 'Fechar o PATEC Finalizado do dia',
+      num: d.resumo.l3 + ' item(ns)',
+      texto: 'Mantenha o ritmo de finalização para o saldo do dia fechar em queda.'
+    });
+  } else {
+    if (d.prorr.length) cand.push({
+      titulo: 'Solicitar prorrogação da oportunidade',
+      num: d.prorr.length + ' item(ns)',
+      texto: 'Itens em PATEC Finalizado, com prazo vencido ou em urgência máxima, e ainda em AG. AÇÃO na Governança. Sem prorrogação hoje, a oportunidade se perde.'
+    });
+    var zerar = d.pc.reprovados.length + d.fluxo.length + d.pc.cancelados.length;
+    if (zerar > 0) cand.push({
+      titulo: 'Terminar o dia com estas filas zeradas',
+      num: zerar + ' item(ns)',
+      texto: '100% Reprovado (' + d.pc.reprovados.length + '), Tirar do Fluxo (' + d.fluxo.length
+           + ') e Cancelados (' + d.pc.cancelados.length + '). São filas de conclusão obrigatória: fechamos o dia com todas em zero.'
+    });
+    if (d.pc.vencidos.length) cand.push({
+      titulo: 'Atacar os Vencidos da Planilha Crítica',
+      num: d.pc.vencidos.length + ' item(ns)',
+      texto: 'Atuar nesses itens reduz a fila e melhora a saúde da carteira. Cada baixa aqui conta duas vezes: tira o vencido e libera o analista.'
+    });
+    var parados = d.sla.filter(function(x){ return x.dias === null || x.dias > 7; }).length;
+    if (parados) cand.push({
+      titulo: 'Destravar as RCs de maior SLA',
+      num: parados + ' das 10 maiores sem ação recente',
+      texto: 'São as RCs mais antigas da carteira. Uma ação registrada hoje em cada uma já muda o indicador de parado.'
+    });
+    if (d.aa.pedido) cand.push({
+      titulo: 'Converter o que já está apto a pedido',
+      num: d.aa.pedido + ' registro(s)',
+      texto: 'O Analista Automático já separou o que pode virar pedido direto. É ganho rápido de produção no dia.'
+    });
+  }
+  if (!cand.length) cand.push({
+    titulo: 'Manter o ritmo do dia',
+    num: '',
+    texto: 'Nenhuma fila crítica em aberto neste momento. Foco em manter a produção e registrar as ações no sistema.'
+  });
+  return cand.slice(0, 2);
+}
+
+function _dirRisco(d){
+  if (d.mod === 'fast') {
+    if (d.cob.length) return { nivel:'alto',
+      txt: d.cob.length + ' item(ns) da Cobrança por Status estão vencidos. Enquanto não forem tratados, contam contra o prazo da carteira todos os dias.' };
+    if (d.resumo.totPatecAnt !== null && d.resumo.totPatec > d.resumo.totPatecAnt) return { nivel:'medio',
+      txt: 'O Total PATEC subiu ' + (d.resumo.totPatec - d.resumo.totPatecAnt) + ' item(ns) em relação ao dia anterior — a carteira cresceu.' };
+    if (!d.resumo.temMapa) return { nivel:'medio', txt:'Não há MAPA lançado para ' + _dirDataBR(d.resumo.dt) + '. Os números do panorama podem estar desatualizados.' };
+    return { nivel:'ok', txt:'Sem atraso crítico identificado para hoje.' };
+  }
+  if (d.prorr.length) return { nivel:'alto',
+    txt: d.prorr.length + ' oportunidade(s) com prazo vencido/urgência máxima ainda em AG. AÇÃO. Sem a prorrogação solicitada hoje, o item é perdido.' };
+  var muito = d.sla.filter(function(x){ return x.dias !== null && x.dias > 30; }).length
+            + d.sla.filter(function(x){ return x.dias === null; }).length;
+  if (muito) return { nivel:'alto',
+    txt: muito + ' das 10 RCs de maior SLA estão há mais de 30 dias sem ação (ou nunca tiveram ação registrada).' };
+  if (d.pc.reprovados.length + d.fluxo.length + d.pc.cancelados.length > 0) return { nivel:'medio',
+    txt: 'Há itens em filas de conclusão obrigatória (100% Reprovado, Tirar do Fluxo, Cancelados) que não podem virar o dia em aberto.' };
+  if (!d.resumo.temMapa) return { nivel:'medio', txt:'Não há MAPA lançado para ' + _dirDataBR(d.resumo.dt) + '. Os números do panorama podem estar desatualizados.' };
+  return { nivel:'ok', txt:'Sem atraso crítico identificado para hoje.' };
+}
+
+// ── 5. o card (HTML autossuficiente: estilo inline, sem variável de
+//     CSS e sem classe — é assim que ele cola certo no Outlook/Teams)
+var _DIR_C = { az:'#0D2347', azm:'#1A4A8A', azc:'#E8F0FB', vd:'#0E9E6A', vdc:'#E6F7F1',
+               vm:'#D94040', vmc:'#FDEAEA', am:'#C77700', amc:'#FFF4E0',
+               tx:'#1B2430', tx2:'#6B7785', brd:'#DCE3EC', cin:'#F4F6FA' };
+
+function _dirVar(v, ant){
+  if (ant === null || ant === undefined) return '';
+  var dd = v - ant;
+  if (dd === 0) return '<div style="font-size:10px;font-weight:600;color:' + _DIR_C.tx2 + ';margin-top:3px">— igual ao dia ant.</div>';
+  var cor = dd > 0 ? _DIR_C.vm : _DIR_C.vd;
+  return '<div style="font-size:10px;font-weight:700;color:' + cor + ';margin-top:3px">'
+       + (dd > 0 ? '▲ +' : '▼ ') + dd + ' vs dia ant.</div>';
+}
+function _dirKpi(rot, val, ant, cor){
+  return '<td style="width:11%;padding:4px" valign="top">'
+    + '<div style="background:' + _DIR_C.cin + ';border:1px solid ' + _DIR_C.brd + ';border-radius:8px;padding:8px 6px;text-align:center">'
+    + '<div style="font-size:9.5px;font-weight:700;color:' + _DIR_C.tx2 + ';line-height:1.25;margin-bottom:3px">' + _dirEsc(rot) + '</div>'
+    + '<div style="font-size:21px;font-weight:700;color:' + cor + ';line-height:1">' + _dirNum(val) + '</div>'
+    + _dirVar(val, ant) + '</div></td>';
+}
+function _dirTitulo(txt){
+  return '<div style="font-size:12.5px;font-weight:700;color:' + _DIR_C.az + ';margin:18px 0 8px;'
+       + 'border-left:4px solid ' + _DIR_C.azm + ';padding-left:8px">' + _dirEsc(txt) + '</div>';
+}
+function _dirLinhaBloco(cor, bg, titulo, num, texto){
+  return '<div style="background:' + bg + ';border:1px solid ' + cor + ';border-left:4px solid ' + cor
+    + ';border-radius:8px;padding:10px 12px;margin-bottom:8px">'
+    + '<div style="font-size:12px;font-weight:700;color:' + cor + '">' + _dirEsc(titulo)
+    + (num ? ' <span style="color:' + _DIR_C.tx + '">· ' + _dirEsc(num) + '</span>' : '') + '</div>'
+    + '<div style="font-size:11.5px;color:' + _DIR_C.tx + ';margin-top:4px;line-height:1.5">' + _dirEsc(texto) + '</div>'
+    + '</div>';
+}
+function _dirTabela(cols, linhas, limite){
+  var lim = limite || 40;
+  var h = '<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px">'
+    + '<tr>' + cols.map(function(c){
+        return '<th style="text-align:left;padding:5px 7px;background:' + _DIR_C.azc + ';color:' + _DIR_C.az
+             + ';border:1px solid ' + _DIR_C.brd + ';font-size:10px;font-weight:700">' + _dirEsc(c) + '</th>';
+      }).join('') + '</tr>';
+  linhas.slice(0, lim).forEach(function(l, i){
+    h += '<tr>' + l.map(function(c){
+      return '<td style="padding:5px 7px;border:1px solid ' + _DIR_C.brd + ';background:'
+           + (i % 2 ? '#fff' : _DIR_C.cin) + ';color:' + _DIR_C.tx + '">' + _dirEsc(c) + '</td>';
+    }).join('') + '</tr>';
+  });
+  h += '</table>';
+  if (linhas.length > lim) h += '<div style="font-size:10.5px;color:' + _DIR_C.tx2 + ';margin-top:5px">… e mais '
+    + (linhas.length - lim) + ' item(ns). A lista completa está na tela de origem.</div>';
+  return h;
+}
+
+function _dirCardHTML(d){
+  var r = d.resumo, mod = _dirModNome();
+  var cabData = 'Gerado em ' + _dirDataBR(d.gerado) + ' · base do dia ' + _dirDataBR(r.dt);
+
+  var h = '<div style="font-family:Segoe UI,Calibri,Arial,sans-serif;max-width:900px;color:' + _DIR_C.tx + ';background:#ffffff">';
+
+  // cabeçalho
+  h += '<div style="background:' + _DIR_C.az + ';color:#ffffff;padding:14px 18px;border-radius:10px 10px 0 0">'
+     + '<div style="font-size:17px;font-weight:700">📣 Direcionamento da Equipe — ' + mod + '</div>'
+     + '<div style="font-size:11.5px;color:#C9D6EA;margin-top:3px">' + _dirEsc(cabData) + '</div>'
+     + '</div>';
+  h += '<div style="border:1px solid ' + _DIR_C.brd + ';border-top:none;border-radius:0 0 10px 10px;padding:14px 18px">';
+
+  // 1 — panorama
+  h += _dirTitulo('1 · Panorama de hoje');
+  if (!r.temMapa) {
+    h += '<div style="font-size:11.5px;color:' + _DIR_C.am + ';background:' + _DIR_C.amc + ';border:1px solid ' + _DIR_C.am
+       + ';border-radius:8px;padding:8px 10px">Sem MAPA lançado para ' + _dirEsc(_dirDataBR(r.dt)) + '.</div>';
+  } else {
+    var frase = 'Carteira em ' + r.totGeral + ' itens: ' + r.totPatec + ' em PATEC e ' + r.totAbrir + ' em Abrir PATEC.';
+    if (r.totGeralAnt !== null) {
+      var dg = r.totGeral - r.totGeralAnt;
+      frase += dg === 0 ? ' Estável em relação ao dia anterior.'
+             : (dg < 0 ? ' Queda de ' + (-dg) + ' item(ns) vs o dia anterior.' : ' Alta de ' + dg + ' item(ns) vs o dia anterior.');
+    }
+    h += '<div style="font-size:12px;color:' + _DIR_C.tx + ';margin-bottom:8px">' + _dirEsc(frase) + '</div>';
+    h += '<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;table-layout:fixed"><tr>'
+       + _dirKpi('PATEC Finalizado', r.l3, r.a3, '#3266AD')
+       + _dirKpi('Ag. PATEC Finalizar', r.l4, r.a4, '#3266AD')
+       + _dirKpi('100% Reprovado', r.l5, r.a5, _DIR_C.vd)
+       + _dirKpi('PATEC Cancelado', r.l6, r.a6, _DIR_C.vd)
+       + _dirKpi('Total PATEC', r.totPatec, r.totPatecAnt, _DIR_C.azm)
+       + _dirKpi('Abrir ID Não', r.l7, r.a7, _DIR_C.am)
+       + _dirKpi('Abrir PATEC Obrig.', r.l8, r.a8, _DIR_C.am)
+       + _dirKpi('Total Abrir PATEC', r.totAbrir, r.totAbrirAnt, _DIR_C.am)
+       + '<td style="width:12%;padding:4px" valign="top">'
+       + '<div style="background:' + _DIR_C.azc + ';border:1px solid ' + _DIR_C.azm + ';border-radius:8px;padding:8px 6px;text-align:center">'
+       + '<div style="font-size:9.5px;font-weight:700;color:' + _DIR_C.tx2 + ';margin-bottom:3px">Total Geral</div>'
+       + '<div style="font-size:24px;font-weight:800;color:' + _DIR_C.az + ';line-height:1">' + r.totGeral + '</div>'
+       + _dirVar(r.totGeral, r.totGeralAnt) + '</div></td>'
+       + '</tr></table>';
+  }
+
+  // 2 — prioridades
+  h += _dirTitulo('2 · Onde focar hoje');
+  d.prioridades.forEach(function(p, i){
+    var cor = i === 0 ? _DIR_C.vm : _DIR_C.am;
+    var bg = i === 0 ? _DIR_C.vmc : _DIR_C.amc;
+    h += _dirLinhaBloco(cor, bg, (i + 1) + 'ª prioridade — ' + p.titulo, p.num, p.texto);
+  });
+
+  // 3 — risco
+  h += _dirTitulo('3 · Alerta de risco');
+  var cr = d.risco.nivel === 'alto' ? _DIR_C.vm : (d.risco.nivel === 'medio' ? _DIR_C.am : _DIR_C.vd);
+  var bgr = d.risco.nivel === 'alto' ? _DIR_C.vmc : (d.risco.nivel === 'medio' ? _DIR_C.amc : _DIR_C.vdc);
+  var icr = d.risco.nivel === 'alto' ? '🔴' : (d.risco.nivel === 'medio' ? '🟠' : '🟢');
+  h += '<div style="background:' + bgr + ';border:1px solid ' + cr + ';border-radius:8px;padding:10px 12px;'
+     + 'font-size:12px;color:' + _DIR_C.tx + ';line-height:1.5">' + icr + ' <strong style="color:' + cr + '">'
+     + (d.risco.nivel === 'ok' ? 'Sem risco crítico' : 'Atenção') + '</strong> — ' + _dirEsc(d.risco.txt) + '</div>';
+
+  // 4 — detalhamento
+  if (d.mod === 'fast') {
+    h += _dirTitulo('4 · Cobrança por Status — itens vencidos');
+    h += '<div style="display:inline-block;background:' + _DIR_C.vmc + ';border:1px solid ' + _DIR_C.vm
+       + ';border-radius:8px;padding:8px 16px;margin-bottom:6px">'
+       + '<span style="font-size:22px;font-weight:800;color:' + _DIR_C.vm + '">' + d.cob.length + '</span>'
+       + '<span style="font-size:11px;color:' + _DIR_C.tx2 + ';font-weight:700"> vencidos de ' + d.cobTotal + ' itens</span></div>';
+    if (d.cob.length) {
+      h += _dirTabela(['RC', 'Item da RC', 'Status', 'Fila'],
+        d.cob.map(function(x){ return [x.rc, x.item, x.status, x.fila]; }), 60);
+    } else {
+      h += '<div style="font-size:11.5px;color:' + _DIR_C.vd + '">✅ Nenhum item vencido na Cobrança por Status.</div>';
+    }
+  } else {
+    // Planilha Crítica
+    h += _dirTitulo('4 · Governança › Planilha Crítica');
+    h += _dirLinhaBloco(_DIR_C.vm, _DIR_C.vmc, '⏰ Vencidos', d.pc.vencidos.length + ' item(ns)',
+      'A equipe deve atuar nesses itens para diminuir a quantidade na fila e melhorar a saúde da carteira.');
+    var obrig = [
+      { ico:'❌', nome:'100% Reprovado', n:d.pc.reprovados.length },
+      { ico:'🗑', nome:'Tirar do Fluxo', n:d.fluxo.length },
+      { ico:'🚫', nome:'Cancelados', n:d.pc.cancelados.length }
+    ];
+    obrig.forEach(function(o){
+      if (o.n > 0) h += _dirLinhaBloco(_DIR_C.am, _DIR_C.amc, o.ico + ' ' + o.nome, o.n + ' item(ns)',
+        'Precisamos terminar o dia com todos esses itens concluídos.');
+      else h += _dirLinhaBloco(_DIR_C.vd, _DIR_C.vdc, o.ico + ' ' + o.nome, 'zerado',
+        'Nada pendente hoje — manter assim até o fechamento.');
+    });
+
+    // Urgência por Prazo
+    h += _dirTitulo('5 · Governança › Urgência por Prazo — prorrogação');
+    h += '<div style="font-size:11.5px;color:' + _DIR_C.tx + ';margin-bottom:6px">Itens vencidos e em urgência máxima com '
+       + '<strong>PATEC Finalizado</strong> e <strong>AG. AÇÃO</strong>: precisamos solicitar a prorrogação da oportunidade.</div>';
+    h += '<div style="display:inline-block;background:' + (d.prorr.length ? _DIR_C.vmc : _DIR_C.vdc) + ';border:1px solid '
+       + (d.prorr.length ? _DIR_C.vm : _DIR_C.vd) + ';border-radius:8px;padding:8px 16px;margin-bottom:6px">'
+       + '<span style="font-size:22px;font-weight:800;color:' + (d.prorr.length ? _DIR_C.vm : _DIR_C.vd) + '">' + d.prorr.length + '</span>'
+       + '<span style="font-size:11px;color:' + _DIR_C.tx2 + ';font-weight:700"> item(ns) para prorrogar</span></div>';
+    if (d.prorr.length) {
+      h += _dirTabela(['RC', 'Item da RC', 'Fila', 'Prazo', 'SLA'],
+        d.prorr.map(function(x){ return [x.rc, x.itemRc || '—', x.fila || '—', x.prazoOp, x.sla]; }), 30);
+    }
+
+    // Urgência por SLA
+    h += _dirTitulo('6 · Governança › Urgência por SLA — Top 10');
+    if (d.sla.length) {
+      h += _dirTabela(['#', 'RC', 'Analista', 'SLA (dias)', 'Fase atual', 'Sem ação'],
+        d.sla.map(function(x, i){ return [(i + 1) + 'º', x.rc, x.analista, x.sla, x.fase, x.diasTxt]; }), 10);
+    } else {
+      h += '<div style="font-size:11.5px;color:' + _DIR_C.tx2 + '">Sem base do Radar carregada para o Top SLA.</div>';
+    }
+
+    // Analista Automático
+    h += _dirTitulo('7 · Analista Automático › Analista Pedido');
+    h += '<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;table-layout:fixed"><tr>'
+       + '<td style="width:50%;padding:4px" valign="top"><div style="background:' + _DIR_C.vdc + ';border:1px solid ' + _DIR_C.vd
+       + ';border-radius:8px;padding:10px;text-align:center">'
+       + '<div style="font-size:26px;font-weight:800;color:' + _DIR_C.vd + ';line-height:1">' + d.aa.pedido + '</div>'
+       + '<div style="font-size:11px;font-weight:700;color:' + _DIR_C.tx + ';margin-top:4px">Podem virar pedido</div>'
+       + '<div style="font-size:10px;color:' + _DIR_C.tx2 + ';margin-top:2px">' + d.aa.pedidoRc + ' RC(s) · demais regras (tudo que não é Regra 3)</div>'
+       + '</div></td>'
+       + '<td style="width:50%;padding:4px" valign="top"><div style="background:' + _DIR_C.amc + ';border:1px solid ' + _DIR_C.am
+       + ';border-radius:8px;padding:10px;text-align:center">'
+       + '<div style="font-size:26px;font-weight:800;color:' + _DIR_C.am + ';line-height:1">' + d.aa.regra3 + '</div>'
+       + '<div style="font-size:11px;font-weight:700;color:' + _DIR_C.tx + ';margin-top:4px">Regra 3 — ⚠️ Verificar SAP</div>'
+       + '<div style="font-size:10px;color:' + _DIR_C.tx2 + ';margin-top:2px">' + d.aa.regra3Rc + ' RC(s) · conferir no SAP antes do pedido</div>'
+       + '</div></td></tr></table>';
+    if (!d.aa.temBase) h += '<div style="font-size:10.5px;color:' + _DIR_C.tx2 + ';margin-top:4px">Sem resultado do Analista Pedido carregado.</div>';
+  }
+
+  h += '<div style="margin-top:16px;border-top:1px solid ' + _DIR_C.brd + ';padding-top:8px;font-size:10px;color:' + _DIR_C.tx2 + '">'
+     + 'PATEC · Sistema de Gestão de Compras — ' + mod + ' · números iguais aos do dashboard em ' + _dirEsc(_dirDataBR(d.gerado)) + '</div>';
+  h += '</div></div>';
+  return h;
+}
+
+// ── 6. versão texto (para colar no chat do Teams sem formatação) ──
+function _dirTexto(d){
+  var r = d.resumo, T = [];
+  T.push('DIRECIONAMENTO DA EQUIPE — ' + _dirModNome());
+  T.push('Gerado em ' + _dirDataBR(d.gerado) + ' | base do dia ' + _dirDataBR(r.dt));
+  T.push('');
+  T.push('1) PANORAMA');
+  if (!r.temMapa) T.push('  Sem MAPA lançado para ' + _dirDataBR(r.dt) + '.');
+  else {
+    T.push('  PATEC Finalizado: ' + r.l3 + ' | Ag. PATEC Finalizar: ' + r.l4 + ' | 100% Reprovado: ' + r.l5 + ' | Cancelado: ' + r.l6);
+    T.push('  Total PATEC: ' + r.totPatec + ' | Abrir ID Não: ' + r.l7 + ' | Abrir PATEC Obrig.: ' + r.l8 + ' | Total Abrir: ' + r.totAbrir);
+    T.push('  TOTAL GERAL: ' + r.totGeral + (r.totGeralAnt !== null ? ' (' + (r.totGeral - r.totGeralAnt >= 0 ? '+' : '') + (r.totGeral - r.totGeralAnt) + ' vs dia ant.)' : ''));
+  }
+  T.push('');
+  T.push('2) ONDE FOCAR HOJE');
+  d.prioridades.forEach(function(p, i){
+    T.push('  ' + (i + 1) + '. ' + p.titulo + (p.num ? ' (' + p.num + ')' : ''));
+    T.push('     ' + p.texto);
+  });
+  T.push('');
+  T.push('3) ALERTA DE RISCO');
+  T.push('  ' + d.risco.txt);
+  T.push('');
+  if (d.mod === 'fast') {
+    T.push('4) COBRANÇA POR STATUS — VENCIDOS: ' + d.cob.length + ' de ' + d.cobTotal);
+    d.cob.slice(0, 60).forEach(function(x){ T.push('   - RC ' + x.rc + ' item ' + x.item + ' | ' + x.status + ' | ' + x.fila); });
+    if (d.cob.length > 60) T.push('   ... e mais ' + (d.cob.length - 60) + ' item(ns).');
+  } else {
+    T.push('4) PLANILHA CRÍTICA');
+    T.push('   Vencidos: ' + d.pc.vencidos.length + ' | 100% Reprovado: ' + d.pc.reprovados.length
+         + ' | Tirar do Fluxo: ' + d.fluxo.length + ' | Cancelados: ' + d.pc.cancelados.length);
+    T.push('');
+    T.push('5) URGÊNCIA POR PRAZO — PRORROGAÇÃO: ' + d.prorr.length + ' item(ns)');
+    d.prorr.slice(0, 30).forEach(function(x){ T.push('   - RC ' + x.rc + ' item ' + (x.itemRc || '-') + ' | ' + (x.fila || '-') + ' | prazo ' + x.prazoOp + ' | SLA ' + x.sla); });
+    if (d.prorr.length > 30) T.push('   ... e mais ' + (d.prorr.length - 30) + ' item(ns).');
+    T.push('');
+    T.push('6) TOP 10 MAIOR SLA');
+    d.sla.forEach(function(x, i){ T.push('   ' + (i + 1) + '. RC ' + x.rc + ' | ' + x.analista + ' | SLA ' + x.sla + ' | ' + x.fase + ' | ' + x.diasTxt); });
+    T.push('');
+    T.push('7) ANALISTA PEDIDO');
+    T.push('   Podem virar pedido: ' + d.aa.pedido + ' registro(s) / ' + d.aa.pedidoRc + ' RC(s)');
+    T.push('   Regra 3 (verificar SAP): ' + d.aa.regra3 + ' registro(s) / ' + d.aa.regra3Rc + ' RC(s)');
+  }
+  return T.join('\n');
+}
+
+// ── 7. tela ───────────────────────────────────────────────────────
+function dirAbrir(){
+  var sel = document.getElementById('dir-dia');
+  if (sel && !sel.value) {
+    try { sel.value = (typeof estGetDia === 'function') ? estGetDia() : _dirHojeISO(); } catch (e) { sel.value = _dirHojeISO(); }
+  }
+  var lbl = document.getElementById('dir-mod-lbl');
+  if (lbl) lbl.textContent = _dirModNome();
+  dirGerar();
+}
+
+function dirGerar(){
+  var alvo = document.getElementById('dir-card');
+  if (!alvo) return;
+  _dirMsg('Carregando as bases…', 'var(--azm)');
+  alvo.innerHTML = '<div style="padding:24px;text-align:center;color:var(--tx2);font-size:12px">⏳ Montando o direcionamento…</div>';
+  _dirGarantirDados().then(function(){
+    try {
+      _DIR = _dirColetar();
+      alvo.innerHTML = _dirCardHTML(_DIR);
+      _dirMsg('✅ Card gerado às ' + new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }) + '.', 'var(--vd)');
+    } catch (e) {
+      alvo.innerHTML = '<div style="padding:18px;color:var(--vm);font-size:12px">❌ Não foi possível montar o card: ' + _dirEsc(e.message) + '</div>';
+      _dirMsg('❌ Erro ao montar o card.', 'var(--vm)');
+    }
+  });
+}
+
+function dirCopiar(){
+  var alvo = document.getElementById('dir-card');
+  if (!alvo || !_DIR) { _dirMsg('Gere o card primeiro.', 'var(--am)'); return; }
+  var html = alvo.innerHTML, txt = _dirTexto(_DIR);
+  var selecionar = function(){
+    // o caminho que funciona em todo navegador: selecionar e copiar
+    try {
+      var sel = window.getSelection(); var rg = document.createRange();
+      rg.selectNodeContents(alvo); sel.removeAllRanges(); sel.addRange(rg);
+      var ok = document.execCommand('copy');
+      sel.removeAllRanges();
+      _dirMsg(ok ? '📋 Card copiado — cole no e-mail ou no Teams.' : '❌ O navegador bloqueou a cópia.', ok ? 'var(--vd)' : 'var(--vm)');
+    } catch (e) { _dirMsg('❌ O navegador bloqueou a cópia.', 'var(--vm)'); }
+  };
+  if (navigator.clipboard && window.ClipboardItem) {
+    try {
+      navigator.clipboard.write([new window.ClipboardItem({
+        'text/html': new Blob([html], { type:'text/html' }),
+        'text/plain': new Blob([txt], { type:'text/plain' })
+      })]).then(function(){
+        _dirMsg('📋 Card copiado com a formatação — cole no e-mail ou no Teams.', 'var(--vd)');
+      }).catch(selecionar);
+      return;
+    } catch (e) {}
+  }
+  selecionar();
+}
+
+function dirCopiarTexto(){
+  if (!_DIR) { _dirMsg('Gere o card primeiro.', 'var(--am)'); return; }
+  var txt = _dirTexto(_DIR);
+  var falha = function(){
+    var ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    var ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+    _dirMsg(ok ? '📋 Texto copiado.' : '❌ O navegador bloqueou a cópia.', ok ? 'var(--vd)' : 'var(--vm)');
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(function(){ _dirMsg('📋 Texto copiado.', 'var(--vd)'); }).catch(falha);
+  } else falha();
+}
+
+// PNG sem biblioteca: o card vira um <foreignObject> dentro de um SVG e
+// esse SVG é desenhado num canvas. XMLSerializer garante o XHTML válido
+// que o foreignObject exige.
+function dirPng(){
+  var alvo = document.getElementById('dir-card');
+  if (!alvo || !alvo.firstElementChild) { _dirMsg('Gere o card primeiro.', 'var(--am)'); return; }
+  _dirMsg('Gerando a imagem…', 'var(--azm)');
+  try {
+    var no = alvo.firstElementChild;
+    var bb = no.getBoundingClientRect();
+    var larg = Math.ceil(bb.width) || no.offsetWidth;
+    var alt = Math.ceil(bb.height) || no.offsetHeight;
+    // card escondido mede 0 — gerar assim sairia cortado
+    if (!larg || !alt) { _dirMsg('❌ Abra a aba do Direcionamento antes de baixar a imagem.', 'var(--vm)'); return; }
+    var xml = new XMLSerializer().serializeToString(no);
+    var esc = 2;  // 2x = imagem nítida para colar no Teams
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + larg + '" height="' + alt + '">'
+      + '<rect width="100%" height="100%" fill="#ffffff"/>'
+      + '<foreignObject x="0" y="0" width="' + larg + '" height="' + alt + '">'
+      + '<div xmlns="http://www.w3.org/1999/xhtml" style="width:' + larg + 'px">' + xml + '</div>'
+      + '</foreignObject></svg>';
+    var img = new Image();
+    img.onload = function(){
+      try {
+        var cv = document.createElement('canvas');
+        cv.width = larg * esc; cv.height = alt * esc;
+        var ct = cv.getContext('2d');
+        ct.fillStyle = '#ffffff'; ct.fillRect(0, 0, cv.width, cv.height);
+        ct.setTransform(esc, 0, 0, esc, 0, 0);
+        ct.drawImage(img, 0, 0);
+        cv.toBlob(function(b){
+          if (!b) { _dirMsg('❌ Não foi possível gerar a imagem.', 'var(--vm)'); return; }
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(b);
+          a.download = 'Direcionamento_' + _dirModNome() + '_' + (_DIR ? _DIR.gerado : _dirHojeISO()).replace(/-/g, '') + '.png';
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+          _dirMsg('🖼 Imagem baixada — é só anexar ou colar no Teams.', 'var(--vd)');
+        }, 'image/png');
+      } catch (e) { _dirMsg('❌ Não foi possível gerar a imagem: ' + e.message, 'var(--vm)'); }
+    };
+    img.onerror = function(){ _dirMsg('❌ Não foi possível gerar a imagem neste navegador. Use o botão de copiar.', 'var(--vm)'); };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  } catch (e) {
+    _dirMsg('❌ Não foi possível gerar a imagem: ' + e.message, 'var(--vm)');
+  }
+}
+
 
 </script>
