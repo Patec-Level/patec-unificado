@@ -4324,7 +4324,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             </label>
             <span id="cob-status" style="font-size:11.5px;color:var(--tx2)"></span>
           </div>
-          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Data de Retorno, Status, Centro, Verificar, Processo, Cobrança, Tipo de Cobrança, Fila, Prazo, SLA</strong> — obrigatórias: RC e Status. As colunas <em>MAPA GUI</em>, <em>Fila GOV</em> e as sem título são ignoradas. A ordem das colunas não importa: a leitura é pelo nome.</div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Data de Retorno, Status, Centro, Verificar, Processo, Cobrança, Tipo, Tipo de Cobrança, Fila, Prazo, SLA</strong> — obrigatórias: RC e Status. As colunas <em>MAPA GUI</em>, <em>Fila GOV</em> e as sem título são ignoradas. A ordem das colunas não importa: a leitura é pelo nome.</div>
           <div id="cob-resumo"></div>
         </div>
 
@@ -31459,6 +31459,18 @@ function _cobNorm(s){
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
+// Só o nome exato. "Tipo" não pode cair dentro de "Tipo de Cobrança"
+// nem de "Tipo de Processo", que é o que a busca aproximada faria.
+function _cobColExata(linha, nomes){
+  var chaves = Object.keys(linha), i, j;
+  for (i = 0; i < nomes.length; i++) {
+    for (j = 0; j < chaves.length; j++) {
+      if (_cobNorm(chaves[j]) === _cobNorm(nomes[i])) return chaves[j];
+    }
+  }
+  return null;
+}
+
 function _cobCol(linha, nomes){
   var chaves = Object.keys(linha);
   var i, j, k;
@@ -31910,7 +31922,7 @@ function _cobDesenhar(){
 
   var t = '<table><thead><tr>'
     + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Data de Retorno</th><th>Status</th><th>Centro</th>'
-    + '<th>Cobranças</th><th>Tipo de Cobrança</th><th>Fila</th><th>Prazo</th><th>SLA</th>'
+    + '<th>Cobranças</th><th>Tipo</th><th>Tipo de Cobrança</th><th>Fila</th><th>Prazo</th><th>SLA</th>'
     + '<th>Tipo de Processo</th><th>Processo</th>'
     + '</tr></thead><tbody>';
 
@@ -31929,6 +31941,7 @@ function _cobDesenhar(){
       + '<td><span style="background:' + bgSt + ';color:' + corSt + ';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">' + _cobEsc(st || '—') + '</span></td>'
       + '<td>' + _cobEsc(String(r.centro || '').trim() || '—') + '</td>'
       + '<td style="text-align:center;font-weight:700">' + _cobQtd(r) + '</td>'
+      + '<td>' + _cobEsc(String(r.tipo || '').trim() || '—') + '</td>'
       + '<td>' + _cobEsc(r.tipoCobranca || '—') + '</td>'
       + '<td>' + _cobEsc(_cobFila(r) || '—') + '</td>'
       + '<td style="text-align:center">' + _cobEsc(String(r.prazo || '').trim() || '—') + '</td>'
@@ -32121,7 +32134,10 @@ function govCobrancaUpload(ev){
       var cAnal  = _cobCol(amostra, ['Analista']);
       var cItem  = _cobCol(amostra, ['Item RC', 'Item']);
       var cQtd   = _cobCol(amostra, ['Cobranca', 'Cobrança', 'Qtd Cobranca']);
-      var cTipo  = _cobCol(amostra, ['Tipo de Cobranca', 'Tipo de Cobrança', 'Tipo']);
+      var cTipo  = _cobCol(amostra, ['Tipo de Cobranca', 'Tipo de Cobrança']);
+      var cTipoS = _cobColExata(amostra, ['Tipo']);   // coluna S, nova
+      // planilha antiga: a coluna chamada só "Tipo" era o tipo de cobrança
+      if (!cTipo && cTipoS) { cTipo = cTipoS; cTipoS = null; }
       var cVer   = _cobCol(amostra, ['Verificar', 'Verificacao', 'Verificação']);
       var cProc  = _cobCol(amostra, ['Processo', 'Processos']);
       var cDtRet = _cobCol(amostra, ['Data de Retorno', 'Data Retorno', 'Data de retorno']);
@@ -32162,6 +32178,7 @@ function govCobrancaUpload(ev){
           status: limpo(l[cStat]),
           cobrancas: cQtd ? limpo(l[cQtd]) : '',
           tipoCobranca: cTipo ? limpo(l[cTipo]) : '',
+          tipo: cTipoS ? limpo(l[cTipoS]) : '',
           verificar: cVer ? limpo(l[cVer]) : '',
           processo: cProc ? limpo(l[cProc]) : '',
           dataRetorno: cDtRet ? _cobDataBR(l[cDtRet]) : '',
@@ -33378,6 +33395,7 @@ function reuniaoExportar(){
         'Status': r.status || '',
         'Centro': r.centro || '',
         'Cobranças': _cobQtd(r),
+        'Tipo': r.tipo || '',
         'Tipo de Cobrança': r.tipoCobranca || '',
         'Fila': _cobFila(r),
         'Prazo': r.prazo || '',
