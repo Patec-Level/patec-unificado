@@ -33926,11 +33926,18 @@ function _dirPrioridades(d){
   };
   var lista;
   if (d.mod === 'fast') {
-    var obrig = d.pc.reprovados.length + d.pc.cancelados.length;
+    // No FAST, 100% Reprovado e Cancelado saem do Resumo do dia (MAPA) — os
+    // mesmos números que o Panorama mostra logo acima. A Planilha Crítica é
+    // base do Radar e tem outra data de corte: usar as duas no mesmo card
+    // fazia o "100% Reprovado" aparecer com dois valores diferentes.
+    var rep = d.resumo.temMapa ? d.resumo.l5 : d.pc.reprovados.length;
+    var can = d.resumo.temMapa ? d.resumo.l6 : d.pc.cancelados.length;
+    var obrig = rep + can;
     lista = [
       { titulo:'Tratar 100% Reprovado e Cancelados', n:obrig, tom:'critico',
         num: _dirItens(obrig),
-        det: junta([{ rot:'100% Reprovado', n:d.pc.reprovados.length }, { rot:'Cancelados', n:d.pc.cancelados.length }]),
+        det: junta([{ rot:'100% Reprovado', n:rep }, { rot:'Cancelados', n:can }])
+           + (d.resumo.temMapa ? ' · Resumo do dia ' + _dirDataBR(d.resumo.dt) : ''),
         texto: 'Devemos terminar o dia sem nenhum item em 100% Reprovado ou Cancelado. Esses itens são nossa obrigação e precisam estar tratados até o final do dia.' },
       { titulo:'Terminar o dia sem nenhum item Atrasado', n:d.cob.length, tom:'critico',
         num: _dirItens(d.cob.length) + (d.cob.length === 1 ? ' atrasado' : ' atrasados'),
