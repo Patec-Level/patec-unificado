@@ -33931,11 +33931,11 @@ function _dirPrioridades(d){
       { titulo:'Tratar 100% Reprovado e Cancelados', n:obrig, tom:'critico',
         num: _dirItens(obrig),
         det: junta([{ rot:'100% Reprovado', n:d.pc.reprovados.length }, { rot:'Cancelados', n:d.pc.cancelados.length }]),
-        texto: 'Quando houver item nessas duas filas, ele é a primeira coisa do dia.' },
+        texto: 'Devemos terminar o dia sem nenhum item em 100% Reprovado ou Cancelado. Esses itens são nossa obrigação e precisam estar tratados até o final do dia.' },
       { titulo:'Terminar o dia sem nenhum item Atrasado', n:d.cob.length, tom:'critico',
         num: _dirItens(d.cob.length) + (d.cob.length === 1 ? ' atrasado' : ' atrasados'),
         det: 'Cobrança por Status — ' + d.cob.length + ' de ' + d.cobPan.total + ' itens da carteira',
-        texto: 'A Cobrança por Status precisa fechar o dia sem item vencido. A lista completa está no fim deste card.' },
+        texto: 'Processar todos os itens elegíveis, garantindo que nenhum fique pendente ou para trás.' },
       { titulo:'Monitorar o retorno de Nova Reserva', n:d.cobPan.nr + d.filas.nr, tom:'atencao',
         num: _dirItens(d.cobPan.nr + d.filas.nr),
         det: junta([{ rot:'Cobrança por Status', n:d.cobPan.nr }, { rot:'Governança aguardando retorno', n:d.filas.nr }]),
@@ -33986,7 +33986,8 @@ function _dirPrioridades(d){
 function _dirRisco(d){
   if (d.mod === 'fast') {
     if (d.cob.length) return { nivel:'alto', titulo:'Itens vencidos',
-      txt: _dirItens(d.cob.length) + (d.cob.length === 1 ? ' vencido' : ' vencidos') + ' na Cobrança por Status. Não podemos ter nada vencido no FAST — esses itens têm que ser concluídos hoje.' };
+      txt: _dirItens(d.cob.length) + (d.cob.length === 1 ? ' vencido' : ' vencidos')
+         + ' na Cobrança por Status — todos devem ser concluídos hoje. Precisamos encerrar o dia com zero itens vencidos no FAST.' };
     return { nivel:'ok', titulo:'Nenhum item vencido',
       txt: 'A Cobrança por Status está sem item vencido. É assim que o FAST tem que fechar o dia.' };
   }
@@ -34074,9 +34075,22 @@ function _dirCartao(n, rot, sub, cor, bg){
   // linha terminarem exatamente na mesma altura
   return _dirCel(
       '<div style="font-size:22px;font-weight:800;color:' + cor + ';line-height:1">' + _dirNum(n) + '</div>'
-    + '<div style="font-size:10px;font-weight:700;color:' + _DIR_C.tx + ';margin-top:4px;line-height:1.25">' + _dirEsc(rot) + '</div>'
+    + '<div style="font-size:10px;font-weight:700;color:' + _DIR_C.tx + ';margin-top:4px;line-height:1.25;'
+      + 'word-break:break-word;overflow-wrap:anywhere">' + _dirEsc(rot) + '</div>'
     + '<div style="font-size:9.5px;color:' + _DIR_C.tx2 + ';margin-top:2px">' + (sub ? _dirEsc(sub) : '\u00A0') + '</div>',
     cor, bg);
+}
+
+// Grade de cards: N por linha, completando a última com células vazias
+// para todos ficarem com a mesma largura.
+function _dirGrade(celulas, porLinha){
+  var n = porLinha || 5, h = '', i, j;
+  for (i = 0; i < celulas.length; i += n) {
+    var linha = celulas.slice(i, i + n);
+    for (j = linha.length; j < n; j++) linha.push('<td></td>');
+    h += '<table cellspacing="0" cellpadding="0" style="' + _DIR_TAB + '"><tr>' + linha.join('') + '</tr></table>';
+  }
+  return h;
 }
 
 function _dirCardHTML(d){
@@ -34120,42 +34134,24 @@ function _dirCardHTML(d){
        + '</tr></table>';
   }
 
-  // FAST: como a carteira terminou o dia (Cobrança por Status)
   if (d.mod === 'fast') {
+    // FAST: como a carteira fechou o dia anterior (Cobrança por Status)
     var cp = d.cobPan;
-    h += '<div style="font-size:12px;font-weight:700;color:' + _DIR_C.az + ';margin:14px 0 6px">'
-       + 'Como terminamos o dia — Cobrança por Status'
-       + (cp.dt ? ' <span style="font-weight:600;color:' + _DIR_C.tx2 + ';font-size:11px">(base de ' + _dirEsc(cp.dt) + ')</span>' : '')
-       + '</div>';
+    h += _dirTitulo('Fechamento do dia anterior');
+    h += '<div style="font-size:11px;color:' + _DIR_C.tx2 + ';margin-bottom:6px">Cobrança por Status'
+       + (cp.dt ? ' · base de ' + _dirEsc(cp.dt) : '') + ' — o primeiro card é o total de itens da carteira.</div>';
     if (!cp.total) {
       h += '<div style="font-size:11.5px;color:' + _DIR_C.tx2 + '">Sem base de Cobrança por Status carregada.</div>';
     } else {
-      var celTot = _dirCel('<div style="font-size:24px;font-weight:800;color:#ffffff;line-height:1">' + cp.total + '</div>'
-        + '<div style="font-size:10px;font-weight:700;color:#C9D6EA;margin-top:4px">TOTAL DE ITENS</div>'
-        + '<div style="font-size:9.5px;margin-top:2px">\u00A0</div>', _DIR_C.az, _DIR_C.az);
-      var linhasFila = cp.filas.map(function(f){
-        return _dirCartao(f.n, f.nome, '', _DIR_C.azm, _DIR_C.cin);
-      });
-      h += '<table cellspacing="0" cellpadding="0" style="' + _DIR_TAB + '"><tr>'
-         + celTot + linhasFila.join('') + '</tr></table>';
-      h += '<table cellspacing="0" cellpadding="0" style="width:62%;' + _DIR_TAB.replace('width:100%;','') + ';margin-top:2px"><tr>'
-         + _dirCartao(cp.sb, 'Status B', '', _DIR_C.vd, _DIR_C.vdc)
-         + _dirCartao(cp.nr, 'Nova Reserva', '', '#7C3AED', '#F3EDFF')
-         + _dirCartao(cp.ep, 'E&P', '', _DIR_C.azm, _DIR_C.azc)
-         + '</tr></table>';
+      var cels = [_dirCel('<div style="font-size:24px;font-weight:800;color:#ffffff;line-height:1">' + cp.total + '</div>'
+        + '<div style="font-size:10px;font-weight:700;color:#C9D6EA;margin-top:4px;line-height:1.25">TOTAL DE ITENS</div>'
+        + '<div style="font-size:9.5px;margin-top:2px">\u00A0</div>', _DIR_C.az, _DIR_C.az)];
+      cp.filas.forEach(function(f){ cels.push(_dirCartao(f.n, f.nome, '', _DIR_C.azm, _DIR_C.cin)); });
+      h += _dirGrade(cels, 5);
     }
-  }
-
-  // Governança — só os números, sem texto (o direcionamento vem depois)
-  h += _dirTitulo('Governança');
-  if (d.mod === 'fast') {
-    h += '<table cellspacing="0" cellpadding="0" style="' + _DIR_TAB + '"><tr>'
-       + _dirCartaoNum(d.pc.vencidos.length, 'Vencidos', _DIR_C.vm)
-       + _dirCartaoNum(d.pc.reprovados.length, '100% Reprovado', _DIR_C.am)
-       + _dirCartaoNum(d.pc.cancelados.length, 'Cancelados', _DIR_C.am)
-       + _dirCartaoNum(d.cob.length, 'Cobrança atrasados', _DIR_C.vm)
-       + '</tr></table>';
   } else {
+    // Governança — só os números, sem texto (o direcionamento vem depois)
+    h += _dirTitulo('Governança');
     h += '<table cellspacing="0" cellpadding="0" style="' + _DIR_TAB + '"><tr>'
        + _dirCartaoNum(d.pc.vencidos.length, 'Vencidos', _DIR_C.vm)
        + _dirCartaoNum(d.pc.reprovados.length, '100% Reprovado', _DIR_C.am)
@@ -34349,17 +34345,14 @@ function _dirTexto(d){
     T.push('  Total PATEC: ' + r.totPatec + ' | Abrir ID Não: ' + r.l7 + ' | Abrir PATEC Obrig.: ' + r.l8 + ' | Total Abrir: ' + r.totAbrir);
     T.push('  TOTAL GERAL: ' + r.totGeral + (r.totGeralAnt !== null ? ' (' + (r.totGeral - r.totGeralAnt >= 0 ? '+' : '') + (r.totGeral - r.totGeralAnt) + ' vs dia ant.)' : ''));
   }
-  if (d.mod === 'fast' && d.cobPan.total) {
-    T.push('  Como terminamos o dia (Cobrança por Status' + (d.cobPan.dt ? ', base de ' + d.cobPan.dt : '') + '): ' + d.cobPan.total + ' itens');
-    T.push('   ' + d.cobPan.filas.map(function(f){ return f.nome + ': ' + f.n; }).join(' | '));
-    T.push('   Status B: ' + d.cobPan.sb + ' | Nova Reserva: ' + d.cobPan.nr + ' | E&P: ' + d.cobPan.ep);
-  }
   T.push('');
-  T.push('2) GOVERNANÇA');
   if (d.mod === 'fast') {
-    T.push('  Vencidos: ' + d.pc.vencidos.length + ' | 100% Reprovado: ' + d.pc.reprovados.length
-         + ' | Cancelados: ' + d.pc.cancelados.length + ' | Cobrança atrasados: ' + d.cob.length);
+    T.push('2) FECHAMENTO DO DIA ANTERIOR — Cobrança por Status'
+         + (d.cobPan.dt ? ' (base de ' + d.cobPan.dt + ')' : ''));
+    T.push('  Total de itens: ' + d.cobPan.total);
+    if (d.cobPan.filas.length) T.push('  ' + d.cobPan.filas.map(function(f){ return f.nome + ': ' + f.n; }).join(' | '));
   } else {
+    T.push('2) GOVERNANÇA');
     T.push('  Vencidos: ' + d.pc.vencidos.length + ' | 100% Reprovado: ' + d.pc.reprovados.length
          + ' | Tirar do Fluxo: ' + d.fluxo.length + ' | Cancelados: ' + d.pc.cancelados.length
          + ' | Para prorrogar: ' + d.prorr.length + ' | SLA alto: ' + d.slaAlto);
