@@ -636,6 +636,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
   <div class="sb-it" onclick="go('radar',this)">📡 Radar Estratégico</div>
   <div class="sb-it" onclick="go('plano-acao',this)">🎯 Plano de Ação</div>
   <div class="sb-mod">◈ EXECUÇÃO</div>
+  <div class="sb-it" onclick="go('direcionamento',this)">📣 Direcionamento da Equipe</div>
   <div class="sb-it" onclick="go('pr-estrategico',this)">🎯 Painel Estratégico</div>
   <div class="sb-it" onclick="go('governanca',this)">⚖️ Governança</div>
   <div class="sb-it" onclick="go('analista-auto',this)">🤖 Analista Automático</div>
@@ -3458,6 +3459,23 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
     <!-- ══════════════════════════════════════════
          PAINEL ESTRATÉGICO
     ══════════════════════════════════════════ -->
+    <!-- ── DIRECIONAMENTO DA EQUIPE — só leitura, espelho do card do ADM ── -->
+    <div id="p-direcionamento" class="page">
+      <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--azm)">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+          <div style="flex:1 1 320px;min-width:0">
+            <div class="cd-t" style="margin:0">📣 Direcionamento da Equipe — <span id="dirp-mod-lbl">ADLV</span></div>
+            <div style="font-size:11px;color:var(--tx2);margin-top:4px">O panorama do dia, as prioridades e o alerta de risco da equipe. Os números são os mesmos das telas de origem.</div>
+          </div>
+          <button class="btn btn-s" style="font-size:11px" onclick="dirGerar()">↺ Atualizar</button>
+        </div>
+        <div id="dirp-msg" style="font-size:11px;color:var(--tx2);margin-top:8px"></div>
+      </div>
+      <div class="cd">
+        <div id="dirp-card" style="overflow-x:auto"></div>
+      </div>
+    </div>
+
     <div id="p-pr-estrategico" class="page">
 
       <!-- CARDS DO DIA (automático) -->
@@ -6891,6 +6909,7 @@ function go(id, el) {
   const labelSidebar = (typeof PERMS_SIDEBAR !== 'undefined' && PERMS_SIDEBAR[id]) ? PERMS_SIDEBAR[id].label : null;
   document.getElementById('ttl').textContent = titles[id] || labelSidebar || id;
   if(id==='reuniao'){ if(typeof reuniaoAbrir==='function') reuniaoAbrir(); }
+  if(id==='direcionamento'){ if(typeof dirPagina==='function') setTimeout(dirPagina, 60); }
   if(typeof _fcAgendarVarredura==='function') _fcAgendarVarredura();
   if(id==='pr-bancoferias'){ renderFerias(); renderBanco(); setTimeout(()=>{ fbCarregarBHE().then(()=>{ bheArquivarVencidos(); renderBHECards(); }); }, 100); }
   document.getElementById('sb').classList.remove('mob-open');
@@ -25274,6 +25293,7 @@ const PERMS_SIDEBAR = {
   'reuniao':        { icon:'🗣️', label:'Reunião',                   mod:'ESTRATÉGICO' },
   'radar':          { icon:'📡', label:'Radar Estratégico',        mod:'ESTRATÉGICO' },
   'plano-acao':     { icon:'🎯', label:'Plano de Ação',            mod:'ESTRATÉGICO' },
+  'direcionamento': { icon:'📣', label:'Direcionamento da Equipe', mod:'EXECUÇÃO' },
   'pr-estrategico': { icon:'🎯', label:'Painel Estratégico',       mod:'EXECUÇÃO' },
   'governanca':     { icon:'⚖️', label:'Governança',               mod:'EXECUÇÃO' },
   'planilha-critica':{ icon:'🔴', label:'Planilha Crítica',        mod:'EXECUÇÃO', redirect:'governanca', hidden:true },
@@ -25821,7 +25841,8 @@ function authMontarSidebar(emailParam){
     if(_moduloAtivo === 'fast' && PAGINAS_ADLV_ONLY.includes(key)) return;
     if(_moduloAtivo !== 'fast' && PAGINAS_FAST_ONLY.includes(key)) return;
     if(cfg.hidden) return; // item oculto do menu (integrado em outra página)
-    if(podeVerTudo || perms.includes(key) || (key === 'reuniao' && perms.includes('governanca'))){
+    if(podeVerTudo || perms.includes(key) || (key === 'reuniao' && perms.includes('governanca'))
+       || (key === 'direcionamento' && (perms.includes('pr-estrategico') || perms.includes('governanca')))){
       if(!mods[cfg.mod]) mods[cfg.mod] = [];
       mods[cfg.mod].push({key, ...cfg});
     }
@@ -33545,9 +33566,22 @@ function _dirHojeISO(){
   var h = new Date();
   return h.getFullYear() + '-' + String(h.getMonth() + 1).padStart(2, '0') + '-' + String(h.getDate()).padStart(2, '0');
 }
+// O card é desenhado em dois lugares: a aba do ADM (onde ficam os botões de
+// copiar/baixar) e o tópico "Direcionamento da Equipe" do menu, que a equipe
+// só lê. As duas telas mostram exatamente o mesmo HTML.
+function _dirAlvos(){
+  var out = [], i, ids = ['dir-card', 'dirp-card'];
+  for (i = 0; i < ids.length; i++) {
+    var e = document.getElementById(ids[i]);
+    if (e) out.push(e);
+  }
+  return out;
+}
 function _dirMsg(txt, cor){
-  var e = document.getElementById('dir-msg');
-  if (e) { e.textContent = txt || ''; e.style.color = cor || 'var(--tx2)'; }
+  ['dir-msg', 'dirp-msg'].forEach(function(id){
+    var e = document.getElementById(id);
+    if (e) { e.textContent = txt || ''; e.style.color = cor || 'var(--tx2)'; }
+  });
 }
 
 // ── 1. garantir que as bases já estejam em memória ────────────────
@@ -34377,27 +34411,39 @@ function dirAbrir(){
 }
 
 function dirGerar(){
-  var alvo = document.getElementById('dir-card');
-  if (!alvo) return;
+  var alvos = _dirAlvos();
+  if (!alvos.length) return;
+  var pintar = function(html){ alvos.forEach(function(a){ a.innerHTML = html; }); };
   _dirMsg('Carregando as bases…', 'var(--azm)');
-  alvo.innerHTML = '<div style="padding:24px;text-align:center;color:var(--tx2);font-size:12px">⏳ Montando o direcionamento…</div>';
+  pintar('<div style="padding:24px;text-align:center;color:var(--tx2);font-size:12px">⏳ Montando o direcionamento…</div>');
   _dirGarantirDados().then(function(){
     return _dirGraficoPatec().catch(function(){ return null; });
   }).then(function(graf){
     try {
       _DIR = _dirColetar();
       _DIR.grafico = graf;
-      alvo.innerHTML = _dirCardHTML(_DIR);
+      pintar(_dirCardHTML(_DIR));
       _dirMsg('✅ Card gerado às ' + new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' }) + '.', 'var(--vd)');
     } catch (e) {
-      alvo.innerHTML = '<div style="padding:18px;color:var(--vm);font-size:12px">❌ Não foi possível montar o card: ' + _dirEsc(e.message) + '</div>';
+      pintar('<div style="padding:18px;color:var(--vm);font-size:12px">❌ Não foi possível montar o card: ' + _dirEsc(e.message) + '</div>');
       _dirMsg('❌ Erro ao montar o card.', 'var(--vm)');
     }
   });
 }
 
+// Tópico do menu (equipe): mesmo card, sem os botões de copiar/baixar.
+function dirPagina(){
+  var lbl = document.getElementById('dirp-mod-lbl');
+  if (lbl) lbl.textContent = _dirModNome();
+  var sel = document.getElementById('dir-dia');
+  if (sel && !sel.value) {
+    try { sel.value = (typeof estGetDia === 'function') ? estGetDia() : _dirHojeISO(); } catch (e) { sel.value = _dirHojeISO(); }
+  }
+  dirGerar();
+}
+
 function dirCopiar(){
-  var alvo = document.getElementById('dir-card');
+  var alvo = document.getElementById('dir-card') || _dirAlvos()[0];
   if (!alvo || !_DIR) { _dirMsg('Gere o card primeiro.', 'var(--am)'); return; }
   var html = alvo.innerHTML, txt = _dirTexto(_DIR);
   var selecionar = function(){
@@ -34444,7 +34490,7 @@ function dirCopiarTexto(){
 // esse SVG é desenhado num canvas. XMLSerializer garante o XHTML válido
 // que o foreignObject exige.
 function dirPng(){
-  var alvo = document.getElementById('dir-card');
+  var alvo = document.getElementById('dir-card') || _dirAlvos()[0];
   if (!alvo || !alvo.firstElementChild) { _dirMsg('Gere o card primeiro.', 'var(--am)'); return; }
   _dirMsg('Gerando a imagem…', 'var(--azm)');
   try {
