@@ -33509,13 +33509,18 @@ function _cobCarregarDados(){
 
 // ══════════════════════════════════════════════════════════════════
 //  DIRECIONAMENTO DA EQUIPE  (ADM)
-//  Monta um card curto — panorama, 2 prioridades do dia e alerta de
+//  Monta um card curto — panorama, prioridades do dia e alerta de
 //  risco — pronto para colar no e-mail e no Teams.
 //
 //  Regra de ouro deste módulo: ele NÃO inventa número nenhum. Cada
 //  bloco lê exatamente a mesma fonte da tela de origem (Resumo do dia,
-//  Planilha Crítica, Urgência por Prazo/SLA, Analista Pedido,
-//  Cobrança por Status), para o card nunca divergir do dashboard.
+//  Planilha Crítica, Urgência por Prazo/SLA, XGL, Status B, Nova
+//  Reserva, Analista Pedido, Cobrança por Status), para o card nunca
+//  divergir do dashboard.
+//
+//  As prioridades são FIXAS e na ordem combinada com a operação — o
+//  que muda a cada dia é o número de cada uma e a cor (vermelho quando
+//  há pendência, verde quando a fila está zerada).
 //
 //  O conteúdo muda conforme o módulo aberto: ADLV e FAST acompanham
 //  coisas diferentes. A aba é a mesma nos dois.
@@ -33530,6 +33535,7 @@ function _dirEsc(s){
 function _dirNum(n){ return String(n == null ? 0 : n); }
 function _dirMod(){ return (typeof _moduloAtivo !== 'undefined' && _moduloAtivo === 'fast') ? 'fast' : 'adlv'; }
 function _dirModNome(){ return _dirMod() === 'fast' ? 'FAST' : 'ADLV'; }
+function _dirItens(n){ return n + (n === 1 ? ' item' : ' itens'); }
 function _dirDataBR(iso){
   if (!iso) return '—';
   var p = String(iso).split('-');
@@ -33547,36 +33553,38 @@ function _dirMsg(txt, cor){
 // ── 1. garantir que as bases já estejam em memória ────────────────
 function _dirGarantirDados(){
   var ps = [];
-  try {
-    if (typeof _govUrgGarantirDados === 'function') ps.push(_govUrgGarantirDados());
-  } catch (e) {}
-  try {
-    if (typeof mapaFirebase !== 'undefined' && (!mapaFirebase || !mapaFirebase.length)
-        && typeof fbCarregarMapaDiario === 'function') ps.push(fbCarregarMapaDiario());
-  } catch (e) {}
-  try {
-    // dias sem ação do Top SLA vêm do cache de ações do ciclo
-    if (typeof _garantirCacheAcoes === 'function' && !window._prodCacheOK) _garantirCacheAcoes();
-  } catch (e) {}
+  var add = function(f){ try { var p = f(); if (p && typeof p.then === 'function') ps.push(p); } catch (e) {} };
+
+  // Radar + Governança + XGL + Status B
+  if (typeof _govUrgGarantirDados === 'function') add(function(){ return _govUrgGarantirDados(); });
+  // Resumo do dia
+  if (typeof fbCarregarMapaDiario === 'function') add(function(){
+    if (typeof mapaFirebase !== 'undefined' && mapaFirebase && mapaFirebase.length) return null;
+    return fbCarregarMapaDiario();
+  });
+  // dias sem ação do Top SLA vêm do cache de ações do ciclo
+  try { if (typeof _garantirCacheAcoes === 'function' && !window._prodCacheOK) _garantirCacheAcoes(); } catch (e) {}
 
   if (_dirMod() === 'fast') {
-    try {
-      if (typeof _cobDados !== 'undefined' && (!_cobDados || !_cobDados.length)
-          && typeof _cobCarregarDados === 'function') ps.push(_cobCarregarDados());
-    } catch (e) {}
+    if (typeof _cobCarregarDados === 'function') add(function(){
+      if (typeof _cobDados !== 'undefined' && _cobDados && _cobDados.length) return null;
+      return _cobCarregarDados();
+    });
+    if (typeof nrCarregarFirebase === 'function') add(function(){
+      if (typeof _nrItens !== 'undefined' && _nrItens && _nrItens.length) return null;
+      return nrCarregarFirebase();
+    });
   } else {
-    try {
-      if ((typeof _bkDados === 'undefined' || !_bkDados || !_bkDados.rows || !_bkDados.rows.length)
-          && typeof bkCarregarFirebase === 'function') ps.push(bkCarregarFirebase());
-    } catch (e) {}
-    try {
-      if ((typeof _aaPub === 'undefined' || !_aaPub || !_aaPub.length)
-          && typeof aaPublicoCarregar === 'function') ps.push(aaPublicoCarregar());
-    } catch (e) {}
+    if (typeof bkCarregarFirebase === 'function') add(function(){
+      if (typeof _bkDados !== 'undefined' && _bkDados && _bkDados.rows && _bkDados.rows.length) return null;
+      return bkCarregarFirebase();
+    });
+    if (typeof aaPublicoCarregar === 'function') add(function(){
+      if (typeof _aaPub !== 'undefined' && _aaPub && _aaPub.length) return null;
+      return aaPublicoCarregar();
+    });
   }
-  return Promise.all(ps.map(function(p){
-    return (p && typeof p.then === 'function') ? p.catch(function(){ return null; }) : Promise.resolve(p);
-  }));
+  return Promise.all(ps.map(function(p){ return p.catch(function(){ return null; }); }));
 }
 
 // ── 2. Resumo do dia (mesma leitura do Plano de Ação › Monitoramento)
@@ -33652,19 +33660,27 @@ function _dirTirarFluxo(){
   return out;
 }
 
-// Urgência por Prazo — vencida + urgência máxima, PATEC Finalizado e AG. AÇÃO.
-// São os itens que precisam de prorrogação da oportunidade.
+// Prorrogação — prazo vencido ou em urgência máxima, ainda em AG. AÇÃO.
+// Só "Analisar PATEC Finalizado": 100% Reprovado e Cancelado NÃO entram,
+// mesmo o Status Patec deles também sendo "PATEC Finalizado".
 function _dirProrrogacao(){
   var out = [];
   try {
-    if (typeof _govUrgPrazoUniverso !== 'function') return out;
-    var uni = _govUrgPrazoUniverso();
-    out = uni.filter(function(r){
-      var f = _govUrgPrazoFaixa(Number(r.prazoOp||0));
-      return (f === 'vencida' || f === 'max')
-          && r.statusPatec === 'PATEC Finalizado'
-          && String(r.statusTrat||'').toUpperCase() === 'AG. AÇÃO';
-    }).sort(function(a, b){ return (b.prazoOp||0) - (a.prazoOp||0); });
+    var base = (typeof _radarDados !== 'undefined' ? (_radarDados||[]) : []).filter(function(r){
+      return (r.analista_auto||'').trim() === 'Analisar PATEC Finalizado';
+    });
+    out = base.filter(function(r){
+      var f = (typeof _govUrgPrazoFaixa === 'function') ? _govUrgPrazoFaixa(Number(r.prazo_c||0)) : null;
+      if (f !== 'vencida' && f !== 'max') return false;
+      var m = {};
+      try { m = (typeof _govDados !== 'undefined' && _govDados[govChave(r)]) || {}; } catch (e) {}
+      var st = (typeof _govUrgStatusTrat === 'function') ? _govUrgStatusTrat(m, r.fila||'') : '';
+      return String(st||'').toUpperCase() === 'AG. AÇÃO';
+    }).map(function(r){
+      return { rc:String(r.rc||'').trim(), itemRc:String(r.item_rc||r.seq||'').trim(),
+               analista:(r.analista && r.analista !== '#N/A') ? r.analista : '—',
+               fila:r.fila||'', prazoOp:Number(r.prazo_c||0), sla:Number(r.sla||0) };
+    }).sort(function(a, b){ return b.prazoOp - a.prazoOp; });
   } catch (e) {}
   return out;
 }
@@ -33729,6 +33745,56 @@ function _dirTopSla(n){
   return out;
 }
 
+// Itens em SLA alto = faixa "Urgência Máxima" da aba Urgência por SLA
+function _dirSlaAlto(){
+  try {
+    if (typeof _govUrgUniverso !== 'function' || typeof _govUrgSlaFaixa !== 'function') return 0;
+    return _govUrgUniverso().filter(function(r){ return _govUrgSlaFaixa(Number(r.sla||0)) === 'max'; }).length;
+  } catch (e) { return 0; }
+}
+
+// Filas de acompanhamento: XGL, Status B, Nova Reserva e etapas da Governança
+function _dirFilas(){
+  var f = { xgl:0, xglDev:0, sb:0, mdg:0, thiago:0, nr:0 };
+  try {
+    var xi = (typeof _xglItens !== 'undefined' && _xglItens) ? _xglItens : [];
+    xi.forEach(function(r){
+      var m = {};
+      try { m = (typeof _xglDados !== 'undefined' && _xglDados[xglChave(r.rc, r.item, r.oport, r.itemop)]) || {}; } catch (e) {}
+      if (!m.finalizado) f.xgl++;
+      if (m.conclusao === 'Devolvido' && !m.enviadoTeams) f.xglDev++;
+    });
+  } catch (e) {}
+  try {
+    var si = (typeof _sbItens !== 'undefined' && _sbItens && _sbItens.length) ? _sbItens
+           : ((typeof _SB_BASE_ITENS !== 'undefined' && _SB_BASE_ITENS) ? _SB_BASE_ITENS : []);
+    si.forEach(function(r){
+      var m = {};
+      try { m = (typeof _sbDados !== 'undefined' && _sbDados[r.chave || sbChave(r.rc, r.seq, r.op, r.item)]) || {}; } catch (e) {}
+      if (!m.finalizado) f.sb++;
+    });
+  } catch (e) {}
+  try {
+    var g = (typeof _govDados !== 'undefined' && _govDados) ? _govDados : {};
+    Object.keys(g).forEach(function(k){
+      var m = g[k] || {};
+      if (m.finalizado) return;
+      var st = String(m.status||'').toUpperCase();
+      if (st.indexOf('MDG') !== -1) f.mdg++;
+      if (st.indexOf('THIAGO') !== -1) f.thiago++;
+    });
+  } catch (e) {}
+  try {
+    var ni = (typeof _nrItens !== 'undefined' && _nrItens) ? _nrItens : [];
+    ni.forEach(function(r){
+      var m = {};
+      try { m = (typeof _nrDados !== 'undefined' && _nrDados[nrChave(r.rc, r.item)]) || {}; } catch (e) {}
+      if (!m.finalizado) f.nr++;
+    });
+  } catch (e) {}
+  return f;
+}
+
 // Analista Pedido — Regra 3 pede conferência no SAP; o resto pode virar pedido.
 function _dirAnalistaPedido(){
   var r = { pedido:0, pedidoRc:0, regra3:0, regra3Rc:0, total:0, temBase:false };
@@ -33762,20 +33828,49 @@ function _dirCobVencidos(){
   return out;
 }
 
+// FAST — como a carteira fechou: composição da Cobrança por Status
+function _dirCobPanorama(){
+  var o = { total:0, filas:[], ep:0, nr:0, sb:0, dt:'' };
+  try {
+    var lista = (typeof _cobDados !== 'undefined' && _cobDados) ? _cobDados : [];
+    o.total = lista.length;
+    var mapa = {};
+    lista.forEach(function(r){
+      var f = ((typeof _cobFila === 'function') ? _cobFila(r) : r.fila) || 'Sem fila';
+      var k = _cobNorm(f);
+      if (!mapa[k]) mapa[k] = { nome:f, n:0 };
+      mapa[k].n++;
+      var v = (typeof _cobVerifTipo === 'function') ? _cobVerifTipo(r) : '';
+      if (v === 'Status B') o.sb++;
+      if (v === 'Nova Reserva') o.nr++;
+      if ((typeof _cobProcTipo === 'function') && _cobProcTipo(r) === 'E&P') o.ep++;
+    });
+    o.filas = Object.keys(mapa).map(function(k){ return mapa[k]; }).sort(function(a, b){ return b.n - a.n; });
+    if (typeof _cobResumo !== 'undefined' && _cobResumo && _cobResumo.atualizadoEm) {
+      var d = new Date(_cobResumo.atualizadoEm);
+      if (!isNaN(d)) o.dt = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+    }
+  } catch (e) {}
+  return o;
+}
+
 function _dirColetar(){
   var sel = document.getElementById('dir-dia');
   var dt = (sel && sel.value) || ((typeof estGetDia === 'function') ? estGetDia() : _dirHojeISO());
   if (sel && !sel.value) sel.value = dt;
 
   var d = { mod:_dirMod(), gerado:_dirHojeISO(), resumo:_dirResumo(dt) };
+  d.pc = _dirPlanilhaCritica();
   if (d.mod === 'fast') {
     d.cob = _dirCobVencidos();
-    d.cobTotal = (typeof _cobDados !== 'undefined' && _cobDados) ? _cobDados.length : 0;
+    d.cobPan = _dirCobPanorama();
+    d.filas = _dirFilas();
   } else {
-    d.pc = _dirPlanilhaCritica();
     d.fluxo = _dirTirarFluxo();
     d.prorr = _dirProrrogacao();
     d.sla = _dirTopSla(10);
+    d.slaAlto = _dirSlaAlto();
+    d.filas = _dirFilas();
     d.aa = _dirAnalistaPedido();
   }
   d.prioridades = _dirPrioridades(d);
@@ -33783,87 +33878,67 @@ function _dirColetar(){
   return d;
 }
 
-// ── 4. leitura de gestor: prioridades e risco ─────────────────────
+// ── 4. prioridades fixas da operação ──────────────────────────────
+// A ordem nunca muda; o que muda é o número e a cor.
 function _dirPrioridades(d){
-  var cand = [];
+  var tom = function(n, quandoTem){ return n > 0 ? (quandoTem || 'critico') : 'ok'; };
   if (d.mod === 'fast') {
-    if (d.cob.length) cand.push({
-      titulo: 'Zerar os itens vencidos da Cobrança por Status',
-      num: d.cob.length + ' item(ns) vencido(s)',
-      texto: 'Todo item vencido precisa de tratativa hoje. A lista completa está no fim deste card — cada um deve sair do dia com cobrança registrada ou com o status atualizado.'
-    });
-    if (d.resumo.l4 > 0) cand.push({
-      titulo: 'Reduzir o Ag. PATEC Finalizar',
-      num: d.resumo.l4 + ' item(ns)',
-      texto: 'É a fila que mais segura o Total PATEC. Priorize os itens mais antigos para o número cair no fechamento de hoje.'
-    });
-    if (d.resumo.totAbrirAnt !== null && d.resumo.totAbrir > d.resumo.totAbrirAnt) cand.push({
-      titulo: 'Conter a entrada de Abrir PATEC',
-      num: '+' + (d.resumo.totAbrir - d.resumo.totAbrirAnt) + ' vs dia anterior',
-      texto: 'O Total Abrir PATEC subiu. Atacar as entradas do dia evita que a carteira cresça de novo amanhã.'
-    });
-    if (d.resumo.l3 > 0) cand.push({
-      titulo: 'Fechar o PATEC Finalizado do dia',
-      num: d.resumo.l3 + ' item(ns)',
-      texto: 'Mantenha o ritmo de finalização para o saldo do dia fechar em queda.'
-    });
-  } else {
-    if (d.prorr.length) cand.push({
-      titulo: 'Solicitar prorrogação da oportunidade',
-      num: d.prorr.length + ' item(ns)',
-      texto: 'Itens em PATEC Finalizado, com prazo vencido ou em urgência máxima, e ainda em AG. AÇÃO na Governança. Sem prorrogação hoje, a oportunidade se perde.'
-    });
-    var zerar = d.pc.reprovados.length + d.fluxo.length + d.pc.cancelados.length;
-    if (zerar > 0) cand.push({
-      titulo: 'Terminar o dia com estas filas zeradas',
-      num: zerar + ' item(ns)',
-      texto: '100% Reprovado (' + d.pc.reprovados.length + '), Tirar do Fluxo (' + d.fluxo.length
-           + ') e Cancelados (' + d.pc.cancelados.length + '). São filas de conclusão obrigatória: fechamos o dia com todas em zero.'
-    });
-    if (d.pc.vencidos.length) cand.push({
-      titulo: 'Atacar os Vencidos da Planilha Crítica',
-      num: d.pc.vencidos.length + ' item(ns)',
-      texto: 'Atuar nesses itens reduz a fila e melhora a saúde da carteira. Cada baixa aqui conta duas vezes: tira o vencido e libera o analista.'
-    });
-    var parados = d.sla.filter(function(x){ return x.dias === null || x.dias > 7; }).length;
-    if (parados) cand.push({
-      titulo: 'Destravar as RCs de maior SLA',
-      num: parados + ' das 10 maiores sem ação recente',
-      texto: 'São as RCs mais antigas da carteira. Uma ação registrada hoje em cada uma já muda o indicador de parado.'
-    });
-    if (d.aa.pedido) cand.push({
-      titulo: 'Converter o que já está apto a pedido',
-      num: d.aa.pedido + ' registro(s)',
-      texto: 'O Analista Automático já separou o que pode virar pedido direto. É ganho rápido de produção no dia.'
-    });
+    var obrig = d.pc.reprovados.length + d.pc.cancelados.length;
+    return [
+      { titulo:'Tratar 100% Reprovado e Cancelados', n:obrig, tom:tom(obrig),
+        num: obrig ? _dirItens(obrig) : 'nada pendente',
+        det: '100% Reprovado (' + d.pc.reprovados.length + ') · Cancelados (' + d.pc.cancelados.length + ')',
+        texto: 'Quando houver item nessas duas filas, ele é a primeira coisa do dia.' },
+      { titulo:'Terminar o dia sem nenhum item Atrasado', n:d.cob.length, tom:tom(d.cob.length),
+        num: d.cob.length ? _dirItens(d.cob.length) + ' atrasado(s)' : 'nenhum atrasado',
+        det: 'Cobrança por Status — ' + d.cob.length + ' de ' + d.cobPan.total + ' itens da carteira',
+        texto: 'A Cobrança por Status precisa fechar o dia sem item vencido. A lista completa está no fim deste card.' },
+      { titulo:'Monitorar o retorno de Nova Reserva', n:d.cobPan.nr, tom:tom(d.cobPan.nr, 'atencao'),
+        num: d.cobPan.nr ? _dirItens(d.cobPan.nr) : 'sem item hoje',
+        det: d.filas.nr ? 'Governança › Nova Reserva: ' + d.filas.nr + ' aguardando retorno' : '',
+        texto: 'Quando o retorno chegar, ajustar no SAP o número de acompanhamento.' }
+    ];
   }
-  if (!cand.length) cand.push({
-    titulo: 'Manter o ritmo do dia',
-    num: '',
-    texto: 'Nenhuma fila crítica em aberto neste momento. Foco em manter a produção e registrar as ações no sistema.'
-  });
-  return cand.slice(0, 2);
+  var obrigAdlv = d.pc.reprovados.length + d.pc.cancelados.length + d.fluxo.length;
+  var xglMdg = d.filas.xgl + d.filas.mdg;
+  var acomp = d.filas.sb + d.filas.xgl;
+  return [
+    { titulo:'Zerar as filas de obrigação', n:obrigAdlv, tom:tom(obrigAdlv),
+      num: obrigAdlv ? _dirItens(obrigAdlv) : 'tudo zerado',
+      det: '100% Reprovado (' + d.pc.reprovados.length + ') · Cancelados (' + d.pc.cancelados.length + ') · Tirar do Fluxo (' + d.fluxo.length + ')',
+      texto: 'Devemos terminar o dia sem nenhum item em 100% Reprovado, Cancelado ou Tirar do Fluxo — esses itens são obrigação.' },
+    { titulo:'Fechar o dia com os aptos na fila de emissão de pedido', n:d.aa.pedido, tom:tom(d.aa.pedido, 'atencao'),
+      num: d.aa.pedido ? _dirItens(d.aa.pedido) + ' apto(s)' : 'nenhum item apto hoje',
+      det: d.aa.pedido ? d.aa.pedidoRc + ' RC(s) do Analista Pedido' : '',
+      texto: 'Se tiver item para virar pedido, devemos terminar o dia com todos na fila de emissão de pedido PATEC.' },
+    { titulo:'Acompanhar XGL e MDG', n:xglMdg, tom:tom(xglMdg, 'atencao'),
+      num: xglMdg ? _dirItens(xglMdg) + ' em aberto' : 'filas zeradas',
+      det: 'XGL (' + d.filas.xgl + ') · MDG (' + d.filas.mdg + ') · Validação do Thiago (' + d.filas.thiago + ')'
+         + (d.filas.xglDev ? ' · devolução XGL a enviar (' + d.filas.xglDev + ')' : ''),
+      texto: 'Quando houver item já validado pelo Thiago/Cibele, tratar de imediato, para abaixar o nosso backlog.' },
+    { titulo:'Intensificar a Regra 3 para aumentar o cadastro no MDG', n:d.aa.regra3, tom:tom(d.aa.regra3, 'atencao'),
+      num: d.aa.regra3 ? _dirItens(d.aa.regra3) : 'nenhum item hoje',
+      det: d.aa.regra3 ? d.aa.regra3Rc + ' RC(s) · conferir no SAP antes' : '',
+      texto: 'De acordo com o Analista Automático, intensificar o tratamento da Regra 3 para aumentar o número de cadastros no MDG.' },
+    { titulo:'Acompanhar as filas Status B e XGL', n:acomp, tom:tom(acomp, 'atencao'),
+      num: acomp ? _dirItens(acomp) + ' em aberto' : 'filas zeradas',
+      det: 'Status B (' + d.filas.sb + ') · XGL (' + d.filas.xgl + ')',
+      texto: 'Acompanhar todos os dias o andamento dessas duas filas.' }
+  ];
 }
 
 function _dirRisco(d){
   if (d.mod === 'fast') {
-    if (d.cob.length) return { nivel:'alto',
-      txt: d.cob.length + ' item(ns) da Cobrança por Status estão vencidos. Enquanto não forem tratados, contam contra o prazo da carteira todos os dias.' };
-    if (d.resumo.totPatecAnt !== null && d.resumo.totPatec > d.resumo.totPatecAnt) return { nivel:'medio',
-      txt: 'O Total PATEC subiu ' + (d.resumo.totPatec - d.resumo.totPatecAnt) + ' item(ns) em relação ao dia anterior — a carteira cresceu.' };
-    if (!d.resumo.temMapa) return { nivel:'medio', txt:'Não há MAPA lançado para ' + _dirDataBR(d.resumo.dt) + '. Os números do panorama podem estar desatualizados.' };
-    return { nivel:'ok', txt:'Sem atraso crítico identificado para hoje.' };
+    if (d.cob.length) return { nivel:'alto', titulo:'Itens vencidos',
+      txt: _dirItens(d.cob.length) + (d.cob.length === 1 ? ' vencido' : ' vencidos') + ' na Cobrança por Status. Não podemos ter nada vencido no FAST — esses itens têm que ser concluídos hoje.' };
+    return { nivel:'ok', titulo:'Nenhum item vencido',
+      txt: 'A Cobrança por Status está sem item vencido. É assim que o FAST tem que fechar o dia.' };
   }
-  if (d.prorr.length) return { nivel:'alto',
-    txt: d.prorr.length + ' oportunidade(s) com prazo vencido/urgência máxima ainda em AG. AÇÃO. Sem a prorrogação solicitada hoje, o item é perdido.' };
-  var muito = d.sla.filter(function(x){ return x.dias !== null && x.dias > 30; }).length
-            + d.sla.filter(function(x){ return x.dias === null; }).length;
-  if (muito) return { nivel:'alto',
-    txt: muito + ' das 10 RCs de maior SLA estão há mais de 30 dias sem ação (ou nunca tiveram ação registrada).' };
-  if (d.pc.reprovados.length + d.fluxo.length + d.pc.cancelados.length > 0) return { nivel:'medio',
-    txt: 'Há itens em filas de conclusão obrigatória (100% Reprovado, Tirar do Fluxo, Cancelados) que não podem virar o dia em aberto.' };
-  if (!d.resumo.temMapa) return { nivel:'medio', txt:'Não há MAPA lançado para ' + _dirDataBR(d.resumo.dt) + '. Os números do panorama podem estar desatualizados.' };
-  return { nivel:'ok', txt:'Sem atraso crítico identificado para hoje.' };
+  var v = d.pc.vencidos.length, s = d.slaAlto;
+  if (v || s) return { nivel:'alto', titulo:'Vencidos e SLA alto',
+    txt: _dirItens(v) + (v === 1 ? ' vencido' : ' vencidos') + ' e ' + _dirItens(s) + ' em SLA alto (urgência máxima). São os mais urgentes da carteira — são as duas filas que precisam de vazão, concluídas o quanto antes.' };
+  return { nivel:'ok', titulo:'Sem item urgente',
+    txt: 'Nenhum item vencido e nenhum em SLA de urgência máxima. Manter assim.' };
 }
 
 // ── 5. o card (HTML autossuficiente: estilo inline, sem variável de
@@ -33871,6 +33946,8 @@ function _dirRisco(d){
 var _DIR_C = { az:'#0D2347', azm:'#1A4A8A', azc:'#E8F0FB', vd:'#0E9E6A', vdc:'#E6F7F1',
                vm:'#D94040', vmc:'#FDEAEA', am:'#C77700', amc:'#FFF4E0',
                tx:'#1B2430', tx2:'#6B7785', brd:'#DCE3EC', cin:'#F4F6FA' };
+function _dirCorTom(t){ return t === 'critico' ? _DIR_C.vm : (t === 'atencao' ? _DIR_C.am : _DIR_C.vd); }
+function _dirBgTom(t){ return t === 'critico' ? _DIR_C.vmc : (t === 'atencao' ? _DIR_C.amc : _DIR_C.vdc); }
 
 function _dirVar(v, ant){
   if (ant === null || ant === undefined) return '';
@@ -33880,8 +33957,8 @@ function _dirVar(v, ant){
   return '<div style="font-size:10px;font-weight:700;color:' + cor + ';margin-top:3px">'
        + (dd > 0 ? '▲ +' : '▼ ') + dd + ' vs dia ant.</div>';
 }
-function _dirKpi(rot, val, ant, cor){
-  return '<td style="width:11%;padding:4px" valign="top">'
+function _dirKpi(rot, val, ant, cor, larg){
+  return '<td style="width:' + (larg || '11%') + ';padding:4px" valign="top">'
     + '<div style="background:' + _DIR_C.cin + ';border:1px solid ' + _DIR_C.brd + ';border-radius:8px;padding:8px 6px;text-align:center">'
     + '<div style="font-size:9.5px;font-weight:700;color:' + _DIR_C.tx2 + ';line-height:1.25;margin-bottom:3px">' + _dirEsc(rot) + '</div>'
     + '<div style="font-size:21px;font-weight:700;color:' + cor + ';line-height:1">' + _dirNum(val) + '</div>'
@@ -33891,12 +33968,13 @@ function _dirTitulo(txt){
   return '<div style="font-size:12.5px;font-weight:700;color:' + _DIR_C.az + ';margin:18px 0 8px;'
        + 'border-left:4px solid ' + _DIR_C.azm + ';padding-left:8px">' + _dirEsc(txt) + '</div>';
 }
-function _dirLinhaBloco(cor, bg, titulo, num, texto){
+function _dirLinhaBloco(cor, bg, titulo, num, texto, det){
   return '<div style="background:' + bg + ';border:1px solid ' + cor + ';border-left:4px solid ' + cor
     + ';border-radius:8px;padding:10px 12px;margin-bottom:8px">'
     + '<div style="font-size:12px;font-weight:700;color:' + cor + '">' + _dirEsc(titulo)
     + (num ? ' <span style="color:' + _DIR_C.tx + '">· ' + _dirEsc(num) + '</span>' : '') + '</div>'
     + '<div style="font-size:11.5px;color:' + _DIR_C.tx + ';margin-top:4px;line-height:1.5">' + _dirEsc(texto) + '</div>'
+    + (det ? '<div style="font-size:10.5px;color:' + _DIR_C.tx2 + ';margin-top:4px">' + _dirEsc(det) + '</div>' : '')
     + '</div>';
 }
 function _dirTabela(cols, linhas, limite){
@@ -33914,8 +33992,16 @@ function _dirTabela(cols, linhas, limite){
   });
   h += '</table>';
   if (linhas.length > lim) h += '<div style="font-size:10.5px;color:' + _DIR_C.tx2 + ';margin-top:5px">… e mais '
-    + (linhas.length - lim) + ' item(ns). A lista completa está na tela de origem.</div>';
+    + _dirItens(linhas.length - lim) + '. A lista completa está na tela de origem.</div>';
   return h;
+}
+function _dirCartao(n, rot, sub, cor, bg){
+  return '<td style="padding:4px" valign="top"><div style="background:' + bg + ';border:1px solid ' + cor
+    + ';border-radius:8px;padding:9px 6px;text-align:center">'
+    + '<div style="font-size:22px;font-weight:800;color:' + cor + ';line-height:1">' + _dirNum(n) + '</div>'
+    + '<div style="font-size:10px;font-weight:700;color:' + _DIR_C.tx + ';margin-top:4px;line-height:1.25">' + _dirEsc(rot) + '</div>'
+    + (sub ? '<div style="font-size:9.5px;color:' + _DIR_C.tx2 + ';margin-top:2px">' + _dirEsc(sub) + '</div>' : '')
+    + '</div></td>';
 }
 
 function _dirCardHTML(d){
@@ -33924,7 +34010,6 @@ function _dirCardHTML(d){
 
   var h = '<div style="font-family:Segoe UI,Calibri,Arial,sans-serif;max-width:900px;color:' + _DIR_C.tx + ';background:#ffffff">';
 
-  // cabeçalho
   h += '<div style="background:' + _DIR_C.az + ';color:#ffffff;padding:14px 18px;border-radius:10px 10px 0 0">'
      + '<div style="font-size:17px;font-weight:700">📣 Direcionamento da Equipe — ' + mod + '</div>'
      + '<div style="font-size:11.5px;color:#C9D6EA;margin-top:3px">' + _dirEsc(cabData) + '</div>'
@@ -33941,7 +34026,7 @@ function _dirCardHTML(d){
     if (r.totGeralAnt !== null) {
       var dg = r.totGeral - r.totGeralAnt;
       frase += dg === 0 ? ' Estável em relação ao dia anterior.'
-             : (dg < 0 ? ' Queda de ' + (-dg) + ' item(ns) vs o dia anterior.' : ' Alta de ' + dg + ' item(ns) vs o dia anterior.');
+             : (dg < 0 ? ' Queda de ' + _dirItens(-dg) + ' vs o dia anterior.' : ' Alta de ' + _dirItens(dg) + ' vs o dia anterior.');
     }
     h += '<div style="font-size:12px;color:' + _DIR_C.tx + ';margin-bottom:8px">' + _dirEsc(frase) + '</div>';
     h += '<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;table-layout:fixed"><tr>'
@@ -33961,30 +34046,56 @@ function _dirCardHTML(d){
        + '</tr></table>';
   }
 
+  // FAST: como a carteira terminou o dia (Cobrança por Status)
+  if (d.mod === 'fast') {
+    var cp = d.cobPan;
+    h += '<div style="font-size:12px;font-weight:700;color:' + _DIR_C.az + ';margin:14px 0 6px">'
+       + 'Como terminamos o dia — Cobrança por Status'
+       + (cp.dt ? ' <span style="font-weight:600;color:' + _DIR_C.tx2 + ';font-size:11px">(base de ' + _dirEsc(cp.dt) + ')</span>' : '')
+       + '</div>';
+    if (!cp.total) {
+      h += '<div style="font-size:11.5px;color:' + _DIR_C.tx2 + '">Sem base de Cobrança por Status carregada.</div>';
+    } else {
+      var celTot = '<td style="padding:4px;width:16%" valign="top">'
+        + '<div style="background:' + _DIR_C.az + ';border-radius:8px;padding:9px 6px;text-align:center">'
+        + '<div style="font-size:24px;font-weight:800;color:#ffffff;line-height:1">' + cp.total + '</div>'
+        + '<div style="font-size:10px;font-weight:700;color:#C9D6EA;margin-top:4px">TOTAL DE ITENS</div></div></td>';
+      var linhasFila = cp.filas.map(function(f){
+        return _dirCartao(f.n, f.nome, '', _DIR_C.azm, _DIR_C.cin);
+      });
+      h += '<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;table-layout:fixed"><tr>'
+         + celTot + linhasFila.join('') + '</tr></table>';
+      h += '<table cellspacing="0" cellpadding="0" style="width:60%;border-collapse:separate;table-layout:fixed;margin-top:4px"><tr>'
+         + _dirCartao(cp.sb, 'Status B', '', _DIR_C.vd, _DIR_C.vdc)
+         + _dirCartao(cp.nr, 'Nova Reserva', '', '#7C3AED', '#F3EDFF')
+         + _dirCartao(cp.ep, 'E&P', '', _DIR_C.azm, _DIR_C.azc)
+         + '</tr></table>';
+    }
+  }
+
   // 2 — prioridades
   h += _dirTitulo('2 · Onde focar hoje');
   d.prioridades.forEach(function(p, i){
-    var cor = i === 0 ? _DIR_C.vm : _DIR_C.am;
-    var bg = i === 0 ? _DIR_C.vmc : _DIR_C.amc;
-    h += _dirLinhaBloco(cor, bg, (i + 1) + 'ª prioridade — ' + p.titulo, p.num, p.texto);
+    var cor = _dirCorTom(p.tom), bg = _dirBgTom(p.tom);
+    h += _dirLinhaBloco(cor, bg, (i + 1) + 'ª prioridade — ' + p.titulo, p.num, p.texto, p.det);
   });
 
   // 3 — risco
   h += _dirTitulo('3 · Alerta de risco');
-  var cr = d.risco.nivel === 'alto' ? _DIR_C.vm : (d.risco.nivel === 'medio' ? _DIR_C.am : _DIR_C.vd);
-  var bgr = d.risco.nivel === 'alto' ? _DIR_C.vmc : (d.risco.nivel === 'medio' ? _DIR_C.amc : _DIR_C.vdc);
-  var icr = d.risco.nivel === 'alto' ? '🔴' : (d.risco.nivel === 'medio' ? '🟠' : '🟢');
+  var cr = _dirCorTom(d.risco.nivel === 'alto' ? 'critico' : 'ok');
+  var bgr = _dirBgTom(d.risco.nivel === 'alto' ? 'critico' : 'ok');
+  var icr = d.risco.nivel === 'alto' ? '🔴' : '🟢';
   h += '<div style="background:' + bgr + ';border:1px solid ' + cr + ';border-radius:8px;padding:10px 12px;'
      + 'font-size:12px;color:' + _DIR_C.tx + ';line-height:1.5">' + icr + ' <strong style="color:' + cr + '">'
-     + (d.risco.nivel === 'ok' ? 'Sem risco crítico' : 'Atenção') + '</strong> — ' + _dirEsc(d.risco.txt) + '</div>';
+     + _dirEsc(d.risco.titulo) + '</strong> — ' + _dirEsc(d.risco.txt) + '</div>';
 
   // 4 — detalhamento
   if (d.mod === 'fast') {
     h += _dirTitulo('4 · Cobrança por Status — itens vencidos');
-    h += '<div style="display:inline-block;background:' + _DIR_C.vmc + ';border:1px solid ' + _DIR_C.vm
-       + ';border-radius:8px;padding:8px 16px;margin-bottom:6px">'
-       + '<span style="font-size:22px;font-weight:800;color:' + _DIR_C.vm + '">' + d.cob.length + '</span>'
-       + '<span style="font-size:11px;color:' + _DIR_C.tx2 + ';font-weight:700"> vencidos de ' + d.cobTotal + ' itens</span></div>';
+    h += '<div style="display:inline-block;background:' + (d.cob.length ? _DIR_C.vmc : _DIR_C.vdc) + ';border:1px solid '
+       + (d.cob.length ? _DIR_C.vm : _DIR_C.vd) + ';border-radius:8px;padding:8px 16px;margin-bottom:6px">'
+       + '<span style="font-size:22px;font-weight:800;color:' + (d.cob.length ? _DIR_C.vm : _DIR_C.vd) + '">' + d.cob.length + '</span>'
+       + '<span style="font-size:11px;color:' + _DIR_C.tx2 + ';font-weight:700"> vencidos de ' + d.cobPan.total + ' itens</span></div>';
     if (d.cob.length) {
       h += _dirTabela(['RC', 'Item da RC', 'Status', 'Fila'],
         d.cob.map(function(x){ return [x.rc, x.item, x.status, x.fila]; }), 60);
@@ -33992,9 +34103,8 @@ function _dirCardHTML(d){
       h += '<div style="font-size:11.5px;color:' + _DIR_C.vd + '">✅ Nenhum item vencido na Cobrança por Status.</div>';
     }
   } else {
-    // Planilha Crítica
     h += _dirTitulo('4 · Governança › Planilha Crítica');
-    h += _dirLinhaBloco(_DIR_C.vm, _DIR_C.vmc, '⏰ Vencidos', d.pc.vencidos.length + ' item(ns)',
+    h += _dirLinhaBloco(_DIR_C.vm, _DIR_C.vmc, '⏰ Vencidos', _dirItens(d.pc.vencidos.length),
       'A equipe deve atuar nesses itens para diminuir a quantidade na fila e melhorar a saúde da carteira.');
     var obrig = [
       { ico:'❌', nome:'100% Reprovado', n:d.pc.reprovados.length },
@@ -34002,26 +34112,25 @@ function _dirCardHTML(d){
       { ico:'🚫', nome:'Cancelados', n:d.pc.cancelados.length }
     ];
     obrig.forEach(function(o){
-      if (o.n > 0) h += _dirLinhaBloco(_DIR_C.am, _DIR_C.amc, o.ico + ' ' + o.nome, o.n + ' item(ns)',
+      if (o.n > 0) h += _dirLinhaBloco(_DIR_C.am, _DIR_C.amc, o.ico + ' ' + o.nome, _dirItens(o.n),
         'Precisamos terminar o dia com todos esses itens concluídos.');
       else h += _dirLinhaBloco(_DIR_C.vd, _DIR_C.vdc, o.ico + ' ' + o.nome, 'zerado',
         'Nada pendente hoje — manter assim até o fechamento.');
     });
 
-    // Urgência por Prazo
     h += _dirTitulo('5 · Governança › Urgência por Prazo — prorrogação');
     h += '<div style="font-size:11.5px;color:' + _DIR_C.tx + ';margin-bottom:6px">Itens vencidos e em urgência máxima com '
-       + '<strong>PATEC Finalizado</strong> e <strong>AG. AÇÃO</strong>: precisamos solicitar a prorrogação da oportunidade.</div>';
+       + '<strong>PATEC Finalizado</strong> e <strong>AG. AÇÃO</strong>: precisamos solicitar a prorrogação da oportunidade. '
+       + '<span style="color:' + _DIR_C.tx2 + '">(100% Reprovado e Cancelados não entram aqui.)</span></div>';
     h += '<div style="display:inline-block;background:' + (d.prorr.length ? _DIR_C.vmc : _DIR_C.vdc) + ';border:1px solid '
        + (d.prorr.length ? _DIR_C.vm : _DIR_C.vd) + ';border-radius:8px;padding:8px 16px;margin-bottom:6px">'
        + '<span style="font-size:22px;font-weight:800;color:' + (d.prorr.length ? _DIR_C.vm : _DIR_C.vd) + '">' + d.prorr.length + '</span>'
-       + '<span style="font-size:11px;color:' + _DIR_C.tx2 + ';font-weight:700"> item(ns) para prorrogar</span></div>';
+       + '<span style="font-size:11px;color:' + _DIR_C.tx2 + ';font-weight:700"> para prorrogar</span></div>';
     if (d.prorr.length) {
-      h += _dirTabela(['RC', 'Item da RC', 'Fila', 'Prazo', 'SLA'],
-        d.prorr.map(function(x){ return [x.rc, x.itemRc || '—', x.fila || '—', x.prazoOp, x.sla]; }), 30);
+      h += _dirTabela(['RC', 'Item da RC', 'Analista', 'Fila', 'Prazo', 'SLA'],
+        d.prorr.map(function(x){ return [x.rc, x.itemRc || '—', x.analista, x.fila || '—', x.prazoOp, x.sla]; }), 30);
     }
 
-    // Urgência por SLA
     h += _dirTitulo('6 · Governança › Urgência por SLA — Top 10');
     if (d.sla.length) {
       h += _dirTabela(['#', 'RC', 'Analista', 'SLA (dias)', 'Fase atual', 'Sem ação'],
@@ -34030,21 +34139,15 @@ function _dirCardHTML(d){
       h += '<div style="font-size:11.5px;color:' + _DIR_C.tx2 + '">Sem base do Radar carregada para o Top SLA.</div>';
     }
 
-    // Analista Automático
-    h += _dirTitulo('7 · Analista Automático › Analista Pedido');
+    h += _dirTitulo('7 · Filas de acompanhamento');
     h += '<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;table-layout:fixed"><tr>'
-       + '<td style="width:50%;padding:4px" valign="top"><div style="background:' + _DIR_C.vdc + ';border:1px solid ' + _DIR_C.vd
-       + ';border-radius:8px;padding:10px;text-align:center">'
-       + '<div style="font-size:26px;font-weight:800;color:' + _DIR_C.vd + ';line-height:1">' + d.aa.pedido + '</div>'
-       + '<div style="font-size:11px;font-weight:700;color:' + _DIR_C.tx + ';margin-top:4px">Podem virar pedido</div>'
-       + '<div style="font-size:10px;color:' + _DIR_C.tx2 + ';margin-top:2px">' + d.aa.pedidoRc + ' RC(s) · demais regras (tudo que não é Regra 3)</div>'
-       + '</div></td>'
-       + '<td style="width:50%;padding:4px" valign="top"><div style="background:' + _DIR_C.amc + ';border:1px solid ' + _DIR_C.am
-       + ';border-radius:8px;padding:10px;text-align:center">'
-       + '<div style="font-size:26px;font-weight:800;color:' + _DIR_C.am + ';line-height:1">' + d.aa.regra3 + '</div>'
-       + '<div style="font-size:11px;font-weight:700;color:' + _DIR_C.tx + ';margin-top:4px">Regra 3 — ⚠️ Verificar SAP</div>'
-       + '<div style="font-size:10px;color:' + _DIR_C.tx2 + ';margin-top:2px">' + d.aa.regra3Rc + ' RC(s) · conferir no SAP antes do pedido</div>'
-       + '</div></td></tr></table>';
+       + _dirCartao(d.filas.xgl, 'XGL em aberto', '', _DIR_C.azm, _DIR_C.azc)
+       + _dirCartao(d.filas.mdg, 'MDG', '', _DIR_C.azm, _DIR_C.azc)
+       + _dirCartao(d.filas.thiago, 'Validação do Thiago', '', _DIR_C.am, _DIR_C.amc)
+       + _dirCartao(d.filas.sb, 'Status B', '', _DIR_C.vd, _DIR_C.vdc)
+       + _dirCartao(d.aa.pedido, 'Aptos a pedido', d.aa.pedidoRc + ' RC(s)', _DIR_C.vd, _DIR_C.vdc)
+       + _dirCartao(d.aa.regra3, 'Regra 3 — SAP', d.aa.regra3Rc + ' RC(s)', _DIR_C.am, _DIR_C.amc)
+       + '</tr></table>';
     if (!d.aa.temBase) h += '<div style="font-size:10.5px;color:' + _DIR_C.tx2 + ';margin-top:4px">Sem resultado do Analista Pedido carregado.</div>';
   }
 
@@ -34067,18 +34170,24 @@ function _dirTexto(d){
     T.push('  Total PATEC: ' + r.totPatec + ' | Abrir ID Não: ' + r.l7 + ' | Abrir PATEC Obrig.: ' + r.l8 + ' | Total Abrir: ' + r.totAbrir);
     T.push('  TOTAL GERAL: ' + r.totGeral + (r.totGeralAnt !== null ? ' (' + (r.totGeral - r.totGeralAnt >= 0 ? '+' : '') + (r.totGeral - r.totGeralAnt) + ' vs dia ant.)' : ''));
   }
+  if (d.mod === 'fast' && d.cobPan.total) {
+    T.push('  Como terminamos o dia (Cobrança por Status' + (d.cobPan.dt ? ', base de ' + d.cobPan.dt : '') + '): ' + d.cobPan.total + ' itens');
+    T.push('   ' + d.cobPan.filas.map(function(f){ return f.nome + ': ' + f.n; }).join(' | '));
+    T.push('   Status B: ' + d.cobPan.sb + ' | Nova Reserva: ' + d.cobPan.nr + ' | E&P: ' + d.cobPan.ep);
+  }
   T.push('');
   T.push('2) ONDE FOCAR HOJE');
   d.prioridades.forEach(function(p, i){
     T.push('  ' + (i + 1) + '. ' + p.titulo + (p.num ? ' (' + p.num + ')' : ''));
     T.push('     ' + p.texto);
+    if (p.det) T.push('     ' + p.det);
   });
   T.push('');
-  T.push('3) ALERTA DE RISCO');
+  T.push('3) ALERTA DE RISCO — ' + d.risco.titulo);
   T.push('  ' + d.risco.txt);
   T.push('');
   if (d.mod === 'fast') {
-    T.push('4) COBRANÇA POR STATUS — VENCIDOS: ' + d.cob.length + ' de ' + d.cobTotal);
+    T.push('4) COBRANÇA POR STATUS — VENCIDOS: ' + d.cob.length + ' de ' + d.cobPan.total);
     d.cob.slice(0, 60).forEach(function(x){ T.push('   - RC ' + x.rc + ' item ' + x.item + ' | ' + x.status + ' | ' + x.fila); });
     if (d.cob.length > 60) T.push('   ... e mais ' + (d.cob.length - 60) + ' item(ns).');
   } else {
@@ -34087,15 +34196,15 @@ function _dirTexto(d){
          + ' | Tirar do Fluxo: ' + d.fluxo.length + ' | Cancelados: ' + d.pc.cancelados.length);
     T.push('');
     T.push('5) URGÊNCIA POR PRAZO — PRORROGAÇÃO: ' + d.prorr.length + ' item(ns)');
-    d.prorr.slice(0, 30).forEach(function(x){ T.push('   - RC ' + x.rc + ' item ' + (x.itemRc || '-') + ' | ' + (x.fila || '-') + ' | prazo ' + x.prazoOp + ' | SLA ' + x.sla); });
+    d.prorr.slice(0, 30).forEach(function(x){ T.push('   - RC ' + x.rc + ' item ' + (x.itemRc || '-') + ' | ' + x.analista + ' | ' + (x.fila || '-') + ' | prazo ' + x.prazoOp + ' | SLA ' + x.sla); });
     if (d.prorr.length > 30) T.push('   ... e mais ' + (d.prorr.length - 30) + ' item(ns).');
     T.push('');
     T.push('6) TOP 10 MAIOR SLA');
     d.sla.forEach(function(x, i){ T.push('   ' + (i + 1) + '. RC ' + x.rc + ' | ' + x.analista + ' | SLA ' + x.sla + ' | ' + x.fase + ' | ' + x.diasTxt); });
     T.push('');
-    T.push('7) ANALISTA PEDIDO');
-    T.push('   Podem virar pedido: ' + d.aa.pedido + ' registro(s) / ' + d.aa.pedidoRc + ' RC(s)');
-    T.push('   Regra 3 (verificar SAP): ' + d.aa.regra3 + ' registro(s) / ' + d.aa.regra3Rc + ' RC(s)');
+    T.push('7) FILAS DE ACOMPANHAMENTO');
+    T.push('   XGL: ' + d.filas.xgl + ' | MDG: ' + d.filas.mdg + ' | Validação do Thiago: ' + d.filas.thiago + ' | Status B: ' + d.filas.sb);
+    T.push('   Aptos a pedido: ' + d.aa.pedido + ' (' + d.aa.pedidoRc + ' RC) | Regra 3 (SAP): ' + d.aa.regra3 + ' (' + d.aa.regra3Rc + ' RC)');
   }
   return T.join('\n');
 }
@@ -34219,6 +34328,4 @@ function dirPng(){
     _dirMsg('❌ Não foi possível gerar a imagem: ' + e.message, 'var(--vm)');
   }
 }
-
-
 </script>
