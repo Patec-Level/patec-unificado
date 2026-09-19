@@ -33583,6 +33583,10 @@ function _dirGarantirDados(){
       if (typeof _aaPub !== 'undefined' && _aaPub && _aaPub.length) return null;
       return aaPublicoCarregar();
     });
+    if (typeof nrCarregarFirebase === 'function') add(function(){
+      if (typeof _nrItens !== 'undefined' && _nrItens && _nrItens.length) return null;
+      return nrCarregarFirebase();
+    });
   }
   return Promise.all(ps.map(function(p){ return p.catch(function(){ return null; }); }));
 }
@@ -33766,8 +33770,9 @@ function _dirFilas(){
     });
   } catch (e) {}
   try {
-    var si = (typeof _sbItens !== 'undefined' && _sbItens && _sbItens.length) ? _sbItens
-           : ((typeof _SB_BASE_ITENS !== 'undefined' && _SB_BASE_ITENS) ? _SB_BASE_ITENS : []);
+    // usa só _sbItens (o mesmo que a aba Status B conta) — sem cair na base
+    // embutida, senão o card mostraria itens que a tela não mostra
+    var si = (typeof _sbItens !== 'undefined' && _sbItens) ? _sbItens : [];
     si.forEach(function(r){
       var m = {};
       try { m = (typeof _sbDados !== 'undefined' && _sbDados[r.chave || sbChave(r.rc, r.seq, r.op, r.item)]) || {}; } catch (e) {}
@@ -33881,50 +33886,63 @@ function _dirColetar(){
 // ── 4. prioridades fixas da operação ──────────────────────────────
 // A ordem nunca muda; o que muda é o número e a cor.
 function _dirPrioridades(d){
-  var tom = function(n, quandoTem){ return n > 0 ? (quandoTem || 'critico') : 'ok'; };
+  var junta = function(partes){
+    return partes.filter(function(p){ return p.n > 0; })
+                 .map(function(p){ return p.rot + ' (' + p.n + ')'; }).join(' · ');
+  };
+  var lista;
   if (d.mod === 'fast') {
     var obrig = d.pc.reprovados.length + d.pc.cancelados.length;
-    return [
-      { titulo:'Tratar 100% Reprovado e Cancelados', n:obrig, tom:tom(obrig),
-        num: obrig ? _dirItens(obrig) : 'nada pendente',
-        det: '100% Reprovado (' + d.pc.reprovados.length + ') · Cancelados (' + d.pc.cancelados.length + ')',
+    lista = [
+      { titulo:'Tratar 100% Reprovado e Cancelados', n:obrig, tom:'critico',
+        num: _dirItens(obrig),
+        det: junta([{ rot:'100% Reprovado', n:d.pc.reprovados.length }, { rot:'Cancelados', n:d.pc.cancelados.length }]),
         texto: 'Quando houver item nessas duas filas, ele é a primeira coisa do dia.' },
-      { titulo:'Terminar o dia sem nenhum item Atrasado', n:d.cob.length, tom:tom(d.cob.length),
-        num: d.cob.length ? _dirItens(d.cob.length) + ' atrasado(s)' : 'nenhum atrasado',
+      { titulo:'Terminar o dia sem nenhum item Atrasado', n:d.cob.length, tom:'critico',
+        num: _dirItens(d.cob.length) + (d.cob.length === 1 ? ' atrasado' : ' atrasados'),
         det: 'Cobrança por Status — ' + d.cob.length + ' de ' + d.cobPan.total + ' itens da carteira',
         texto: 'A Cobrança por Status precisa fechar o dia sem item vencido. A lista completa está no fim deste card.' },
-      { titulo:'Monitorar o retorno de Nova Reserva', n:d.cobPan.nr, tom:tom(d.cobPan.nr, 'atencao'),
-        num: d.cobPan.nr ? _dirItens(d.cobPan.nr) : 'sem item hoje',
-        det: d.filas.nr ? 'Governança › Nova Reserva: ' + d.filas.nr + ' aguardando retorno' : '',
+      { titulo:'Monitorar o retorno de Nova Reserva', n:d.cobPan.nr + d.filas.nr, tom:'atencao',
+        num: _dirItens(d.cobPan.nr + d.filas.nr),
+        det: junta([{ rot:'Cobrança por Status', n:d.cobPan.nr }, { rot:'Governança aguardando retorno', n:d.filas.nr }]),
         texto: 'Quando o retorno chegar, ajustar no SAP o número de acompanhamento.' }
     ];
+  } else {
+    var obrigAdlv = d.pc.reprovados.length + d.pc.cancelados.length + d.fluxo.length;
+    var xglMdg = d.filas.xgl + d.filas.mdg;
+    var acomp = d.filas.sb + d.filas.xgl;
+    lista = [
+      { titulo:'Zerar as filas de obrigação', n:obrigAdlv, tom:'critico',
+        num: _dirItens(obrigAdlv),
+        det: junta([{ rot:'100% Reprovado', n:d.pc.reprovados.length }, { rot:'Cancelados', n:d.pc.cancelados.length },
+                    { rot:'Tirar do Fluxo', n:d.fluxo.length }]),
+        texto: 'Devemos terminar o dia sem nenhum item em 100% Reprovado, Cancelado ou Tirar do Fluxo. Esses itens são nossa obrigação e precisam estar tratados até o final do dia.' },
+      { titulo:'Fechar o dia com os aptos na fila de emissão de pedido', n:d.aa.pedido, tom:'atencao',
+        num: _dirItens(d.aa.pedido) + (d.aa.pedido === 1 ? ' apto' : ' aptos'),
+        det: d.aa.pedidoRc + ' RC(s) do Analista Pedido',
+        texto: 'Processar todos os itens elegíveis, garantindo que nenhum fique pendente ou para trás.' },
+      { titulo:'Acompanhar XGL e MDG', n:xglMdg, tom:'atencao',
+        num: _dirItens(xglMdg) + ' em aberto',
+        det: junta([{ rot:'XGL', n:d.filas.xgl }, { rot:'MDG', n:d.filas.mdg },
+                    { rot:'Validação do Thiago', n:d.filas.thiago }, { rot:'devolução XGL a enviar', n:d.filas.xglDev }]),
+        texto: 'Quando houver item já validado pelo Thiago/Cibele via e-mail, tratá-lo imediatamente, priorizando esses casos para reduzir o nosso backlog.' },
+      { titulo:'Intensificar a Regra 3 para aumentar o cadastro no MDG', n:d.aa.regra3, tom:'atencao',
+        num: _dirItens(d.aa.regra3),
+        det: d.aa.regra3Rc + ' RC(s) · conferir no SAP antes',
+        texto: 'Intensificar o tratamento da Regra 3 para aumentar os cadastros no MDG, conforme indicação do Analista Automático.' },
+      { titulo:'Acompanhar as filas Status B e XGL', n:acomp, tom:'atencao',
+        num: _dirItens(acomp) + ' em aberto',
+        det: junta([{ rot:'Status B', n:d.filas.sb }, { rot:'XGL', n:d.filas.xgl }]),
+        texto: 'Acompanhar diariamente o andamento das duas filas, garantindo o avanço e a redução do backlog.' }
+    ];
   }
-  var obrigAdlv = d.pc.reprovados.length + d.pc.cancelados.length + d.fluxo.length;
-  var xglMdg = d.filas.xgl + d.filas.mdg;
-  var acomp = d.filas.sb + d.filas.xgl;
-  return [
-    { titulo:'Zerar as filas de obrigação', n:obrigAdlv, tom:tom(obrigAdlv),
-      num: obrigAdlv ? _dirItens(obrigAdlv) : 'tudo zerado',
-      det: '100% Reprovado (' + d.pc.reprovados.length + ') · Cancelados (' + d.pc.cancelados.length + ') · Tirar do Fluxo (' + d.fluxo.length + ')',
-      texto: 'Devemos terminar o dia sem nenhum item em 100% Reprovado, Cancelado ou Tirar do Fluxo — esses itens são obrigação.' },
-    { titulo:'Fechar o dia com os aptos na fila de emissão de pedido', n:d.aa.pedido, tom:tom(d.aa.pedido, 'atencao'),
-      num: d.aa.pedido ? _dirItens(d.aa.pedido) + ' apto(s)' : 'nenhum item apto hoje',
-      det: d.aa.pedido ? d.aa.pedidoRc + ' RC(s) do Analista Pedido' : '',
-      texto: 'Se tiver item para virar pedido, devemos terminar o dia com todos na fila de emissão de pedido PATEC.' },
-    { titulo:'Acompanhar XGL e MDG', n:xglMdg, tom:tom(xglMdg, 'atencao'),
-      num: xglMdg ? _dirItens(xglMdg) + ' em aberto' : 'filas zeradas',
-      det: 'XGL (' + d.filas.xgl + ') · MDG (' + d.filas.mdg + ') · Validação do Thiago (' + d.filas.thiago + ')'
-         + (d.filas.xglDev ? ' · devolução XGL a enviar (' + d.filas.xglDev + ')' : ''),
-      texto: 'Quando houver item já validado pelo Thiago/Cibele, tratar de imediato, para abaixar o nosso backlog.' },
-    { titulo:'Intensificar a Regra 3 para aumentar o cadastro no MDG', n:d.aa.regra3, tom:tom(d.aa.regra3, 'atencao'),
-      num: d.aa.regra3 ? _dirItens(d.aa.regra3) : 'nenhum item hoje',
-      det: d.aa.regra3 ? d.aa.regra3Rc + ' RC(s) · conferir no SAP antes' : '',
-      texto: 'De acordo com o Analista Automático, intensificar o tratamento da Regra 3 para aumentar o número de cadastros no MDG.' },
-    { titulo:'Acompanhar as filas Status B e XGL', n:acomp, tom:tom(acomp, 'atencao'),
-      num: acomp ? _dirItens(acomp) + ' em aberto' : 'filas zeradas',
-      det: 'Status B (' + d.filas.sb + ') · XGL (' + d.filas.xgl + ')',
-      texto: 'Acompanhar todos os dias o andamento dessas duas filas.' }
-  ];
+  // Combinado com a operação: prioridade sem item NÃO aparece — a de
+  // baixo sobe e a numeração é refeita na hora de desenhar.
+  var ativas = lista.filter(function(p){ return p.n > 0; });
+  if (!ativas.length) ativas = [{
+    titulo:'Nada pendente nas filas de hoje', n:0, tom:'ok', num:'', det:'',
+    texto:'Nenhuma das filas acompanhadas tem item em aberto. Foco em manter a produção e registrar as ações no sistema.' }];
+  return ativas;
 }
 
 function _dirRisco(d){
@@ -33936,7 +33954,8 @@ function _dirRisco(d){
   }
   var v = d.pc.vencidos.length, s = d.slaAlto;
   if (v || s) return { nivel:'alto', titulo:'Vencidos e SLA alto',
-    txt: _dirItens(v) + (v === 1 ? ' vencido' : ' vencidos') + ' e ' + _dirItens(s) + ' em SLA alto (urgência máxima). São os mais urgentes da carteira — são as duas filas que precisam de vazão, concluídas o quanto antes.' };
+    txt: _dirItens(v) + (v === 1 ? ' vencido' : ' vencidos') + ' e ' + _dirItens(s)
+       + ' em SLA alto (urgência máxima). São os itens mais urgentes da carteira. Essas duas filas precisam ganhar vazão e ser concluídas o quanto antes.' };
   return { nivel:'ok', titulo:'Sem item urgente',
     txt: 'Nenhum item vencido e nenhum em SLA de urgência máxima. Manter assim.' };
 }
@@ -33957,12 +33976,20 @@ function _dirVar(v, ant){
   return '<div style="font-size:10px;font-weight:700;color:' + cor + ';margin-top:3px">'
        + (dd > 0 ? '▲ +' : '▼ ') + dd + ' vs dia ant.</div>';
 }
-function _dirKpi(rot, val, ant, cor, larg){
-  return '<td style="width:' + (larg || '11%') + ';padding:4px" valign="top">'
-    + '<div style="background:' + _DIR_C.cin + ';border:1px solid ' + _DIR_C.brd + ';border-radius:8px;padding:8px 6px;text-align:center">'
-    + '<div style="font-size:9.5px;font-weight:700;color:' + _DIR_C.tx2 + ';line-height:1.25;margin-bottom:3px">' + _dirEsc(rot) + '</div>'
+// O cartão é o próprio <td>: numa mesma linha de tabela todas as células
+// têm a mesma altura, então os cards ficam alinhados sem depender de flex
+// (que o Outlook não entende).
+function _dirCel(conteudo, cor, bg){
+  return '<td style="background:' + bg + ';border:1px solid ' + cor + ';border-radius:8px;'
+    + 'padding:9px 6px;text-align:center;vertical-align:middle">' + conteudo + '</td>';
+}
+var _DIR_TAB = 'width:100%;border-collapse:separate;border-spacing:6px;table-layout:fixed';
+
+function _dirKpi(rot, val, ant, cor){
+  return _dirCel(
+      '<div style="font-size:9.5px;font-weight:700;color:' + _DIR_C.tx2 + ';line-height:1.25;margin-bottom:3px">' + _dirEsc(rot) + '</div>'
     + '<div style="font-size:21px;font-weight:700;color:' + cor + ';line-height:1">' + _dirNum(val) + '</div>'
-    + _dirVar(val, ant) + '</div></td>';
+    + _dirVar(val, ant), _DIR_C.brd, _DIR_C.cin);
 }
 function _dirTitulo(txt){
   return '<div style="font-size:12.5px;font-weight:700;color:' + _DIR_C.az + ';margin:18px 0 8px;'
@@ -33996,12 +34023,13 @@ function _dirTabela(cols, linhas, limite){
   return h;
 }
 function _dirCartao(n, rot, sub, cor, bg){
-  return '<td style="padding:4px" valign="top"><div style="background:' + bg + ';border:1px solid ' + cor
-    + ';border-radius:8px;padding:9px 6px;text-align:center">'
-    + '<div style="font-size:22px;font-weight:800;color:' + cor + ';line-height:1">' + _dirNum(n) + '</div>'
+  // a linha do subtítulo existe sempre (mesmo vazia) para os cards da
+  // linha terminarem exatamente na mesma altura
+  return _dirCel(
+      '<div style="font-size:22px;font-weight:800;color:' + cor + ';line-height:1">' + _dirNum(n) + '</div>'
     + '<div style="font-size:10px;font-weight:700;color:' + _DIR_C.tx + ';margin-top:4px;line-height:1.25">' + _dirEsc(rot) + '</div>'
-    + (sub ? '<div style="font-size:9.5px;color:' + _DIR_C.tx2 + ';margin-top:2px">' + _dirEsc(sub) + '</div>' : '')
-    + '</div></td>';
+    + '<div style="font-size:9.5px;color:' + _DIR_C.tx2 + ';margin-top:2px">' + (sub ? _dirEsc(sub) : '\u00A0') + '</div>',
+    cor, bg);
 }
 
 function _dirCardHTML(d){
@@ -34029,7 +34057,7 @@ function _dirCardHTML(d){
              : (dg < 0 ? ' Queda de ' + _dirItens(-dg) + ' vs o dia anterior.' : ' Alta de ' + _dirItens(dg) + ' vs o dia anterior.');
     }
     h += '<div style="font-size:12px;color:' + _DIR_C.tx + ';margin-bottom:8px">' + _dirEsc(frase) + '</div>';
-    h += '<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;table-layout:fixed"><tr>'
+    h += '<table cellspacing="0" cellpadding="0" style="' + _DIR_TAB + '"><tr>'
        + _dirKpi('PATEC Finalizado', r.l3, r.a3, '#3266AD')
        + _dirKpi('Ag. PATEC Finalizar', r.l4, r.a4, '#3266AD')
        + _dirKpi('100% Reprovado', r.l5, r.a5, _DIR_C.vd)
@@ -34038,11 +34066,9 @@ function _dirCardHTML(d){
        + _dirKpi('Abrir ID Não', r.l7, r.a7, _DIR_C.am)
        + _dirKpi('Abrir PATEC Obrig.', r.l8, r.a8, _DIR_C.am)
        + _dirKpi('Total Abrir PATEC', r.totAbrir, r.totAbrirAnt, _DIR_C.am)
-       + '<td style="width:12%;padding:4px" valign="top">'
-       + '<div style="background:' + _DIR_C.azc + ';border:1px solid ' + _DIR_C.azm + ';border-radius:8px;padding:8px 6px;text-align:center">'
-       + '<div style="font-size:9.5px;font-weight:700;color:' + _DIR_C.tx2 + ';margin-bottom:3px">Total Geral</div>'
-       + '<div style="font-size:24px;font-weight:800;color:' + _DIR_C.az + ';line-height:1">' + r.totGeral + '</div>'
-       + _dirVar(r.totGeral, r.totGeralAnt) + '</div></td>'
+       + _dirCel('<div style="font-size:9.5px;font-weight:700;color:' + _DIR_C.tx2 + ';margin-bottom:3px">Total Geral</div>'
+           + '<div style="font-size:24px;font-weight:800;color:' + _DIR_C.az + ';line-height:1">' + r.totGeral + '</div>'
+           + _dirVar(r.totGeral, r.totGeralAnt), _DIR_C.azm, _DIR_C.azc)
        + '</tr></table>';
   }
 
@@ -34056,16 +34082,15 @@ function _dirCardHTML(d){
     if (!cp.total) {
       h += '<div style="font-size:11.5px;color:' + _DIR_C.tx2 + '">Sem base de Cobrança por Status carregada.</div>';
     } else {
-      var celTot = '<td style="padding:4px;width:16%" valign="top">'
-        + '<div style="background:' + _DIR_C.az + ';border-radius:8px;padding:9px 6px;text-align:center">'
-        + '<div style="font-size:24px;font-weight:800;color:#ffffff;line-height:1">' + cp.total + '</div>'
-        + '<div style="font-size:10px;font-weight:700;color:#C9D6EA;margin-top:4px">TOTAL DE ITENS</div></div></td>';
+      var celTot = _dirCel('<div style="font-size:24px;font-weight:800;color:#ffffff;line-height:1">' + cp.total + '</div>'
+        + '<div style="font-size:10px;font-weight:700;color:#C9D6EA;margin-top:4px">TOTAL DE ITENS</div>'
+        + '<div style="font-size:9.5px;margin-top:2px">\u00A0</div>', _DIR_C.az, _DIR_C.az);
       var linhasFila = cp.filas.map(function(f){
         return _dirCartao(f.n, f.nome, '', _DIR_C.azm, _DIR_C.cin);
       });
-      h += '<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;table-layout:fixed"><tr>'
+      h += '<table cellspacing="0" cellpadding="0" style="' + _DIR_TAB + '"><tr>'
          + celTot + linhasFila.join('') + '</tr></table>';
-      h += '<table cellspacing="0" cellpadding="0" style="width:60%;border-collapse:separate;table-layout:fixed;margin-top:4px"><tr>'
+      h += '<table cellspacing="0" cellpadding="0" style="width:62%;' + _DIR_TAB.replace('width:100%;','') + ';margin-top:2px"><tr>'
          + _dirCartao(cp.sb, 'Status B', '', _DIR_C.vd, _DIR_C.vdc)
          + _dirCartao(cp.nr, 'Nova Reserva', '', '#7C3AED', '#F3EDFF')
          + _dirCartao(cp.ep, 'E&P', '', _DIR_C.azm, _DIR_C.azc)
@@ -34140,11 +34165,12 @@ function _dirCardHTML(d){
     }
 
     h += _dirTitulo('7 · Filas de acompanhamento');
-    h += '<table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:separate;table-layout:fixed"><tr>'
+    h += '<table cellspacing="0" cellpadding="0" style="' + _DIR_TAB + '"><tr>'
        + _dirCartao(d.filas.xgl, 'XGL em aberto', '', _DIR_C.azm, _DIR_C.azc)
        + _dirCartao(d.filas.mdg, 'MDG', '', _DIR_C.azm, _DIR_C.azc)
        + _dirCartao(d.filas.thiago, 'Validação do Thiago', '', _DIR_C.am, _DIR_C.amc)
        + _dirCartao(d.filas.sb, 'Status B', '', _DIR_C.vd, _DIR_C.vdc)
+       + _dirCartao(d.filas.nr, 'Nova Reserva', 'aguardando retorno', '#7C3AED', '#F3EDFF')
        + _dirCartao(d.aa.pedido, 'Aptos a pedido', d.aa.pedidoRc + ' RC(s)', _DIR_C.vd, _DIR_C.vdc)
        + _dirCartao(d.aa.regra3, 'Regra 3 — SAP', d.aa.regra3Rc + ' RC(s)', _DIR_C.am, _DIR_C.amc)
        + '</tr></table>';
@@ -34203,7 +34229,8 @@ function _dirTexto(d){
     d.sla.forEach(function(x, i){ T.push('   ' + (i + 1) + '. RC ' + x.rc + ' | ' + x.analista + ' | SLA ' + x.sla + ' | ' + x.fase + ' | ' + x.diasTxt); });
     T.push('');
     T.push('7) FILAS DE ACOMPANHAMENTO');
-    T.push('   XGL: ' + d.filas.xgl + ' | MDG: ' + d.filas.mdg + ' | Validação do Thiago: ' + d.filas.thiago + ' | Status B: ' + d.filas.sb);
+    T.push('   XGL: ' + d.filas.xgl + ' | MDG: ' + d.filas.mdg + ' | Validação do Thiago: ' + d.filas.thiago
+         + ' | Status B: ' + d.filas.sb + ' | Nova Reserva: ' + d.filas.nr);
     T.push('   Aptos a pedido: ' + d.aa.pedido + ' (' + d.aa.pedidoRc + ' RC) | Regra 3 (SAP): ' + d.aa.regra3 + ' (' + d.aa.regra3Rc + ' RC)');
   }
   return T.join('\n');
