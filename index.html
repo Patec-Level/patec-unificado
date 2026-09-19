@@ -6975,7 +6975,11 @@ function go(id, el) {
       // fez o marco de ontem "sumir" do gráfico apesar de estar salvo.
       paHistoricoCarregarFirebase().then(renderPlanoAcao).catch(renderPlanoAcao);
     } else {
-      renderPlanoAcao();
+      // Mesmo motivo do bloco do FAST acima: com o Radar já carregado nesta
+      // sessão, o ADLV caía aqui e desenhava com o _paHistorico do
+      // localStorage (só os marcos antigos), deixando a linha Ag. Tratamento
+      // vazia nos dias recentes.
+      paHistoricoGarantir().then(renderPlanoAcao).catch(renderPlanoAcao);
     }
     // Aba "Abrir PATEC" — inicializa em segundo plano para já estar pronta ao trocar de aba
     const diaSelAP = document.getElementById('ap-dia-sel');
@@ -15557,6 +15561,8 @@ function paSetTabInterna(aba, btn){
     // dia (mapa_diario) antes de desenhar.
     Promise.resolve()
       .then(()=> typeof fbCarregarMapaDiario==='function' ? fbCarregarMapaDiario() : null)
+      // sem os marcos de pa_historico a linha Ag. Tratamento sai vazia
+      .then(()=> typeof paHistoricoGarantir==='function' ? paHistoricoGarantir() : null)
       .catch(e=>console.warn('paSetTabInterna (monitoramento):', e))
       .finally(()=>{
         try{ renderMonitoramentoCardsDia(); }catch(e){}
@@ -16135,6 +16141,31 @@ async function paEntradaCarregarFirebase(){
     console.log('PA Entradas carregadas:', _paEntradas.length);
     renderCascata(); // atualizar gráfico com entradas carregadas
   } catch(e){ console.warn('PA Entradas load:', e); }
+}
+
+// Os marcos "Backlog Auto — AG. Tratamento" (config/pa_historico) são a
+// ÚNICA fonte da linha Ag. Tratamento do Monitoramento do PATEC. Até aqui
+// só a tela ADM > Entradas Plano de Ação > Histórico de Backlog lia essa
+// coleção — por isso a linha aparecia depois de abrir (ou salvar) lá, e
+// sumia numa sessão em que ninguém passou por essa tela. Este garantidor
+// faz a leitura junto com o gráfico, com cache de 60s para não repetir a
+// cada troca de aba; troca de módulo invalida o cache.
+var _paHistLeitura = null;   // { mod, t }
+function paHistoricoGarantir(forcar){
+  try {
+    var mod = (typeof _moduloAtivo !== 'undefined' && _moduloAtivo) ? _moduloAtivo : 'adlv';
+    var agora = Date.now();
+    if (!forcar && _paHistLeitura && _paHistLeitura.mod === mod && (agora - _paHistLeitura.t) < 60000) {
+      return Promise.resolve(_paHistorico);
+    }
+    _paHistLeitura = { mod: mod, t: agora };
+    if (typeof paHistoricoCarregarFirebase !== 'function') return Promise.resolve(_paHistorico);
+    return paHistoricoCarregarFirebase().catch(function(e){
+      console.warn('PA Histórico (garantir):', e);
+      _paHistLeitura = null;      // falhou: deixa tentar de novo na próxima
+      return null;
+    });
+  } catch (e) { return Promise.resolve(null); }
 }
 
 async function paHistoricoCarregarFirebase(){
@@ -34266,6 +34297,11 @@ function _dirGraficoPatec(){
       aba = document.getElementById('pa-tab-monitoramento');
       abaEscondida = !!aba && aba.style.display === 'none';
       if (aba) aba.style.display = 'block';
+      // os marcos de Ag. Tratamento precisam estar em memória antes do desenho
+      var _pronto = (typeof paHistoricoGarantir === 'function')
+        ? paHistoricoGarantir().catch(function(){ return null; })
+        : Promise.resolve();
+      _pronto.then(function(){
       try { renderMonitoramentoPatec(); } catch (e) {}
       setTimeout(function(){
         var img = '';
@@ -34335,6 +34371,7 @@ function _dirGraficoPatec(){
                      + ' — mesmo filtro do Plano de Ação',
               de: de, ate: ate, titulo: leg });
       }, 900);
+      });
     } catch (e) { devolver(); res(null); }
   });
 }
