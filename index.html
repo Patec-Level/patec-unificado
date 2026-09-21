@@ -5717,8 +5717,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div class="tw" style="max-height:500px">
             <table>
               <thead><tr>
-                <th>Analista</th><th>Status Mapa</th><th>Centro</th><th>Fila Level Board</th><th>Validade Proposta</th><th>SLA</th><th>Idas Mercado</th>
-                <th>RC</th><th>Item RC</th><th>Oportunidade</th><th>Item OP</th><th>PATEC Obrig.</th><th>Status</th><th>Grupo Mercadorias</th>
+                <th>Analista</th><th>Status Mapa</th><th>Fila Level Board</th><th>SLA</th>
+                <th>RC</th><th>Item RC</th><th>Oportunidade</th><th>Item OP</th><th>Status</th>
               </tr></thead>
               <tbody id="pc-tbody-pid"></tbody>
             </table>
@@ -17299,7 +17299,7 @@ function pcFiltrar(){
   // PID: coluna W preenchida e STATUS MAPA em PC_PID_STATUS (a regra fica em
   // pcDadosPid, para tela e exportação lerem da mesma fonte)
   const pids = filtrar(pcDadosPid());
-  pcRenderTabela('pid', pids, ['analista','validade','sla','idas','rc','item_rc','num_oport','seq','patec_obrig'], true);
+  pcRenderTabela('pid', pids, ['analista','sla','rc','item_rc','num_oport','seq'], true);
 
   // CANCELADO: col D = 'Analisar PATEC Cancelado'
   const cancelados = filtrar(pcDadosCancelado());
@@ -17368,21 +17368,21 @@ function pcRenderTabela(aba, rows, campos, comExtra){
     if(aba === 'pid'){
       cells.push(`<td style="font-size:11px">${r.analista_auto||'—'}</td>`);
     }
-    // Centro — entre Analista e Fila (para criticos e reprovado)
-    if(aba === 'criticos' || aba === 'reprovado' || aba === 'cancelado' || aba === 'pid'){
+    // Centro — entre Analista e Fila (para criticos e reprovado; a aba PID não usa)
+    if(aba === 'criticos' || aba === 'reprovado' || aba === 'cancelado'){
       cells.push(`<td style="font-size:11px">${r.centro||'—'}</td>`);
     }
     cells.push(`<td style="font-size:11px">${r.fila||'—'}</td>`);
-    if(aba !== 'criticos') cells.push(`<td style="${corValidade(r.validade)}">${r.validade||'—'}</td>`);
+    if(aba !== 'criticos' && aba !== 'pid') cells.push(`<td style="${corValidade(r.validade)}">${r.validade||'—'}</td>`);
     cells.push(`<td style="${corSla(r.sla)}">${r.sla||'—'}</td>`);
-    if(comExtra) cells.push(`<td style="text-align:center">${r.idas||'—'}</td>`);
+    if(comExtra && aba !== 'pid') cells.push(`<td style="text-align:center">${r.idas||'—'}</td>`);
     cells.push(
       `<td style="font-weight:700;color:var(--az)">${r.rc||'—'}</td>`,
       `<td>${r.seq||'—'}</td>`,
       `<td>${r.num_oport||'—'}</td>`,
       `<td>${r.item_op||r.item_rc||'—'}</td>`,
     );
-    if(comExtra) cells.push(`<td style="text-align:center;font-weight:600;color:${(r.patec_obrig||'').toLowerCase()==='sim'?'var(--vm)':'var(--tx2)'}">${r.patec_obrig||'—'}</td>`);
+    if(comExtra && aba !== 'pid') cells.push(`<td style="text-align:center;font-weight:600;color:${(r.patec_obrig||'').toLowerCase()==='sim'?'var(--vm)':'var(--tx2)'}">${r.patec_obrig||'—'}</td>`);
     if(comExtra && aba === 'criticos') cells.push(`<td style="${corValidade(r.validade)}">${r.validade||'—'}</td>`);
     // Status (Dentro do Prazo / Atrasado / Concluído / Ag. Ação) — em todas as abas
     {
@@ -17399,8 +17399,10 @@ function pcRenderTabela(aba, rows, campos, comExtra){
                        : 'color:var(--tx2);font-weight:600';
       cells.push(`<td style="${corStatus}">${statusCalc}</td>`);
     }
-    const grupoMerc = r.grupo_merc || (_radarDados||[]).find(x=>String(x.rc||'').trim()===String(r.rc||'').trim()&&x.grupo_merc)?.grupo_merc || '—';
-    cells.push(`<td style="font-size:11px">${grupoMerc}</td>`);
+    if(aba !== 'pid'){
+      const grupoMerc = r.grupo_merc || (_radarDados||[]).find(x=>String(x.rc||'').trim()===String(r.rc||'').trim()&&x.grupo_merc)?.grupo_merc || '—';
+      cells.push(`<td style="font-size:11px">${grupoMerc}</td>`);
+    }
     return `<tr>${cells.join('')}</tr>`;
   }).join('');
 }
@@ -17696,8 +17698,8 @@ function pcExportar(){
   // Aba PID — mesma regra da tela (coluna W + STATUS MAPA aceito)
   const pidsExp = filtrar(pcDadosPid());
   const wsPid = XLSX.utils.aoa_to_sheet([
-    ['Analista','Status Mapa','Centro','Fila Level Board','Validade Proposta','SLA','Idas Mercado','RC','Item RC','Oportunidade','Item OP','PATEC Obrig.','Status','Grupo Mercadorias','PID'],
-    ...pidsExp.map(r=>[r.analista,r.analista_auto,r.centro,r.fila,r.validade,r.sla,r.idas,r.rc,r.seq,r.num_oport,r.item_op||r.item_rc,r.patec_obrig,statusDe(r),grupoMercDe(r),r.pid])
+    ['Analista','Status Mapa','Fila Level Board','SLA','RC','Item RC','Oportunidade','Item OP','Status','PID'],
+    ...pidsExp.map(r=>[r.analista,r.analista_auto,r.fila,r.sla,r.rc,r.seq,r.num_oport,r.item_op||r.item_rc,statusDe(r),r.pid])
   ]);
   XLSX.utils.book_append_sheet(wb, wsPid, 'PID');
 
