@@ -1391,7 +1391,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <div id="adm-radar-adm" class="adm-tab" style="display:none">
         <div class="cd" style="border-top:3px solid var(--azm);margin-bottom:1rem">
           <div class="cd-t">📡 Upload — Base do Radar Operacional</div>
-          <div class="al al-b" style="margin-bottom:1rem">ℹ Suba o arquivo <strong>Dashboard_Dados.xlsx</strong> sempre que quiser atualizar os dados. Os dados são salvos no Firebase e ficam disponíveis para todos os usuários automaticamente.</div>
+          <div class="al al-b" style="margin-bottom:1rem">ℹ Suba o arquivo <strong>Dashboard_Dados.xlsx</strong> sempre que quiser atualizar os dados. Os dados são salvos no Firebase e ficam disponíveis para todos os usuários automaticamente.<br>A coluna <strong>PID</strong> (coluna W) alimenta a aba <strong>PID</strong> da Planilha Crítica — entram os itens com a coluna preenchida cujo <strong>STATUS MAPA</strong> seja <em>Aguardar PATEC ser Finalizado</em> ou <em>Analisar PATEC Finalizado</em>. A leitura é pelo nome da coluna, então a ordem na planilha não importa, e uma planilha sem essa coluna continua funcionando normalmente.</div>
 
           <!-- Zona de upload -->
           <div class="uz" id="radar-uz" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="radarOnDrop(event)" style="margin-bottom:1rem">
@@ -5651,6 +5651,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button class="stab active" onclick="pcSetTab('vencido',this)">⏰ Vencido</button>
         <button class="stab" onclick="pcSetTab('reprovado',this)">❌ 100% Reprovado</button>
         <button class="stab" onclick="pcSetTab('criticos',this)">🔴 Itens Críticos</button>
+        <button class="stab" onclick="pcSetTab('pid',this)">📌 PID</button>
         <button class="stab" id="pc-nav-fluxo-btn" onclick="pcSetTab('fluxo',this)">🗑 Tirar do Fluxo</button>
         <button class="stab" onclick="pcSetTab('cancelado',this)">🚫 Cancelado</button>
         <button class="stab" onclick="pcSetTab('urgmuitoalta',this)">🔴 Urgência Muito Alta</button>
@@ -5706,6 +5707,20 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>RC</th><th>Item RC</th><th>Oportunidade</th><th>Item OP</th><th>PATEC Obrig.</th><th>Validade Proposta</th><th>Status</th><th>Grupo Mercadorias</th>
               </tr></thead>
               <tbody id="pc-tbody-criticos"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ABA PID — coluna W do Radar + STATUS MAPA Aguardar/Analisar PATEC -->
+        <div id="pc-tab-pid" style="display:none">
+          <div style="font-size:12px;font-weight:600;color:var(--vm);margin-bottom:.5rem" id="pc-count-pid"></div>
+          <div class="tw" style="max-height:500px">
+            <table>
+              <thead><tr>
+                <th>Analista</th><th>Status Mapa</th><th>Centro</th><th>Fila Level Board</th><th>Validade Proposta</th><th>SLA</th><th>Idas Mercado</th>
+                <th>RC</th><th>Item RC</th><th>Oportunidade</th><th>Item OP</th><th>PATEC Obrig.</th><th>Status</th><th>Grupo Mercadorias</th>
+              </tr></thead>
+              <tbody id="pc-tbody-pid"></tbody>
             </table>
           </div>
         </div>
@@ -12807,6 +12822,13 @@ async function radarOnFile(file){
         const k = Object.keys(r).find(k => k.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes('URGEN'));
         return k ? String(r[k]||'').trim() : '';
       })(),
+      // Coluna W — PID. Nome exato ('PID'), sem busca por "contém", para não
+      // casar com nenhuma outra coluna. Planilha antiga, sem a coluna, fica ''.
+      pid:           (()=>{
+        const k = Object.keys(r).find(k => String(k||'').replace(/\s+/g,' ').trim().toUpperCase() === 'PID');
+        const v = k ? String(r[k]||'').trim() : '';
+        return (v === '#N/A' || v === 'nan' || v === '0') ? '' : v;
+      })(),
     }));
 
     // Debug: log column names from first row to help identify FAMILIA L OU Q
@@ -17125,6 +17147,17 @@ function pcDadosCancelado(){
   return (_radarDados||[]).filter(r => (r.analista_auto||'').trim() === 'Analisar PATEC Cancelado');
 }
 
+// STATUS MAPA (col D) aceitos na aba PID
+const PC_PID_STATUS = ['Aguardar PATEC ser Finalizado', 'Analisar PATEC Finalizado'];
+
+function pcDadosPid(){
+  // PID: coluna W do Radar preenchida E col D (STATUS MAPA) em PC_PID_STATUS.
+  // A marcação de PID aparece em vários status, mas só estes dois entram aqui.
+  return (_radarDados||[]).filter(r =>
+    String(r.pid||'').trim() !== '' &&
+    PC_PID_STATUS.indexOf((r.analista_auto||'').trim()) !== -1);
+}
+
 function pcInicializar(){
   const base = pcDadosBase();
 
@@ -17263,6 +17296,11 @@ function pcFiltrar(){
   }));
   pcRenderTabela('criticos', criticos, ['analista','validade','sla','idas','rc','item_rc','num_oport','seq','patec_obrig'], true);
 
+  // PID: coluna W preenchida e STATUS MAPA em PC_PID_STATUS (a regra fica em
+  // pcDadosPid, para tela e exportação lerem da mesma fonte)
+  const pids = filtrar(pcDadosPid());
+  pcRenderTabela('pid', pids, ['analista','validade','sla','idas','rc','item_rc','num_oport','seq','patec_obrig'], true);
+
   // CANCELADO: col D = 'Analisar PATEC Cancelado'
   const cancelados = filtrar(pcDadosCancelado());
   pcRenderTabela('cancelado', cancelados, ['analista','validade','sla','idas','rc','item_rc','num_oport','seq','patec_obrig'], true);
@@ -17325,8 +17363,13 @@ function pcRenderTabela(aba, rows, campos, comExtra){
     const cells = [
       `<td>${r.analista||'—'}</td>`,
     ];
+    // PID: o Status Mapa vem logo depois do analista — a aba junta itens de
+    // vários status, então sem essa coluna não dá para saber de onde é o item
+    if(aba === 'pid'){
+      cells.push(`<td style="font-size:11px">${r.analista_auto||'—'}</td>`);
+    }
     // Centro — entre Analista e Fila (para criticos e reprovado)
-    if(aba === 'criticos' || aba === 'reprovado' || aba === 'cancelado'){
+    if(aba === 'criticos' || aba === 'reprovado' || aba === 'cancelado' || aba === 'pid'){
       cells.push(`<td style="font-size:11px">${r.centro||'—'}</td>`);
     }
     cells.push(`<td style="font-size:11px">${r.fila||'—'}</td>`);
@@ -17546,7 +17589,7 @@ function pcSetTab(aba, btn){
   _pcTabAtiva = aba;
   document.querySelectorAll('#pc-tabs .stab').forEach(b => b.classList.remove('active'));
   if(btn) btn.classList.add('active');
-  ['vencido','reprovado','criticos','fluxo','cancelado','urgmuitoalta','urgalta','urgbaixa'].forEach(t => {
+  ['vencido','reprovado','criticos','pid','fluxo','cancelado','urgmuitoalta','urgalta','urgbaixa'].forEach(t => {
     const el = document.getElementById('pc-tab-' + t);
     if(el) el.style.display = t === aba ? 'block' : 'none';
   });
@@ -17649,6 +17692,14 @@ function pcExportar(){
     ...criticos.map(r=>[r.analista,r.centro,r.fila,r.sla,r.idas,r.rc,r.seq,r.num_oport,r.item_op||r.item_rc,r.patec_obrig,r.validade,statusDe(r),grupoMercDe(r)])
   ]);
   XLSX.utils.book_append_sheet(wb, wsC, 'Itens Criticos');
+
+  // Aba PID — mesma regra da tela (coluna W + STATUS MAPA aceito)
+  const pidsExp = filtrar(pcDadosPid());
+  const wsPid = XLSX.utils.aoa_to_sheet([
+    ['Analista','Status Mapa','Centro','Fila Level Board','Validade Proposta','SLA','Idas Mercado','RC','Item RC','Oportunidade','Item OP','PATEC Obrig.','Status','Grupo Mercadorias','PID'],
+    ...pidsExp.map(r=>[r.analista,r.analista_auto,r.centro,r.fila,r.validade,r.sla,r.idas,r.rc,r.seq,r.num_oport,r.item_op||r.item_rc,r.patec_obrig,statusDe(r),grupoMercDe(r),r.pid])
+  ]);
+  XLSX.utils.book_append_sheet(wb, wsPid, 'PID');
 
   // Aba cancelado — mesma regra usada em pcFiltrar (pcDadosCancelado)
   const cancelados = filtrar(pcDadosCancelado());
@@ -33750,6 +33801,26 @@ function _dirHojeISO(){
   var h = new Date();
   return h.getFullYear() + '-' + String(h.getMonth() + 1).padStart(2, '0') + '-' + String(h.getDate()).padStart(2, '0');
 }
+// O dia do card é SEMPRE hoje. Nada de herdar o seletor do Painel Estratégico
+// nem cair no último dia com MAPA lançado: se o MAPA de hoje ainda não entrou,
+// o card avisa, em vez de mostrar número de outro dia como se fosse o de hoje.
+function _dirDiaPadrao(){ return _dirHojeISO(); }
+
+// Último dia com MAPA lançado (só para avisar, quando hoje ainda não tem).
+function _dirUltimoMapa(dtLimite){
+  var datas = [];
+  try {
+    if (typeof mapaFirebase !== 'undefined' && mapaFirebase) {
+      mapaFirebase.forEach(function(r){ if (r && r.data) datas.push(r.data); });
+    }
+    if (typeof DATAS_ISO_MAPA !== 'undefined' && DATAS_ISO_MAPA) {
+      DATAS_ISO_MAPA.forEach(function(d){ if (d) datas.push(d); });
+    }
+  } catch (e) {}
+  datas = datas.filter(function(d){ return d < dtLimite; }).sort();
+  return datas.length ? datas[datas.length - 1] : null;
+}
+
 // O card é desenhado em dois lugares: a aba do ADM (onde ficam os botões de
 // copiar/baixar) e o tópico "Direcionamento da Equipe" do menu, que a equipe
 // só lê. As duas telas mostram exatamente o mesmo HTML.
@@ -33832,6 +33903,8 @@ function _dirResumo(dt){
     a3:ma?g(ma,'l3'):null, a4:ma?g(ma,'l4'):null, a5:ma?g(ma,'l5'):null,
     a6:ma?g(ma,'l6'):null, a7:ma?g(ma,'l7'):null, a8:ma?g(ma,'l8'):null
   };
+  r.ehHoje = (dt === _dirHojeISO());
+  r.ultimoMapa = m ? null : _dirUltimoMapa(dt);
   r.totPatec = r.l3 + r.l4 + r.l5 + r.l6;
   r.totAbrir = r.l7 + r.l8;
   r.totGeral = r.totPatec + r.totAbrir;
@@ -33851,11 +33924,30 @@ function _dirPlanilhaCritica(){
     var ehVenc = val.indexOf('vencimento') !== -1 || val.indexOf('vencid') !== -1;
     return (ctrl === 'CRÍTICO' || ctrl === 'CRITICO') && !ehVenc;
   });
+  var pid = (typeof pcDadosPid === 'function') ? pcDadosPid() : [];
   return {
     vencidos: vencidos,
     reprovados: (typeof pcDadosReprovado === 'function') ? pcDadosReprovado() : [],
     cancelados: (typeof pcDadosCancelado === 'function') ? pcDadosCancelado() : [],
-    criticos: criticos
+    criticos: criticos,
+    pid: pid,
+    // Vencidos + PID para a 3a prioridade. E uniao, nao soma: o item que esta
+    // nas duas listas conta uma vez so. A chave e a mesma que a Planilha
+    // Critica usa para identificar o item (RC + SEQ + oportunidade + item).
+    vencPid: (function(){
+      var vistos = {}, out = [];
+      var ch = function(r){
+        return [r.rc, r.seq, r.num_oport, r.item_op || r.item_rc]
+          .map(function(v){ return String(v == null ? '' : v).trim(); }).join('|');
+      };
+      vencidos.concat(pid).forEach(function(r){
+        var k = ch(r);
+        if (vistos[k]) return;
+        vistos[k] = 1;
+        out.push(r);
+      });
+      return out;
+    })()
   };
 }
 
@@ -34079,7 +34171,7 @@ function _dirCobPanorama(){
 
 function _dirColetar(){
   var sel = document.getElementById('dir-dia');
-  var dt = (sel && sel.value) || ((typeof estGetDia === 'function') ? estGetDia() : _dirHojeISO());
+  var dt = (sel && sel.value) || _dirDiaPadrao();
   if (sel && !sel.value) sel.value = dt;
 
   var d = { mod:_dirMod(), gerado:_dirHojeISO(), resumo:_dirResumo(dt) };
@@ -34146,9 +34238,12 @@ function _dirPrioridades(d){
         num: _dirItens(d.aa.pedido) + (d.aa.pedido === 1 ? ' apto' : ' aptos'),
         det: d.aa.pedidoRc + ' RC(s) do Analista Pedido',
         texto: 'Processar todos os itens elegíveis, garantindo que nenhum fique pendente ou para trás.' },
-      { titulo:'Analisar as oportunidades vencidas da carteira', n:d.pc.vencidos.length, tom:'critico',
-        num: _dirItens(d.pc.vencidos.length) + (d.pc.vencidos.length === 1 ? ' vencido' : ' vencidos'),
-        det: 'Planilha Crítica › Vencidos',
+      { titulo:'Analisar os itens de PID e as oportunidades vencidas da carteira', n:d.pc.vencPid.length, tom:'critico',
+        num: _dirItens(d.pc.vencPid.length),
+        det: junta([{ rot:'Vencidos', n:d.pc.vencidos.length }, { rot:'PID', n:d.pc.pid.length }])
+           + (d.pc.vencidos.length + d.pc.pid.length > d.pc.vencPid.length
+              ? ' · ' + (d.pc.vencidos.length + d.pc.pid.length - d.pc.vencPid.length) + ' nas duas listas'
+              : ''),
         texto: 'Prioridade de análise aos itens de oportunidade vencida da carteira e também àqueles que forem sendo sinalizados durante o dia.' },
       { titulo:'Acompanhar XGL e MDG', n:xglMdg, tom:'atencao',
         num: _dirItens(xglMdg) + ' em aberto',
@@ -34301,7 +34396,10 @@ function _dirCardHTML(d){
   h += _dirTitulo('Panorama de hoje');
   if (!r.temMapa) {
     h += '<div style="font-size:11.5px;color:' + _DIR_C.am + ';background:' + _DIR_C.amc + ';border:1px solid ' + _DIR_C.am
-       + ';border-radius:8px;padding:8px 10px">Sem MAPA lançado para ' + _dirEsc(_dirDataBR(r.dt)) + '.</div>';
+       + ';border-radius:8px;padding:8px 10px">Sem MAPA lançado para ' + _dirEsc(_dirDataBR(r.dt)) + '.'
+       + (r.ultimoMapa ? ' O último lançamento foi em ' + _dirEsc(_dirDataBR(r.ultimoMapa))
+                       + ' — os números de hoje entram assim que o MAPA for lançado.' : '')
+       + '</div>';
   } else {
     var frase = 'Carteira em ' + r.totGeral + ' itens: ' + r.totPatec + ' em PATEC e ' + r.totAbrir + ' em Abrir PATEC.';
     if (r.totGeralAnt !== null) {
@@ -34350,6 +34448,7 @@ function _dirCardHTML(d){
        + _dirCartaoNum(d.pc.cancelados.length, 'Cancelados', _DIR_C.am)
        + _dirCartaoNum(d.prorr.length, 'Para prorrogar', _DIR_C.vm)
        + _dirCartaoNum(d.slaAlto, 'SLA alto', _DIR_C.vm)
+       + _dirCartaoNum(d.pc.pid.length, 'PID', _DIR_C.vm)
        + '</tr></table>';
   }
 
@@ -34433,22 +34532,40 @@ function _dirCardHTML(d){
 // O canvas só tem largura com a aba visível, então ela é mostrada fora da
 // tela por um instante e devolvida ao estado anterior (mesmo caminho que a
 // Apresentação já usa para capturar esse gráfico).
+var _dirGrafAtivos = 0, _dirGrafEstado = null;
+
 function _dirGraficoPatec(){
   return new Promise(function(res){
-    var pg = null, aba = null, pgEscondida = false, abaEscondida = false;
+    var devolvido = false;
+    // Duas capturas podem se cruzar (dirAbrir ja gera o card e o usuario pode
+    // clicar em Gerar logo em seguida). O estado de antes e guardado na
+    // primeira e so devolvido quando a ultima termina — senao a segunda leria
+    // a tela ja aberta pela primeira e a aba Monitoramento ficaria visivel.
     var devolver = function(){
+      if (devolvido) return;
+      devolvido = true;
+      _dirGrafAtivos = Math.max(0, _dirGrafAtivos - 1);
+      if (_dirGrafAtivos > 0 || !_dirGrafEstado) return;
+      var e = _dirGrafEstado; _dirGrafEstado = null;
       try {
-        if (abaEscondida && aba) aba.style.display = 'none';
-        if (pgEscondida && pg) { pg.style.display = ''; pg.style.visibility = ''; }
-      } catch (e) {}
+        if (e.aba) e.aba.style.display = e.abaDisplay;
+        if (e.pg) { e.pg.style.display = e.pgDisplay; e.pg.style.visibility = e.pgVis; }
+      } catch (er) {}
     };
     try {
       if (typeof renderMonitoramentoPatec !== 'function' || typeof Chart === 'undefined') return res(null);
-      pg = document.getElementById('p-plano-acao');
-      pgEscondida = !!pg && !pg.classList.contains('active');
-      if (pgEscondida) { pg.style.display = 'block'; pg.style.visibility = 'hidden'; }
-      aba = document.getElementById('pa-tab-monitoramento');
-      abaEscondida = !!aba && aba.style.display === 'none';
+      var pg = document.getElementById('p-plano-acao');
+      var aba = document.getElementById('pa-tab-monitoramento');
+      if (!_dirGrafEstado) {
+        _dirGrafEstado = {
+          pg: pg, aba: aba,
+          pgDisplay: pg ? pg.style.display : '',
+          pgVis:     pg ? pg.style.visibility : '',
+          abaDisplay: aba ? aba.style.display : ''
+        };
+      }
+      _dirGrafAtivos++;
+      if (pg && !pg.classList.contains('active')) { pg.style.display = 'block'; pg.style.visibility = 'hidden'; }
       if (aba) aba.style.display = 'block';
       // os marcos de Ag. Tratamento precisam estar em memória antes do desenho
       var _pronto = (typeof paHistoricoGarantir === 'function')
@@ -34536,7 +34653,8 @@ function _dirTexto(d){
   T.push('Gerado em ' + _dirDataBR(d.gerado) + ' | base do dia ' + _dirDataBR(r.dt));
   T.push('');
   T.push('1) PANORAMA');
-  if (!r.temMapa) T.push('  Sem MAPA lançado para ' + _dirDataBR(r.dt) + '.');
+  if (!r.temMapa) T.push('  Sem MAPA lançado para ' + _dirDataBR(r.dt) + '.'
+    + (r.ultimoMapa ? ' Último lançamento: ' + _dirDataBR(r.ultimoMapa) + '.' : ''));
   else {
     T.push('  PATEC Finalizado: ' + r.l3 + ' | Ag. PATEC Finalizar: ' + r.l4 + ' | 100% Reprovado: ' + r.l5 + ' | Cancelado: ' + r.l6);
     T.push('  Total PATEC: ' + r.totPatec + ' | Abrir ID Não: ' + r.l7 + ' | Abrir PATEC Obrig.: ' + r.l8 + ' | Total Abrir: ' + r.totAbrir);
@@ -34552,7 +34670,8 @@ function _dirTexto(d){
     T.push('2) GOVERNANÇA');
     T.push('  Vencidos: ' + d.pc.vencidos.length + ' | 100% Reprovado: ' + d.pc.reprovados.length
          + ' | Tirar do Fluxo: ' + d.fluxo.length + ' | Cancelados: ' + d.pc.cancelados.length
-         + ' | Para prorrogar: ' + d.prorr.length + ' | SLA alto: ' + d.slaAlto);
+         + ' | Para prorrogar: ' + d.prorr.length + ' | SLA alto: ' + d.slaAlto
+         + ' | PID: ' + d.pc.pid.length);
   }
   T.push('');
   T.push('3) ONDE FOCAR HOJE');
@@ -34591,10 +34710,11 @@ function _dirTexto(d){
 
 // ── 7. tela ───────────────────────────────────────────────────────
 function dirAbrir(){
+  // Toda vez que a tela abre o dia volta para hoje. Trocar a data no seletor
+  // continua funcionando para olhar outro dia, mas isso não fica grudado:
+  // na próxima abertura o card mostra o dia de hoje de novo.
   var sel = document.getElementById('dir-dia');
-  if (sel && !sel.value) {
-    try { sel.value = (typeof estGetDia === 'function') ? estGetDia() : _dirHojeISO(); } catch (e) { sel.value = _dirHojeISO(); }
-  }
+  if (sel) sel.value = _dirDiaPadrao();
   var lbl = document.getElementById('dir-mod-lbl');
   if (lbl) lbl.textContent = _dirModNome();
   dirGerar();
@@ -34625,10 +34745,9 @@ function dirGerar(){
 function dirPagina(){
   var lbl = document.getElementById('dirp-mod-lbl');
   if (lbl) lbl.textContent = _dirModNome();
+  // o tópico da equipe não tem seletor: é sempre o dia de hoje
   var sel = document.getElementById('dir-dia');
-  if (sel && !sel.value) {
-    try { sel.value = (typeof estGetDia === 'function') ? estGetDia() : _dirHojeISO(); } catch (e) { sel.value = _dirHojeISO(); }
-  }
+  if (sel) sel.value = _dirDiaPadrao();
   dirGerar();
 }
 
