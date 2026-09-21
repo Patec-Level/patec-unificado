@@ -630,17 +630,17 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
     </div>
   </div>
 
-  <div class="sb-mod">◈ ESTRATÉGICO</div>
-  <div class="sb-it active" onclick="go('vg-mercado',this)">🌐 Indicadores de Mercado</div>
+  <!-- Indicadores de Mercado, Radar, Plano de Ação e Painel Estratégico
+       foram para ADM › Dados de Consulta (e, no FAST, também o Analista
+       Automático e a Consulta Q18). As telas são as mesmas, só deixaram de
+       ficar no menu que todo mundo enxerga. -->
+  <div class="sb-mod" id="sb-mod-estrategico">◈ ESTRATÉGICO</div>
   <div class="sb-it" id="sb-reuniao-it" onclick="go('reuniao',this)" style="display:none">🗣️ Reunião</div>
-  <div class="sb-it" onclick="go('radar',this)">📡 Radar Estratégico</div>
-  <div class="sb-it" onclick="go('plano-acao',this)">🎯 Plano de Ação</div>
   <div class="sb-mod">◈ EXECUÇÃO</div>
-  <div class="sb-it" onclick="go('direcionamento',this)">📣 Direcionamento da Equipe</div>
-  <div class="sb-it" onclick="go('pr-estrategico',this)">🎯 Painel Estratégico</div>
+  <div class="sb-it active" onclick="go('direcionamento',this)">📣 Direcionamento da Equipe</div>
   <div class="sb-it" onclick="go('governanca',this)">⚖️ Governança</div>
-  <div class="sb-it" onclick="go('analista-auto',this)">🤖 Analista Automático</div>
-  <div class="sb-it" onclick="go('consulta-q18',this)">🚫 Consulta Q18</div>
+  <div class="sb-it" id="sb-aa-it" onclick="go('analista-auto',this)">🤖 Analista Automático</div>
+  <div class="sb-it" id="sb-q18-it" onclick="go('consulta-q18',this)">🚫 Consulta Q18</div>
 
   <!-- Gestão de Produção movida para ADM -->
   <div class="sb-it" onclick="go('fechamento-dia',this)">🔒 Fechamento do Dia</div>
@@ -856,6 +856,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <div class="stabs" id="adm-tabs">
         <button class="stab active" onclick="setAdmTab('ciclos',this)">🔄 Gestão de Ciclos</button>
         <button class="stab" onclick="setAdmTab('direcionamento',this)">📣 Direcionamento</button>
+        <button class="stab" id="adm-nav-dados-consulta-btn" onclick="setAdmTab('dados-consulta',this)">📚 Dados de Consulta</button>
         <button class="stab" id="adm-nav-usuarios-btn" onclick="setAdmTab('usuarios',this)">👥 Usuários</button>
         <button class="stab" id="adm-nav-equipe-btn" onclick="setAdmTab('equipe',this)">🧑‍🤝‍🧑 Equipe (Metas RT)</button>
         <button class="stab" id="adm-nav-online-btn" onclick="setAdmTab('online',this)">🕐 Último Acesso</button>
@@ -890,6 +891,16 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       </div>
 
       <!-- ── FERIADOS E PONTOS FACULTATIVOS ── -->
+      <!-- ── DADOS DE CONSULTA — telas que saíram do menu lateral ── -->
+      <div id="adm-dados-consulta" class="adm-tab" style="display:none">
+        <div class="cd" style="margin-bottom:.75rem;border-top:3px solid var(--azm)">
+          <div class="cd-t" style="margin:0">📚 Dados de Consulta</div>
+          <div style="font-size:11px;color:var(--tx2);margin-top:4px">As telas são exatamente as mesmas de antes — só saíram do menu lateral e passaram a ficar aqui, com acesso pelo ADM.</div>
+        </div>
+        <div class="stabs" id="dc-tabs" style="margin-bottom:.5rem"></div>
+        <div id="dc-host"></div>
+      </div>
+
       <!-- ── DIRECIONAMENTO DA EQUIPE — card pronto para e-mail e Teams ── -->
       <div id="adm-direcionamento" class="adm-tab" style="display:none">
         <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--azm)">
@@ -3287,7 +3298,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
     <!-- ══════════════════════════════════════════
          INTELIGÊNCIA DE MERCADO
     ══════════════════════════════════════════ -->
-    <div id="p-vg-mercado" class="page active">
+    <div id="p-vg-mercado" class="page">
 
       <!-- TOPBAR INFO (atualização) -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
@@ -10097,6 +10108,7 @@ function setAdmTab(id,btn){
   }
   if(id==='ciclos') setTimeout(()=>{cicloCarregarAtivo().then(initCicloADM);},50);
   if(id==='direcionamento') setTimeout(dirAbrir,50);
+  if(id==='dados-consulta') setTimeout(dcAbrir,50);
   if(id==='online') setTimeout(admUltimoAcessoCarregar,50);
   if(id==='equipe') setTimeout(equipeAbrirEditor,50);
   if(id==='resultado-medicao') setTimeout(renderResultadoMedicao,50);
@@ -25319,17 +25331,21 @@ function q18Consultar(valor){
 // ══════════════════════════════════════════════════════════
 
 // Mapa de permissões: chave sidebar → id da página
+// hidden      = não aparece no menu lateral (a tela vive em ADM › Dados de
+//               Consulta), mas continua existindo para o go() e para a
+//               lista de permissões do cadastro de usuários.
+// hiddenFast  = some do menu só no FAST; no ADLV continua no menu.
 const PERMS_SIDEBAR = {
-  'vg-mercado':     { icon:'🌐', label:'Indicadores de Mercado',  mod:'ESTRATÉGICO' },
+  'vg-mercado':     { icon:'🌐', label:'Indicadores de Mercado',  mod:'ESTRATÉGICO', hidden:true },
   'reuniao':        { icon:'🗣️', label:'Reunião',                   mod:'ESTRATÉGICO' },
-  'radar':          { icon:'📡', label:'Radar Estratégico',        mod:'ESTRATÉGICO' },
-  'plano-acao':     { icon:'🎯', label:'Plano de Ação',            mod:'ESTRATÉGICO' },
+  'radar':          { icon:'📡', label:'Radar Estratégico',        mod:'ESTRATÉGICO', hidden:true },
+  'plano-acao':     { icon:'🎯', label:'Plano de Ação',            mod:'ESTRATÉGICO', hidden:true },
   'direcionamento': { icon:'📣', label:'Direcionamento da Equipe', mod:'EXECUÇÃO' },
-  'pr-estrategico': { icon:'🎯', label:'Painel Estratégico',       mod:'EXECUÇÃO' },
+  'pr-estrategico': { icon:'🎯', label:'Painel Estratégico',       mod:'EXECUÇÃO', hidden:true },
   'governanca':     { icon:'⚖️', label:'Governança',               mod:'EXECUÇÃO' },
   'planilha-critica':{ icon:'🔴', label:'Planilha Crítica',        mod:'EXECUÇÃO', redirect:'governanca', hidden:true },
-  'analista-auto':  { icon:'🤖', label:'Analista Automático',      mod:'EXECUÇÃO' },
-  'consulta-q18':   { icon:'🚫', label:'Consulta Q18',             mod:'EXECUÇÃO' },
+  'analista-auto':  { icon:'🤖', label:'Analista Automático',      mod:'EXECUÇÃO', hiddenFast:true },
+  'consulta-q18':   { icon:'🚫', label:'Consulta Q18',             mod:'EXECUÇÃO', hiddenFast:true },
   'pr-bancoferias': { icon:'🗓', label:'Gestão de Jornada',        mod:'EXECUÇÃO' },
 };
 
@@ -25588,6 +25604,18 @@ function _entrarNoApp(){
   });
 
   rtIniciarListener();
+
+  // A tela inicial era Indicadores de Mercado, que foi para o ADM. Agora o
+  // app abre no Direcionamento da Equipe, o primeiro item do menu.
+  setTimeout(function(){
+    try {
+      if(document.getElementById('p-adm') && document.getElementById('p-adm').classList.contains('active')) return;
+      var it = [].slice.call(document.querySelectorAll('#sb .sb-it')).filter(function(x){
+        return /go\('direcionamento'/.test(x.getAttribute('onclick') || '');
+      })[0];
+      go('direcionamento', it || null);
+    } catch(e){ console.warn('tela inicial:', e); }
+  }, 250);
 
   // Todos os carregamentos Firebase centralizados aqui, só uma vez após login
   if(!window._fbCarregadoUmaVez){
@@ -25872,6 +25900,8 @@ function authMontarSidebar(emailParam){
     if(_moduloAtivo === 'fast' && PAGINAS_ADLV_ONLY.includes(key)) return;
     if(_moduloAtivo !== 'fast' && PAGINAS_FAST_ONLY.includes(key)) return;
     if(cfg.hidden) return; // item oculto do menu (integrado em outra página)
+    // no FAST estas telas vivem em ADM › Dados de Consulta
+    if(cfg.hiddenFast && _moduloAtivo === 'fast') return;
     if(podeVerTudo || perms.includes(key) || (key === 'reuniao' && perms.includes('governanca'))
        || (key === 'direcionamento' && (perms.includes('pr-estrategico') || perms.includes('governanca')))){
       if(!mods[cfg.mod]) mods[cfg.mod] = [];
@@ -33532,6 +33562,15 @@ function _cobAplicarModulo(){
   // o tópico Reunião também é exclusivo do FAST
   var itReu = document.getElementById('sb-reuniao-it');
   if (itReu) itReu.style.display = fast ? '' : 'none';
+  // ESTRATÉGICO só tem a Reunião desde que as telas de consulta foram para
+  // o ADM — no ADLV o cabeçalho ficaria sozinho
+  var secEst = document.getElementById('sb-mod-estrategico');
+  if (secEst) secEst.style.display = fast ? '' : 'none';
+  // no FAST, Analista Automático e Consulta Q18 também ficam só no ADM
+  ['sb-aa-it', 'sb-q18-it'].forEach(function(id){
+    var it = document.getElementById(id);
+    if (it) it.style.display = fast ? 'none' : '';
+  });
   if (!fast) {
     var pgReu = document.getElementById('p-reuniao');
     if (pgReu) pgReu.classList.remove('active');
@@ -33558,6 +33597,120 @@ function _cobCarregarDados(){
   });
 }
 
+
+
+// ══════════════════════════════════════════════════════════════════
+//  DADOS DE CONSULTA  (ADM)
+//  Indicadores de Mercado, Radar Estratégico, Plano de Ação, Painel
+//  Estratégico — e, no FAST, também Analista Automático e Consulta Q18 —
+//  saíram do menu lateral e passaram a viver aqui dentro.
+//
+//  Nada foi reescrito: o próprio elemento de cada página é MOVIDO para
+//  dentro desta aba, com o mesmo id, os mesmos elementos e os mesmos
+//  handlers. Quem inicializa cada tela continua sendo o go(), o mesmo
+//  que o menu lateral chamava — então toda configuração, regra, filtro
+//  e carregamento continua valendo exatamente como antes.
+// ══════════════════════════════════════════════════════════════════
+
+var _DC_ITENS = [
+  { id:'vg-mercado',     ico:'🌐', rot:'Indicadores de Mercado' },
+  { id:'radar',          ico:'📡', rot:'Radar Estratégico' },
+  { id:'plano-acao',     ico:'🎯', rot:'Plano de Ação' },
+  { id:'pr-estrategico', ico:'🎯', rot:'Painel Estratégico' },
+  // no ADLV estas duas continuam no menu lateral
+  { id:'analista-auto',  ico:'🤖', rot:'Analista Automático', soFast:true },
+  { id:'consulta-q18',   ico:'🚫', rot:'Consulta Q18',        soFast:true }
+];
+var _dcAtual = null;
+
+function _dcEhFast(){ return (typeof _moduloAtivo !== 'undefined') && _moduloAtivo === 'fast'; }
+function _dcVisiveis(){
+  return _DC_ITENS.filter(function(i){ return !i.soFast || _dcEhFast(); });
+}
+function _dcItem(id){
+  var r = _DC_ITENS.filter(function(i){ return i.id === id; });
+  return r.length ? r[0] : null;
+}
+
+function _dcMontarAbas(){
+  var barra = document.getElementById('dc-tabs');
+  if (!barra) return;
+  barra.innerHTML = '';
+  _dcVisiveis().forEach(function(i){
+    var b = document.createElement('button');
+    b.className = 'stab';
+    b.id = 'dc-btn-' + i.id;
+    b.textContent = i.ico + ' ' + i.rot;
+    b.addEventListener('click', function(){ dcTab(i.id, b); });
+    barra.appendChild(b);
+  });
+}
+
+// Move os elementos das páginas para dentro da aba. Move uma vez só; o id e
+// tudo que está dentro continuam intactos.
+function _dcMover(){
+  var host = document.getElementById('dc-host');
+  if (!host) return;
+  _DC_ITENS.forEach(function(i){
+    var pg = document.getElementById('p-' + i.id);
+    if (pg && pg.parentElement !== host) host.appendChild(pg);
+  });
+}
+
+function dcTab(id, btn){
+  var item = _dcItem(id);
+  if (!item) return;
+  if (item.soFast && !_dcEhFast()) return;   // no ADLV segue no menu lateral
+  _dcAtual = id;
+  _dcMover();
+
+  // 1) inicialização: exatamente a mesma que o menu lateral dispara
+  try { go(id, null); } catch (e) { console.warn('Dados de Consulta (go):', e); }
+
+  // 2) e a tela volta para dentro do ADM, na aba Dados de Consulta
+  var adm = document.getElementById('p-adm');
+  if (adm) adm.classList.add('active');
+  document.querySelectorAll('.adm-tab').forEach(function(t){ t.style.display = 'none'; });
+  var aba = document.getElementById('adm-dados-consulta');
+  if (aba) aba.style.display = 'block';
+  document.querySelectorAll('#adm-tabs .stab').forEach(function(b){ b.classList.remove('active'); });
+  var btnAba = document.getElementById('adm-nav-dados-consulta-btn');
+  if (btnAba) btnAba.classList.add('active');
+
+  // 3) só a página escolhida fica visível dentro da aba
+  var host = document.getElementById('dc-host');
+  if (host) {
+    [].slice.call(host.children).forEach(function(p){ p.classList.remove('active'); });
+    var pg = document.getElementById('p-' + id);
+    if (pg) pg.classList.add('active');
+  }
+  _dcMontarAbas();
+  var b2 = document.getElementById('dc-btn-' + id);
+  if (b2) b2.classList.add('active');
+
+  // 4) menu lateral marcado no ADM e título da barra de cima
+  var itAdm = document.getElementById('sb-adm-it');
+  if (!itAdm) {
+    itAdm = [].slice.call(document.querySelectorAll('#sb .sb-it')).filter(function(x){
+      return /go\('adm'/.test(x.getAttribute('onclick') || '');
+    })[0];
+  }
+  if (itAdm) itAdm.classList.add('active');
+  var ttl = document.getElementById('ttl');
+  if (ttl) ttl.textContent = 'Dados de Consulta — ' + item.rot;
+  var ct = document.querySelector('.ct');
+  if (ct) ct.style.flex = '1';
+}
+
+function dcAbrir(){
+  _dcMontarAbas();
+  _dcMover();
+  var vis = _dcVisiveis();
+  if (!vis.length) return;
+  var ok = _dcAtual && vis.some(function(i){ return i.id === _dcAtual; });
+  var alvo = ok ? _dcAtual : vis[0].id;
+  dcTab(alvo, document.getElementById('dc-btn-' + alvo));
+}
 
 // ══════════════════════════════════════════════════════════════════
 //  DIRECIONAMENTO DA EQUIPE  (ADM)
