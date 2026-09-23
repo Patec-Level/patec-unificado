@@ -4354,6 +4354,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button id="gov-main-tab-prazo" onclick="govMainTab('prazo',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">📆 Urgência por Prazo da OP</button>
         <button id="gov-main-tab-cobranca" onclick="govMainTab('cobranca',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">💳 Cobrança por Status</button>
         <button id="gov-main-tab-pedidos" onclick="govMainTab('pedidos',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">📦 Pedidos</button>
+        <button id="gov-main-tab-govnova" onclick="govMainTab('govnova',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">🆕 Governança Nova</button>
       </div>
 
       <!-- ── ABA: COBRANÇA POR STATUS (exclusiva do módulo FAST) ── -->
@@ -4596,6 +4597,153 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div id="ped-tabela"></div>
       </div>
 
+
+      <!-- ── ABA: GOVERNANÇA NOVA (upload + edição preservada) ── -->
+      <div id="gov-main-content-govnova" style="display:none">
+        <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--vd)">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div>
+              <div class="cd-t" style="margin:0">🆕 Governança Nova</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:2px">A planilha traz só os dados de origem. O que a equipe preenche aqui <strong>nunca é sobreposto</strong> por um novo upload.</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span id="gnv-atualizado" style="font-size:11px;color:var(--tx2)"></span>
+              <button class="btn btn-s" style="font-size:11px" onclick="govNovaRender()">↺ Atualizar</button>
+              <button class="btn btn-g" style="font-size:11px" onclick="govNovaExportar()">📥 Exportar</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:.875rem;align-items:center">
+            <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;background:var(--azm);color:#fff;padding:8px 18px;border-radius:6px;font-size:12px;font-weight:700">
+              📤 Subir planilha
+              <input id="gnv-upload" type="file" accept=".xlsx,.xls" style="display:none" onchange="govNovaUpload(event)">
+            </label>
+            <span id="gnv-msg" style="font-size:11.5px;color:var(--tx2)"></span>
+          </div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Oportunidade, Item OP, Centro, Tipo, Prazo, SLA, Tipo de Processo, Processo</strong> — obrigatória: RC. A ordem não importa, a leitura é pelo nome.</div>
+          <div id="gnv-resumo"></div>
+        </div>
+
+        <!-- Busca RC + produção do dia (mesmo painel das outras abas) -->
+<div class="cd" style="margin-bottom:1rem;padding:.875rem 1rem">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+
+          <!-- Coluna esquerda: busca + KPIs -->
+          <div style="flex:1;min-width:220px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:.75rem">
+              <span style="font-size:12px;font-weight:600;color:var(--az)">🔍 Buscar RC</span>
+              <input type="text" id="gnv-busca-rc" placeholder="Digite o número da RC..." oninput="govBuscarRC(this.value,'gnv-busca-resultado')"
+                style="font-size:12px;padding:5px 10px;flex:1;min-width:160px;max-width:280px">
+              <button class="btn btn-s" style="font-size:11px" onclick="govLimparBusca()">✕ Limpar</button>
+            </div>
+            <!-- Mini KPIs do dia -->
+            <div id="gnv-prod-kpis-bar" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <span style="font-size:10px;color:var(--tx2);font-weight:600">Hoje:</span>
+              <span id="gnv-kpi-1a" title="1ª Análise" style="font-size:11px;font-weight:700;color:var(--azm);background:var(--azc);padding:2px 10px;border-radius:20px;cursor:default">🔍 0</span>
+              <span id="gnv-kpi-trat" title="Em Tratativa" style="font-size:11px;font-weight:700;color:var(--azm);background:var(--azc);padding:2px 10px;border-radius:20px;cursor:default">⚙️ 0</span>
+              <span id="gnv-kpi-sb" title="Status B" style="font-size:11px;font-weight:700;color:var(--vd);background:var(--vdc);padding:2px 10px;border-radius:20px;cursor:default">✅ 0</span>
+              <span id="gnv-kpi-agp" title="Ag Parecer" style="font-size:11px;font-weight:700;color:#7c3aed;background:#ede9fe;padding:2px 10px;border-radius:20px;cursor:default">📝 0</span>
+              <span id="gnv-kpi-outros" title="Outros" style="font-size:11px;font-weight:700;color:var(--am);background:var(--amc);padding:2px 10px;border-radius:20px;cursor:default">📋 0</span>
+              <span id="gnv-kpi-total" title="Total do dia / Meta" style="font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;background:var(--cin);color:var(--tx2);cursor:default">Total: 0 / 30</span>
+              <span class="rt-dot" style="margin-left:2px" title="Tempo real"></span>
+            </div>
+          </div>
+
+          <!-- Velocímetros: individual + equipe -->
+          <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;justify-content:center">
+          <div style="display:flex;flex-direction:column;align-items:center;min-width:150px">
+            <span style="font-size:10px;font-weight:800;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1px">👤 Individual</span>
+            <svg id="gnvv-velocimetro" viewBox="0 0 160 105" width="160" height="105" style="overflow:visible">
+              <!-- Segmentos -->
+              <path id="gnvv-seg-0" d="M28.0,77.7 A52,52 0 0,0 28.6,70.2 L40.5,72.0 A40,40 0 0,1 40.0,77.8 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-1" d="M28.7,69.6 A52,52 0 0,0 30.4,62.2 L41.9,65.9 A40,40 0 0,1 40.5,71.5 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-2" d="M30.6,61.6 A52,52 0 0,0 33.5,54.7 L44.2,60.1 A40,40 0 0,1 42.0,65.4 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-3" d="M33.8,54.1 A52,52 0 0,0 37.7,47.7 L47.5,54.7 A40,40 0 0,1 44.5,59.6 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-4" d="M38.1,47.2 A52,52 0 0,0 43.0,41.5 L51.5,49.9 A40,40 0 0,1 47.8,54.3 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-5" d="M43.5,41.0 A52,52 0 0,0 49.2,36.1 L56.3,45.8 A40,40 0 0,1 51.9,49.5 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-6" d="M49.7,35.7 A52,52 0 0,0 56.1,31.8 L61.6,42.5 A40,40 0 0,1 56.7,45.5 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-7" d="M56.7,31.5 A52,52 0 0,0 63.6,28.6 L67.4,40.0 A40,40 0 0,1 62.1,42.2 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-8" d="M64.2,28.4 A52,52 0 0,0 71.6,26.7 L73.5,38.5 A40,40 0 0,1 67.9,39.9 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-9" d="M72.2,26.6 A52,52 0 0,0 79.7,26.0 L79.8,38.0 A40,40 0 0,1 74.0,38.5 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-10" d="M80.3,26.0 A52,52 0 0,0 87.8,26.6 L86.0,38.5 A40,40 0 0,1 80.2,38.0 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-11" d="M88.4,26.7 A52,52 0 0,0 95.8,28.4 L92.1,39.9 A40,40 0 0,1 86.5,38.5 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-12" d="M96.4,28.6 A52,52 0 0,0 103.3,31.5 L97.9,42.2 A40,40 0 0,1 92.6,40.0 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-13" d="M103.9,31.8 A52,52 0 0,0 110.3,35.7 L103.3,45.5 A40,40 0 0,1 98.4,42.5 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-14" d="M110.8,36.1 A52,52 0 0,0 116.5,41.0 L108.1,49.5 A40,40 0 0,1 103.7,45.8 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-15" d="M117.0,41.5 A52,52 0 0,0 121.9,47.2 L112.2,54.3 A40,40 0 0,1 108.5,49.9 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-16" d="M122.3,47.7 A52,52 0 0,0 126.2,54.1 L115.5,59.6 A40,40 0 0,1 112.5,54.7 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-17" d="M126.5,54.7 A52,52 0 0,0 129.4,61.6 L118.0,65.4 A40,40 0 0,1 115.8,60.1 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-18" d="M129.6,62.2 A52,52 0 0,0 131.3,69.6 L119.5,71.5 A40,40 0 0,1 118.1,65.9 Z" fill="#E0E5EE"/>
+              <path id="gnvv-seg-19" d="M131.4,70.2 A52,52 0 0,0 132.0,77.7 L120.0,77.8 A40,40 0 0,1 119.5,72.0 Z" fill="#E0E5EE"/>
+              <!-- Agulha -->
+              <line id="gnvv-vel-agulha" x1="80" y1="78" x2="80" y2="32"
+                stroke="#1A2D4F" stroke-width="2.5" stroke-linecap="round"
+                style="transform-origin:80px 78px;transform:rotate(-90deg);transition:transform .5s cubic-bezier(.4,0,.2,1)"/>
+              <!-- Pivot -->
+              <circle cx="80" cy="78" r="7" fill="#1A2D4F"/>
+              <circle cx="80" cy="78" r="3.5" fill="#fff"/>
+              <!-- Badge -->
+              <rect id="gnvv-vel-badge" x="53" y="86" width="54" height="17" rx="5" fill="#1A2D4F"/>
+              <text id="gnvv-vel-pct" x="80" y="98" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">0%</text>
+            </svg>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;min-width:150px">
+            <span style="font-size:10px;font-weight:800;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1px">👥 Equipe</span>
+            <svg id="gnveq-velocimetro" viewBox="0 0 160 105" width="160" height="105" style="overflow:visible">
+              <!-- Segmentos -->
+              <path id="gnveq-seg-0" d="M28.0,77.7 A52,52 0 0,0 28.6,70.2 L40.5,72.0 A40,40 0 0,1 40.0,77.8 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-1" d="M28.7,69.6 A52,52 0 0,0 30.4,62.2 L41.9,65.9 A40,40 0 0,1 40.5,71.5 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-2" d="M30.6,61.6 A52,52 0 0,0 33.5,54.7 L44.2,60.1 A40,40 0 0,1 42.0,65.4 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-3" d="M33.8,54.1 A52,52 0 0,0 37.7,47.7 L47.5,54.7 A40,40 0 0,1 44.5,59.6 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-4" d="M38.1,47.2 A52,52 0 0,0 43.0,41.5 L51.5,49.9 A40,40 0 0,1 47.8,54.3 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-5" d="M43.5,41.0 A52,52 0 0,0 49.2,36.1 L56.3,45.8 A40,40 0 0,1 51.9,49.5 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-6" d="M49.7,35.7 A52,52 0 0,0 56.1,31.8 L61.6,42.5 A40,40 0 0,1 56.7,45.5 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-7" d="M56.7,31.5 A52,52 0 0,0 63.6,28.6 L67.4,40.0 A40,40 0 0,1 62.1,42.2 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-8" d="M64.2,28.4 A52,52 0 0,0 71.6,26.7 L73.5,38.5 A40,40 0 0,1 67.9,39.9 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-9" d="M72.2,26.6 A52,52 0 0,0 79.7,26.0 L79.8,38.0 A40,40 0 0,1 74.0,38.5 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-10" d="M80.3,26.0 A52,52 0 0,0 87.8,26.6 L86.0,38.5 A40,40 0 0,1 80.2,38.0 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-11" d="M88.4,26.7 A52,52 0 0,0 95.8,28.4 L92.1,39.9 A40,40 0 0,1 86.5,38.5 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-12" d="M96.4,28.6 A52,52 0 0,0 103.3,31.5 L97.9,42.2 A40,40 0 0,1 92.6,40.0 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-13" d="M103.9,31.8 A52,52 0 0,0 110.3,35.7 L103.3,45.5 A40,40 0 0,1 98.4,42.5 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-14" d="M110.8,36.1 A52,52 0 0,0 116.5,41.0 L108.1,49.5 A40,40 0 0,1 103.7,45.8 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-15" d="M117.0,41.5 A52,52 0 0,0 121.9,47.2 L112.2,54.3 A40,40 0 0,1 108.5,49.9 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-16" d="M122.3,47.7 A52,52 0 0,0 126.2,54.1 L115.5,59.6 A40,40 0 0,1 112.5,54.7 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-17" d="M126.5,54.7 A52,52 0 0,0 129.4,61.6 L118.0,65.4 A40,40 0 0,1 115.8,60.1 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-18" d="M129.6,62.2 A52,52 0 0,0 131.3,69.6 L119.5,71.5 A40,40 0 0,1 118.1,65.9 Z" fill="#E0E5EE"/>
+              <path id="gnveq-seg-19" d="M131.4,70.2 A52,52 0 0,0 132.0,77.7 L120.0,77.8 A40,40 0 0,1 119.5,72.0 Z" fill="#E0E5EE"/>
+              <!-- Agulha -->
+              <line id="gnveq-vel-agulha" x1="80" y1="78" x2="80" y2="32"
+                stroke="#1A2D4F" stroke-width="2.5" stroke-linecap="round"
+                style="transform-origin:80px 78px;transform:rotate(-90deg);transition:transform .5s cubic-bezier(.4,0,.2,1)"/>
+              <!-- Pivot -->
+              <circle cx="80" cy="78" r="7" fill="#1A2D4F"/>
+              <circle cx="80" cy="78" r="3.5" fill="#fff"/>
+              <!-- Badge (com tooltip do absoluto ao passar o mouse) -->
+              <g><title id="gnveq-vel-tip"></title>
+              <rect id="gnveq-vel-badge" x="53" y="86" width="54" height="17" rx="5" fill="#1A2D4F"/>
+              <text id="gnveq-vel-pct" x="80" y="98" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">0%</text>
+              </g>
+            </svg>
+          </div>
+          </div>
+
+        </div>
+        <div id="gnv-busca-resultado" style="display:none;margin-top:.5rem"></div>
+      </div>
+
+        <!-- Cards no mesmo layout da Cobrança por Status: total + Tipo de Processo + Fila -->
+        <div class="cd" style="margin-bottom:1rem;padding:.875rem 1rem">
+          <div id="gnv-cards"></div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:.75rem;padding-top:.75rem;border-top:1px dashed var(--brd)">
+            <input type="text" id="gnv-filtro-texto" placeholder="Filtrar a lista: RC, oportunidade, analista, processo..." autocomplete="off"
+              oninput="gnvBuscar(this.value)"
+              style="font-size:12px;padding:5px 10px;flex:1;min-width:200px;max-width:340px">
+            <button class="btn btn-s" style="font-size:11px" onclick="gnvLimparFiltros()">✕ Limpar filtros</button>
+            <span style="margin-left:auto;font-size:10px;color:var(--tx2)">A lista abaixo é só de consulta — a edição é feita pelo <strong>🔍 Buscar RC</strong> acima.</span>
+          </div>
+        </div>
+
+        <div id="gnv-tabela"></div>
+      </div>
 
       <!-- ── ABA: URGÊNCIA POR SLA ── -->
       <div id="gov-main-content-sla" style="display:none">
@@ -8964,6 +9112,7 @@ function _atualizarColabsPorModulo(){
   // Aba "Cobrança por Status" é exclusiva do FAST — no ADLV nem aparece.
   try{ _cobAplicarModulo(); }catch(e){}
   try{ _pedAplicarModulo(); }catch(e){}
+  try{ _gnvAplicarModulo(); }catch(e){}
   try{ _apresFastAplicarModulo(); }catch(e){}
   try{ _apres2FastAplicarModulo(); }catch(e){}
   // CORREÇÃO BUG (20/06): `registros` começava com HISTORICO_INICIAL (dados
@@ -17571,6 +17720,9 @@ function pcBuscarRCDetalhe(rc){
     </table>
     </div>
   `;
+
+  // Governança Nova entra como bloco próprio, com colunas e ações dela
+  try{ _gnvBuscaAnexar(rcBusca, el); }catch(e){ console.warn('gnv busca:', e); }
 }
 
 function pcLimparFiltros(){
@@ -18144,8 +18296,12 @@ function govMainTab(aba, btn){
   if(aba==='pedidos' && typeof _pedEhFast==='function' && !_pedEhFast()){
     aba = 'gov'; btn = document.getElementById('gov-main-tab-gov');
   }
+  // "Governança Nova" também é exclusiva do FAST
+  if(aba==='govnova' && typeof _gnvEhFast==='function' && !_gnvEhFast()){
+    aba = 'gov'; btn = document.getElementById('gov-main-tab-gov');
+  }
   // Alternar entre abas principais: Governança e Planilha Crítica
-  ['gov','pc','sla','prazo','cobranca','pedidos'].forEach(t => {
+  ['gov','pc','sla','prazo','cobranca','pedidos','govnova'].forEach(t => {
     const content = document.getElementById('gov-main-content-'+t);
     const tabBtn  = document.getElementById('gov-main-tab-'+t);
     if(content) content.style.display = t===aba ? '' : 'none';
@@ -18159,6 +18315,7 @@ function govMainTab(aba, btn){
   if(aba==='prazo') { _govUrgGarantirDados().then(govUrgPrazoRender); _govUrgPainelSync(); }
   if(aba==='cobranca') { govCobrancaRender(); _govUrgPainelSync(); }
   if(aba==='pedidos')  { govPedidosRender(); _govUrgPainelSync(); }
+  if(aba==='govnova')  { govNovaRender(); _govUrgPainelSync(); }
   if(typeof _fcAgendarVarredura==='function') _fcAgendarVarredura();
 }
 
@@ -19552,7 +19709,7 @@ function govBuscarRC(rc, alvo){
   const el = document.getElementById(alvo || 'gov-busca-resultado');
   if(!el) return;
   // Evita IDs duplicados: só um container de resultado ativo por vez entre as abas
-  ['gov-busca-resultado','sla-busca-resultado','prazo-busca-resultado','cob-busca-resultado'].forEach(function(_id){ if(_id!==el.id){ var _o=document.getElementById(_id); if(_o){ _o.innerHTML=''; _o.style.display='none'; } } });
+  ['gov-busca-resultado','sla-busca-resultado','prazo-busca-resultado','cob-busca-resultado','gnv-busca-resultado'].forEach(function(_id){ if(_id!==el.id){ var _o=document.getElementById(_id); if(_o){ _o.innerHTML=''; _o.style.display='none'; } } });
   const rcBusca = rc.trim();
   if(!rcBusca){ el.style.display='none'; el.innerHTML=''; return; }
 
@@ -19623,7 +19780,8 @@ function govBuscarRC(rc, alvo){
 
   if(!resultados.length){
     el.style.display='block';
-    el.innerHTML='<span style="font-size:12px;color:var(--tx2)">Nenhum resultado encontrado para RC <strong>'+rcBusca+'</strong></span>';
+    el.innerHTML='<span style="font-size:12px;color:var(--tx2)" data-gnv-vazio="1">Nenhum resultado encontrado para RC <strong>'+rcBusca+'</strong></span>';
+    try{ _gnvBuscaAnexar(rcBusca, el); }catch(e){ console.warn('gnv busca:', e); }
     return;
   }
 
@@ -20796,8 +20954,8 @@ async function fastResetExecutar(){
 }
 
 function govLimparBusca(){
-  ['gov-busca-rc','sla-busca-rc','prazo-busca-rc','cob-busca-rc'].forEach(function(id){ const el=document.getElementById(id); if(el) el.value=''; });
-  ['gov-busca-resultado','sla-busca-resultado','prazo-busca-resultado','cob-busca-resultado'].forEach(function(id){ const res=document.getElementById(id); if(res){ res.style.display='none'; res.innerHTML=''; } });
+  ['gov-busca-rc','sla-busca-rc','prazo-busca-rc','cob-busca-rc','gnv-busca-rc'].forEach(function(id){ const el=document.getElementById(id); if(el) el.value=''; });
+  ['gov-busca-resultado','sla-busca-resultado','prazo-busca-resultado','cob-busca-resultado','gnv-busca-resultado'].forEach(function(id){ const res=document.getElementById(id); if(res){ res.style.display='none'; res.innerHTML=''; } });
 }
 
 
@@ -25289,6 +25447,46 @@ function q18Consultar(valor){
 </div>
 <!-- ══ fim MODAL AÇÃO RC ══ -->
 
+<!-- ══ MODAL AÇÃO — GOVERNANÇA NOVA ══ -->
+<div id="gnv-acao-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;width:460px;max-width:95vw;max-height:92vh;overflow:auto;padding:1.5rem;box-shadow:0 8px 32px rgba(13,35,71,.18)">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:.25rem">
+      <div>
+        <div style="font-weight:700;font-size:15px;color:var(--az)" id="gnv-acao-titulo">Confirmar ação</div>
+        <div style="font-size:11px;color:var(--tx2);margin-top:2px">Selecione a fila de tratamento</div>
+      </div>
+      <button onclick="gnvAcaoFechar()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--tx2);line-height:1">×</button>
+    </div>
+
+    <div id="gnv-acao-rc" style="font-size:12px;color:var(--az);background:var(--azc);border:1px solid var(--azm);border-radius:8px;padding:.5rem .75rem;margin:.75rem 0">—</div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:.5rem">↓ Fila — para onde foi?</div>
+    <div id="gnv-acao-filas" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem"></div>
+
+    <div style="margin-bottom:.75rem">
+      <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">📅 Data de envio <span style="color:var(--vm)">*</span></div>
+      <input type="date" id="gnv-acao-envio" style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px">
+    </div>
+
+    <div style="margin-bottom:.75rem">
+      <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Observação (opcional)</div>
+      <input type="text" id="gnv-acao-obs" placeholder="Ex: aguardando retorno do fornecedor..."
+        style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px">
+    </div>
+
+    <div id="gnv-acao-aviso" style="font-size:10.5px;color:var(--tx2);background:var(--cin);border-radius:7px;padding:7px 10px;margin-bottom:.75rem">
+      Ao confirmar: a cobrança zera e a contagem de dias parados recomeça nesta fila.
+    </div>
+    <div id="gnv-acao-erro" style="display:none;font-size:11px;color:var(--vm);background:var(--vmc);padding:7px 12px;border-radius:7px;margin-bottom:.75rem"></div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="gnvAcaoFechar()" style="background:var(--cin);color:var(--tx);border:1.5px solid var(--brd);padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px">Cancelar</button>
+      <button id="gnv-acao-confirmar" onclick="gnvAcaoConfirmar()" style="background:var(--vd);color:#fff;border:none;padding:8px 24px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">✓ Confirmar</button>
+    </div>
+  </div>
+</div>
+
+
 <!-- ══ MODAL DESFECHO — raiz do documento, visível em qualquer página ══ -->
 <div id="desfecho-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:12px;width:440px;max-width:95vw;padding:1.5rem;box-shadow:0 8px 32px rgba(13,35,71,.18)">
@@ -29351,6 +29549,7 @@ function govAtualizarVelocimetroEquipe(total, metaVal){
   _velAtualizarPrefixo('slaeq', total, metaVal);
   _velAtualizarPrefixo('prazoeq', total, metaVal);
   _velAtualizarPrefixo('cobeq', total, metaVal);
+  _velAtualizarPrefixo('gnveq', total, metaVal);
 }
 
 function prodRenderizarPaineis(colab){
@@ -29365,7 +29564,7 @@ function prodRenderizarPaineis(colab){
   const totalLabel = semMeta ? `Líder: ${cnt.meta} itens` : `Total: ${cnt.meta} / ${metaVal}`;
 
   // Atualizar badges compactos em Gov, PC, SLA, Prazo e Cobrança por Status
-  ['gov','pc','sla','prazo','cob'].forEach(origem => {
+  ['gov','pc','sla','prazo','cob','gnv'].forEach(origem => {
     const s = id => document.getElementById(`${origem}-kpi-${id}`);
     if(s('1a'))     s('1a').textContent     = `🔍 ${cnt.primeira_analise}`;
     if(s('trat'))   s('trat').textContent   = `⚙️ ${cnt.em_tratativa}`;
@@ -29387,6 +29586,7 @@ function prodRenderizarPaineis(colab){
   _velAtualizarPrefixo('slav', _velTotal, _velMeta);
   _velAtualizarPrefixo('prazov', _velTotal, _velMeta);
   _velAtualizarPrefixo('cobv', _velTotal, _velMeta);
+  _velAtualizarPrefixo('gnvv', _velTotal, _velMeta);
 
   // Renderizar gráfico (gov)
   prodRenderGrafico('gov-prod-chart', '_prodChartGov', colab);
@@ -33466,6 +33666,833 @@ function _pedAplicarModulo(){
     _pedStatusLista = [];
     _pedFilasLista = [];
     _pedResumo = null;
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════
+//  GOVERNANÇA NOVA — base por upload + edição do dashboard preservada
+//
+//  O ponto central: são DUAS coleções separadas, e é isso que garante,
+//  por construção, que o upload nunca sobrepõe o que a equipe preencheu.
+//    gov_nova_base → substituída inteira a cada upload (dados da planilha)
+//    gov_nova_edit → só a tela escreve (solicitação, fila, envio, cobrança)
+//  A tabela é o encontro das duas, casadas por RC|ItemRC|OP|ItemOP.
+//
+//  Um item que sai da planilha some da lista, mas a edição dele continua
+//  guardada em gov_nova_edit — se voltar num upload futuro, volta preenchido.
+// ═════════════════════════════════════════════════════════════════
+
+var _GNV_COL_BASE   = 'gov_nova_base';
+var _GNV_COL_EDIT   = 'gov_nova_edit';
+var _GNV_DOC_RESUMO = '__resumo__';
+
+// Prazo de retorno por fila, em DIAS ÚTEIS — pula sábado, domingo e os
+// feriados cadastrados em ADM › Feriados (mesma lista do resto do sistema).
+// Para mudar o prazo de uma fila, ou incluir fila nova, é só mexer aqui.
+// null = fila sem prazo definido (não calcula data de retorno).
+var GOV_NOVA_PRAZOS = {
+  'AG. TRATAMENTO':   null,
+  'FORNECEDOR':       2,
+  'MDG':              4,
+  'MDG EQUIPE SCOMP': 10,
+  'REQUISITANTE':     5,
+  'PARECERISTA':      5
+};
+
+var _gnvBase   = [];    // linhas da planilha
+var _gnvEdit   = {};    // chave -> { dataSolic, fila, envio, cobranca }
+var _gnvResumo = null;
+var _gnvBusca  = '';
+var _gnvFiltroFila = null;
+var _gnvFiltroTipoProc = null;
+
+function _gnvEhFast(){
+  return (typeof _moduloAtivo !== 'undefined') && _moduloAtivo === 'fast';
+}
+
+function _gnvMsg(txt, cor){
+  var el = document.getElementById('gnv-msg');
+  if (!el) return;
+  el.textContent = txt || '';
+  el.style.color = cor || 'var(--tx2)';
+}
+
+function _gnvHoje(){
+  if (typeof _fdiaHojeLocal === 'function') return _fdiaHojeLocal();
+  var n = new Date();
+  return n.getFullYear() + '-' + String(n.getMonth()+1).padStart(2,'0') + '-' + String(n.getDate()).padStart(2,'0');
+}
+
+// Chave = RC|ItemRC|OP|ItemOP. Sanitizada para servir como id de documento
+// no Firestore e como literal seguro dentro do onchange da célula.
+function _gnvChave(rc, itemRc, op, itemOp){
+  return [rc, itemRc, op, itemOp].map(function(v){
+    return String(v == null ? '' : v).trim().replace(/\.0$/, '').replace(/[^0-9A-Za-zÀ-ÿ._-]/g, '');
+  }).join('|');
+}
+
+// ── Colunas calculadas ───────────────────────────────────────────
+function _gnvPrazoRetorno(fila, envio){
+  if (!fila || !envio) return '';
+  var dias = GOV_NOVA_PRAZOS[String(fila).toUpperCase().trim()];
+  if (!dias) return '';
+  if (typeof govAddDiasUteis !== 'function') return '';
+  // try/catch pelo mesmo motivo do resto do arquivo: govAddDiasUteis lê
+  // GOV_FERIADOS, que é declarado mais abaixo — se algo chamar cedo demais,
+  // a célula fica vazia em vez de derrubar o desenho da tabela inteira.
+  try { return govAddDiasUteis(envio, dias) || ''; }
+  catch (e) { return ''; }
+}
+
+function _gnvStatus(prazoRetorno){
+  if (!prazoRetorno) return '';
+  return prazoRetorno < _gnvHoje() ? 'VENCIDA' : 'DENTRO DO PRAZO';
+}
+
+// Dias parados = hoje − data da solicitação, em dias corridos.
+// Ao trocar a fila a data da solicitação vira hoje, então o contador
+// reinicia e passa a significar "dias parado nesta fila".
+function _gnvDiasParado(dataSolic){
+  if (!dataSolic) return null;
+  var a = new Date(String(dataSolic) + 'T12:00:00');
+  if (isNaN(a.getTime())) return null;
+  var b = new Date(_gnvHoje() + 'T12:00:00');
+  return Math.max(0, Math.round((b - a) / 86400000));
+}
+
+function _gnvLinhaCalc(r){
+  var e = _gnvEdit[r.id] || {};
+  var prazoRet = _gnvPrazoRetorno(e.fila || '', e.envio || '');
+  return {
+    dataSolic: e.dataSolic || '',
+    fila:      e.fila || '',
+    envio:     e.envio || '',
+    cobranca:  (e.cobranca == null || e.cobranca === '') ? 0 : (parseInt(e.cobranca, 10) || 0),
+    prazoRet:  prazoRet,
+    status:    _gnvStatus(prazoRet),
+    dias:      _gnvDiasParado(e.dataSolic || '')
+  };
+}
+
+// ── Gravação das colunas editáveis ───────────────────────────────
+async function gnvSalvar(chave, campo, valor){
+  if (!chave) return;
+  if (!_gnvEdit[chave]) _gnvEdit[chave] = {};
+
+  if (campo === 'cobranca') {
+    valor = Math.max(0, parseInt(valor, 10) || 0);
+  }
+
+  var filaMudou = (campo === 'fila' && String(_gnvEdit[chave].fila || '') !== String(valor || ''));
+  _gnvEdit[chave][campo] = valor;
+
+  // Regra do processo: trocou a fila, a cobrança zera e a contagem de dias
+  // recomeça (data da solicitação passa a ser hoje).
+  if (filaMudou) {
+    _gnvEdit[chave].cobranca  = 0;
+    _gnvEdit[chave].dataSolic = _gnvHoje();
+  }
+  _gnvEdit[chave].atualizadoEm = new Date().toISOString();
+
+  _gnvDesenhar();
+  _gnvRepintarBusca();
+
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!db) { _gnvMsg('⚠ Sem Firebase — a alteração ficou só nesta tela.', 'var(--am)'); return; }
+  try {
+    await db.collection(_GNV_COL_EDIT).doc(chave).set(_gnvEdit[chave], { merge: true });
+    _gnvMsg('✓ Salvo.', 'var(--vd)');
+    setTimeout(function(){ _gnvMsg(''); }, 1500);
+  } catch (err) {
+    _gnvMsg('❌ Erro ao salvar: ' + (err.message || err), 'var(--vm)');
+  }
+}
+
+// ── Carga ────────────────────────────────────────────────────────
+async function govNovaRender(){
+  if (!_gnvEhFast()) return;
+  var wrap = document.getElementById('gnv-tabela');
+  if (!wrap) return;
+
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!db) {
+    wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⚠ Firebase indisponível.</div>';
+    return;
+  }
+  wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⏳ Carregando...</div>';
+
+  try {
+    var res = await Promise.all([
+      db.collection(_GNV_COL_BASE).get(),
+      db.collection(_GNV_COL_EDIT).get()
+    ]);
+    _gnvBase = []; _gnvResumo = null;
+    res[0].forEach(function(d){
+      if (d.id === _GNV_DOC_RESUMO) { _gnvResumo = d.data(); return; }
+      var o = d.data(); o.id = d.id; _gnvBase.push(o);
+    });
+    _gnvEdit = {};
+    res[1].forEach(function(d){ _gnvEdit[d.id] = d.data(); });
+
+    _gnvBase.sort(function(a, b){
+      return String(a.rc || '').localeCompare(String(b.rc || '')) ||
+             String(a.itemRc || '').localeCompare(String(b.itemRc || ''));
+    });
+
+    var av = document.getElementById('gnv-atualizado');
+    if (av && _gnvResumo && _gnvResumo.atualizadoEm) {
+      av.textContent = 'Base de ' + new Date(_gnvResumo.atualizadoEm).toLocaleString('pt-BR');
+    }
+    _gnvDesenhar();
+  } catch (err) {
+    wrap.innerHTML = '<div style="padding:2rem;color:var(--vm);font-size:13px">❌ ' + _cobEsc(err.message) + '</div>';
+  }
+}
+
+// ── Filtros ──────────────────────────────────────────────────────
+function gnvBuscar(v){ _gnvBusca = String(v || '').trim().toLowerCase(); _gnvDesenhar(); }
+
+function gnvFiltrarFila(f){
+  _gnvFiltroFila = (_gnvFiltroFila === f) ? null : f;
+  _gnvDesenhar();
+}
+function gnvFiltrarTipoProc(t){
+  _gnvFiltroTipoProc = (_gnvFiltroTipoProc === t) ? null : t;
+  _gnvDesenhar();
+}
+function gnvLimparFiltros(){
+  _gnvBusca = ''; _gnvFiltroFila = null; _gnvFiltroTipoProc = null;
+  var b = document.getElementById('gnv-filtro-texto'); if (b) b.value = '';
+  _gnvDesenhar();
+}
+
+function _gnvFiltrar(){
+  var lista = _gnvBase;
+  if (_gnvBusca) {
+    lista = lista.filter(function(r){
+      return [r.rc, r.itemRc, r.oportunidade, r.itemOp, r.analista, r.processo, r.tipoProcesso, r.centro]
+        .join(' ').toLowerCase().indexOf(_gnvBusca) !== -1;
+    });
+  }
+  if (_gnvFiltroTipoProc) {
+    lista = lista.filter(function(r){ return (r.tipoProcesso || 'Sem tipo') === _gnvFiltroTipoProc; });
+  }
+  if (_gnvFiltroFila) {
+    lista = lista.filter(function(r){
+      var f = _gnvLinhaCalc(r).fila;
+      return (f || 'Sem fila') === _gnvFiltroFila;
+    });
+  }
+  return lista;
+}
+
+// ── Desenho ──────────────────────────────────────────────────────
+// Redesenha só o bloco da Governança Nova dentro do painel de busca
+function _gnvRepintarBusca(){
+  var bloco = document.getElementById('gnv-busca-bloco');
+  if (!bloco) return;
+  var campo = document.getElementById('gnv-busca-rc');
+  var termo = (campo && campo.value || '').trim();
+  if (!termo) return;
+  var achados = _gnvBase.filter(function(r){ return String(r.rc || '').indexOf(termo) !== -1; });
+  if (achados.length) bloco.innerHTML = _gnvBuscaHtml(achados, termo);
+}
+
+function _gnvDesenhar(){
+  var wrap   = document.getElementById('gnv-tabela');
+  var cards  = document.getElementById('gnv-cards');
+  var resumo = document.getElementById('gnv-resumo');
+  if (!wrap) return;
+
+  if (resumo) {
+    resumo.innerHTML = (_gnvResumo && _gnvResumo.qtdDuplicadas)
+      ? '<div style="margin-top:8px;font-size:10.5px;color:#b45309">⚠ ' + _gnvResumo.qtdDuplicadas
+        + ' linha(s) repetida(s) na planilha foram ignoradas (mesma RC + item + oportunidade).</div>'
+      : '';
+  }
+
+  if (!_gnvBase.length) {
+    if (cards) cards.innerHTML = '';
+    wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">'
+      + '📄 Nenhum item carregado ainda.<br><span style="font-size:11px">Use <strong>📤 Subir planilha</strong> acima.</span></div>';
+    return;
+  }
+
+  // ── Contagens: por fila (direita) e por tipo de processo (esquerda) ──
+  var porFila = {}, porTipoProc = {}, nVenc = 0;
+  _gnvBase.forEach(function(r){
+    var c = _gnvLinhaCalc(r);
+    var f = c.fila || 'Sem fila';
+    porFila[f] = (porFila[f] || 0) + 1;
+    var tp = r.tipoProcesso || 'Sem tipo';
+    porTipoProc[tp] = (porTipoProc[tp] || 0) + 1;
+    if (c.status === 'VENCIDA') nVenc++;
+  });
+
+  // A ordem das filas segue a tabela de prazos; o que sobrar vem depois, por volume
+  var filasOrdem = Object.keys(GOV_NOVA_PRAZOS).filter(function(f){ return porFila[f]; });
+  Object.keys(porFila).forEach(function(f){ if (filasOrdem.indexOf(f) === -1) filasOrdem.push(f); });
+  filasOrdem.sort(function(a, b){ return porFila[b] - porFila[a]; });
+
+  var tiposOrdem = Object.keys(porTipoProc).sort(function(a, b){ return porTipoProc[b] - porTipoProc[a]; });
+
+  if (cards) {
+    var _q = function(s){ return String(s).replace(/'/g, "\\'"); };
+
+    // Card grande do total, com o alerta de vencidas embutido
+    var semFiltro = (!_gnvFiltroFila && !_gnvFiltroTipoProc);
+    var totalCard =
+      '<div onclick="gnvLimparFiltros()" title="Mostrar todos os itens"'
+      + ' style="cursor:pointer;background:' + (semFiltro ? '#1A2D4F' : 'var(--azc)')
+      + ';color:' + (semFiltro ? '#fff' : 'var(--azm)') + ';border:1.5px solid #1A2D4F;border-radius:8px;'
+      + 'padding:10px 20px;display:flex;align-items:center;gap:12px;line-height:1.1;min-width:200px">'
+      + '<span style="font-size:26px;font-weight:800">' + _gnvBase.length + '</span>'
+      + '<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Total<br>de itens</span>'
+      + '</div>'
+      + (nVenc
+          ? '<div style="margin-top:6px;font-size:10px;font-weight:700;color:var(--vm);background:var(--vmc);'
+            + 'border-radius:5px;padding:3px 10px;text-align:center">⚠ ' + nVenc + ' vencida(s)</div>'
+          : '');
+
+    // Grupo menor: Tipo de Processo
+    var tpCards = '';
+    var tpCores = ['var(--vd)', '#6D28D9', 'var(--azm)', 'var(--am)', '#0891B2', '#B45309'];
+    tiposOrdem.forEach(function(tp, i){
+      var on  = (_gnvFiltroTipoProc === tp);
+      var cor = tpCores[i % tpCores.length];
+      tpCards += '<div onclick="gnvFiltrarTipoProc(\'' + _q(tp) + '\')" title="Filtrar por ' + _cobEsc(tp) + '"'
+        + ' style="cursor:pointer;background:' + (on ? cor : 'var(--bg)') + ';color:' + (on ? '#fff' : cor)
+        + ';border:1.5px solid ' + cor + ';border-radius:8px;padding:6px 14px;text-align:center;'
+        + 'line-height:1.15;min-width:76px">'
+        + '<div style="font-size:17px;font-weight:800">' + porTipoProc[tp] + '</div>'
+        + '<div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(tp) + '</div>'
+        + '</div>';
+    });
+
+    // Cards grandes por Fila
+    var filaCards = '';
+    filasOrdem.forEach(function(f){
+      var on = (_gnvFiltroFila === f);
+      filaCards += '<div onclick="gnvFiltrarFila(\'' + _q(f) + '\')" title="Filtrar pela fila ' + _cobEsc(f) + '"'
+        + ' style="cursor:pointer;background:' + (on ? 'var(--azm)' : 'var(--bg)')
+        + ';color:' + (on ? '#fff' : 'var(--tx)')
+        + ';border:1.5px solid ' + (on ? 'var(--azm)' : 'var(--brd)')
+        + ';border-radius:8px;padding:10px 18px;text-align:center;line-height:1.2;'
+        + 'flex:1 1 0;min-width:132px">'
+        + '<div style="font-size:21px;font-weight:800">' + porFila[f] + '</div>'
+        + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(f) + '</div>'
+        + '</div>';
+    });
+
+    cards.innerHTML =
+      '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">'
+      + '<div style="display:flex;flex-direction:column;gap:8px;min-width:210px">'
+      +   totalCard
+      +   (tpCards
+            ? '<div style="font-size:9px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px;margin-top:2px">Tipo de Processo</div>'
+              + '<div style="display:flex;gap:8px;flex-wrap:wrap">' + tpCards + '</div>'
+            : '')
+      + '</div>'
+      + '<div style="flex:1 1 auto;border-left:1px dashed var(--brd);padding-left:18px">'
+      +   '<div style="display:flex;gap:12px;flex-wrap:wrap">' + filaCards + '</div>'
+      + '</div>'
+      + '</div>';
+  }
+
+  // ── Tabela (somente consulta — a edição é pelo painel Buscar RC) ──
+  var lista = _gnvFiltrar();
+  var AUTO_BG = 'background:var(--cin)';
+
+  var t = '<table><thead><tr>'
+    + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Oportunidade</th><th>Item OP</th>'
+    + '<th>Centro</th><th>Tipo</th>'
+    + '<th>Data da solicitação</th><th>Fila</th><th>Envio</th>'
+    + '<th style="' + AUTO_BG + '">Prazo de retorno</th>'
+    + '<th style="' + AUTO_BG + '">Status</th>'
+    + '<th>Cobrança</th>'
+    + '<th style="' + AUTO_BG + '">Dias parados</th>'
+    + '<th>Prazo</th><th>SLA</th><th>Tipo de Processo</th><th>Processo</th><th></th>'
+    + '</tr></thead><tbody>';
+
+  var fmt = function(d){ return d ? String(d).split('-').reverse().join('/') : '—'; };
+
+  for (var i = 0; i < lista.length; i++) {
+    var r = lista[i];
+    var c = _gnvLinhaCalc(r);
+
+    var corSt = 'var(--tx2)', bgSt = 'transparent';
+    if (c.status === 'VENCIDA')              { corSt = 'var(--vm)'; bgSt = 'var(--vmc)'; }
+    else if (c.status === 'DENTRO DO PRAZO') { corSt = 'var(--vd)'; bgSt = 'var(--vdc)'; }
+
+    var corDias = 'var(--tx2)';
+    if (c.dias != null) corDias = c.dias >= 10 ? 'var(--vm)' : (c.dias >= 5 ? 'var(--am)' : 'var(--tx)');
+
+    t += '<tr>'
+      + '<td>' + _cobEsc(r.analista || '—') + '</td>'
+      + '<td style="font-weight:700">' + _cobEsc(r.rc || '—') + '</td>'
+      + '<td>' + _cobEsc(r.itemRc || '—') + '</td>'
+      + '<td>' + _cobEsc(r.oportunidade || '—') + '</td>'
+      + '<td>' + _cobEsc(r.itemOp || '—') + '</td>'
+      + '<td>' + _cobEsc(r.centro || '—') + '</td>'
+      + '<td>' + _cobEsc(r.tipo || '—') + '</td>'
+      + '<td style="text-align:center">' + fmt(c.dataSolic) + '</td>'
+      + '<td>' + (c.fila ? _cobEsc(c.fila) : '<span style="color:var(--tx2)">—</span>') + '</td>'
+      + '<td style="text-align:center">' + fmt(c.envio) + '</td>'
+      + '<td style="' + AUTO_BG + ';text-align:center;font-weight:600">' + fmt(c.prazoRet) + '</td>'
+      + '<td style="' + AUTO_BG + ';text-align:center">'
+        + (c.status
+            ? '<span style="background:' + bgSt + ';color:' + corSt + ';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">' + c.status + '</span>'
+            : '<span style="color:var(--tx2)">—</span>')
+        + '</td>'
+      + '<td style="text-align:center;font-weight:700">' + c.cobranca + '</td>'
+      + '<td style="' + AUTO_BG + ';text-align:center;font-weight:700;color:' + corDias + '">'
+        + (c.dias == null ? '—' : c.dias) + '</td>'
+      + '<td>' + _cobEsc(r.prazo || '—') + '</td>'
+      + '<td>' + _cobEsc(r.sla || '—') + '</td>'
+      + '<td>' + _cobEsc(r.tipoProcesso || '—') + '</td>'
+      + '<td>' + _cobEsc(r.processo || '—') + '</td>'
+      + '<td><button title="Abrir esta RC no Buscar RC para tratar"'
+        + ' onclick="gnvAbrirNaBusca(\'' + String(r.rc || '').replace(/'/g, "\\'") + '\')"'
+        + ' style="background:var(--azc);border:1px solid var(--azm);border-radius:6px;padding:2px 9px;'
+        + 'cursor:pointer;font-size:10px;color:var(--azm);font-weight:700;white-space:nowrap">tratar ↑</button></td>'
+      + '</tr>';
+  }
+  t += '</tbody></table>';
+
+  var legenda = 'Mostrando ' + lista.length + ' de ' + _gnvBase.length + ' itens';
+  if (_gnvFiltroFila) legenda += ' — fila ' + _cobEsc(_gnvFiltroFila);
+  if (_gnvFiltroTipoProc) legenda += ' — ' + _cobEsc(_gnvFiltroTipoProc);
+  if (_gnvBusca) legenda += ' — "' + _cobEsc(_gnvBusca) + '"';
+  legenda += '. Prazo de retorno = Envio + dias úteis da fila (pula fim de semana e feriados).';
+
+  wrap.innerHTML = '<div class="tw" style="max-height:600px">' + t + '</div>'
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">' + legenda + '</div>';
+}
+
+// Joga a RC no campo Buscar RC do topo e dispara a busca
+function gnvAbrirNaBusca(rc){
+  var el = document.getElementById('gnv-busca-rc');
+  if (el) { el.value = rc; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  if (typeof govBuscarRC === 'function') govBuscarRC(rc, 'gnv-busca-resultado');
+}
+
+// ── Upload — substitui SÓ a base; a coleção de edição não é tocada ──
+function govNovaUpload(ev){
+  var arq = ev && ev.target && ev.target.files && ev.target.files[0];
+  if (!arq) return;
+
+  if (!_gnvEhFast()) {
+    _gnvMsg('❌ A aba Governança Nova é exclusiva do módulo FAST.', 'var(--vm)');
+    ev.target.value = ''; return;
+  }
+  if (typeof XLSX === 'undefined') {
+    _gnvMsg('❌ Biblioteca XLSX não carregada — atualize a página (F5).', 'var(--vm)');
+    ev.target.value = ''; return;
+  }
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!db) {
+    _gnvMsg('❌ Firebase indisponível.', 'var(--vm)');
+    ev.target.value = ''; return;
+  }
+
+  _gnvMsg('⏳ Lendo planilha...');
+  var reader = new FileReader();
+  reader.onerror = function(){
+    _gnvMsg('❌ Não foi possível ler o arquivo.', 'var(--vm)');
+    ev.target.value = '';
+  };
+
+  reader.onload = function(e){
+    try {
+      var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      if (!ws) throw new Error('Planilha vazia ou ilegível.');
+
+      var linhas = XLSX.utils.sheet_to_json(ws, { defval: '' }).filter(function(l){
+        return Object.keys(l).some(function(k){ return String(l[k]).trim() !== ''; });
+      });
+      if (!linhas.length) throw new Error('Nenhuma linha de dados encontrada.');
+
+      var am = linhas[0];
+      var cRc = _cobCol(am, ['RC', 'Nº RC', 'N RC', 'Numero RC', 'Número RC']);
+      if (!cRc) throw new Error('Coluna "RC" não encontrada na planilha.');
+
+      var cAnal  = _cobCol(am, ['Analista']);
+      var cItem  = _cobColExata(am, ['Item RC', 'Item da RC', 'Item']);
+      var cOp    = _cobCol(am, ['Oportunidade', 'Num Oport', 'Nº Oportunidade', 'OP']);
+      var cItOp  = _cobColExata(am, ['Item OP', 'Item da OP', 'Item Oportunidade', 'Item da Oportunidade']);
+      var cCentro= _cobCol(am, ['Centro']);
+      // exatas: "Tipo" não pode cair em "Tipo de Processo", nem "Processo" em "Tipo de Processo"
+      var cTipo  = _cobColExata(am, ['Tipo']);
+      var cPrazo = _cobColExata(am, ['Prazo']);
+      var cSla   = _cobCol(am, ['SLA']);
+      var cTpProc= _cobColExata(am, ['Tipo de Processo', 'Tipo Processo']);
+      var cProc  = _cobColExata(am, ['Processo']);
+
+      var limpo = function(v){
+        var s = String(v == null ? '' : v).trim();
+        return (s === '#N/A' || s === '#N/D' || s === 'undefined') ? '' : s;
+      };
+      var num = function(v){ return limpo(v).replace(/\.0$/, ''); };
+
+      var registros = [], vistos = {}, duplicadas = [], semRc = 0, i;
+      for (i = 0; i < linhas.length; i++) {
+        var l = linhas[i];
+        var rc = num(l[cRc]);
+        if (!rc) { semRc++; continue; }
+        var itemRc = cItem  ? num(l[cItem])  : '';
+        var op     = cOp    ? num(l[cOp])    : '';
+        var itemOp = cItOp  ? num(l[cItOp])  : '';
+        var id = _gnvChave(rc, itemRc, op, itemOp);
+
+        if (vistos[id]) { duplicadas.push({ id: id, linha: i + 2, primeira: vistos[id] }); continue; }
+        vistos[id] = i + 2;
+
+        registros.push({
+          id: id,
+          rc: rc, itemRc: itemRc, oportunidade: op, itemOp: itemOp,
+          analista:     cAnal   ? limpo(l[cAnal])   : '',
+          centro:       cCentro ? limpo(l[cCentro]) : '',
+          tipo:         cTipo   ? limpo(l[cTipo])   : '',
+          prazo:        cPrazo  ? limpo(l[cPrazo])  : '',
+          sla:          cSla    ? limpo(l[cSla])    : '',
+          tipoProcesso: cTpProc ? limpo(l[cTpProc]) : '',
+          processo:     cProc   ? limpo(l[cProc])   : '',
+          atualizadoEm: new Date().toISOString()
+        });
+      }
+      if (!registros.length) throw new Error('Nenhuma RC válida encontrada.');
+
+      var resumo = {
+        linhas: linhas.length, gravados: registros.length, semRc: semRc,
+        qtdDuplicadas: duplicadas.length, duplicadas: duplicadas.slice(0, 60),
+        arquivo: arq.name || '', atualizadoEm: new Date().toISOString()
+      };
+
+      _gnvMsg('⏳ Atualizando base (' + registros.length + ' itens)...');
+
+      // Apaga e regrava SOMENTE _GNV_COL_BASE. A coleção de edição
+      // (_GNV_COL_EDIT) não entra neste lote em nenhuma hipótese.
+      db.collection(_GNV_COL_BASE).get().then(function(snap){
+        var lotes = [], lote = db.batch(), n = 0;
+        snap.forEach(function(doc){
+          lote.delete(doc.ref); n++;
+          if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
+        });
+        var j;
+        for (j = 0; j < registros.length; j++) {
+          lote.set(db.collection(_GNV_COL_BASE).doc(registros[j].id), registros[j]); n++;
+          if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
+        }
+        lotes.push(lote);
+        var seq = Promise.resolve();
+        lotes.forEach(function(b){ seq = seq.then(function(){ return b.commit(); }); });
+        return seq;
+      }).then(function(){
+        return db.collection(_GNV_COL_BASE).doc(_GNV_DOC_RESUMO).set(resumo);
+      }).then(function(){
+        _gnvMsg('✅ ' + registros.length + ' itens carregados'
+          + (duplicadas.length ? ' — ' + duplicadas.length + ' linha(s) repetida(s) ignorada(s)' : '')
+          + '. As edições da equipe foram preservadas.', duplicadas.length ? '#b45309' : 'var(--vd)');
+        govNovaRender();
+        setTimeout(function(){ _gnvMsg(''); }, 6000);
+      }).catch(function(err){
+        _gnvMsg('❌ Erro ao gravar: ' + err.message, 'var(--vm)');
+      });
+
+    } catch (err) {
+      _gnvMsg('❌ ' + err.message, 'var(--vm)');
+    }
+    ev.target.value = '';
+  };
+
+  reader.readAsArrayBuffer(arq);
+}
+
+// ── Exportar o que está na tela (já com as colunas calculadas) ──
+function govNovaExportar(){
+  if (typeof XLSX === 'undefined') { alert('Biblioteca XLSX não carregada.'); return; }
+  var lista = _gnvFiltrar();
+  if (!lista.length) { alert('Nada para exportar.'); return; }
+  var rows = [['Analista','RC','Item RC','Oportunidade','Item OP','Centro','Tipo',
+               'Data da solicitação','Fila','Envio','Prazo de retorno','Status','Cobrança',
+               'Dias parados','Prazo','SLA','Tipo de Processo','Processo']];
+  lista.forEach(function(r){
+    var c = _gnvLinhaCalc(r);
+    rows.push([
+      r.analista||'', r.rc||'', r.itemRc||'', r.oportunidade||'', r.itemOp||'', r.centro||'', r.tipo||'',
+      c.dataSolic ? c.dataSolic.split('-').reverse().join('/') : '',
+      c.fila||'',
+      c.envio ? c.envio.split('-').reverse().join('/') : '',
+      c.prazoRet ? c.prazoRet.split('-').reverse().join('/') : '',
+      c.status||'', c.cobranca, (c.dias == null ? '' : c.dias),
+      r.prazo||'', r.sla||'', r.tipoProcesso||'', r.processo||''
+    ]);
+  });
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Governanca Nova');
+  XLSX.writeFile(wb, 'Governanca_Nova_' + _gnvHoje() + '.xlsx');
+}
+
+// ═════════════════════════════════════════════════════════════════
+//  GOVERNANÇA NOVA — tratamento pelo painel "Buscar RC"
+//  A tabela da aba é só consulta. Aqui o item aparece com os campos
+//  editáveis e com a faixa "Registrar ação", igual às outras abas:
+//  o colaborador escolhe o TIPO da análise, o modal pergunta a FILA,
+//  e a confirmação grava produção (conta na meta) + a edição do item.
+// ═════════════════════════════════════════════════════════════════
+
+var _gnvAcaoCtx = null;   // { chave, tipo, rc, itemRc }
+
+async function _gnvGarantirDados(){
+  if (_gnvBase.length) return;
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!db) return;
+  try {
+    var res = await Promise.all([
+      db.collection(_GNV_COL_BASE).get(),
+      db.collection(_GNV_COL_EDIT).get()
+    ]);
+    _gnvBase = [];
+    res[0].forEach(function(d){
+      if (d.id === _GNV_DOC_RESUMO) { _gnvResumo = d.data(); return; }
+      var o = d.data(); o.id = d.id; _gnvBase.push(o);
+    });
+    _gnvEdit = {};
+    res[1].forEach(function(d){ _gnvEdit[d.id] = d.data(); });
+  } catch (e) { console.warn('_gnvGarantirDados:', e); }
+}
+
+async function _gnvBuscaAnexar(rcBusca, el){
+  if (!el || !rcBusca) return;
+  await _gnvGarantirDados();
+
+  var achados = _gnvBase.filter(function(r){
+    return String(r.rc || '').indexOf(String(rcBusca).trim()) !== -1;
+  });
+  if (!achados.length) return;
+
+  // se as abas antigas não acharam nada, tira a mensagem de vazio
+  var vazio = el.querySelector('[data-gnv-vazio]');
+  if (vazio) vazio.remove();
+
+  var div = document.createElement('div');
+  div.id = 'gnv-busca-bloco';
+  div.innerHTML = _gnvBuscaHtml(achados, rcBusca);
+  var antigo = el.querySelector('#gnv-busca-bloco');
+  if (antigo) antigo.remove();
+  el.appendChild(div);
+  el.style.display = 'block';
+}
+
+function _gnvBuscaHtml(achados, rcBusca){
+  var fmt = function(d){ return d ? String(d).split('-').reverse().join('/') : '—'; };
+  var h = '<div style="font-size:11px;font-weight:700;color:var(--vd);margin:10px 0 6px">'
+        + '🆕 Governança Nova — ' + achados.length + ' item(ns) para RC <strong>' + _cobEsc(rcBusca) + '</strong></div>';
+
+  achados.forEach(function(r){
+    var c = _gnvLinhaCalc(r);
+    var k = r.id;
+    var corSt = 'var(--tx2)', bgSt = 'var(--cin)';
+    if (c.status === 'VENCIDA')              { corSt = 'var(--vm)'; bgSt = 'var(--vmc)'; }
+    else if (c.status === 'DENTRO DO PRAZO') { corSt = 'var(--vd)'; bgSt = 'var(--vdc)'; }
+
+    h += '<div style="border:1.5px solid var(--brd);border-left:3px solid var(--vd);border-radius:9px;'
+       + 'padding:.7rem .85rem;margin-bottom:9px;background:var(--bg)">'
+
+       // identificação
+       + '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline;margin-bottom:8px">'
+       +   '<span style="font-size:13px;font-weight:800;color:var(--az)">RC ' + _cobEsc(r.rc) + '</span>'
+       +   '<span style="font-size:11px;color:var(--tx2)">Item <strong>' + _cobEsc(r.itemRc || '—') + '</strong></span>'
+       +   '<span style="font-size:11px;color:var(--tx2)">OP <strong>' + _cobEsc(r.oportunidade || '—') + '</strong> · item ' + _cobEsc(r.itemOp || '—') + '</span>'
+       +   '<span style="font-size:11px;color:var(--tx2)">' + _cobEsc(r.analista || '—') + '</span>'
+       +   '<span style="font-size:11px;color:var(--tx2)">Centro ' + _cobEsc(r.centro || '—') + '</span>'
+       +   (r.processo ? '<span style="font-size:11px;color:var(--tx2)">' + _cobEsc(r.tipoProcesso || '') + ' ' + _cobEsc(r.processo) + '</span>' : '')
+       + '</div>'
+
+       // estado atual + campos editáveis
+       + '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">'
+       +   '<label style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">DATA DA SOLICITAÇÃO'
+       +     '<input type="date" value="' + _cobEsc(c.dataSolic) + '" onchange="gnvSalvar(\'' + k + '\',\'dataSolic\',this.value)"'
+       +     ' style="font-size:11px;padding:3px 6px;border:1px solid var(--brd);border-radius:5px;width:125px"></label>'
+       +   '<div style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">FILA'
+       +     '<span style="font-size:12px;font-weight:700;color:' + (c.fila ? 'var(--az)' : 'var(--tx2)') + ';padding:3px 0">'
+       +     (c.fila ? _cobEsc(c.fila) : '— sem fila —') + '</span></div>'
+       +   '<label style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">ENVIO'
+       +     '<input type="date" value="' + _cobEsc(c.envio) + '" onchange="gnvSalvar(\'' + k + '\',\'envio\',this.value)"'
+       +     ' style="font-size:11px;padding:3px 6px;border:1px solid var(--brd);border-radius:5px;width:125px"></label>'
+       +   '<div style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">PRAZO DE RETORNO'
+       +     '<span style="font-size:12px;font-weight:700;padding:3px 0">' + fmt(c.prazoRet) + '</span></div>'
+       +   '<div style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">STATUS'
+       +     '<span style="background:' + bgSt + ';color:' + corSt + ';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;text-align:center">'
+       +     (c.status || '—') + '</span></div>'
+       +   '<label style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">COBRANÇA'
+       +     '<input type="number" min="0" value="' + c.cobranca + '" onchange="gnvSalvar(\'' + k + '\',\'cobranca\',this.value)"'
+       +     ' style="font-size:11px;padding:3px 6px;border:1px solid var(--brd);border-radius:5px;width:62px;text-align:center"></label>'
+       +   '<div style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">DIAS PARADOS'
+       +     '<span style="font-size:14px;font-weight:800;text-align:center;padding:1px 0;color:'
+       +     (c.dias == null ? 'var(--tx2)' : (c.dias >= 10 ? 'var(--vm)' : (c.dias >= 5 ? 'var(--am)' : 'var(--tx)')))
+       +     '">' + (c.dias == null ? '—' : c.dias) + '</span></div>'
+       + '</div>'
+
+       // faixa de registro de ação — mesmo padrão das outras abas
+       + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:9px;padding-top:8px;border-top:1px dashed var(--brd)">'
+       +   '<span style="font-size:10px;font-weight:700;color:var(--tx2);margin-right:2px">Registrar ação:</span>'
+       +   _gnvBtnAcao(k, 'ag_parecer',      '📝 Ag Parecer',   '#7c3aed', '#ede9fe')
+       +   _gnvBtnAcao(k, 'primeira_analise','🔍 1ª Análise',   'var(--azm)', 'var(--azc)')
+       +   _gnvBtnAcao(k, 'em_tratativa',    '⚙️ Em Tratativa', 'var(--azm)', 'var(--azc)')
+       +   _gnvBtnAcao(k, 'status_b',        '✅ Status B',      'var(--vd)', 'var(--vdc)')
+       +   _gnvBtnAcao(k, 'outros',          '📋 Outros',        'var(--am)', 'var(--amc)')
+       + '</div>'
+       + '</div>';
+  });
+  return h;
+}
+
+function _gnvBtnAcao(chave, tipo, rotulo, cor, bg){
+  return '<button onclick="gnvAcaoAbrir(\'' + chave + '\',\'' + tipo + '\')"'
+    + ' style="background:' + bg + ';border:1.5px solid ' + cor + ';border-radius:7px;padding:4px 12px;'
+    + 'cursor:pointer;font-size:11px;font-weight:700;color:' + cor + ';white-space:nowrap">' + rotulo + '</button>';
+}
+
+// ── Modal ────────────────────────────────────────────────────────
+function gnvAcaoAbrir(chave, tipo){
+  var r = _gnvBase.find(function(x){ return x.id === chave; });
+  if (!r) return;
+  _gnvAcaoCtx = { chave: chave, tipo: tipo, fila: '', rc: r.rc, itemRc: r.itemRc };
+
+  var cfg = _cobManualLabel(tipo);
+  var tit = document.getElementById('gnv-acao-titulo');
+  if (tit) tit.textContent = 'Confirmar ação — ' + cfg.label;
+
+  var badge = document.getElementById('gnv-acao-rc');
+  if (badge) badge.innerHTML = '📋 RC <strong>' + _cobEsc(r.rc) + '</strong> · Item ' + _cobEsc(r.itemRc || '—')
+    + ' · OP ' + _cobEsc(r.oportunidade || '—');
+
+  // botões de fila a partir da tabela de prazos
+  var box = document.getElementById('gnv-acao-filas');
+  if (box) {
+    var atual = _gnvLinhaCalc(r).fila;
+    box.innerHTML = Object.keys(GOV_NOVA_PRAZOS).map(function(f){
+      var dias = GOV_NOVA_PRAZOS[f];
+      return '<button type="button" data-fila="' + _cobEsc(f) + '" onclick="gnvAcaoSelFila(this)"'
+        + ' style="background:' + (f === atual ? 'var(--azc)' : 'var(--cin)') + ';border:1.5px solid '
+        + (f === atual ? 'var(--azm)' : 'var(--brd)') + ';border-radius:8px;padding:9px 6px;cursor:pointer;'
+        + 'font-size:11.5px;font-weight:700;color:var(--tx);line-height:1.3">'
+        + _cobEsc(f)
+        + '<div style="font-size:9px;font-weight:600;color:var(--tx2)">'
+        + (dias ? dias + ' dias úteis' : 'sem prazo') + '</div></button>';
+    }).join('');
+  }
+
+  var envio = document.getElementById('gnv-acao-envio');
+  if (envio) envio.value = _gnvHoje();
+  var obs = document.getElementById('gnv-acao-obs');
+  if (obs) obs.value = '';
+  var err = document.getElementById('gnv-acao-erro');
+  if (err) { err.style.display = 'none'; err.textContent = ''; }
+
+  var m = document.getElementById('gnv-acao-modal');
+  if (m) m.style.display = 'flex';
+}
+
+function gnvAcaoSelFila(btn){
+  if (!_gnvAcaoCtx) return;
+  _gnvAcaoCtx.fila = btn.getAttribute('data-fila') || '';
+  var box = document.getElementById('gnv-acao-filas');
+  if (box) [].forEach.call(box.children, function(b){
+    var on = (b === btn);
+    b.style.background  = on ? 'var(--azm)' : 'var(--cin)';
+    b.style.borderColor = on ? 'var(--azm)' : 'var(--brd)';
+    b.style.color       = on ? '#fff' : 'var(--tx)';
+    var sub = b.querySelector('div');
+    if (sub) sub.style.color = on ? 'rgba(255,255,255,.8)' : 'var(--tx2)';
+  });
+}
+
+function gnvAcaoFechar(){
+  var m = document.getElementById('gnv-acao-modal');
+  if (m) m.style.display = 'none';
+  _gnvAcaoCtx = null;
+}
+
+async function gnvAcaoConfirmar(){
+  if (!_gnvAcaoCtx) return;
+  var err = document.getElementById('gnv-acao-erro');
+  var mostrarErro = function(t){ if (err) { err.textContent = t; err.style.display = 'block'; } };
+
+  var envio = (document.getElementById('gnv-acao-envio') || {}).value || '';
+  var obs   = ((document.getElementById('gnv-acao-obs') || {}).value || '').trim();
+
+  if (!_gnvAcaoCtx.fila) { mostrarErro('Selecione a fila de tratamento.'); return; }
+  if (!envio)            { mostrarErro('Informe a data de envio.'); return; }
+
+  var colab = _cobManualColab();
+  if (!colab) { mostrarErro('Não identifiquei o colaborador logado — entre de novo para a ação contar na produção.'); return; }
+
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!db) { mostrarErro('Firebase indisponível.'); return; }
+
+  var btn = document.getElementById('gnv-acao-confirmar');
+  if (btn) btn.disabled = true;
+
+  var chave = _gnvAcaoCtx.chave, tipo = _gnvAcaoCtx.tipo, fila = _gnvAcaoCtx.fila;
+
+  try {
+    // 1) produção — mesma coleção das demais ações, então conta nos chips,
+    //    no velocímetro individual, no da equipe e no Tempo Real
+    await db.collection('producao_acoes').add({
+      colab: colab,
+      data: _gnvHoje(),
+      tipo: tipo,
+      tratamento: fila,
+      conclusao: '',
+      obs: obs,
+      origem: 'gov_nova',
+      ts: new Date().toISOString(),
+      rc: _gnvAcaoCtx.rc,
+      itemRc: _gnvAcaoCtx.itemRc,
+      rcChave: chave
+    });
+
+    // 2) edição do item — troca de fila zera cobrança e reinicia a contagem
+    if (!_gnvEdit[chave]) _gnvEdit[chave] = {};
+    _gnvEdit[chave].fila         = fila;
+    _gnvEdit[chave].envio        = envio;
+    _gnvEdit[chave].dataSolic    = _gnvHoje();
+    _gnvEdit[chave].cobranca     = 0;
+    _gnvEdit[chave].atualizadoEm = new Date().toISOString();
+    await db.collection(_GNV_COL_EDIT).doc(chave).set(_gnvEdit[chave], { merge: true });
+
+    gnvAcaoFechar();
+
+    // 3) repintar produção, cards da aba e o bloco da busca
+    try {
+      if (typeof prodCarregarHoje === 'function') await prodCarregarHoje(colab);
+      if (typeof prodRenderizarPaineis === 'function') prodRenderizarPaineis(colab);
+    } catch (e) { console.warn('gnv produção:', e); }
+    _gnvDesenhar();
+    var campo = document.getElementById('gnv-busca-rc');
+    var termo = (campo && campo.value) || _gnvAcaoCtx && _gnvAcaoCtx.rc || '';
+    if (termo && typeof govBuscarRC === 'function') govBuscarRC(termo, 'gnv-busca-resultado');
+
+  } catch (e) {
+    mostrarErro('Erro ao registrar: ' + (e.message || e));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ── Exclusividade FAST: no ADLV a aba nem aparece ──
+function _gnvAplicarModulo(){
+  var btn  = document.getElementById('gov-main-tab-govnova');
+  var pane = document.getElementById('gov-main-content-govnova');
+  var fast = _gnvEhFast();
+  if (btn) btn.style.display = fast ? '' : 'none';
+  if (!fast) {
+    if (pane) pane.style.display = 'none';
+    _gnvBase = []; _gnvEdit = {}; _gnvResumo = null;
+    _gnvBusca = ''; _gnvFiltroFila = null; _gnvFiltroTipoProc = null;
   }
 }
 
