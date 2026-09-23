@@ -4617,6 +4617,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               📤 Subir planilha
               <input id="gnv-upload" type="file" accept=".xlsx,.xls" style="display:none" onchange="govNovaUpload(event)">
             </label>
+            <button class="btn btn-s" style="font-size:11px" onclick="govNovaBaixarModelo()" title="Baixa a planilha em branco, já com os cabeçalhos certos">📄 Baixar modelo</button>
             <span id="gnv-msg" style="font-size:11.5px;color:var(--tx2)"></span>
           </div>
           <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Oportunidade, Item OP, Centro, Tipo, Prazo, SLA, Tipo de Processo, Processo</strong> — obrigatória: RC. A ordem não importa, a leitura é pelo nome.</div>
@@ -34134,6 +34135,25 @@ function govNovaUpload(ev){
         return (s === '#N/A' || s === '#N/D' || s === 'undefined') ? '' : s;
       };
       var num = function(v){ return limpo(v).replace(/\.0$/, ''); };
+      // Coluna de data: se o Excel mandar a célula formatada como data, ela
+      // chega como número de série (ex.: 46296) e apareceria assim na tela.
+      // Converte para dd/mm/aaaa; texto que já venha pronto passa direto.
+      var dataCel = function(v){
+        if (v instanceof Date && !isNaN(v.getTime())) {
+          return String(v.getDate()).padStart(2,'0') + '/' + String(v.getMonth()+1).padStart(2,'0') + '/' + v.getFullYear();
+        }
+        var s = limpo(v);
+        if (/^\d+(\.\d+)?$/.test(s)) {
+          var n = parseFloat(s);
+          if (n > 20000 && n < 80000) {   // faixa de datas plausíveis (1954–2119)
+            var d = new Date(Date.UTC(1899, 11, 30) + Math.round(n) * 86400000);
+            if (!isNaN(d.getTime())) {
+              return String(d.getUTCDate()).padStart(2,'0') + '/' + String(d.getUTCMonth()+1).padStart(2,'0') + '/' + d.getUTCFullYear();
+            }
+          }
+        }
+        return s;
+      };
 
       var registros = [], vistos = {}, duplicadas = [], semRc = 0, i;
       for (i = 0; i < linhas.length; i++) {
@@ -34154,7 +34174,7 @@ function govNovaUpload(ev){
           analista:     cAnal   ? limpo(l[cAnal])   : '',
           centro:       cCentro ? limpo(l[cCentro]) : '',
           tipo:         cTipo   ? limpo(l[cTipo])   : '',
-          prazo:        cPrazo  ? limpo(l[cPrazo])  : '',
+          prazo:        cPrazo  ? dataCel(l[cPrazo]) : '',
           sla:          cSla    ? limpo(l[cSla])    : '',
           tipoProcesso: cTpProc ? limpo(l[cTpProc]) : '',
           processo:     cProc   ? limpo(l[cProc])   : '',
@@ -34207,6 +34227,61 @@ function govNovaUpload(ev){
   };
 
   reader.readAsArrayBuffer(arq);
+}
+
+// ── Modelo da planilha de upload ────────────────────────────────
+// Cabeçalhos iguais aos que a leitura procura. Aba "Base" é a que o
+// sistema lê (primeira aba); a segunda serve só de referência.
+var _GNV_MODELO_COLS = ['Analista','RC','Item RC','Oportunidade','Item OP','Centro','Tipo','Prazo','SLA','Tipo de Processo','Processo'];
+
+function govNovaBaixarModelo(){
+  if (typeof XLSX === 'undefined') { alert('Biblioteca XLSX não carregada — atualize a página (F5).'); return; }
+
+  var wb = XLSX.utils.book_new();
+
+  // Aba lida pelo sistema: só os cabeçalhos
+  var wsBase = XLSX.utils.aoa_to_sheet([_GNV_MODELO_COLS]);
+  wsBase['!cols'] = _GNV_MODELO_COLS.map(function(c){ return { wch: Math.max(12, c.length + 4) }; });
+  XLSX.utils.book_append_sheet(wb, wsBase, 'Base');
+
+  // Referência de formato
+  var wsEx = XLSX.utils.aoa_to_sheet([
+    _GNV_MODELO_COLS,
+    ['Lory',    '36181159', '10', '7004500001', '1', '4142', 'Material', '30/09/2026', 'Normal',  'E&P',          'PR-2201'],
+    ['Wanessa', '36181160', '20', '7004500002', '2', '4142', 'Serviço',  '02/10/2026', 'Urgente', 'Status B',     'PR-2202'],
+    ['Ludy',    '36181161', '30', '7004500003', '3', '4150', 'Material', '05/10/2026', 'Normal',  'Nova Reserva', 'PR-2203']
+  ]);
+  wsEx['!cols'] = wsBase['!cols'];
+  XLSX.utils.book_append_sheet(wb, wsEx, 'Exemplo preenchido');
+
+  // Instruções
+  var wsInfo = XLSX.utils.aoa_to_sheet([
+    ['Governança Nova — modelo de planilha'],
+    [''],
+    ['Suba sempre a aba "Base". A ordem das colunas não importa: a leitura é pelo nome do cabeçalho.'],
+    ['Obrigatória: RC. As demais podem vir em branco.'],
+    [''],
+    ['REGRA PRINCIPAL'],
+    ['O upload substitui apenas os dados que vêm da planilha.'],
+    ['Data da solicitação, Fila, Envio e Cobrança são preenchidos no dashboard e NUNCA são apagados por um novo upload.'],
+    ['O item é reconhecido por RC + Item RC + Oportunidade + Item OP.'],
+    ['Item que não vier mais na planilha sai da lista; a edição dele fica guardada e volta se ele voltar.'],
+    [''],
+    ['PREENCHIDO NO DASHBOARD (não coloque na planilha)'],
+    ['Data da solicitação — na tela; zera na data da troca quando a fila muda'],
+    ['Fila — escolhida no modal de ação'],
+    ['Envio — na tela ou no modal de ação'],
+    ['Cobrança — manual; zera quando a fila muda'],
+    ['Prazo de retorno — calculado: Envio + dias úteis da fila'],
+    ['Status — calculado: VENCIDA ou DENTRO DO PRAZO'],
+    ['Dias parados — calculado: hoje menos a data da solicitação']
+  ]);
+  wsInfo['!cols'] = [{ wch: 110 }];
+  XLSX.utils.book_append_sheet(wb, wsInfo, 'Como preencher');
+
+  XLSX.writeFile(wb, 'Modelo_Governanca_Nova.xlsx');
+  _gnvMsg('📄 Modelo baixado — preencha a aba "Base" e suba aqui.', 'var(--vd)');
+  setTimeout(function(){ _gnvMsg(''); }, 6000);
 }
 
 // ── Exportar o que está na tela (já com as colunas calculadas) ──
