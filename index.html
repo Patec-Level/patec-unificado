@@ -7535,7 +7535,8 @@ function abrirHistoricoRC(rc){
     'status_b':         '✅ Status B',
     'outros':           '📋 Outros',
     'ag_parecer':       '📝 Ag Parecer',
-    'edicao_manual':    '✏️ Edição Manual'
+    'edicao_manual':    '✏️ Edição Manual',
+    'saida_fila':       '⏳ Saiu da fila'
   };
   const corTipo = {
     'primeira_analise': 'var(--azm)',
@@ -7543,7 +7544,8 @@ function abrirHistoricoRC(rc){
     'status_b':         'var(--vd)',
     'outros':           'var(--am)',
     'ag_parecer':       'var(--roxo,#7c3aed)',
-    'edicao_manual':    'var(--am)'
+    'edicao_manual':    'var(--am)',
+    'saida_fila':       'var(--tx2)'
   };
 
   let conteudo = '';
@@ -33904,6 +33906,12 @@ function _gnvStatusPatecDe(r, e){
 // de terceiros. Só sai daqui quando alguém tratar pelo Buscar RC.
 var _GNV_FILA_ENTRADA = 'AG. AÇÃO';
 
+// Mandar um item para Ag. Ação é o contrário de tratar: o item volta para a
+// nossa mão, nenhum terceiro foi acionado. A ação fica registrada no histórico
+// da RC (com quem fez e quando), mas com um tipo próprio, fora das listas que
+// alimentam a meta — então não entra na produção individual nem na da equipe.
+var _GNV_TIPO_SAIDA = 'saida_fila';
+
 function _gnvStatusPatecCanonico(v){
   var t = String(v == null ? '' : v).trim().replace(/\s+/g, ' ');
   if (!t || _GNV_VAZIOS.test(t)) return '';
@@ -35277,6 +35285,16 @@ function gnvAcaoAbrir(chave, tipo){
         + '<div style="font-size:10px;font-weight:600;color:var(--tx2);margin-top:2px">'
         + (dias ? dias + ' dias úteis' : 'sem prazo') + '</div></button>';
     }).join('')
+    // Sair da fila: o item volta para a nossa mão, sem terceiro envolvido.
+    // Fica com traço pontilhado para não se confundir com os destinos acima.
+    + '<button type="button" class="acao-sel-btn" data-fila="' + _cobEsc(_GNV_FILA_ENTRADA) + '"'
+    + ' onclick="gnvAcaoSelFila(this)"'
+    + ' style="background:var(--cin);border:1.5px dashed var(--tx2);border-radius:10px;padding:.875rem;'
+    + 'cursor:pointer;text-align:center;grid-column:span 2;transition:all .18s">'
+    + '<div style="font-size:20px;margin-bottom:4px">' + (_GNV_FILA_ICONE[_GNV_FILA_ENTRADA] || '⏳') + '</div>'
+    + '<div style="font-size:12px;font-weight:600;color:var(--tx)">Sai da fila — volta para Ag. Ação</div>'
+    + '<div style="font-size:9.5px;font-weight:600;color:var(--tx2);margin-top:2px">'
+    + 'sem prazo · não conta na produção</div></button>'
     // o "Concluído" é o último card da grade, ocupando a linha inteira — igual ao antigo
     + '<button type="button" class="acao-sel-btn" onclick="gnvAcaoIrConclusao()"'
     + ' style="background:var(--vdc);border:1.5px solid var(--vd);border-radius:10px;padding:.875rem;cursor:pointer;'
@@ -35447,6 +35465,11 @@ function gnvAcaoSelConclusao(btn){
 function gnvAcaoSelFila(btn){
   if (!_gnvAcaoCtx) return;
   var nova = btn.getAttribute('data-fila') || '';
+  var av = document.getElementById('gnv-acao-aviso');
+  if (av) av.innerHTML = (nova === _GNV_FILA_ENTRADA)
+    ? 'O item volta para <strong>Ag. Ação</strong>: sai da fila, fica sem prazo e '
+      + '<strong>não entra na produção</strong> — só no histórico da RC.'
+    : 'Ao escolher uma fila diferente da atual, a cobrança zera e a contagem recomeça hoje — os campos acima continuam editáveis antes de confirmar.';
   // trocou de fila: a cobrança zera e a contagem recomeça hoje (os campos
   // continuam editáveis, então dá para ajustar antes de confirmar)
   if (nova !== _gnvAcaoCtx.filaAtual) {
@@ -35521,6 +35544,8 @@ async function gnvAcaoConfirmar(){
   if (btn) btn.disabled = true;
 
   var chave = _gnvAcaoCtx.chave, tipo = _gnvAcaoCtx.tipo, fila = _gnvAcaoCtx.fila;
+  // voltar para Ag. Ação não é tratamento: sai da produção, fica no histórico
+  if (!ehConclusao && fila === _GNV_FILA_ENTRADA) tipo = _GNV_TIPO_SAIDA;
 
   try {
     // 1) produção — mesma coleção das demais ações, então conta nos chips,
