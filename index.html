@@ -33685,7 +33685,10 @@ function _pedAplicarModulo(){
 
 var _GNV_COL_BASE   = 'gov_nova_base';
 var _GNV_COL_EDIT   = 'gov_nova_edit';
-var _GNV_DOC_RESUMO = '__resumo__';
+// ATENÇÃO: o Firestore RESERVA ids que casem com __algo__ e recusa a gravação
+// com "Resource ID is reserved". Por isso o nome sem os underscores duplos —
+// mesmo padrão usado no módulo Pedidos.
+var _GNV_DOC_RESUMO = 'resumo_upload';
 
 // Prazo de retorno por fila, em DIAS ÚTEIS — pula sábado, domingo e os
 // feriados cadastrados em ADM › Feriados (mesma lista do resto do sistema).
@@ -33829,7 +33832,7 @@ async function govNovaRender(){
     ]);
     _gnvBase = []; _gnvResumo = null;
     res[0].forEach(function(d){
-      if (d.id === _GNV_DOC_RESUMO) { _gnvResumo = d.data(); return; }
+      if (d.id === _GNV_DOC_RESUMO || /^__.*__$/.test(d.id)) { _gnvResumo = d.data(); return; }
       var o = d.data(); o.id = d.id; _gnvBase.push(o);
     });
     _gnvEdit = {};
@@ -34209,7 +34212,10 @@ function govNovaUpload(ev){
         lotes.forEach(function(b){ seq = seq.then(function(){ return b.commit(); }); });
         return seq;
       }).then(function(){
-        return db.collection(_GNV_COL_BASE).doc(_GNV_DOC_RESUMO).set(resumo);
+        // o resumo é só a conferência do upload: se ele falhar, os itens já
+        // foram gravados e não faz sentido reportar o upload inteiro como erro
+        return db.collection(_GNV_COL_BASE).doc(_GNV_DOC_RESUMO).set(resumo)
+          .catch(function(e){ console.warn('resumo do upload não gravou:', e); });
       }).then(function(){
         _gnvMsg('✅ ' + registros.length + ' itens carregados'
           + (duplicadas.length ? ' — ' + duplicadas.length + ' linha(s) repetida(s) ignorada(s)' : '')
@@ -34217,7 +34223,8 @@ function govNovaUpload(ev){
         govNovaRender();
         setTimeout(function(){ _gnvMsg(''); }, 6000);
       }).catch(function(err){
-        _gnvMsg('❌ Erro ao gravar: ' + err.message, 'var(--vm)');
+        console.error('govNovaUpload:', err);
+        _gnvMsg('❌ Erro ao gravar: ' + (err.code ? '[' + err.code + '] ' : '') + (err.message || err), 'var(--vm)');
       });
 
     } catch (err) {
@@ -34330,7 +34337,7 @@ async function _gnvGarantirDados(){
     ]);
     _gnvBase = [];
     res[0].forEach(function(d){
-      if (d.id === _GNV_DOC_RESUMO) { _gnvResumo = d.data(); return; }
+      if (d.id === _GNV_DOC_RESUMO || /^__.*__$/.test(d.id)) { _gnvResumo = d.data(); return; }
       var o = d.data(); o.id = d.id; _gnvBase.push(o);
     });
     _gnvEdit = {};
