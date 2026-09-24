@@ -4731,6 +4731,21 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div id="gnv-busca-resultado" style="display:none;margin-top:.5rem"></div>
       </div>
 
+        <!-- Sub-abas + histórico da RC -->
+        <div class="stabs" id="gnv-subabas" style="margin-bottom:1rem;display:flex;align-items:center;flex-wrap:wrap;gap:6px;width:100%;box-sizing:border-box">
+          <button class="stab active" id="gnv-aba-andamento" onclick="gnvSetAba('andamento',this)">⏳ Em andamento</button>
+          <button class="stab" id="gnv-aba-concluidos" onclick="gnvSetAba('concluidos',this)">✅ Concluídos</button>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+            <span style="font-size:12px;color:var(--tx2);white-space:nowrap">📋 Histórico RC:</span>
+            <input id="gnv-hist-rc" type="text" placeholder="Nº da RC..."
+              style="font-size:12px;padding:5px 10px;border:1.5px solid var(--brd);border-radius:6px;width:150px;background:var(--bg);color:var(--tx)"
+              onkeydown="if(event.key==='Enter') gnvVerHistorico()"
+              oninput="this.value=this.value.replace(/\D/g,'')">
+            <button onclick="gnvVerHistorico()"
+              style="font-size:11px;padding:5px 12px;background:var(--azm);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;white-space:nowrap">Ver histórico</button>
+          </div>
+        </div>
+
         <!-- Cards no mesmo layout da Cobrança por Status: total + Tipo de Processo + Fila -->
         <div class="cd" style="margin-bottom:1rem;padding:.875rem 1rem">
           <div id="gnv-cards"></div>
@@ -7500,7 +7515,7 @@ function abrirHistoricoRC(rc){
 
     conteudo = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.875rem;padding:.625rem .875rem;background:var(--cin);border-radius:8px;border:1px solid var(--brd)">
-        <span style="font-size:12px;font-weight:700;color:var(--az)">${acoesRC.length} ação${acoesRC.length>1?'ões':''} registrada${acoesRC.length>1?'s':''}</span>
+        <span style="font-size:12px;font-weight:700;color:var(--az)">${acoesRC.length} ${acoesRC.length>1?'ações registradas':'ação registrada'}</span>
         <span style="font-size:11px;color:${diasParado>7?'var(--vm)':diasParado>3?'var(--am)':'var(--vd)'};font-weight:600">${resumo}</span>
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;max-height:420px;overflow-y:auto;padding-right:4px">
@@ -25498,6 +25513,20 @@ function q18Consultar(valor){
       <div id="gnv-acao-prazo-previa" style="font-size:11px;color:var(--tx2);padding-bottom:9px"></div>
     </div>
 
+    <div id="gnv-bloco-conclusao" style="display:none">
+      <div style="margin-bottom:.75rem">
+        <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">✅ Data de conclusão <span style="color:var(--vm)">*</span></div>
+        <input type="date" id="gnv-acao-fim" style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px">
+      </div>
+      <div style="background:var(--azc);border:1px solid rgba(26,74,138,.2);border-radius:10px;padding:.875rem;margin-bottom:.75rem">
+        <div style="font-size:11px;font-weight:700;color:var(--azm);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.4px">💼 Centro</div>
+        <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Centro <span style="color:var(--vm)">*</span></div>
+        <input type="text" id="gnv-acao-centro" placeholder="Ex: 4142"
+          style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:8px;background:#fff">
+        <div id="gnv-acao-centro-auto" style="font-size:10px;color:var(--vd);margin-top:3px;display:none">✓ Preenchido pelo centro da RC — confira/edite se necessário.</div>
+      </div>
+    </div>
+
     <div style="margin-bottom:.75rem">
       <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Observação (opcional)</div>
       <input type="text" id="gnv-acao-obs" placeholder="Ex: aguardando retorno do fornecedor..."
@@ -33727,6 +33756,15 @@ var _GNV_DOC_RESUMO = 'resumo_upload';
 // MDG SCOMP↔MDG EQUIPE SCOMP). As duas etapas PATEC estão como null porque não
 // havia número equivalente. null = a fila não calcula prazo automático; nesse
 // caso vale o prazo de retorno que veio na planilha, se houver.
+// Ícone de cada fila — mesmo tratamento visual dos cards do modal da
+// Governança antiga, com o prazo logo abaixo do nome.
+var _GNV_FILA_ICONE = {
+  'MDG':                 '🗂',
+  'MDG SCOMP':           '🗂',
+  'PARADA REQUISITANTE': '👤',
+  'PARADA FORNECEDOR':   '🏭'
+};
+
 var GOV_NOVA_PRAZOS = {
   'MDG':                 4,
   'MDG SCOMP':           10,
@@ -33785,6 +33823,41 @@ var _gnvFiltroFila = null;
 var _gnvFiltroTipoProc = null;
 var _gnvSubFiltro = null;   // nº de cobranças (2º nível, dentro da fila)
 var _gnvFiltroStPatec = null;
+var _gnvAba = 'andamento';     // 'andamento' | 'concluidos'
+var _gnvFiltroConc = null;     // tipo de conclusão, dentro da aba Concluídos
+
+// govSetTab limpa o "active" de todas as .stab da página, então o estado destas
+// sub-abas é reaplicado também a cada desenho.
+function _gnvSyncAbas(){
+  ['gnv-aba-andamento', 'gnv-aba-concluidos'].forEach(function(id){
+    var b = document.getElementById(id);
+    if (b) b.classList.toggle('active', id === 'gnv-aba-' + _gnvAba);
+  });
+}
+function gnvSetAba(aba, btn){
+  _gnvAba = (aba === 'concluidos') ? 'concluidos' : 'andamento';
+  _gnvSyncAbas();
+  // filtros de uma aba não fazem sentido na outra
+  _gnvFiltroFila = null; _gnvSubFiltro = null; _gnvFiltroConc = null;
+  _gnvDesenhar();
+}
+
+// Item concluído sai da lista principal e passa a viver na aba Concluídos
+function _gnvEhConcluido(r){ return !!(_gnvEdit[r.id] && _gnvEdit[r.id].conclusao); }
+function _gnvBaseAba(){
+  return _gnvBase.filter(function(r){
+    return _gnvAba === 'concluidos' ? _gnvEhConcluido(r) : !_gnvEhConcluido(r);
+  });
+}
+
+// Reaproveita o mesmo modal de histórico da Governança
+function gnvVerHistorico(){
+  var el = document.getElementById('gnv-hist-rc');
+  var rc = (el && el.value || '').trim();
+  if (!rc) { alert('Informe o número da RC.'); return; }
+  if (typeof abrirHistoricoRC === 'function') abrirHistoricoRC(rc);
+  else alert('Histórico indisponível nesta tela.');
+}
 
 function _gnvChipStatusPatec(v){
   var t = String(v || '').trim();
@@ -33869,7 +33942,12 @@ function _gnvLinhaCalc(r){
   // o cálculo (Envio + dias úteis da fila) tem prioridade; quando a fila não
   // tem prazo definido ou ainda não houve envio, vale o prazo que veio na
   // planilha da carga inicial
-  var prazoRet = _gnvPrazoRetorno(e.fila || '', e.envio || '') || (e.prazoRetManual || '');
+  // O prazo que veio da planilha foi calculado para um envio anterior. Se o
+  // envio atual já passou dele, ele não vale mais — era o caso de itens
+  // aparecendo com envio 23/09 e retorno 17/09.
+  var manual = e.prazoRetManual || '';
+  if (manual && e.envio && manual < e.envio) manual = '';
+  var prazoRet = _gnvPrazoRetorno(e.fila || '', e.envio || '') || manual;
   return {
     dataSolic: e.dataSolic || '',
     fila:      e.fila || '',
@@ -33881,7 +33959,9 @@ function _gnvLinhaCalc(r){
     dias:      concluido ? null : _gnvDiasParado(e.dataSolic || ''),
     statusPatec: stPatec,
     conclusao:   e.conclusao || '',
-    finalizadoEm: e.finalizadoEm || ''
+    finalizadoEm: e.finalizadoEm || '',
+    centro:      e.centroConclusao || '',
+    concluidoPor: e.concluidoPor || ''
   };
 }
 
@@ -33916,6 +33996,12 @@ async function govNovaRender(){
              String(a.itemRc || '').localeCompare(String(b.itemRc || ''));
     });
 
+    var migrados = await _gnvMigrarFilaPatec();
+    if (migrados) {
+      _gnvMsg('↻ ' + migrados + ' item(ns) tinham Patec em Andamento/Finalizado na Fila — movidos para Status do Patec.', 'var(--azm)');
+      setTimeout(function(){ _gnvMsg(''); }, 8000);
+    }
+
     var av = document.getElementById('gnv-atualizado');
     if (av && _gnvResumo && _gnvResumo.atualizadoEm) {
       av.textContent = 'Base de ' + new Date(_gnvResumo.atualizadoEm).toLocaleString('pt-BR');
@@ -33924,6 +34010,40 @@ async function govNovaRender(){
   } catch (err) {
     wrap.innerHTML = '<div style="padding:2rem;color:var(--vm);font-size:13px">❌ ' + _cobEsc(err.message) + '</div>';
   }
+}
+
+// Corrige o que ficou da carga anterior: enquanto Patec em Andamento e Patec
+// Finalizado eram filas, eles foram gravados em gov_nova_edit.fila. Agora são
+// status, então saem da fila e viram statusPatec — uma vez só, na carga.
+async function _gnvMigrarFilaPatec(){
+  var ajustes = [];
+  Object.keys(_gnvEdit).forEach(function(k){
+    var e = _gnvEdit[k] || {};
+    if (!e.fila || !_gnvEhStatusPatec(e.fila)) return;
+    e.statusPatec = e.statusPatec || _gnvStatusPatecCanonico(e.fila);
+    e.fila = '';
+    _gnvEdit[k] = e;
+    ajustes.push(k);
+  });
+  if (!ajustes.length) return 0;
+
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (db) {
+    try {
+      var lote = db.batch(), n = 0, lotes = [];
+      ajustes.forEach(function(k){
+        lote.set(db.collection(_GNV_COL_EDIT).doc(k),
+                 { fila: '', statusPatec: _gnvEdit[k].statusPatec }, { merge: true });
+        n++;
+        if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
+      });
+      lotes.push(lote);
+      var seq = Promise.resolve();
+      lotes.forEach(function(b){ seq = seq.then(function(){ return b.commit(); }); });
+      await seq;
+    } catch (err) { console.warn('migração fila→status:', err); }
+  }
+  return ajustes.length;
 }
 
 // ── Filtros ──────────────────────────────────────────────────────
@@ -33946,8 +34066,13 @@ function gnvFiltrarStatusPatec(st){
   _gnvFiltroStPatec = (_gnvFiltroStPatec === st) ? null : st;
   _gnvDesenhar();
 }
+function gnvFiltrarConclusao(c){
+  _gnvFiltroConc = (_gnvFiltroConc === c) ? null : c;
+  _gnvDesenhar();
+}
 function gnvLimparFiltros(){
-  _gnvBusca = ''; _gnvFiltroFila = null; _gnvFiltroTipoProc = null; _gnvSubFiltro = null; _gnvFiltroStPatec = null;
+  _gnvBusca = ''; _gnvFiltroFila = null; _gnvFiltroTipoProc = null; _gnvSubFiltro = null;
+  _gnvFiltroStPatec = null; _gnvFiltroConc = null;
   var b = document.getElementById('gnv-filtro-texto'); if (b) b.value = '';
   _gnvDesenhar();
 }
@@ -33955,7 +34080,10 @@ function gnvLimparFiltros(){
 function _gnvTipoProcDe(r){ return String(r.tipoProcesso || '').trim(); }
 
 function _gnvFiltrar(){
-  var lista = _gnvBase;
+  var lista = _gnvBaseAba();
+  if (_gnvAba === 'concluidos' && _gnvFiltroConc) {
+    lista = lista.filter(function(r){ return _gnvLinhaCalc(r).conclusao === _gnvFiltroConc; });
+  }
   if (_gnvBusca) {
     lista = lista.filter(function(r){
       return [r.rc, r.itemRc, r.oportunidade, r.itemOp, r.analista, r.processo, r.tipoProcesso, r.centro]
@@ -33997,9 +34125,9 @@ function _gnvDesenharSub(){
   var el = document.getElementById('gnv-subcards');
   if (!el) return;
 
-  if (!_gnvFiltroFila) { el.innerHTML = ''; el.style.display = 'none'; return; }
+  if (!_gnvFiltroFila || _gnvAba === 'concluidos') { el.innerHTML = ''; el.style.display = 'none'; return; }
 
-  var itens = _gnvBase.filter(function(r){
+  var itens = _gnvBaseAba().filter(function(r){
     if ((_gnvLinhaCalc(r).fila || 'Sem fila') !== _gnvFiltroFila) return false;
     if (_gnvFiltroTipoProc && _gnvTipoProcDe(r) !== _gnvFiltroTipoProc) return false;
     return true;
@@ -34064,9 +34192,13 @@ function _gnvDesenhar(){
     return;
   }
 
+  _gnvSyncAbas();
+  if (_gnvAba === 'concluidos') { _gnvDesenharConcluidos(); return; }
+
   // ── Contagens ───────────────────────────────────────────────
+  var ativos = _gnvBaseAba();
   var porFila = {}, porTipoProc = {}, porStPatec = {}, nVenc = 0;
-  _gnvBase.forEach(function(r){
+  ativos.forEach(function(r){
     var c = _gnvLinhaCalc(r);
     var f = c.fila || 'Sem fila';
     porFila[f] = (porFila[f] || 0) + 1;
@@ -34091,8 +34223,8 @@ function _gnvDesenhar(){
       + ' style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;flex:1 1 auto;'
       + 'background:' + (semFiltro ? 'var(--azm)' : 'var(--azc)') + ';color:' + (semFiltro ? '#fff' : 'var(--azm)')
       + ';border:1.5px solid var(--azm);border-radius:8px;padding:7px 18px;line-height:1.1">'
-      + '<span style="font-size:22px;font-weight:800">' + _gnvBase.length + '</span>'
-      + '<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Total<br>de itens</span>'
+      + '<span style="font-size:22px;font-weight:800">' + ativos.length + '</span>'
+      + '<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Em<br>andamento</span>'
       + '</div></div>';
 
     // o alerta de vencidas continua, logo abaixo do total
@@ -34227,7 +34359,11 @@ function _gnvDesenhar(){
       + '<td>' + _cobEsc(r.centro || '—') + '</td>'
       + '<td>' + _cobEsc(r.tipo || '—') + '</td>'
       + '<td>' + _gnvChipStatusPatec(c.statusPatec)
-        + (c.conclusao ? '<div style="font-size:9px;color:var(--tx2);margin-top:2px">' + _cobEsc(c.conclusao) + '</div>' : '')
+        + (c.conclusao
+            ? '<div style="font-size:9px;color:var(--tx2);margin-top:2px">' + _cobEsc(c.conclusao)
+              + (c.finalizadoEm ? ' · ' + fmt(c.finalizadoEm) : '')
+              + (c.centro ? ' · centro ' + _cobEsc(c.centro) : '') + '</div>'
+            : '')
         + '</td>'
       + '<td style="text-align:center">' + fmt(c.dataSolic) + '</td>'
       + '<td>' + (c.fila ? _cobEsc(c.fila) : '<span style="color:var(--tx2)">—</span>') + '</td>'
@@ -34253,7 +34389,7 @@ function _gnvDesenhar(){
   }
   t += '</tbody></table>';
 
-  var legenda = 'Mostrando ' + lista.length + ' de ' + _gnvBase.length + ' itens';
+  var legenda = 'Mostrando ' + lista.length + ' de ' + ativos.length + ' itens em andamento';
   if (_gnvFiltroFila) legenda += ' — fila ' + _cobEsc(_gnvFiltroFila);
   if (_gnvFiltroTipoProc) legenda += ' — ' + _cobEsc(_gnvFiltroTipoProc);
   if (_gnvFiltroStPatec) legenda += ' — ' + _cobEsc(_gnvFiltroStPatec);
@@ -34263,6 +34399,121 @@ function _gnvDesenhar(){
 
   wrap.innerHTML = '<div class="tw" style="max-height:600px">' + t + '</div>'
     + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">' + legenda + '</div>';
+}
+
+// ── Aba Concluídos: histórico dos itens finalizados ──────────────
+function _gnvDesenharConcluidos(){
+  var wrap  = document.getElementById('gnv-tabela');
+  var cards = document.getElementById('gnv-cards');
+  if (!wrap) return;
+
+  var base = _gnvBaseAba();
+  var fmt = function(d){ return d ? String(d).split('-').reverse().join('/') : '—'; };
+
+  if (cards) {
+    var porConc = {};
+    base.forEach(function(r){
+      var c = _gnvLinhaCalc(r).conclusao || 'Sem tipo';
+      porConc[c] = (porConc[c] || 0) + 1;
+    });
+    var semFiltro = !_gnvFiltroConc;
+    var html = '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
+      + '<div style="border-right:1px dashed var(--brd);padding-right:18px;min-width:200px">'
+      +   '<div onclick="gnvLimparFiltros()" title="Mostrar todos os concluídos"'
+      +   ' style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;'
+      +   'background:' + (semFiltro ? 'var(--vd)' : 'var(--vdc)') + ';color:' + (semFiltro ? '#fff' : 'var(--vd)')
+      +   ';border:1.5px solid var(--vd);border-radius:8px;padding:7px 18px;line-height:1.1">'
+      +   '<span style="font-size:22px;font-weight:800">' + base.length + '</span>'
+      +   '<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Itens<br>concluídos</span>'
+      +   '</div>'
+      + '</div>'
+      + '<div style="flex:1 1 0;min-width:0"><div style="display:flex;gap:12px;flex-wrap:wrap">';
+
+    _GNV_CONCLUSOES.forEach(function(x){
+      var qtd = porConc[x.nome] || 0;
+      var on = (_gnvFiltroConc === x.nome);
+      html += '<div ' + (qtd ? 'onclick="gnvFiltrarConclusao(\'' + x.nome.replace(/'/g, "\\'") + '\')"' : '')
+        + ' title="Filtrar ' + _cobEsc(x.nome) + '"'
+        + ' style="' + (qtd ? 'cursor:pointer' : 'opacity:.55;cursor:default')
+        + ';background:' + (on ? x.cor : x.bg) + ';color:' + (on ? '#fff' : x.cor)
+        + ';border:1.5px solid ' + x.cor + ';border-radius:8px;padding:10px 18px;text-align:center;'
+        + 'line-height:1.2;flex:1 1 0;min-width:132px">'
+        + '<div style="font-size:20px">' + x.emoji + '</div>'
+        + '<div style="font-size:21px;font-weight:800">' + qtd + '</div>'
+        + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(x.nome) + '</div>'
+        + '</div>';
+    });
+    cards.innerHTML = html + '</div></div></div>';
+  }
+
+  _gnvDesenharSub();
+
+  if (!base.length) {
+    wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">'
+      + '✅ Nenhum item concluído ainda.<br><span style="font-size:11px">Itens saem daqui da lista em andamento quando recebem uma conclusão.</span></div>';
+    return;
+  }
+
+  var lista = _gnvFiltrar().slice().sort(function(a, b){
+    return String(_gnvLinhaCalc(b).finalizadoEm || '').localeCompare(String(_gnvLinhaCalc(a).finalizadoEm || ''));
+  });
+
+  var t = '<table><thead><tr>'
+    + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Oportunidade</th><th>Item OP</th>'
+    + '<th>Centro</th><th>Tipo</th><th>Conclusão</th><th>Data de conclusão</th>'
+    + '<th>Centro da conclusão</th><th>Concluído por</th><th>Última fila</th>'
+    + '<th>Tipo de Processo</th><th>Processo</th>'
+    + '<th style="position:sticky;right:0;background:var(--cin);box-shadow:-4px 0 6px -4px rgba(0,0,0,.18)"></th>'
+    + '</tr></thead><tbody>';
+
+  for (var i = 0; i < lista.length; i++) {
+    var r = lista[i];
+    var c = _gnvLinhaCalc(r);
+    var cfg = null;
+    _GNV_CONCLUSOES.forEach(function(x){ if (x.nome === c.conclusao) cfg = x; });
+
+    t += '<tr>'
+      + '<td>' + _cobEsc(r.analista || '—') + '</td>'
+      + '<td style="font-weight:700">' + _cobEsc(r.rc || '—') + '</td>'
+      + '<td>' + _cobEsc(r.itemRc || '—') + '</td>'
+      + '<td>' + _cobEsc(r.oportunidade || '—') + '</td>'
+      + '<td>' + _cobEsc(r.itemOp || '—') + '</td>'
+      + '<td>' + _cobEsc(r.centro || '—') + '</td>'
+      + '<td>' + _cobEsc(r.tipo || '—') + '</td>'
+      + '<td><span style="background:' + (cfg ? cfg.bg : 'var(--cin)') + ';color:' + (cfg ? cfg.cor : 'var(--tx2)')
+        + ';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap">'
+        + (cfg ? cfg.emoji + ' ' : '') + _cobEsc(c.conclusao || '—') + '</span></td>'
+      + '<td style="text-align:center;font-weight:600">' + fmt(c.finalizadoEm) + '</td>'
+      + '<td style="text-align:center">' + _cobEsc(c.centro || '—') + '</td>'
+      + '<td>' + _cobEsc(c.concluidoPor || '—') + '</td>'
+      + '<td style="color:var(--tx2)">' + _cobEsc(c.fila || '—') + '</td>'
+      + '<td>' + _cobEsc(r.tipoProcesso || '—') + '</td>'
+      + '<td>' + _cobEsc(r.processo || '—') + '</td>'
+      + '<td style="white-space:nowrap;position:sticky;right:0;background:var(--bg);box-shadow:-4px 0 6px -4px rgba(0,0,0,.18)">'
+        + '<button title="Ver todas as ações desta RC" onclick="gnvHistoricoDe(\'' + String(r.rc || '').replace(/'/g, "\\'") + '\')"'
+        + ' style="background:var(--cin);border:1px solid var(--brd);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11px">📋</button> '
+        + '<button title="Reabrir: registrar uma fila devolve o item para a lista em andamento"'
+        + ' onclick="gnvAbrirNaBusca(\'' + String(r.rc || '').replace(/'/g, "\\'") + '\')"'
+        + ' style="background:var(--azc);border:1px solid var(--azm);border-radius:6px;padding:2px 9px;'
+        + 'cursor:pointer;font-size:10px;color:var(--azm);font-weight:700">reabrir ↑</button>'
+        + '</td>'
+      + '</tr>';
+  }
+  t += '</tbody></table>';
+
+  var legenda = 'Mostrando ' + lista.length + ' de ' + base.length + ' itens concluídos';
+  if (_gnvFiltroConc) legenda += ' — ' + _cobEsc(_gnvFiltroConc);
+  if (_gnvBusca) legenda += ' — "' + _cobEsc(_gnvBusca) + '"';
+  legenda += '. Mais recentes primeiro.';
+
+  wrap.innerHTML = '<div class="tw" style="max-height:600px">' + t + '</div>'
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">' + legenda + '</div>';
+}
+
+function gnvHistoricoDe(rc){
+  var el = document.getElementById('gnv-hist-rc');
+  if (el) el.value = rc;
+  gnvVerHistorico();
 }
 
 // Joga a RC no campo Buscar RC do topo e dispara a busca
@@ -34554,19 +34805,20 @@ function govNovaExportar(){
   if (typeof XLSX === 'undefined') { alert('Biblioteca XLSX não carregada.'); return; }
   var lista = _gnvFiltrar();
   if (!lista.length) { alert('Nada para exportar.'); return; }
-  var rows = [['Analista','RC','Item RC','Oportunidade','Item OP','Centro','Tipo',
+  var rows = [['Analista','RC','Item RC','Oportunidade','Item OP','Centro','Tipo','Status do Patec',
                'Data da solicitação','Fila','Envio','Prazo de retorno','Status','Cobrança',
-               'Dias parados','Prazo','SLA','Tipo de Processo','Processo']];
+               'Dias parados','Prazo','SLA','Tipo de Processo','Processo',
+               'Conclusão','Data de conclusão','Centro da conclusão','Concluído por']];
   lista.forEach(function(r){
     var c = _gnvLinhaCalc(r);
+    var br = function(d){ return d ? String(d).split('-').reverse().join('/') : ''; };
     rows.push([
       r.analista||'', r.rc||'', r.itemRc||'', r.oportunidade||'', r.itemOp||'', r.centro||'', r.tipo||'',
-      c.dataSolic ? c.dataSolic.split('-').reverse().join('/') : '',
-      c.fila||'',
-      c.envio ? c.envio.split('-').reverse().join('/') : '',
-      c.prazoRet ? c.prazoRet.split('-').reverse().join('/') : '',
+      c.statusPatec||'',
+      br(c.dataSolic), c.fila||'', br(c.envio), br(c.prazoRet),
       c.status||'', c.cobranca, (c.dias == null ? '' : c.dias),
-      r.prazo||'', r.sla||'', r.tipoProcesso||'', r.processo||''
+      r.prazo||'', r.sla||'', r.tipoProcesso||'', r.processo||'',
+      c.conclusao||'', br(c.finalizadoEm), c.centro||'', c.concluidoPor||''
     ]);
   });
   var wb = XLSX.utils.book_new();
@@ -34600,6 +34852,7 @@ async function _gnvGarantirDados(){
     });
     _gnvEdit = {};
     res[1].forEach(function(d){ _gnvEdit[d.id] = d.data(); });
+    await _gnvMigrarFilaPatec();
   } catch (e) { console.warn('_gnvGarantirDados:', e); }
 }
 
@@ -34649,7 +34902,11 @@ function _gnvBuscaHtml(achados, rcBusca){
        +   '<span style="font-size:11px;color:var(--tx2)">' + _cobEsc(r.analista || '—') + '</span>'
        +   '<span style="font-size:11px;color:var(--tx2)">Centro ' + _cobEsc(r.centro || '—') + '</span>'
        +   _gnvChipStatusPatec(c.statusPatec)
-       +   (c.conclusao ? '<span style="font-size:11px;font-weight:700;color:var(--az)">' + _cobEsc(c.conclusao) + '</span>' : '')
+       +   (c.conclusao
+              ? '<span style="font-size:11px;font-weight:700;color:var(--az)">' + _cobEsc(c.conclusao)
+                + (c.finalizadoEm ? ' em ' + fmt(c.finalizadoEm) : '')
+                + (c.centro ? ' · centro ' + _cobEsc(c.centro) : '') + '</span>'
+              : '')
        +   (r.processo ? '<span style="font-size:11px;color:var(--tx2)">' + _cobEsc(r.tipoProcesso || '') + ' ' + _cobEsc(r.processo) + '</span>' : '')
        + '</div>'
 
@@ -34720,10 +34977,11 @@ function gnvAcaoAbrir(chave, tipo){
       var dias = GOV_NOVA_PRAZOS[f];
       return '<button type="button" data-fila="' + _cobEsc(f) + '" onclick="gnvAcaoSelFila(this)"'
         + ' style="background:' + (f === atual ? 'var(--azc)' : 'var(--cin)') + ';border:1.5px solid '
-        + (f === atual ? 'var(--azm)' : 'var(--brd)') + ';border-radius:8px;padding:9px 6px;cursor:pointer;'
-        + 'font-size:11.5px;font-weight:700;color:var(--tx);line-height:1.3">'
-        + _cobEsc(f)
-        + '<div style="font-size:9px;font-weight:600;color:var(--tx2)">'
+        + (f === atual ? 'var(--azm)' : 'var(--brd)') + ';border-radius:10px;padding:.875rem .5rem;cursor:pointer;'
+        + 'text-align:center;transition:all .18s">'
+        + '<div style="font-size:20px;margin-bottom:4px">' + (_GNV_FILA_ICONE[f] || '📋') + '</div>'
+        + '<div style="font-size:12px;font-weight:600;color:var(--tx)">' + _cobEsc(f) + '</div>'
+        + '<div style="font-size:9.5px;font-weight:600;color:var(--tx2);margin-top:2px">'
         + (dias ? dias + ' dias úteis' : 'sem prazo') + '</div></button>';
     }).join('');
   }
@@ -34737,6 +34995,16 @@ function gnvAcaoAbrir(chave, tipo){
   if (cobr) cobr.value = calc.cobranca || 0;
   var obs = document.getElementById('gnv-acao-obs');
   if (obs) obs.value = '';
+  var fim = document.getElementById('gnv-acao-fim');
+  if (fim) fim.value = calc.finalizadoEm || _gnvHoje();
+  // o centro já vem da planilha: preenche e deixa editável, como na Governança
+  var centro = document.getElementById('gnv-acao-centro');
+  var centroAuto = document.getElementById('gnv-acao-centro-auto');
+  if (centro) {
+    var jaTem = calc.centro || r.centro || '';
+    centro.value = jaTem;
+    if (centroAuto) centroAuto.style.display = (!calc.centro && r.centro) ? 'block' : 'none';
+  }
   _gnvAcaoPrevia();
   var err = document.getElementById('gnv-acao-erro');
   if (err) { err.style.display = 'none'; err.textContent = ''; }
@@ -34790,6 +35058,7 @@ function _gnvAcaoTrocarEtapa(){
   el = document.getElementById('gnv-etapa-fila');      if (el) el.style.display = conc ? 'none' : '';
   el = document.getElementById('gnv-etapa-conclusao'); if (el) el.style.display = conc ? '' : 'none';
   el = document.getElementById('gnv-linha-cobranca');  if (el) el.style.display = conc ? 'none' : 'grid';
+  el = document.getElementById('gnv-bloco-conclusao'); if (el) el.style.display = conc ? '' : 'none';
   el = document.getElementById('gnv-acao-subtitulo');
   if (el) el.textContent = conc ? 'Selecione o tipo de conclusão' : 'Selecione a fila de tratamento';
   el = document.getElementById('gnv-acao-aviso');
@@ -34827,9 +35096,9 @@ function gnvAcaoSelFila(btn){
     var on = (b === btn);
     b.style.background  = on ? 'var(--azm)' : 'var(--cin)';
     b.style.borderColor = on ? 'var(--azm)' : 'var(--brd)';
-    b.style.color       = on ? '#fff' : 'var(--tx)';
-    var sub = b.querySelector('div');
-    if (sub) sub.style.color = on ? 'rgba(255,255,255,.8)' : 'var(--tx2)';
+    var divs = b.querySelectorAll('div');
+    if (divs[1]) divs[1].style.color = on ? '#fff' : 'var(--tx)';
+    if (divs[2]) divs[2].style.color = on ? 'rgba(255,255,255,.85)' : 'var(--tx2)';
   });
   _gnvAcaoPrevia();
 }
@@ -34852,8 +35121,13 @@ async function gnvAcaoConfirmar(){
 
   var ehConclusao = (_gnvAcaoCtx.etapa === 'conclusao');
 
+  var dataFim = (document.getElementById('gnv-acao-fim') || {}).value || '';
+  var centro  = ((document.getElementById('gnv-acao-centro') || {}).value || '').trim();
+
   if (ehConclusao) {
     if (!_gnvAcaoCtx.conclusao) { mostrarErro('Selecione o tipo de conclusão.'); return; }
+    if (!dataFim) { mostrarErro('Informe a data de conclusão.'); return; }
+    if (!centro)  { mostrarErro('Informe o Centro.'); return; }
   } else {
     if (!_gnvAcaoCtx.fila) { mostrarErro('Selecione a fila de tratamento.'); return; }
   }
@@ -34875,6 +35149,10 @@ async function gnvAcaoConfirmar(){
     mostrarErro('A data da solicitação não pode ser posterior à data de envio.');
     return;
   }
+  if (ehConclusao && dataFim < envio) {
+    mostrarErro('A data de conclusão não pode ser anterior à data de envio.');
+    return;
+  }
 
   var colab = _cobManualColab();
   if (!colab) { mostrarErro('Não identifiquei o colaborador logado — entre de novo para a ação contar na produção.'); return; }
@@ -34890,7 +35168,7 @@ async function gnvAcaoConfirmar(){
   try {
     // 1) produção — mesma coleção das demais ações, então conta nos chips,
     //    no velocímetro individual, no da equipe e no Tempo Real
-    await db.collection('producao_acoes').add({
+    var registroAcao = {
       colab: colab,
       data: _gnvHoje(),
       tipo: tipo,
@@ -34901,22 +35179,38 @@ async function gnvAcaoConfirmar(){
       ts: new Date().toISOString(),
       rc: _gnvAcaoCtx.rc,
       itemRc: _gnvAcaoCtx.itemRc,
-      rcChave: chave
-    });
+      rcChave: chave,
+      ...(ehConclusao ? { centro: centro, finalizado: dataFim } : {})
+    };
+    await db.collection('producao_acoes').add(registroAcao);
+    // o modal de Histórico da RC lê do cache local: sem isto a ação só
+    // apareceria lá depois de recarregar a página
+    try {
+      if (!window._prodAcoesCache) window._prodAcoesCache = {};
+      if (!window._prodAcoesCache[registroAcao.data]) window._prodAcoesCache[registroAcao.data] = [];
+      window._prodAcoesCache[registroAcao.data].push(registroAcao);
+    } catch (e) {}
 
     // 2) edição do item — troca de fila zera cobrança e reinicia a contagem
     if (!_gnvEdit[chave]) _gnvEdit[chave] = {};
     if (ehConclusao) {
       // conclusão: o item vira Patec Finalizado e o relógio para. A fila
       // continua como estava, para os cards não perderem o histórico.
-      _gnvEdit[chave].conclusao    = _gnvAcaoCtx.conclusao;
-      _gnvEdit[chave].finalizadoEm = envio;
-      _gnvEdit[chave].statusPatec  = 'Patec Finalizado';
+      // guardado com o que a aba de Concluídos vai precisar depois
+      _gnvEdit[chave].conclusao       = _gnvAcaoCtx.conclusao;
+      _gnvEdit[chave].finalizadoEm    = dataFim;
+      _gnvEdit[chave].centroConclusao = centro;
+      _gnvEdit[chave].concluidoPor    = colab;
+      _gnvEdit[chave].concluidoTs     = new Date().toISOString();
+      _gnvEdit[chave].statusPatec     = 'Patec Finalizado';
     } else {
       // voltou para tratamento: deixa de estar concluído
-      _gnvEdit[chave].conclusao    = '';
-      _gnvEdit[chave].finalizadoEm = '';
-      _gnvEdit[chave].statusPatec  = 'Patec em Andamento';
+      _gnvEdit[chave].conclusao       = '';
+      _gnvEdit[chave].finalizadoEm    = '';
+      _gnvEdit[chave].centroConclusao = '';
+      _gnvEdit[chave].concluidoPor    = '';
+      _gnvEdit[chave].concluidoTs     = '';
+      _gnvEdit[chave].statusPatec     = 'Patec em Andamento';
       _gnvEdit[chave].fila         = fila;
       _gnvEdit[chave].cobranca     = cobranca;
     }
