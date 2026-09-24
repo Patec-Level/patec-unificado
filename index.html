@@ -4620,7 +4620,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <button class="btn btn-s" style="font-size:11px" onclick="govNovaBaixarModelo()" title="Baixa a planilha em branco, já com os cabeçalhos certos">📄 Baixar modelo</button>
             <span id="gnv-msg" style="font-size:11.5px;color:var(--tx2)"></span>
           </div>
-          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Oportunidade, Item OP, Centro, Tipo, Prazo, SLA, Tipo de Processo, Processo</strong> — obrigatória: RC. A ordem não importa, a leitura é pelo nome.<br>Para a <strong>carga inicial</strong>, a planilha também pode trazer <strong>Fila, Data da solicitação, Envio, Cobrança e Prazo de retorno</strong>: esses só preenchem o que ainda estiver em branco e nunca sobrepõem o que a equipe já tratou.</div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Oportunidade, Item OP, Centro, Tipo, Status do Patec, Prazo, SLA, Tipo de Processo, Processo</strong> — obrigatória: RC. A ordem não importa, a leitura é pelo nome.<br>Para a <strong>carga inicial</strong>, a planilha também pode trazer <strong>Fila, Data da solicitação, Envio, Cobrança e Prazo de retorno</strong>: esses só preenchem o que ainda estiver em branco e nunca sobrepõem o que a equipe já tratou.</div>
           <div id="gnv-resumo"></div>
         </div>
 
@@ -25455,19 +25455,47 @@ function q18Consultar(valor){
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:.25rem">
       <div>
         <div style="font-weight:700;font-size:15px;color:var(--az)" id="gnv-acao-titulo">Confirmar ação</div>
-        <div style="font-size:11px;color:var(--tx2);margin-top:2px">Selecione a fila de tratamento</div>
+        <div id="gnv-acao-subtitulo" style="font-size:11px;color:var(--tx2);margin-top:2px">Selecione a fila de tratamento</div>
       </div>
       <button onclick="gnvAcaoFechar()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--tx2);line-height:1">×</button>
     </div>
 
     <div id="gnv-acao-rc" style="font-size:12px;color:var(--az);background:var(--azc);border:1px solid var(--azm);border-radius:8px;padding:.5rem .75rem;margin:.75rem 0">—</div>
 
-    <div style="font-size:11px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:.5rem">↓ Fila — para onde foi?</div>
-    <div id="gnv-acao-filas" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem"></div>
+    <div id="gnv-etapa-fila">
+      <div style="font-size:11px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:.5rem">↓ Fila — para onde foi?</div>
+      <div id="gnv-acao-filas" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.75rem"></div>
+      <button type="button" onclick="gnvAcaoIrConclusao()"
+        style="width:100%;background:var(--vdc);border:1.5px solid var(--vd);border-radius:9px;padding:12px;cursor:pointer;
+               font-size:13px;font-weight:700;color:var(--vd);margin-bottom:1rem">🏁 Concluído — ir para conclusão ›</button>
+    </div>
 
-    <div style="margin-bottom:.75rem">
-      <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">📅 Data de envio <span style="color:var(--vm)">*</span></div>
-      <input type="date" id="gnv-acao-envio" style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px">
+    <div id="gnv-etapa-conclusao" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:.5rem">
+        <button type="button" onclick="gnvAcaoVoltar()"
+          style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--azm);font-weight:700;padding:0">‹ Voltar</button>
+        <span style="font-size:11px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">↓ Tipo de conclusão</span>
+      </div>
+      <div id="gnv-acao-conclusoes" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:.75rem">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">🗓️ Data da solicitação <span style="color:var(--vm)">*</span></div>
+        <input type="date" id="gnv-acao-solic" style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px">
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">📅 Data de envio <span style="color:var(--vm)">*</span></div>
+        <input type="date" id="gnv-acao-envio" oninput="_gnvAcaoPrevia()" style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px">
+      </div>
+    </div>
+
+    <div id="gnv-linha-cobranca" style="display:grid;grid-template-columns:110px 1fr;gap:10px;margin-bottom:.75rem;align-items:end">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">💳 Cobrança</div>
+        <input type="number" min="0" id="gnv-acao-cobr" value="0" style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px;text-align:center">
+      </div>
+      <div id="gnv-acao-prazo-previa" style="font-size:11px;color:var(--tx2);padding-bottom:9px"></div>
     </div>
 
     <div style="margin-bottom:.75rem">
@@ -25476,9 +25504,7 @@ function q18Consultar(valor){
         style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px">
     </div>
 
-    <div id="gnv-acao-aviso" style="font-size:10.5px;color:var(--tx2);background:var(--cin);border-radius:7px;padding:7px 10px;margin-bottom:.75rem">
-      Ao confirmar: a cobrança zera e a contagem de dias parados recomeça nesta fila.
-    </div>
+    <div id="gnv-acao-aviso" style="font-size:10.5px;color:var(--tx2);background:var(--cin);border-radius:7px;padding:7px 10px;margin-bottom:.75rem"></div>
     <div id="gnv-acao-erro" style="display:none;font-size:11px;color:var(--vm);background:var(--vmc);padding:7px 12px;border-radius:7px;margin-bottom:.75rem"></div>
 
     <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -33702,13 +33728,43 @@ var _GNV_DOC_RESUMO = 'resumo_upload';
 // havia número equivalente. null = a fila não calcula prazo automático; nesse
 // caso vale o prazo de retorno que veio na planilha, se houver.
 var GOV_NOVA_PRAZOS = {
-  'PATEC EM ANDAMENTO':  null,
-  'PATEC FINALIZADO':    null,
   'MDG':                 4,
   'MDG SCOMP':           10,
   'PARADA REQUISITANTE': 5,
   'PARADA FORNECEDOR':   2
 };
+
+// "Patec em Andamento" e "Patec Finalizado" não são fila de tratamento: são o
+// estado do PATEC. Viraram coluna própria, alimentada pelo upload.
+var _GNV_STATUS_PATEC = [
+  { nome: 'Patec em Andamento', cor: 'var(--azm)', bg: 'var(--azc)' },
+  { nome: 'Patec Finalizado',   cor: 'var(--vd)',  bg: 'var(--vdc)' }
+];
+
+// Mesmos quatro desfechos do resto do sistema, com as cores de lá.
+var _GNV_CONCLUSOES = [
+  { nome: 'Pedido',       emoji: '🛒', cor: '#16a34a', bg: '#dcfce7' },
+  { nome: 'Republicação', emoji: '🔄', cor: '#b45309', bg: '#fef3c7' },
+  { nome: 'Devolução',    emoji: '↩',  cor: '#dc2626', bg: '#fee2e2' },
+  { nome: 'Nova Reserva', emoji: '🎫', cor: '#2563EB', bg: '#dbeafe' }
+];
+
+function _gnvStatusPatecCanonico(v){
+  var t = String(v == null ? '' : v).trim().replace(/\s+/g, ' ');
+  if (!t || t === '#N/A' || t === '#N/D' || t === '—' || t === '-') return '';
+  var alvo = t.toUpperCase();
+  var achou = '';
+  _GNV_STATUS_PATEC.forEach(function(x){ if (x.nome.toUpperCase() === alvo) achou = x.nome; });
+  return achou || t;
+}
+
+// Um valor de Status do Patec que apareça na coluna Fila da planilha antiga
+// não é fila — é status. Isso deixa a carga que você já tem funcionar sem
+// precisar refazer a planilha.
+function _gnvEhStatusPatec(v){
+  var alvo = String(v == null ? '' : v).trim().replace(/\s+/g, ' ').toUpperCase();
+  return _GNV_STATUS_PATEC.some(function(x){ return x.nome.toUpperCase() === alvo; });
+}
 
 // A planilha traz a fila com espaço sobrando e caixa variada ("Patec em Andamento ").
 // Aqui ela vira o nome canônico da tabela acima; fila desconhecida entra como veio.
@@ -33728,6 +33784,18 @@ var _gnvBusca  = '';
 var _gnvFiltroFila = null;
 var _gnvFiltroTipoProc = null;
 var _gnvSubFiltro = null;   // nº de cobranças (2º nível, dentro da fila)
+var _gnvFiltroStPatec = null;
+
+function _gnvChipStatusPatec(v){
+  var t = String(v || '').trim();
+  if (!t) return '<span style="color:var(--tx2)">—</span>';
+  var cfg = null;
+  _GNV_STATUS_PATEC.forEach(function(x){ if (x.nome.toUpperCase() === t.toUpperCase()) cfg = x; });
+  if (!cfg) return _cobEsc(t);
+  return '<span style="background:' + cfg.bg + ';color:' + cfg.cor
+    + ';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap">'
+    + _cobEsc(cfg.nome) + '</span>';
+}
 
 // Mesma lista fixa e as mesmas cores da Cobrança por Status. Valores de
 // "Tipo de Processo" que aparecerem na planilha fora desta lista entram
@@ -33794,6 +33862,10 @@ function _gnvDiasParado(dataSolic){
 
 function _gnvLinhaCalc(r){
   var e = _gnvEdit[r.id] || {};
+  // O Status do Patec vem do upload, mas a conclusão feita na tela manda —
+  // e fica na coleção de edição, que o upload não toca.
+  var stPatec = e.statusPatec || r.statusPatec || '';
+  var concluido = !!e.conclusao;
   // o cálculo (Envio + dias úteis da fila) tem prioridade; quando a fila não
   // tem prazo definido ou ainda não houve envio, vale o prazo que veio na
   // planilha da carga inicial
@@ -33804,43 +33876,13 @@ function _gnvLinhaCalc(r){
     envio:     e.envio || '',
     cobranca:  (e.cobranca == null || e.cobranca === '') ? 0 : (parseInt(e.cobranca, 10) || 0),
     prazoRet:  prazoRet,
-    status:    _gnvStatus(prazoRet),
-    dias:      _gnvDiasParado(e.dataSolic || '')
+    // concluído para de contar prazo e dias parados, como no resto do sistema
+    status:    concluido ? 'CONCLUÍDO' : _gnvStatus(prazoRet),
+    dias:      concluido ? null : _gnvDiasParado(e.dataSolic || ''),
+    statusPatec: stPatec,
+    conclusao:   e.conclusao || '',
+    finalizadoEm: e.finalizadoEm || ''
   };
-}
-
-// ── Gravação das colunas editáveis ───────────────────────────────
-async function gnvSalvar(chave, campo, valor){
-  if (!chave) return;
-  if (!_gnvEdit[chave]) _gnvEdit[chave] = {};
-
-  if (campo === 'cobranca') {
-    valor = Math.max(0, parseInt(valor, 10) || 0);
-  }
-
-  var filaMudou = (campo === 'fila' && String(_gnvEdit[chave].fila || '') !== String(valor || ''));
-  _gnvEdit[chave][campo] = valor;
-
-  // Regra do processo: trocou a fila, a cobrança zera e a contagem de dias
-  // recomeça (data da solicitação passa a ser hoje).
-  if (filaMudou) {
-    _gnvEdit[chave].cobranca  = 0;
-    _gnvEdit[chave].dataSolic = _gnvHoje();
-  }
-  _gnvEdit[chave].atualizadoEm = new Date().toISOString();
-
-  _gnvDesenhar();
-  _gnvRepintarBusca();
-
-  var db = (typeof getDB === 'function') ? getDB() : null;
-  if (!db) { _gnvMsg('⚠ Sem Firebase — a alteração ficou só nesta tela.', 'var(--am)'); return; }
-  try {
-    await db.collection(_GNV_COL_EDIT).doc(chave).set(_gnvEdit[chave], { merge: true });
-    _gnvMsg('✓ Salvo.', 'var(--vd)');
-    setTimeout(function(){ _gnvMsg(''); }, 1500);
-  } catch (err) {
-    _gnvMsg('❌ Erro ao salvar: ' + (err.message || err), 'var(--vm)');
-  }
 }
 
 // ── Carga ────────────────────────────────────────────────────────
@@ -33900,8 +33942,12 @@ function gnvSubFiltrar(q){
   _gnvSubFiltro = (_gnvSubFiltro === q) ? null : q;
   _gnvDesenhar();
 }
+function gnvFiltrarStatusPatec(st){
+  _gnvFiltroStPatec = (_gnvFiltroStPatec === st) ? null : st;
+  _gnvDesenhar();
+}
 function gnvLimparFiltros(){
-  _gnvBusca = ''; _gnvFiltroFila = null; _gnvFiltroTipoProc = null; _gnvSubFiltro = null;
+  _gnvBusca = ''; _gnvFiltroFila = null; _gnvFiltroTipoProc = null; _gnvSubFiltro = null; _gnvFiltroStPatec = null;
   var b = document.getElementById('gnv-filtro-texto'); if (b) b.value = '';
   _gnvDesenhar();
 }
@@ -33918,6 +33964,11 @@ function _gnvFiltrar(){
   }
   if (_gnvFiltroTipoProc) {
     lista = lista.filter(function(r){ return _gnvTipoProcDe(r) === _gnvFiltroTipoProc; });
+  }
+  if (_gnvFiltroStPatec) {
+    lista = lista.filter(function(r){
+      return String(_gnvLinhaCalc(r).statusPatec || '').toUpperCase() === _gnvFiltroStPatec.toUpperCase();
+    });
   }
   if (_gnvFiltroFila) {
     lista = lista.filter(function(r){ return (_gnvLinhaCalc(r).fila || 'Sem fila') === _gnvFiltroFila; });
@@ -34014,13 +34065,15 @@ function _gnvDesenhar(){
   }
 
   // ── Contagens ───────────────────────────────────────────────
-  var porFila = {}, porTipoProc = {}, nVenc = 0;
+  var porFila = {}, porTipoProc = {}, porStPatec = {}, nVenc = 0;
   _gnvBase.forEach(function(r){
     var c = _gnvLinhaCalc(r);
     var f = c.fila || 'Sem fila';
     porFila[f] = (porFila[f] || 0) + 1;
     var tp = _gnvTipoProcDe(r);
     if (tp) porTipoProc[tp] = (porTipoProc[tp] || 0) + 1;
+    var sp = String(c.statusPatec || '').trim();
+    if (sp) porStPatec[sp] = (porStPatec[sp] || 0) + 1;
     if (c.status === 'VENCIDA') nVenc++;
   });
 
@@ -34030,7 +34083,7 @@ function _gnvDesenhar(){
 
   if (cards) {
     var _q = function(x){ return String(x).replace(/'/g, "\\'"); };
-    var semFiltro = (!_gnvFiltroFila && !_gnvFiltroTipoProc && _gnvSubFiltro === null);
+    var semFiltro = (!_gnvFiltroFila && !_gnvFiltroTipoProc && _gnvSubFiltro === null && !_gnvFiltroStPatec);
 
     // 1ª linha da lateral: TOTAL (mesmo card da Cobrança por Status)
     var cardTotal = '<div style="display:flex;margin-bottom:10px">'
@@ -34047,6 +34100,25 @@ function _gnvDesenhar(){
       ? '<div style="font-size:10px;font-weight:700;color:var(--vm);background:var(--vmc);border:1px solid var(--vm);'
         + 'border-radius:6px;padding:3px 10px;text-align:center;margin-bottom:8px">⚠ ' + nVenc + ' vencida(s)</div>'
       : '';
+
+    // Status do Patec — os dois estados; o Finalizado é o card de concluídos
+    var cardsSt = '';
+    _GNV_STATUS_PATEC.forEach(function(x){
+      var qtd = 0, alvo = null;
+      Object.keys(porStPatec).forEach(function(k){
+        if (k.toUpperCase() === x.nome.toUpperCase()) { qtd += porStPatec[k]; alvo = k; }
+      });
+      var on = (_gnvFiltroStPatec && _gnvFiltroStPatec.toUpperCase() === x.nome.toUpperCase());
+      cardsSt += '<div ' + (qtd ? 'onclick="gnvFiltrarStatusPatec(\'' + _q(alvo || x.nome) + '\')"' : '')
+        + ' title="Filtrar ' + _cobEsc(x.nome) + '"'
+        + ' style="' + (qtd ? 'cursor:pointer' : 'opacity:.55;cursor:default')
+        + ';background:' + (on ? x.cor : x.bg) + ';color:' + (on ? '#fff' : x.cor)
+        + ';border:1.5px solid ' + x.cor + ';border-radius:8px;padding:8px 14px;text-align:center;'
+        + 'line-height:1.2;flex:1 1 0;min-width:150px">'
+        + '<div style="font-size:19px;font-weight:800">' + qtd + '</div>'
+        + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(x.nome) + '</div>'
+        + '</div>';
+    });
 
     // 2ª linha da lateral: Tipo de Processo (lista fixa + o que vier a mais)
     var tipos = _GNV_TIPOPROC.slice();
@@ -34078,6 +34150,13 @@ function _gnvDesenhar(){
     var lateral = '<div style="border-right:1px dashed var(--brd);padding-right:18px;min-width:360px">'
       + cardTotal
       + avisoVenc
+      + '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">'
+      +   '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">Status do Patec</span>'
+      +   (_gnvFiltroStPatec
+            ? '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="gnvFiltrarStatusPatec(_gnvFiltroStPatec)">✕ limpar</button>'
+            : '')
+      + '</div>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">' + cardsSt + '</div>'
       + '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">'
       +   '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">Tipo de Processo</span>'
       +   (_gnvFiltroTipoProc
@@ -34116,7 +34195,7 @@ function _gnvDesenhar(){
 
   var t = '<table><thead><tr>'
     + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Oportunidade</th><th>Item OP</th>'
-    + '<th>Centro</th><th>Tipo</th>'
+    + '<th>Centro</th><th>Tipo</th><th>Status do Patec</th>'
     + '<th>Data da solicitação</th><th>Fila</th><th>Envio</th>'
     + '<th style="' + AUTO_BG + '">Prazo de retorno</th>'
     + '<th style="' + AUTO_BG + '">Status</th>'
@@ -34134,6 +34213,7 @@ function _gnvDesenhar(){
     var corSt = 'var(--tx2)', bgSt = 'transparent';
     if (c.status === 'VENCIDA')              { corSt = 'var(--vm)'; bgSt = 'var(--vmc)'; }
     else if (c.status === 'DENTRO DO PRAZO') { corSt = 'var(--vd)'; bgSt = 'var(--vdc)'; }
+    else if (c.status === 'CONCLUÍDO')       { corSt = 'var(--az)'; bgSt = 'var(--azc)'; }
 
     var corDias = 'var(--tx2)';
     if (c.dias != null) corDias = c.dias >= 10 ? 'var(--vm)' : (c.dias >= 5 ? 'var(--am)' : 'var(--tx)');
@@ -34146,6 +34226,9 @@ function _gnvDesenhar(){
       + '<td>' + _cobEsc(r.itemOp || '—') + '</td>'
       + '<td>' + _cobEsc(r.centro || '—') + '</td>'
       + '<td>' + _cobEsc(r.tipo || '—') + '</td>'
+      + '<td>' + _gnvChipStatusPatec(c.statusPatec)
+        + (c.conclusao ? '<div style="font-size:9px;color:var(--tx2);margin-top:2px">' + _cobEsc(c.conclusao) + '</div>' : '')
+        + '</td>'
       + '<td style="text-align:center">' + fmt(c.dataSolic) + '</td>'
       + '<td>' + (c.fila ? _cobEsc(c.fila) : '<span style="color:var(--tx2)">—</span>') + '</td>'
       + '<td style="text-align:center">' + fmt(c.envio) + '</td>'
@@ -34173,6 +34256,7 @@ function _gnvDesenhar(){
   var legenda = 'Mostrando ' + lista.length + ' de ' + _gnvBase.length + ' itens';
   if (_gnvFiltroFila) legenda += ' — fila ' + _cobEsc(_gnvFiltroFila);
   if (_gnvFiltroTipoProc) legenda += ' — ' + _cobEsc(_gnvFiltroTipoProc);
+  if (_gnvFiltroStPatec) legenda += ' — ' + _cobEsc(_gnvFiltroStPatec);
   if (_gnvSubFiltro !== null) legenda += ' — ' + _gnvSubFiltro + ' cobrança' + (_gnvSubFiltro === 1 ? '' : 's');
   if (_gnvBusca) legenda += ' — "' + _cobEsc(_gnvBusca) + '"';
   legenda += '. Prazo de retorno = Envio + dias úteis da fila (pula fim de semana e feriados).';
@@ -34243,6 +34327,7 @@ function govNovaUpload(ev){
       // Colunas do dashboard — opcionais, servem para a carga inicial.
       // Só preenchem o que ainda estiver em branco; nunca sobrepõem edição.
       var cFila   = _cobColExata(am, ['Fila']);
+      var cStPat  = _cobCol(am, ['Status do Patec', 'Status Patec', 'Status do PATEC']);
       var cSolic  = _cobCol(am, ['Data da solicitação', 'Data da solicitacao', 'Data de solicitação']);
       var cEnvio  = _cobColExata(am, ['Envio', 'Data de Envio']);
       var cCobr   = _cobColExata(am, ['Cobrança', 'Cobranca']);
@@ -34306,12 +34391,18 @@ function govNovaUpload(ev){
           prazo:        cPrazo  ? dataCel(l[cPrazo]) : '',
           sla:          cSla    ? limpo(l[cSla])    : '',
           tipoProcesso: cTpProc ? limpo(l[cTpProc]) : '',
+          statusPatec:  _gnvStatusPatecCanonico(
+                          (cStPat && limpo(l[cStPat])) ||
+                          // compatibilidade: planilha antiga trazia o status dentro da Fila
+                          (cFila && _gnvEhStatusPatec(l[cFila]) ? l[cFila] : '')
+                        ),
           processo:     cProc   ? limpo(l[cProc])   : '',
           atualizadoEm: new Date().toISOString()
         });
 
         var ini = {};
-        if (cFila)   { var f = _gnvFilaCanonica(l[cFila]); if (f) ini.fila = f; }
+        // valor de status do Patec na coluna Fila não entra como fila
+        if (cFila && !_gnvEhStatusPatec(l[cFila])) { var f = _gnvFilaCanonica(l[cFila]); if (f) ini.fila = f; }
         if (cSolic)  { var ds = dataISO(l[cSolic]); if (ds) ini.dataSolic = ds; }
         if (cEnvio)  { var en = dataISO(l[cEnvio]); if (en) ini.envio = en; }
         if (cPrazoR) { var pr = dataISO(l[cPrazoR]); if (pr) ini.prazoRetManual = pr; }
@@ -34405,7 +34496,7 @@ function govNovaUpload(ev){
 // ── Modelo da planilha de upload ────────────────────────────────
 // Cabeçalhos iguais aos que a leitura procura. Aba "Base" é a que o
 // sistema lê (primeira aba); a segunda serve só de referência.
-var _GNV_MODELO_COLS = ['Analista','RC','Item RC','Oportunidade','Item OP','Centro','Tipo','Prazo','SLA','Tipo de Processo','Processo'];
+var _GNV_MODELO_COLS = ['Analista','RC','Item RC','Oportunidade','Item OP','Centro','Tipo','Status do Patec','Prazo','SLA','Tipo de Processo','Processo'];
 
 function govNovaBaixarModelo(){
   if (typeof XLSX === 'undefined') { alert('Biblioteca XLSX não carregada — atualize a página (F5).'); return; }
@@ -34420,9 +34511,9 @@ function govNovaBaixarModelo(){
   // Referência de formato
   var wsEx = XLSX.utils.aoa_to_sheet([
     _GNV_MODELO_COLS,
-    ['Lory',    '36181159', '10', '7004500001', '1', '4142', 'Material', '30/09/2026', 'Normal',  'E&P',          'PR-2201'],
-    ['Wanessa', '36181160', '20', '7004500002', '2', '4142', 'Serviço',  '02/10/2026', 'Urgente', 'Status B',     'PR-2202'],
-    ['Ludy',    '36181161', '30', '7004500003', '3', '4150', 'Material', '05/10/2026', 'Normal',  'Nova Reserva', 'PR-2203']
+    ['Lory',    '36181159', '10', '7004500001', '1', '4142', 'Material', 'Patec em Andamento', '30/09/2026', 'Normal',  'E&P',          'PR-2201'],
+    ['Wanessa', '36181160', '20', '7004500002', '2', '4142', 'Serviço',  'Patec Finalizado',   '02/10/2026', 'Urgente', 'Status B',     'PR-2202'],
+    ['Ludy',    '36181161', '30', '7004500003', '3', '4150', 'Material', 'Patec em Andamento', '05/10/2026', 'Normal',  'Nova Reserva', 'PR-2203']
   ]);
   wsEx['!cols'] = wsBase['!cols'];
   XLSX.utils.book_append_sheet(wb, wsEx, 'Exemplo preenchido');
@@ -34438,6 +34529,7 @@ function govNovaBaixarModelo(){
     ['O upload substitui apenas os dados que vêm da planilha.'],
     ['Data da solicitação, Fila, Envio e Cobrança são preenchidos no dashboard e NUNCA são apagados por um novo upload.'],
     ['O item é reconhecido por RC + Item RC + Oportunidade + Item OP.'],
+    ['Status do Patec aceita apenas: Patec em Andamento ou Patec Finalizado.'],
     ['Item que não vier mais na planilha sai da lista; a edição dele fica guardada e volta se ele voltar.'],
     [''],
     ['PREENCHIDO NO DASHBOARD (não coloque na planilha)'],
@@ -34544,6 +34636,7 @@ function _gnvBuscaHtml(achados, rcBusca){
     var corSt = 'var(--tx2)', bgSt = 'var(--cin)';
     if (c.status === 'VENCIDA')              { corSt = 'var(--vm)'; bgSt = 'var(--vmc)'; }
     else if (c.status === 'DENTRO DO PRAZO') { corSt = 'var(--vd)'; bgSt = 'var(--vdc)'; }
+    else if (c.status === 'CONCLUÍDO')       { corSt = 'var(--az)'; bgSt = 'var(--azc)'; }
 
     h += '<div style="border:1.5px solid var(--brd);border-left:3px solid var(--vd);border-radius:9px;'
        + 'padding:.7rem .85rem;margin-bottom:9px;background:var(--bg)">'
@@ -34555,28 +34648,29 @@ function _gnvBuscaHtml(achados, rcBusca){
        +   '<span style="font-size:11px;color:var(--tx2)">OP <strong>' + _cobEsc(r.oportunidade || '—') + '</strong> · item ' + _cobEsc(r.itemOp || '—') + '</span>'
        +   '<span style="font-size:11px;color:var(--tx2)">' + _cobEsc(r.analista || '—') + '</span>'
        +   '<span style="font-size:11px;color:var(--tx2)">Centro ' + _cobEsc(r.centro || '—') + '</span>'
+       +   _gnvChipStatusPatec(c.statusPatec)
+       +   (c.conclusao ? '<span style="font-size:11px;font-weight:700;color:var(--az)">' + _cobEsc(c.conclusao) + '</span>' : '')
        +   (r.processo ? '<span style="font-size:11px;color:var(--tx2)">' + _cobEsc(r.tipoProcesso || '') + ' ' + _cobEsc(r.processo) + '</span>' : '')
        + '</div>'
 
        // estado atual + campos editáveis
        + '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">'
-       +   '<label style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">DATA DA SOLICITAÇÃO'
-       +     '<input type="date" value="' + _cobEsc(c.dataSolic) + '" onchange="gnvSalvar(\'' + k + '\',\'dataSolic\',this.value)"'
-       +     ' style="font-size:11px;padding:3px 6px;border:1px solid var(--brd);border-radius:5px;width:125px"></label>'
+       +   '<div style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">DATA DA SOLICITAÇÃO'
+       +     '<span style="font-size:12px;font-weight:700;color:' + (c.dataSolic ? 'var(--tx)' : 'var(--tx2)') + ';padding:3px 0">'
+       +     fmt(c.dataSolic) + '</span></div>'
        +   '<div style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">FILA'
        +     '<span style="font-size:12px;font-weight:700;color:' + (c.fila ? 'var(--az)' : 'var(--tx2)') + ';padding:3px 0">'
        +     (c.fila ? _cobEsc(c.fila) : '— sem fila —') + '</span></div>'
-       +   '<label style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">ENVIO'
-       +     '<input type="date" value="' + _cobEsc(c.envio) + '" onchange="gnvSalvar(\'' + k + '\',\'envio\',this.value)"'
-       +     ' style="font-size:11px;padding:3px 6px;border:1px solid var(--brd);border-radius:5px;width:125px"></label>'
+       +   '<div style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">ENVIO'
+       +     '<span style="font-size:12px;font-weight:700;color:' + (c.envio ? 'var(--tx)' : 'var(--tx2)') + ';padding:3px 0">'
+       +     fmt(c.envio) + '</span></div>'
        +   '<div style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">PRAZO DE RETORNO'
        +     '<span style="font-size:12px;font-weight:700;padding:3px 0">' + fmt(c.prazoRet) + '</span></div>'
        +   '<div style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">STATUS'
        +     '<span style="background:' + bgSt + ';color:' + corSt + ';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;text-align:center">'
        +     (c.status || '—') + '</span></div>'
-       +   '<label style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">COBRANÇA'
-       +     '<input type="number" min="0" value="' + c.cobranca + '" onchange="gnvSalvar(\'' + k + '\',\'cobranca\',this.value)"'
-       +     ' style="font-size:11px;padding:3px 6px;border:1px solid var(--brd);border-radius:5px;width:62px;text-align:center"></label>'
+       +   '<div style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">COBRANÇA'
+       +     '<span style="font-size:14px;font-weight:800;text-align:center;padding:1px 0">' + c.cobranca + '</span></div>'
        +   '<div style="font-size:10px;color:var(--tx2);font-weight:700;display:flex;flex-direction:column;gap:3px">DIAS PARADOS'
        +     '<span style="font-size:14px;font-weight:800;text-align:center;padding:1px 0;color:'
        +     (c.dias == null ? 'var(--tx2)' : (c.dias >= 10 ? 'var(--vm)' : (c.dias >= 5 ? 'var(--am)' : 'var(--tx)')))
@@ -34607,7 +34701,8 @@ function _gnvBtnAcao(chave, tipo, rotulo, cor, bg){
 function gnvAcaoAbrir(chave, tipo){
   var r = _gnvBase.find(function(x){ return x.id === chave; });
   if (!r) return;
-  _gnvAcaoCtx = { chave: chave, tipo: tipo, fila: '', rc: r.rc, itemRc: r.itemRc };
+  _gnvAcaoCtx = { chave: chave, tipo: tipo, fila: '', conclusao: '', etapa: 'fila',
+                  filaAtual: _gnvLinhaCalc(r).fila || '', rc: r.rc, itemRc: r.itemRc };
 
   var cfg = _cobManualLabel(tipo);
   var tit = document.getElementById('gnv-acao-titulo');
@@ -34633,20 +34728,100 @@ function gnvAcaoAbrir(chave, tipo){
     }).join('');
   }
 
+  var calc = _gnvLinhaCalc(r);
   var envio = document.getElementById('gnv-acao-envio');
-  if (envio) envio.value = _gnvHoje();
+  if (envio) envio.value = calc.envio || _gnvHoje();
+  var solic = document.getElementById('gnv-acao-solic');
+  if (solic) solic.value = calc.dataSolic || _gnvHoje();
+  var cobr = document.getElementById('gnv-acao-cobr');
+  if (cobr) cobr.value = calc.cobranca || 0;
   var obs = document.getElementById('gnv-acao-obs');
   if (obs) obs.value = '';
+  _gnvAcaoPrevia();
   var err = document.getElementById('gnv-acao-erro');
   if (err) { err.style.display = 'none'; err.textContent = ''; }
 
+  _gnvAcaoTrocarEtapa();
   var m = document.getElementById('gnv-acao-modal');
   if (m) m.style.display = 'flex';
 }
 
+// Mostra o prazo que vai resultar da escolha, antes de confirmar
+function _gnvAcaoPrevia(){
+  var el = document.getElementById('gnv-acao-prazo-previa');
+  if (!el || !_gnvAcaoCtx) return;
+  if (_gnvAcaoCtx.etapa === 'conclusao') { el.innerHTML = ''; return; }
+  var envio = (document.getElementById('gnv-acao-envio') || {}).value || '';
+  var fila  = _gnvAcaoCtx.fila || '';
+  if (!fila || !envio) { el.innerHTML = ''; return; }
+  var pr = _gnvPrazoRetorno(fila, envio);
+  el.innerHTML = pr
+    ? 'Prazo de retorno: <strong style="color:var(--az)">' + pr.split('-').reverse().join('/') + '</strong>'
+      + ' <span style="color:var(--tx2)">(' + GOV_NOVA_PRAZOS[fila] + ' dias úteis a partir do envio)</span>'
+    : '<span style="color:var(--am)">Esta fila não tem prazo definido — o item fica sem data de retorno.</span>';
+}
+
+function gnvAcaoIrConclusao(){
+  if (!_gnvAcaoCtx) return;
+  _gnvAcaoCtx.etapa = 'conclusao';
+  _gnvAcaoCtx.fila = '';
+  var box = document.getElementById('gnv-acao-conclusoes');
+  if (box) {
+    box.innerHTML = _GNV_CONCLUSOES.map(function(x){
+      return '<button type="button" data-conc="' + _cobEsc(x.nome) + '" onclick="gnvAcaoSelConclusao(this)"'
+        + ' style="background:' + x.bg + ';border:1.5px solid ' + x.cor + ';border-radius:9px;padding:14px 6px;'
+        + 'cursor:pointer;font-size:12.5px;font-weight:700;color:' + x.cor + ';line-height:1.4">'
+        + '<div style="font-size:18px">' + x.emoji + '</div>' + _cobEsc(x.nome) + '</button>';
+    }).join('');
+  }
+  _gnvAcaoTrocarEtapa();
+}
+
+function gnvAcaoVoltar(){
+  if (!_gnvAcaoCtx) return;
+  _gnvAcaoCtx.etapa = 'fila';
+  _gnvAcaoCtx.conclusao = '';
+  _gnvAcaoTrocarEtapa();
+}
+
+function _gnvAcaoTrocarEtapa(){
+  var conc = _gnvAcaoCtx && _gnvAcaoCtx.etapa === 'conclusao';
+  var el;
+  el = document.getElementById('gnv-etapa-fila');      if (el) el.style.display = conc ? 'none' : '';
+  el = document.getElementById('gnv-etapa-conclusao'); if (el) el.style.display = conc ? '' : 'none';
+  el = document.getElementById('gnv-linha-cobranca');  if (el) el.style.display = conc ? 'none' : 'grid';
+  el = document.getElementById('gnv-acao-subtitulo');
+  if (el) el.textContent = conc ? 'Selecione o tipo de conclusão' : 'Selecione a fila de tratamento';
+  el = document.getElementById('gnv-acao-aviso');
+  if (el) el.innerHTML = conc
+    ? 'Ao confirmar: o item passa a <strong>Patec Finalizado</strong> e para de contar prazo e dias parados.'
+    : 'Ao escolher uma fila diferente da atual, a cobrança zera e a contagem recomeça hoje — os campos acima continuam editáveis antes de confirmar.';
+  var err = document.getElementById('gnv-acao-erro');
+  if (err) { err.style.display = 'none'; err.textContent = ''; }
+  _gnvAcaoPrevia();
+}
+
+function gnvAcaoSelConclusao(btn){
+  if (!_gnvAcaoCtx) return;
+  _gnvAcaoCtx.conclusao = btn.getAttribute('data-conc') || '';
+  var box = document.getElementById('gnv-acao-conclusoes');
+  if (box) [].forEach.call(box.children, function(b){
+    var on = (b === btn);
+    b.style.outline = on ? '3px solid rgba(26,45,79,.35)' : 'none';
+    b.style.transform = on ? 'scale(.98)' : 'none';
+  });
+}
+
 function gnvAcaoSelFila(btn){
   if (!_gnvAcaoCtx) return;
-  _gnvAcaoCtx.fila = btn.getAttribute('data-fila') || '';
+  var nova = btn.getAttribute('data-fila') || '';
+  // trocou de fila: a cobrança zera e a contagem recomeça hoje (os campos
+  // continuam editáveis, então dá para ajustar antes de confirmar)
+  if (nova !== _gnvAcaoCtx.filaAtual) {
+    var c = document.getElementById('gnv-acao-cobr'); if (c) c.value = 0;
+    var d = document.getElementById('gnv-acao-solic'); if (d) d.value = _gnvHoje();
+  }
+  _gnvAcaoCtx.fila = nova;
   var box = document.getElementById('gnv-acao-filas');
   if (box) [].forEach.call(box.children, function(b){
     var on = (b === btn);
@@ -34656,6 +34831,7 @@ function gnvAcaoSelFila(btn){
     var sub = b.querySelector('div');
     if (sub) sub.style.color = on ? 'rgba(255,255,255,.8)' : 'var(--tx2)';
   });
+  _gnvAcaoPrevia();
 }
 
 function gnvAcaoFechar(){
@@ -34669,11 +34845,36 @@ async function gnvAcaoConfirmar(){
   var err = document.getElementById('gnv-acao-erro');
   var mostrarErro = function(t){ if (err) { err.textContent = t; err.style.display = 'block'; } };
 
-  var envio = (document.getElementById('gnv-acao-envio') || {}).value || '';
-  var obs   = ((document.getElementById('gnv-acao-obs') || {}).value || '').trim();
+  var envio     = (document.getElementById('gnv-acao-envio') || {}).value || '';
+  var dataSolic = (document.getElementById('gnv-acao-solic') || {}).value || '';
+  var cobranca  = Math.max(0, parseInt((document.getElementById('gnv-acao-cobr') || {}).value, 10) || 0);
+  var obs       = ((document.getElementById('gnv-acao-obs') || {}).value || '').trim();
 
-  if (!_gnvAcaoCtx.fila) { mostrarErro('Selecione a fila de tratamento.'); return; }
-  if (!envio)            { mostrarErro('Informe a data de envio.'); return; }
+  var ehConclusao = (_gnvAcaoCtx.etapa === 'conclusao');
+
+  if (ehConclusao) {
+    if (!_gnvAcaoCtx.conclusao) { mostrarErro('Selecione o tipo de conclusão.'); return; }
+  } else {
+    if (!_gnvAcaoCtx.fila) { mostrarErro('Selecione a fila de tratamento.'); return; }
+  }
+  if (!envio)     { mostrarErro('Informe a data de envio.'); return; }
+  if (!dataSolic) { mostrarErro('Informe a data da solicitação.'); return; }
+
+  // A data de envio não pode ser posterior ao prazo de retorno. Com as filas
+  // atuais o prazo é sempre envio + dias úteis, então isso só barra o caso de
+  // fila sem prazo caindo num prazo antigo da planilha.
+  var prazoNovo = _gnvPrazoRetorno(_gnvAcaoCtx.fila, envio);
+  var ed = _gnvEdit[_gnvAcaoCtx.chave] || {};
+  var prazoVigente = prazoNovo || ed.prazoRetManual || '';
+  if (!ehConclusao && prazoVigente && prazoVigente < envio) {
+    mostrarErro('A data de envio (' + envio.split('-').reverse().join('/') + ') é posterior ao prazo de retorno ('
+      + prazoVigente.split('-').reverse().join('/') + '). Ajuste a data ou escolha uma fila com prazo.');
+    return;
+  }
+  if (dataSolic > envio) {
+    mostrarErro('A data da solicitação não pode ser posterior à data de envio.');
+    return;
+  }
 
   var colab = _cobManualColab();
   if (!colab) { mostrarErro('Não identifiquei o colaborador logado — entre de novo para a ação contar na produção.'); return; }
@@ -34693,8 +34894,8 @@ async function gnvAcaoConfirmar(){
       colab: colab,
       data: _gnvHoje(),
       tipo: tipo,
-      tratamento: fila,
-      conclusao: '',
+      tratamento: ehConclusao ? '' : fila,
+      conclusao: ehConclusao ? _gnvAcaoCtx.conclusao : '',
       obs: obs,
       origem: 'gov_nova',
       ts: new Date().toISOString(),
@@ -34705,10 +34906,25 @@ async function gnvAcaoConfirmar(){
 
     // 2) edição do item — troca de fila zera cobrança e reinicia a contagem
     if (!_gnvEdit[chave]) _gnvEdit[chave] = {};
-    _gnvEdit[chave].fila         = fila;
+    if (ehConclusao) {
+      // conclusão: o item vira Patec Finalizado e o relógio para. A fila
+      // continua como estava, para os cards não perderem o histórico.
+      _gnvEdit[chave].conclusao    = _gnvAcaoCtx.conclusao;
+      _gnvEdit[chave].finalizadoEm = envio;
+      _gnvEdit[chave].statusPatec  = 'Patec Finalizado';
+    } else {
+      // voltou para tratamento: deixa de estar concluído
+      _gnvEdit[chave].conclusao    = '';
+      _gnvEdit[chave].finalizadoEm = '';
+      _gnvEdit[chave].statusPatec  = 'Patec em Andamento';
+      _gnvEdit[chave].fila         = fila;
+      _gnvEdit[chave].cobranca     = cobranca;
+    }
     _gnvEdit[chave].envio        = envio;
-    _gnvEdit[chave].dataSolic    = _gnvHoje();
-    _gnvEdit[chave].cobranca     = 0;
+    _gnvEdit[chave].dataSolic    = dataSolic;
+    // o prazo que veio da planilha era de um envio anterior: com envio novo
+    // ele fica velho, e quem manda passa a ser o cálculo pela fila
+    _gnvEdit[chave].prazoRetManual = '';
     _gnvEdit[chave].atualizadoEm = new Date().toISOString();
     await db.collection(_GNV_COL_EDIT).doc(chave).set(_gnvEdit[chave], { merge: true });
 
@@ -34720,9 +34936,7 @@ async function gnvAcaoConfirmar(){
       if (typeof prodRenderizarPaineis === 'function') prodRenderizarPaineis(colab);
     } catch (e) { console.warn('gnv produção:', e); }
     _gnvDesenhar();
-    var campo = document.getElementById('gnv-busca-rc');
-    var termo = (campo && campo.value) || _gnvAcaoCtx && _gnvAcaoCtx.rc || '';
-    if (termo && typeof govBuscarRC === 'function') govBuscarRC(termo, 'gnv-busca-resultado');
+    _gnvRepintarBusca();
 
   } catch (e) {
     mostrarErro('Erro ao registrar: ' + (e.message || e));
@@ -34740,7 +34954,7 @@ function _gnvAplicarModulo(){
   if (!fast) {
     if (pane) pane.style.display = 'none';
     _gnvBase = []; _gnvEdit = {}; _gnvResumo = null;
-    _gnvBusca = ''; _gnvFiltroFila = null; _gnvFiltroTipoProc = null; _gnvSubFiltro = null;
+    _gnvBusca = ''; _gnvFiltroFila = null; _gnvFiltroTipoProc = null; _gnvSubFiltro = null; _gnvFiltroStPatec = null;
   }
 }
 
