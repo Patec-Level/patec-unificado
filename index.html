@@ -4734,6 +4734,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <!-- Cards no mesmo layout da Cobrança por Status: total + Tipo de Processo + Fila -->
         <div class="cd" style="margin-bottom:1rem;padding:.875rem 1rem">
           <div id="gnv-cards"></div>
+          <div id="gnv-subcards" style="display:none;margin-top:.75rem;padding:.6rem .875rem;background:var(--vmc);border:1px solid var(--vm);border-radius:8px"></div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:.75rem;padding-top:.75rem;border-top:1px dashed var(--brd)">
             <input type="text" id="gnv-filtro-texto" placeholder="Filtrar a lista: RC, oportunidade, analista, processo..." autocomplete="off"
               oninput="gnvBuscar(this.value)"
@@ -33726,6 +33727,16 @@ var _gnvResumo = null;
 var _gnvBusca  = '';
 var _gnvFiltroFila = null;
 var _gnvFiltroTipoProc = null;
+var _gnvSubFiltro = null;   // nº de cobranças (2º nível, dentro da fila)
+
+// Mesma lista fixa e as mesmas cores da Cobrança por Status. Valores de
+// "Tipo de Processo" que aparecerem na planilha fora desta lista entram
+// depois, para nenhum item ficar sem card.
+var _GNV_TIPOPROC = [
+  { nome: 'Status B',     cor: 'var(--vd)', bg: 'var(--vdc)' },
+  { nome: 'Nova Reserva', cor: '#7c3aed',   bg: '#ede9fe'    },
+  { nome: 'E&P',          cor: '#0369a1',   bg: '#e0f2fe'    }
+];
 
 function _gnvEhFast(){
   return (typeof _moduloAtivo !== 'undefined') && _moduloAtivo === 'fast';
@@ -33878,17 +33889,24 @@ function gnvBuscar(v){ _gnvBusca = String(v || '').trim().toLowerCase(); _gnvDes
 
 function gnvFiltrarFila(f){
   _gnvFiltroFila = (_gnvFiltroFila === f) ? null : f;
+  _gnvSubFiltro = null;            // trocou de fila, a quebra por cobrança reinicia
   _gnvDesenhar();
 }
 function gnvFiltrarTipoProc(t){
   _gnvFiltroTipoProc = (_gnvFiltroTipoProc === t) ? null : t;
   _gnvDesenhar();
 }
+function gnvSubFiltrar(q){
+  _gnvSubFiltro = (_gnvSubFiltro === q) ? null : q;
+  _gnvDesenhar();
+}
 function gnvLimparFiltros(){
-  _gnvBusca = ''; _gnvFiltroFila = null; _gnvFiltroTipoProc = null;
+  _gnvBusca = ''; _gnvFiltroFila = null; _gnvFiltroTipoProc = null; _gnvSubFiltro = null;
   var b = document.getElementById('gnv-filtro-texto'); if (b) b.value = '';
   _gnvDesenhar();
 }
+
+function _gnvTipoProcDe(r){ return String(r.tipoProcesso || '').trim(); }
 
 function _gnvFiltrar(){
   var lista = _gnvBase;
@@ -33899,18 +33917,17 @@ function _gnvFiltrar(){
     });
   }
   if (_gnvFiltroTipoProc) {
-    lista = lista.filter(function(r){ return (r.tipoProcesso || 'Sem tipo') === _gnvFiltroTipoProc; });
+    lista = lista.filter(function(r){ return _gnvTipoProcDe(r) === _gnvFiltroTipoProc; });
   }
   if (_gnvFiltroFila) {
-    lista = lista.filter(function(r){
-      var f = _gnvLinhaCalc(r).fila;
-      return (f || 'Sem fila') === _gnvFiltroFila;
-    });
+    lista = lista.filter(function(r){ return (_gnvLinhaCalc(r).fila || 'Sem fila') === _gnvFiltroFila; });
+  }
+  if (_gnvSubFiltro !== null) {
+    lista = lista.filter(function(r){ return _gnvLinhaCalc(r).cobranca === _gnvSubFiltro; });
   }
   return lista;
 }
 
-// ── Desenho ──────────────────────────────────────────────────────
 // Redesenha só o bloco da Governança Nova dentro do painel de busca
 function _gnvRepintarBusca(){
   var bloco = document.getElementById('gnv-busca-bloco');
@@ -33922,6 +33939,59 @@ function _gnvRepintarBusca(){
   if (achados.length) bloco.innerHTML = _gnvBuscaHtml(achados, termo);
 }
 
+// ── Sub-cards: quebra por nº de cobranças dentro da fila escolhida ──
+// Mesmo formato da Cobrança por Status: faixa vermelha, cards 1/2/3 e o que
+// passar disso, clicáveis, e um "limpar" quando algum está ativo.
+function _gnvDesenharSub(){
+  var el = document.getElementById('gnv-subcards');
+  if (!el) return;
+
+  if (!_gnvFiltroFila) { el.innerHTML = ''; el.style.display = 'none'; return; }
+
+  var itens = _gnvBase.filter(function(r){
+    if ((_gnvLinhaCalc(r).fila || 'Sem fila') !== _gnvFiltroFila) return false;
+    if (_gnvFiltroTipoProc && _gnvTipoProcDe(r) !== _gnvFiltroTipoProc) return false;
+    return true;
+  });
+
+  var porQtd = {}, maxQtd = 3;
+  itens.forEach(function(r){
+    var q = _gnvLinhaCalc(r).cobranca;
+    porQtd[q] = (porQtd[q] || 0) + 1;
+    if (q > maxQtd) maxQtd = q;
+  });
+
+  var html = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+    + '<span style="font-size:11px;font-weight:700;color:var(--az)">↳ ' + _cobEsc(_gnvFiltroFila)
+    + ' — por nº de cobranças:</span>';
+
+  for (var q = 1; q <= maxQtd; q++) {
+    var n = porQtd[q] || 0;
+    var ativo = (_gnvSubFiltro === q);
+    var vazio = (n === 0);
+    html += '<div ' + (vazio ? '' : 'onclick="gnvSubFiltrar(' + q + ')"')
+      + ' style="' + (vazio ? 'opacity:.4;cursor:default' : 'cursor:pointer')
+      + ';background:' + (ativo ? 'var(--vm)' : 'var(--vmc)') + ';color:' + (ativo ? '#fff' : 'var(--vm)')
+      + ';border:1.5px solid var(--vm);border-radius:8px;padding:5px 14px;text-align:center;line-height:1.15;min-width:74px">'
+      + '<div style="font-size:17px;font-weight:800">' + n + '</div>'
+      + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">'
+      + q + ' cobrança' + (q === 1 ? '' : 's') + '</div></div>';
+  }
+
+  var semCobr = porQtd[0] || 0;
+  if (semCobr) {
+    html += '<span style="font-size:10px;color:var(--tx2)">' + semCobr + ' sem cobrança</span>';
+  }
+  if (_gnvSubFiltro !== null) {
+    html += '<button class="btn btn-s" style="font-size:10.5px" onclick="gnvSubFiltrar(null)">✕ limpar</button>';
+  }
+  html += '</div>';
+
+  el.innerHTML = html;
+  el.style.display = 'block';
+}
+
+// ── Desenho ──────────────────────────────────────────────────────
 function _gnvDesenhar(){
   var wrap   = document.getElementById('gnv-tabela');
   var cards  = document.getElementById('gnv-cards');
@@ -33937,91 +34007,108 @@ function _gnvDesenhar(){
 
   if (!_gnvBase.length) {
     if (cards) cards.innerHTML = '';
+    _gnvDesenharSub();
     wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">'
       + '📄 Nenhum item carregado ainda.<br><span style="font-size:11px">Use <strong>📤 Subir planilha</strong> acima.</span></div>';
     return;
   }
 
-  // ── Contagens: por fila (direita) e por tipo de processo (esquerda) ──
+  // ── Contagens ───────────────────────────────────────────────
   var porFila = {}, porTipoProc = {}, nVenc = 0;
   _gnvBase.forEach(function(r){
     var c = _gnvLinhaCalc(r);
     var f = c.fila || 'Sem fila';
     porFila[f] = (porFila[f] || 0) + 1;
-    var tp = r.tipoProcesso || 'Sem tipo';
-    porTipoProc[tp] = (porTipoProc[tp] || 0) + 1;
+    var tp = _gnvTipoProcDe(r);
+    if (tp) porTipoProc[tp] = (porTipoProc[tp] || 0) + 1;
     if (c.status === 'VENCIDA') nVenc++;
   });
 
-  // A ordem das filas segue a tabela de prazos; o que sobrar vem depois, por volume
   var filasOrdem = Object.keys(GOV_NOVA_PRAZOS).filter(function(f){ return porFila[f]; });
   Object.keys(porFila).forEach(function(f){ if (filasOrdem.indexOf(f) === -1) filasOrdem.push(f); });
   filasOrdem.sort(function(a, b){ return porFila[b] - porFila[a]; });
 
-  var tiposOrdem = Object.keys(porTipoProc).sort(function(a, b){ return porTipoProc[b] - porTipoProc[a]; });
-
   if (cards) {
-    var _q = function(s){ return String(s).replace(/'/g, "\\'"); };
+    var _q = function(x){ return String(x).replace(/'/g, "\\'"); };
+    var semFiltro = (!_gnvFiltroFila && !_gnvFiltroTipoProc && _gnvSubFiltro === null);
 
-    // Card grande do total, com o alerta de vencidas embutido
-    var semFiltro = (!_gnvFiltroFila && !_gnvFiltroTipoProc);
-    var totalCard =
-      '<div onclick="gnvLimparFiltros()" title="Mostrar todos os itens"'
-      + ' style="cursor:pointer;background:' + (semFiltro ? '#1A2D4F' : 'var(--azc)')
-      + ';color:' + (semFiltro ? '#fff' : 'var(--azm)') + ';border:1.5px solid #1A2D4F;border-radius:8px;'
-      + 'padding:10px 20px;display:flex;align-items:center;gap:12px;line-height:1.1;min-width:200px">'
-      + '<span style="font-size:26px;font-weight:800">' + _gnvBase.length + '</span>'
+    // 1ª linha da lateral: TOTAL (mesmo card da Cobrança por Status)
+    var cardTotal = '<div style="display:flex;margin-bottom:10px">'
+      + '<div onclick="gnvLimparFiltros()" title="Mostrar todos os itens"'
+      + ' style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;flex:1 1 auto;'
+      + 'background:' + (semFiltro ? 'var(--azm)' : 'var(--azc)') + ';color:' + (semFiltro ? '#fff' : 'var(--azm)')
+      + ';border:1.5px solid var(--azm);border-radius:8px;padding:7px 18px;line-height:1.1">'
+      + '<span style="font-size:22px;font-weight:800">' + _gnvBase.length + '</span>'
       + '<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Total<br>de itens</span>'
-      + '</div>'
-      + (nVenc
-          ? '<div style="margin-top:6px;font-size:10px;font-weight:700;color:var(--vm);background:var(--vmc);'
-            + 'border-radius:5px;padding:3px 10px;text-align:center">⚠ ' + nVenc + ' vencida(s)</div>'
-          : '');
+      + '</div></div>';
 
-    // Grupo menor: Tipo de Processo
-    var tpCards = '';
-    var tpCores = ['var(--vd)', '#6D28D9', 'var(--azm)', 'var(--am)', '#0891B2', '#B45309'];
-    tiposOrdem.forEach(function(tp, i){
-      var on  = (_gnvFiltroTipoProc === tp);
-      var cor = tpCores[i % tpCores.length];
-      tpCards += '<div onclick="gnvFiltrarTipoProc(\'' + _q(tp) + '\')" title="Filtrar por ' + _cobEsc(tp) + '"'
-        + ' style="cursor:pointer;background:' + (on ? cor : 'var(--bg)') + ';color:' + (on ? '#fff' : cor)
-        + ';border:1.5px solid ' + cor + ';border-radius:8px;padding:6px 14px;text-align:center;'
-        + 'line-height:1.15;min-width:76px">'
-        + '<div style="font-size:17px;font-weight:800">' + porTipoProc[tp] + '</div>'
-        + '<div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(tp) + '</div>'
+    // o alerta de vencidas continua, logo abaixo do total
+    var avisoVenc = nVenc
+      ? '<div style="font-size:10px;font-weight:700;color:var(--vm);background:var(--vmc);border:1px solid var(--vm);'
+        + 'border-radius:6px;padding:3px 10px;text-align:center;margin-bottom:8px">⚠ ' + nVenc + ' vencida(s)</div>'
+      : '';
+
+    // 2ª linha da lateral: Tipo de Processo (lista fixa + o que vier a mais)
+    var tipos = _GNV_TIPOPROC.slice();
+    Object.keys(porTipoProc).forEach(function(tp){
+      if (!tipos.some(function(t){ return t.nome.toUpperCase() === tp.toUpperCase(); })) {
+        tipos.push({ nome: tp, cor: 'var(--am)', bg: 'var(--amc)' });
+      }
+    });
+    var cardsTp = '';
+    tipos.forEach(function(t){
+      var qtd = 0;
+      Object.keys(porTipoProc).forEach(function(tp){
+        if (tp.toUpperCase() === t.nome.toUpperCase()) qtd += porTipoProc[tp];
+      });
+      var on = (_gnvFiltroTipoProc && _gnvFiltroTipoProc.toUpperCase() === t.nome.toUpperCase());
+      var alvo = null;
+      Object.keys(porTipoProc).forEach(function(tp){ if (tp.toUpperCase() === t.nome.toUpperCase()) alvo = tp; });
+      cardsTp += '<div ' + (qtd ? 'onclick="gnvFiltrarTipoProc(\'' + _q(alvo || t.nome) + '\')"' : '')
+        + ' title="Filtrar ' + _cobEsc(t.nome) + '"'
+        + ' style="' + (qtd ? 'cursor:pointer' : 'opacity:.55;cursor:default')
+        + ';background:' + (on ? t.cor : t.bg) + ';color:' + (on ? '#fff' : t.cor)
+        + ';border:1.5px solid ' + t.cor + ';border-radius:8px;padding:8px 14px;text-align:center;'
+        + 'line-height:1.2;flex:1 1 0;min-width:104px">'
+        + '<div style="font-size:19px;font-weight:800">' + qtd + '</div>'
+        + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(t.nome) + '</div>'
         + '</div>';
     });
 
-    // Cards grandes por Fila
+    var lateral = '<div style="border-right:1px dashed var(--brd);padding-right:18px;min-width:360px">'
+      + cardTotal
+      + avisoVenc
+      + '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">'
+      +   '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">Tipo de Processo</span>'
+      +   (_gnvFiltroTipoProc
+            ? '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="gnvFiltrarTipoProc(_gnvFiltroTipoProc)">✕ limpar</button>'
+            : '')
+      + '</div>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cardsTp + '</div>'
+      + '</div>';
+
+    // à direita: as filas, no mesmo card da Cobrança
     var filaCards = '';
     filasOrdem.forEach(function(f){
       var on = (_gnvFiltroFila === f);
-      filaCards += '<div onclick="gnvFiltrarFila(\'' + _q(f) + '\')" title="Filtrar pela fila ' + _cobEsc(f) + '"'
-        + ' style="cursor:pointer;background:' + (on ? 'var(--azm)' : 'var(--bg)')
+      filaCards += '<div onclick="gnvFiltrarFila(\'' + _q(f) + '\')" title="Ver a quebra por nº de cobranças desta fila"'
+        + ' style="cursor:pointer;background:' + (on ? '#1A2D4F' : 'var(--bg)')
         + ';color:' + (on ? '#fff' : 'var(--tx)')
-        + ';border:1.5px solid ' + (on ? 'var(--azm)' : 'var(--brd)')
-        + ';border-radius:8px;padding:10px 18px;text-align:center;line-height:1.2;'
-        + 'flex:1 1 0;min-width:132px">'
-        + '<div style="font-size:21px;font-weight:800">' + porFila[f] + '</div>'
+        + ';border:1.5px solid ' + (on ? '#1A2D4F' : 'var(--brd)')
+        + ';border-top:3px solid #1A2D4F;border-radius:8px;padding:8px 18px;text-align:center;'
+        + 'line-height:1.2;flex:1 1 0;min-width:130px">'
+        + '<div style="font-size:19px;font-weight:800">' + porFila[f] + '</div>'
         + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(f) + '</div>'
         + '</div>';
     });
 
-    cards.innerHTML =
-      '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">'
-      + '<div style="display:flex;flex-direction:column;gap:8px;min-width:210px">'
-      +   totalCard
-      +   (tpCards
-            ? '<div style="font-size:9px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px;margin-top:2px">Tipo de Processo</div>'
-              + '<div style="display:flex;gap:8px;flex-wrap:wrap">' + tpCards + '</div>'
-            : '')
-      + '</div>'
-      + '<div style="flex:1 1 auto;border-left:1px dashed var(--brd);padding-left:18px">'
-      +   '<div style="display:flex;gap:12px;flex-wrap:wrap">' + filaCards + '</div>'
-      + '</div>'
+    cards.innerHTML = '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
+      + lateral
+      + '<div style="flex:1 1 0;min-width:0"><div style="display:flex;gap:12px;flex-wrap:wrap">' + filaCards + '</div></div>'
       + '</div>';
   }
+
+  _gnvDesenharSub();
 
   // ── Tabela (somente consulta — a edição é pelo painel Buscar RC) ──
   var lista = _gnvFiltrar();
@@ -34086,6 +34173,7 @@ function _gnvDesenhar(){
   var legenda = 'Mostrando ' + lista.length + ' de ' + _gnvBase.length + ' itens';
   if (_gnvFiltroFila) legenda += ' — fila ' + _cobEsc(_gnvFiltroFila);
   if (_gnvFiltroTipoProc) legenda += ' — ' + _cobEsc(_gnvFiltroTipoProc);
+  if (_gnvSubFiltro !== null) legenda += ' — ' + _gnvSubFiltro + ' cobrança' + (_gnvSubFiltro === 1 ? '' : 's');
   if (_gnvBusca) legenda += ' — "' + _cobEsc(_gnvBusca) + '"';
   legenda += '. Prazo de retorno = Envio + dias úteis da fila (pula fim de semana e feriados).';
 
@@ -34652,7 +34740,7 @@ function _gnvAplicarModulo(){
   if (!fast) {
     if (pane) pane.style.display = 'none';
     _gnvBase = []; _gnvEdit = {}; _gnvResumo = null;
-    _gnvBusca = ''; _gnvFiltroFila = null; _gnvFiltroTipoProc = null;
+    _gnvBusca = ''; _gnvFiltroFila = null; _gnvFiltroTipoProc = null; _gnvSubFiltro = null;
   }
 }
 
