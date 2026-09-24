@@ -4620,7 +4620,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <button class="btn btn-s" style="font-size:11px" onclick="govNovaBaixarModelo()" title="Baixa a planilha em branco, já com os cabeçalhos certos">📄 Baixar modelo</button>
             <span id="gnv-msg" style="font-size:11.5px;color:var(--tx2)"></span>
           </div>
-          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Oportunidade, Item OP, Centro, Tipo, Status do Patec, Prazo, SLA, Tipo de Processo, Processo</strong> — obrigatória: RC. A ordem não importa, a leitura é pelo nome.<br>Para a <strong>carga inicial</strong>, a planilha também pode trazer <strong>Fila, Data da solicitação, Envio, Cobrança e Prazo de retorno</strong>: esses só preenchem o que ainda estiver em branco e nunca sobrepõem o que a equipe já tratou.</div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Oportunidade, Item OP, Centro, Tipo, Status do Patec, Prazo, SLA, Tipo de Processo, Processo</strong> — obrigatória: RC. A ordem não importa, a leitura é pelo nome.<br>          O que a equipe edita no dashboard <strong>sempre ganha</strong> do upload: a planilha só preenche campo que ainda está em branco.
+          Item <strong>novo</strong> entra na fila <strong>Ag. Ação</strong>, a menos que a planilha traga outra fila.
+          Item que <strong>sumir da planilha</strong> sai da lista de trabalho e vai para <strong>Concluídos</strong>; se voltar com a mesma
+          <strong>RC + Item RC + Oportunidade + Item OP</strong>, volta exatamente com o status que tinha. Chave diferente é item novo.</div>
           <div id="gnv-resumo"></div>
         </div>
 
@@ -25530,6 +25533,17 @@ function q18Consultar(valor){
       <div id="gnv-acao-fila-badge" style="display:none;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;background:var(--amc);color:var(--am)"></div>
     </div>
 
+    <div id="gnv-acao-patec" style="display:flex;align-items:center;gap:8px;
+         background:var(--cin);border:1px solid var(--brd);border-radius:10px;padding:.5rem .75rem;margin-bottom:1rem">
+      <span style="font-size:9.5px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.3px;line-height:1.15">Status<br>do Patec</span>
+      <span id="gnv-acao-patec-chip" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap">—</span>
+      <button type="button" id="gnv-acao-patec-btn" onclick="gnvAcaoTogglePatec()"
+        style="margin-left:auto;background:#fff;border:1.5px solid var(--vd);color:var(--vd);border-radius:8px;
+               padding:6px 10px;cursor:pointer;font-size:11px;font-weight:700;white-space:nowrap">🏁 Finalizar</button>
+    </div>
+    <div id="gnv-acao-patec-aviso" style="display:none;font-size:11px;color:var(--vd);background:var(--vdc);
+         border:1px solid var(--vd);border-radius:8px;padding:.5rem .75rem;margin:-.5rem 0 1rem"></div>
+
     <div id="gnv-etapa-fila">
       <div style="font-size:11px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.75rem">↓ Fila — para onde foi?</div>
       <div id="gnv-acao-filas" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem"></div>
@@ -33811,6 +33825,10 @@ var _GNV_DOC_RESUMO = 'resumo_upload';
 // Governança antiga, com o prazo logo abaixo do nome.
 // As filas são guardadas em caixa alta (é o valor que vai para o banco e para
 // os cards de contagem). Nos cards do modal elas aparecem como no modal antigo.
+// O "vazio" das planilhas da equipe: traço, #N/A do PROCV, null de export.
+// Sem isso qualquer um deles viraria uma fila ou um status com esse nome.
+var _GNV_VAZIOS = /^(—|–|-|--|#N\/A|#N\/D|#VALOR!|null|undefined|n\/a|nan|\.)$/i;
+
 // Filas que existem na coluna, mas não são "para onde o item foi": ninguém
 // escolhe AG. AÇÃO no modal — é onde o item fica enquanto espera a nossa ação.
 // Por isso ela não entra em GOV_NOVA_PRAZOS (que é a lista de destinos) e não
@@ -33858,9 +33876,37 @@ var _GNV_CONCLUSOES = [
   { nome: 'Nova Reserva', emoji: '🎫', cor: '#2563EB', bg: '#dbeafe' }
 ];
 
+// O dashboard sempre ganha do upload. A planilha só preenche o que ainda
+// está em branco — vale para a Fila, para o Status do Patec e para os demais
+// campos do dashboard.
+// Ordem: o que o dashboard gravou > o que a planilha trouxe > o que o acerto
+// da carga deduziu pela fila. O palpite do acerto fica por último de propósito,
+// para a planilha poder corrigir o status depois.
+// O Status do Patec é o único campo em que o upload manda: toda planilha nova
+// traz o status atualizado e ele tem que aparecer na tela. A exceção é a
+// mudança feita aqui no dashboard DEPOIS do último upload — essa vale até a
+// próxima planilha chegar, senão o botão de finalizar não serviria para nada.
+// Por último vem o palpite do acerto da carga, que qualquer um dos dois corrige.
+function _gnvStatusPatecDe(r, e){
+  var daPlanilha = _gnvStatusPatecCanonico((r && r.statusPatec) || '');
+  var doDash     = _gnvStatusPatecCanonico((e && e.statusPatec) || '');
+  var doAcerto   = _gnvStatusPatecCanonico((e && e.statusPatecAuto) || '');
+
+  var mudadoEm  = (e && e.statusPatecEm) || '';
+  var subidoEm  = (r && r.atualizadoEm) || '';
+  var dashMaisNovo = !!(doDash && mudadoEm && (!subidoEm || mudadoEm > subidoEm));
+
+  if (dashMaisNovo) return doDash;
+  return daPlanilha || doDash || doAcerto;
+}
+
+// Fila de entrada de todo item novo: ele chega esperando a nossa ação, não a
+// de terceiros. Só sai daqui quando alguém tratar pelo Buscar RC.
+var _GNV_FILA_ENTRADA = 'AG. AÇÃO';
+
 function _gnvStatusPatecCanonico(v){
   var t = String(v == null ? '' : v).trim().replace(/\s+/g, ' ');
-  if (!t || t === '#N/A' || t === '#N/D' || t === '—' || t === '-') return '';
+  if (!t || _GNV_VAZIOS.test(t)) return '';
   var alvo = t.toUpperCase();
   var achou = '';
   _GNV_STATUS_PATEC.forEach(function(x){ if (x.nome.toUpperCase() === alvo) achou = x.nome; });
@@ -33879,7 +33925,7 @@ function _gnvEhStatusPatec(v){
 // Aqui ela vira o nome canônico da tabela acima; fila desconhecida entra como veio.
 function _gnvFilaCanonica(v){
   var s = String(v == null ? '' : v).trim().replace(/\s+/g, ' ');
-  if (!s || s === '#N/A' || s === '#N/D' || s === '—' || s === '-') return '';
+  if (!s || _GNV_VAZIOS.test(s)) return '';
   var alvo = s.toUpperCase();
   var achou = null;
   Object.keys(GOV_NOVA_PRAZOS).forEach(function(f){ if (f.toUpperCase() === alvo) achou = f; });
@@ -33915,7 +33961,10 @@ function gnvSetAba(aba, btn){
 }
 
 // Item concluído sai da lista principal e passa a viver na aba Concluídos
-function _gnvEhConcluido(r){ return !!(_gnvEdit[r.id] && _gnvEdit[r.id].conclusao); }
+// Fora da lista de trabalho: ou foi concluído na tela, ou sumiu da planilha.
+function _gnvEhConcluido(r){
+  return !!r.saiuDaBase || !!(_gnvEdit[r.id] && _gnvEdit[r.id].conclusao);
+}
 function _gnvBaseAba(){
   return _gnvBase.filter(function(r){
     return _gnvAba === 'concluidos' ? _gnvEhConcluido(r) : !_gnvEhConcluido(r);
@@ -34007,10 +34056,11 @@ function _gnvDiasParado(dataSolic){
 
 function _gnvLinhaCalc(r){
   var e = _gnvEdit[r.id] || {};
-  // O Status do Patec vem do upload, mas a conclusão feita na tela manda —
-  // e fica na coleção de edição, que o upload não toca.
-  var stPatec = e.statusPatec || r.statusPatec || '';
+  // O Status do Patec vem da planilha; a conclusão feita na tela manda mais.
   var concluido = !!e.conclusao;
+  var stPatec = concluido
+    ? (_gnvStatusPatecCanonico(e.statusPatec || '') || _gnvStatusPatecDe(r, e))
+    : _gnvStatusPatecDe(r, e);
   // o cálculo (Envio + dias úteis da fila) tem prioridade; quando a fila não
   // tem prazo definido ou ainda não houve envio, vale o prazo que veio na
   // planilha da carga inicial
@@ -34033,7 +34083,9 @@ function _gnvLinhaCalc(r){
     conclusao:   e.conclusao || '',
     finalizadoEm: e.finalizadoEm || '',
     centro:      e.centroConclusao || '',
-    concluidoPor: e.concluidoPor || ''
+    concluidoPor: e.concluidoPor || '',
+    foraDaBase:  !!r.saiuDaBase,
+    foraEm:      r.saiuEm ? String(r.saiuEm).slice(0, 10) : ''
   };
 }
 
@@ -34135,7 +34187,7 @@ async function _gnvMigrarFilaPatec(){
 var _GNV_DOC_AJUSTE_FILAS = 'ajuste_filas_iniciais';
 // Sobe de número quando as regras mudam, para o acerto rodar de novo sobre a
 // carga que já está no banco. O marcador guarda a versão que já passou.
-var _GNV_AJUSTE_VERSAO = 3;
+var _GNV_AJUSTE_VERSAO = 4;
 
 // Fila e Status do Patec se completam: quem tem um diz qual é o outro.
 // Uma regra por item, na ordem abaixo.
@@ -34148,12 +34200,15 @@ var _GNV_REGRAS_AJUSTE = [
     testa: function(st, fila){ return !fila && st === 'Patec Finalizado'; },
     poe:   { fila: 'AG. AÇÃO' } },
 
-  // Já está numa fila de terceiro (MDG, parada, etc.): o Patec saiu daqui, só
-  // falta o retorno. Quem está com o parecerista não entra — o Patec ainda
-  // depende do parecer.
+  // Já está numa fila de terceiro (MDG, parada...): o Patec saiu daqui, só
+  // falta o retorno. Ficam de fora quem está com o parecerista (o Patec ainda
+  // depende do parecer) e quem está em Ag. Ação, que é a fila de entrada e não
+  // diz nada sobre o Patec.
   { rotulo: 'sem Status do Patec e já em fila de tratamento viraram Patec Finalizado',
-    testa: function(st, fila){ return !st && !!fila && fila !== 'PARECERISTA'; },
-    poe:   { statusPatec: 'Patec Finalizado' } }
+    testa: function(st, fila){
+      return !st && !!fila && fila !== 'PARECERISTA' && GOV_NOVA_PRAZOS[fila] !== undefined;
+    },
+    poe:   { statusPatecAuto: 'Patec Finalizado' } }
 ];
 
 async function _gnvBackfillFilas(){
@@ -34164,18 +34219,32 @@ async function _gnvBackfillFilas(){
   if (!db) return null;
 
   var mudancas = [], contagem = {};
+  var ROTULO_LIXO = 'tinham lixo de planilha na Fila (null, #N/A, traço) e foram limpos';
+
   _gnvBase.forEach(function(r){
     var e = _gnvEdit[r.id] || {};
-    if (e.conclusao) return;                        // concluído: fica como está
-    var st   = _gnvStatusPatecCanonico(e.statusPatec || r.statusPatec || '');
-    var fila = e.fila || '';
+    if (e.conclusao || r.saiuDaBase) return;        // fora da lista: fica como está
+
+    var st = _gnvStatusPatecDe(r, e);
+    // Fila gravada por uploads antigos pode ser lixo ("null", "#N/A"). Limpa
+    // antes de aplicar as regras — assim o item ainda cai na fila certa.
+    var filaBruta = e.fila || '';
+    var fila = _gnvFilaCanonica(filaBruta);
+    var poe = null;
+    if (fila !== filaBruta) {
+      poe = { fila: fila };
+      contagem[ROTULO_LIXO] = (contagem[ROTULO_LIXO] || 0) + 1;
+    }
+
     for (var i = 0; i < _GNV_REGRAS_AJUSTE.length; i++) {
       var regra = _GNV_REGRAS_AJUSTE[i];
       if (!regra.testa(st, fila)) continue;
-      mudancas.push({ id: r.id, poe: regra.poe });
+      poe = poe || {};
+      for (var c in regra.poe) poe[c] = regra.poe[c];
       contagem[regra.rotulo] = (contagem[regra.rotulo] || 0) + 1;
       break;                                        // uma regra por item
     }
+    if (poe) mudancas.push({ id: r.id, poe: poe });
   });
 
   mudancas.forEach(function(m){
@@ -34241,7 +34310,12 @@ function _gnvTipoProcDe(r){ return String(r.tipoProcesso || '').trim(); }
 function _gnvFiltrar(){
   var lista = _gnvBaseAba();
   if (_gnvAba === 'concluidos' && _gnvFiltroConc) {
-    lista = lista.filter(function(r){ return _gnvLinhaCalc(r).conclusao === _gnvFiltroConc; });
+    lista = lista.filter(function(r){
+      var c = _gnvLinhaCalc(r);
+      return _gnvFiltroConc === '__fora__'
+        ? (c.foraDaBase && !c.conclusao)
+        : c.conclusao === _gnvFiltroConc;
+    });
   }
   if (_gnvBusca) {
     lista = lista.filter(function(r){
@@ -34570,10 +34644,11 @@ function _gnvDesenharConcluidos(){
   var fmt = function(d){ return d ? String(d).split('-').reverse().join('/') : '—'; };
 
   if (cards) {
-    var porConc = {};
+    var porConc = {}, nFora = 0;
     base.forEach(function(r){
-      var c = _gnvLinhaCalc(r).conclusao || 'Sem tipo';
-      porConc[c] = (porConc[c] || 0) + 1;
+      var c = _gnvLinhaCalc(r);
+      if (c.foraDaBase && !c.conclusao) { nFora++; return; }
+      porConc[c.conclusao || 'Sem tipo'] = (porConc[c.conclusao || 'Sem tipo'] || 0) + 1;
     });
     var semFiltro = !_gnvFiltroConc;
     var html = '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
@@ -34602,6 +34677,18 @@ function _gnvDesenharConcluidos(){
         + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + _cobEsc(x.nome) + '</div>'
         + '</div>';
     });
+    if (nFora) {
+      html += '<div ' + (_gnvFiltroConc === '__fora__' ? '' : '')
+        + 'onclick="gnvFiltrarConclusao(\'__fora__\')" title="Itens que sumiram da planilha"'
+        + ' style="cursor:pointer;background:' + (_gnvFiltroConc === '__fora__' ? 'var(--tx2)' : 'var(--cin)')
+        + ';color:' + (_gnvFiltroConc === '__fora__' ? '#fff' : 'var(--tx2)')
+        + ';border:1.5px dashed var(--tx2);border-radius:8px;padding:10px 18px;text-align:center;'
+        + 'line-height:1.2;flex:1 1 0;min-width:132px">'
+        + '<div style="font-size:20px">⊘</div>'
+        + '<div style="font-size:21px;font-weight:800">' + nFora + '</div>'
+        + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">Fora da planilha</div>'
+        + '</div>';
+    }
     cards.innerHTML = html + '</div></div></div>';
   }
 
@@ -34613,9 +34700,8 @@ function _gnvDesenharConcluidos(){
     return;
   }
 
-  var lista = _gnvFiltrar().slice().sort(function(a, b){
-    return String(_gnvLinhaCalc(b).finalizadoEm || '').localeCompare(String(_gnvLinhaCalc(a).finalizadoEm || ''));
-  });
+  var quando = function(x){ var c = _gnvLinhaCalc(x); return String(c.finalizadoEm || c.foraEm || ''); };
+  var lista = _gnvFiltrar().slice().sort(function(a, b){ return quando(b).localeCompare(quando(a)); });
 
   var t = '<table><thead><tr>'
     + '<th>Analista</th><th>RC</th><th>Item RC</th><th>Oportunidade</th><th>Item OP</th>'
@@ -34641,8 +34727,9 @@ function _gnvDesenharConcluidos(){
       + '<td>' + _cobEsc(r.tipo || '—') + '</td>'
       + '<td><span style="background:' + (cfg ? cfg.bg : 'var(--cin)') + ';color:' + (cfg ? cfg.cor : 'var(--tx2)')
         + ';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap">'
-        + (cfg ? cfg.emoji + ' ' : '') + _cobEsc(c.conclusao || '—') + '</span></td>'
-      + '<td style="text-align:center;font-weight:600">' + fmt(c.finalizadoEm) + '</td>'
+        + (cfg ? cfg.emoji + ' ' + _cobEsc(c.conclusao)
+               : (c.foraDaBase ? '⊘ Fora da planilha' : _cobEsc(c.conclusao || '—'))) + '</span></td>'
+      + '<td style="text-align:center;font-weight:600">' + fmt(c.finalizadoEm || c.foraEm) + '</td>'
       + '<td style="text-align:center">' + _cobEsc(c.centro || '—') + '</td>'
       + '<td>' + _cobEsc(c.concluidoPor || '—') + '</td>'
       + '<td style="color:var(--tx2)">' + _cobEsc(c.fila || '—') + '</td>'
@@ -34747,9 +34834,7 @@ function govNovaUpload(ev){
       // seria gravado como se fosse conteúdo
       var limpo = function(v){
         var s = String(v == null ? '' : v).trim();
-        if (s === '#N/A' || s === '#N/D' || s === 'undefined') return '';
-        if (s === '—' || s === '–' || s === '-' || s === '--') return '';
-        return s;
+        return _GNV_VAZIOS.test(s) ? '' : s;
       };
       var num = function(v){ return limpo(v).replace(/\.0$/, ''); };
       // Coluna de data: se o Excel mandar a célula formatada como data, ela
@@ -34811,8 +34896,16 @@ function govNovaUpload(ev){
         });
 
         var ini = {};
-        // valor de status do Patec na coluna Fila não entra como fila
-        if (cFila && !_gnvEhStatusPatec(l[cFila])) { var f = _gnvFilaCanonica(l[cFila]); if (f) ini.fila = f; }
+        // A fila vem da planilha quando ela traz uma; senão o item entra em
+        // Ag. Ação. Isso só vale para item que ainda não tem fila no
+        // dashboard — o filtro de "só preenche o que está em branco" mais
+        // abaixo garante que reeditar no dash não é desfeito por upload.
+        // (valor de Status do Patec na coluna Fila não entra como fila)
+        var filaPlan = (cFila && !_gnvEhStatusPatec(l[cFila])) ? _gnvFilaCanonica(l[cFila]) : '';
+        ini.fila = filaPlan || _GNV_FILA_ENTRADA;
+        // O Status do Patec fica só na base (gov_nova_base), que o upload
+        // regrava inteira. Assim a planilha pode corrigir o status de um item
+        // depois — e o que o dashboard gravou continua ganhando dela.
         if (cSolic)  { var ds = dataISO(l[cSolic]); if (ds) ini.dataSolic = ds; }
         if (cEnvio)  { var en = dataISO(l[cEnvio]); if (en) ini.envio = en; }
         if (cPrazoR) { var pr = dataISO(l[cPrazoR]); if (pr) ini.prazoRetManual = pr; }
@@ -34834,7 +34927,7 @@ function govNovaUpload(ev){
 
       // Apaga e regrava SOMENTE _GNV_COL_BASE. A coleção de edição
       // (_GNV_COL_EDIT) não entra neste lote em nenhuma hipótese.
-      var nIniciais = 0;
+      var nIniciais = 0, nEntrada = 0, nSairam = 0;
       Promise.all([
         db.collection(_GNV_COL_BASE).get(),
         db.collection(_GNV_COL_EDIT).get()    // para saber o que a equipe já preencheu
@@ -34844,8 +34937,20 @@ function govNovaUpload(ev){
         res[1].forEach(function(d){ jaEditado[d.id] = d.data() || {}; });
 
         var lotes = [], lote = db.batch(), n = 0;
+        var noUpload = {};
+        for (var k = 0; k < registros.length; k++) noUpload[registros[k].id] = true;
+
+        // Some da planilha = saiu da lista de trabalho, mas continua no
+        // histórico (aba Concluídos). Se voltar num upload futuro com a mesma
+        // chave RC+Item RC+OP+Item OP, o registro é regravado inteiro (sem a
+        // marca) e reencontra a edição da equipe, que nunca foi apagada.
         snap.forEach(function(doc){
-          lote.delete(doc.ref); n++;
+          if (doc.id === _GNV_DOC_RESUMO || /^__.*__$/.test(doc.id)) return;
+          if (noUpload[doc.id]) return;                 // veio na planilha: regravado abaixo
+          var d = doc.data() || {};
+          if (d.saiuDaBase) return;                     // já estava fora
+          lote.set(doc.ref, { saiuDaBase: true, saiuEm: new Date().toISOString() }, { merge: true });
+          nSairam++; n++;
           if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
         });
         var j;
@@ -34867,6 +34972,7 @@ function govNovaUpload(ev){
             patch[campo] = ini[campo];
           });
           if (!Object.keys(patch).length) continue;
+          if (patch.fila === _GNV_FILA_ENTRADA) nEntrada++;
           patch.atualizadoEm = new Date().toISOString();
           lote.set(db.collection(_GNV_COL_EDIT).doc(registros[j].id), patch, { merge: true });
           nIniciais++; n++;
@@ -34884,7 +34990,9 @@ function govNovaUpload(ev){
           .catch(function(e){ console.warn('resumo do upload não gravou:', e); });
       }).then(function(){
         _gnvMsg('✅ ' + registros.length + ' itens carregados'
-          + (nIniciais ? ' — ' + nIniciais + ' com fila/cobrança/prazo vindos da planilha' : '')
+          + (nEntrada ? ' — ' + nEntrada + ' item(ns) novo(s) entraram em Ag. Ação' : '')
+          + (nIniciais - nEntrada > 0 ? ' — ' + (nIniciais - nEntrada) + ' com fila/cobrança/prazo da planilha' : '')
+          + (nSairam ? ' — ' + nSairam + ' item(ns) saíram da planilha e foram para Concluídos' : '')
           + (duplicadas.length ? ' — ' + duplicadas.length + ' linha(s) repetida(s) ignorada(s)' : '')
           + '. As edições da equipe foram preservadas.', duplicadas.length ? '#b45309' : 'var(--vd)');
         govNovaRender();
@@ -35140,6 +35248,10 @@ function gnvAcaoAbrir(chave, tipo){
   if (badge) badge.innerHTML = '📋 RC: <strong>' + _cobEsc(r.rc) + '</strong> · Item ' + _cobEsc(r.itemRc || '—')
     + ' · OP ' + _cobEsc(r.oportunidade || '—');
 
+  _gnvAcaoCtx.patecAtual = _gnvLinhaCalc(r).statusPatec || '';
+  _gnvAcaoCtx.patecNovo  = '';
+  _gnvAcaoPintarPatec();
+
   var tipoBadge = document.getElementById('gnv-acao-tipo-badge');
   if (tipoBadge) tipoBadge.textContent = (cfg.emoji ? cfg.emoji + ' ' : '') + cfg.label;
   var filaBadge = document.getElementById('gnv-acao-fila-badge');
@@ -35247,6 +35359,10 @@ function _gnvAcaoTrocarEtapa(){
   el = document.getElementById('gnv-etapa-conclusao'); if (el) el.style.display = conc ? '' : 'none';
   el = document.getElementById('gnv-linha-cobranca');  if (el) el.style.display = conc ? 'none' : 'grid';
   el = document.getElementById('gnv-bloco-conclusao'); if (el) el.style.display = conc ? '' : 'none';
+  // concluir já finaliza o Patec: o botão de status não faz sentido nessa etapa
+  el = document.getElementById('gnv-acao-patec');       if (el) el.style.display = conc ? 'none' : 'flex';
+  el = document.getElementById('gnv-acao-patec-aviso');
+  if (el && conc) el.style.display = 'none';
   el = document.getElementById('gnv-acao-subtitulo');
   if (el) el.textContent = conc ? 'Selecione o tipo de conclusão' : 'Selecione a fila de tratamento';
   el = document.getElementById('gnv-acao-aviso');
@@ -35256,6 +35372,68 @@ function _gnvAcaoTrocarEtapa(){
   var err = document.getElementById('gnv-acao-erro');
   if (err) { err.style.display = 'none'; err.textContent = ''; }
   _gnvAcaoPrevia();
+}
+
+// Mostra o status atual e o que vai ser gravado se o botão estiver ligado.
+function _gnvAcaoPintarPatec(){
+  if (!_gnvAcaoCtx) return;
+  var atual = _gnvAcaoCtx.patecAtual || '';
+  var novo  = _gnvAcaoCtx.patecNovo  || '';
+  var mostrar = novo || atual;
+
+  var cfg = null;
+  _GNV_STATUS_PATEC.forEach(function(x){ if (x.nome === mostrar) cfg = x; });
+
+  var chip = document.getElementById('gnv-acao-patec-chip');
+  if (chip) {
+    chip.textContent = mostrar || 'sem status';
+    chip.style.background = cfg ? cfg.bg  : 'var(--brd)';
+    chip.style.color      = cfg ? cfg.cor : 'var(--tx2)';
+  }
+
+  var finalizado = (novo || atual) === 'Patec Finalizado';
+  var btn = document.getElementById('gnv-acao-patec-btn');
+  if (btn) {
+    btn.textContent = finalizado ? '↩ Em Andamento' : '🏁 Finalizar';
+    btn.style.borderColor = finalizado ? 'var(--azm)' : 'var(--vd)';
+    btn.style.color       = finalizado ? 'var(--azm)' : 'var(--vd)';
+    btn.style.background  = novo ? (finalizado ? 'var(--vdc)' : 'var(--azc)') : '#fff';
+  }
+
+  var aviso = document.getElementById('gnv-acao-patec-aviso');
+  if (aviso) {
+    if (novo === 'Patec Finalizado') {
+      aviso.style.display = 'block';
+      aviso.innerHTML = '🏁 Ao confirmar, o Patec passa a <strong>Finalizado</strong> e a fila vai para <strong>Ag. Ação</strong>.';
+    } else if (novo) {
+      aviso.style.display = 'block';
+      aviso.style.color = 'var(--azm)'; aviso.style.background = 'var(--azc)'; aviso.style.borderColor = 'var(--azm)';
+      aviso.innerHTML = '↩ Ao confirmar, o Patec volta para <strong>Em Andamento</strong>. Escolha a fila em que o item fica.';
+    } else {
+      aviso.style.display = 'none';
+      aviso.style.color = 'var(--vd)'; aviso.style.background = 'var(--vdc)'; aviso.style.borderColor = 'var(--vd)';
+    }
+  }
+}
+
+function gnvAcaoTogglePatec(){
+  if (!_gnvAcaoCtx) return;
+  var vigente = _gnvAcaoCtx.patecNovo || _gnvAcaoCtx.patecAtual || '';
+  var alvo = (vigente === 'Patec Finalizado') ? 'Patec em Andamento' : 'Patec Finalizado';
+
+  // clicar de novo desfaz, em vez de ficar alternando um valor que já era o do item
+  _gnvAcaoCtx.patecNovo = (alvo === _gnvAcaoCtx.patecAtual) ? '' : alvo;
+
+  // Finalizar joga o item para Ag. Ação sozinho — é o que ele espera lá.
+  // A escolha continua livre: clicar numa fila depois troca de novo.
+  if (_gnvAcaoCtx.patecNovo === 'Patec Finalizado') {
+    _gnvAcaoCtx.fila = _GNV_FILA_ENTRADA;
+    document.querySelectorAll('#gnv-acao-filas .acao-sel-btn')
+      .forEach(function(b){ b.classList.remove('selecionado'); });
+    var c = document.getElementById('gnv-acao-cobr');  if (c) c.value = 0;
+    var d = document.getElementById('gnv-acao-solic'); if (d) d.value = _gnvHoje();
+  }
+  _gnvAcaoPintarPatec();
 }
 
 function gnvAcaoSelConclusao(btn){
@@ -35389,8 +35567,17 @@ async function gnvAcaoConfirmar(){
       _gnvEdit[chave].centroConclusao = '';
       _gnvEdit[chave].concluidoPor    = '';
       _gnvEdit[chave].concluidoTs     = '';
-      _gnvEdit[chave].statusPatec     = 'Patec em Andamento';
+      // Registrar uma fila não diz nada sobre o Status do Patec — esse campo
+      // é abastecido pela planilha. O dashboard só o grava ao concluir; aqui
+      // ele é limpo para a coluna da planilha voltar a valer.
+      _gnvEdit[chave].statusPatec     = '';
       _gnvEdit[chave].fila         = fila;
+      // mudança feita no botão: fica marcada com a hora, para valer sobre o
+      // último upload e ser substituída pelo próximo
+      if (_gnvAcaoCtx.patecNovo) {
+        _gnvEdit[chave].statusPatec   = _gnvAcaoCtx.patecNovo;
+        _gnvEdit[chave].statusPatecEm = new Date().toISOString();
+      }
       _gnvEdit[chave].cobranca     = cobranca;
     }
     _gnvEdit[chave].envio        = envio;
