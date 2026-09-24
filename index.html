@@ -6401,7 +6401,46 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
 </main>
 
-<script>// ── GLOBAIS ──
+<script>
+// ── DESTINOS DE TRATAMENTO — VOCABULÁRIO ÚNICO ────────────────────
+// A Governança Nova grava a fila com o nome da planilha dela ("PARADA
+// FORNECEDOR", "MDG SCOMP"), enquanto a Governança e o Fechamento do Dia
+// sempre falaram "Fornecedor" e "MDG Equipe SCOMP". Eram o mesmo destino com
+// dois nomes, e por isso a ação lançada na aba nova não aparecia na
+// composição do dia nem no estratégico. Aqui os nomes são reconhecidos como
+// equivalentes — sem mexer no que já está gravado no banco.
+var _TRAT_SINONIMOS = {
+  forn:         ['FORNECEDOR', 'PARADA FORNECEDOR'],
+  req:          ['REQUISITANTE', 'PARADA REQUISITANTE'],
+  mdg:          ['MDG'],
+  mdgScomp:     ['MDG EQUIPE SCOMP', 'MDG SCOMP'],
+  parecerista:  ['PARECERISTA'],
+  thiago:       ['VALIDAÇÃO THIAGO', 'VALIDAÇÃO DO THIAGO', 'VAL. THIAGO', 'THIAGO'],
+  xgl:          ['XGL'],
+  pedido:       ['PEDIDO'],
+  republicacao: ['REPUBLICAÇÃO'],
+  devolucao:    ['DEVOLUÇÃO'],
+  nova_reserva: ['NOVA RESERVA']
+};
+
+function _tratGrupo(nome){
+  var alvo = String(nome == null ? '' : nome).trim().toUpperCase();
+  for (var k in _TRAT_SINONIMOS) {
+    if (_TRAT_SINONIMOS[k].indexOf(alvo) !== -1) return _TRAT_SINONIMOS[k];
+  }
+  return [alvo];
+}
+
+// a ação foi para este destino? (vale tanto para tratamento quanto conclusão)
+function _tratEh(a, nome){
+  if (!a) return false;
+  var g = _tratGrupo(nome);
+  var t = String(a.tratamento == null ? '' : a.tratamento).trim().toUpperCase();
+  var c = String(a.conclusao  == null ? '' : a.conclusao ).trim().toUpperCase();
+  return g.indexOf(t) !== -1 || g.indexOf(c) !== -1;
+}
+
+// ── GLOBAIS ──
 const HOJE = new Date();
 let BANCO_HE = []; // inicializado após COLABS
 
@@ -8384,12 +8423,12 @@ function renderEstPCP(){
   // a partir das ações reais pra Análise PCP mostrar a produção do dia.
   if(regsEstDia.length===0 && _acoesDia.length){
     const cnt=(pred)=>_acoesDia.filter(a=>!a.anulada&&pred(a)).length;
-    const comp=(nome)=>_acoesDia.filter(a=>!a.anulada&&(a.tratamento===nome||a.conclusao===nome)).length;
+    const comp=(nome)=>_acoesDia.filter(a=>!a.anulada&&_tratEh(a,nome)).length;
     const _f=Array(17).fill(0);
     _f[0]=cnt(a=>a.tipo==='primeira_analise'); _f[1]=cnt(a=>a.tipo==='em_tratativa');
     _f[2]=cnt(a=>a.tipo==='status_b'); _f[12]=cnt(a=>a.tipo==='ag_parecer'); _f[11]=cnt(a=>a.tipo==='outros');
     _f[3]=comp('Fornecedor'); _f[4]=comp('Requisitante'); _f[5]=comp('MDG');
-    _f[6]=comp('Val. Thiago')+comp('Thiago'); _f[7]=comp('XGL');
+    _f[6]=comp('Validação Thiago'); _f[7]=comp('XGL');
     _f[8]=comp('Republicação'); _f[9]=comp('Pedido'); _f[10]=comp('Devolução'); _f[14]=comp('Nova Reserva'); _f[15]=cnt(a=>a.tipo==='nova_reserva');
     _f[13]=comp('Parecerista'); _f[16]=comp('MDG Equipe SCOMP');
     regsEstDia = [{colab:'(ações)', data:dt, pres:'', f:_f}];
@@ -10823,10 +10862,10 @@ function _sincronizarRegistrosComAcoes(){
         if(existentes.has(key)) return;
         const as = porColab[colab];
         const cnt=function(tp){ return as.filter(function(a){return a.tipo===tp;}).length; };
-        const comp=function(nome){ return as.filter(function(a){return a.tratamento===nome||a.conclusao===nome;}).length; };
+        const comp=function(nome){ return as.filter(function(a){ return _tratEh(a,nome); }).length; };
         const f=[ cnt('primeira_analise'), cnt('em_tratativa'), cnt('status_b'),
                   comp('Fornecedor'), comp('Requisitante'), comp('MDG'),
-                  comp('Val. Thiago')+comp('Thiago'), comp('XGL'),
+                  comp('Validação Thiago'), comp('XGL'),
                   comp('Republicação'), comp('Pedido'), comp('Devolução'),
                   cnt('outros'), cnt('ag_parecer'), comp('Parecerista'), comp('Nova Reserva'), cnt('nova_reserva'),
                   comp('MDG Equipe SCOMP') ];
@@ -19731,6 +19770,11 @@ function govBuscarRC(rc, alvo){
   if(!rcBusca){ el.style.display='none'; el.innerHTML=''; return; }
 
   const resultados = [];
+  // Dentro da Governança Nova o painel lista só a base dela. Misturado com os
+  // resultados das abas antigas, o mesmo item aparecia duas vezes e o
+  // "Registrar ação" do card antigo abria o modal antigo — sem data da
+  // solicitação, cobrança nem status do Patec.
+  const soGovNova = (el.id === 'gnv-busca-resultado');
 
   // MAPA
   const dadosMapa = govFiltroMapaPadrao();
@@ -19794,6 +19838,10 @@ function govBuscarRC(rc, alvo){
       status: m.status||'', envio:m.envio||'', prazo:prazo||'—', statusCalc:status, finalizado:m.finalizado||'',
       sla:'—', fila:'—', seguimento:'—', cat_familia:'—'});
   });
+
+  // guarda quantos itens as abas antigas tinham, só para avisar o usuário
+  window._gnvBuscaOutrasAbas = soGovNova ? resultados.length : 0;
+  if (soGovNova) resultados.length = 0;
 
   if(!resultados.length){
     el.style.display='block';
@@ -25466,8 +25514,8 @@ function q18Consultar(valor){
 
 <!-- ══ MODAL AÇÃO — GOVERNANÇA NOVA ══ -->
 <div id="gnv-acao-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:12px;width:460px;max-width:95vw;max-height:92vh;overflow:auto;padding:1.5rem;box-shadow:0 8px 32px rgba(13,35,71,.18)">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:.25rem">
+  <div style="background:#fff;border-radius:16px;padding:1.75rem;max-width:480px;width:95%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
       <div>
         <div style="font-weight:700;font-size:15px;color:var(--az)" id="gnv-acao-titulo">Confirmar ação</div>
         <div id="gnv-acao-subtitulo" style="font-size:11px;color:var(--tx2);margin-top:2px">Selecione a fila de tratamento</div>
@@ -25475,21 +25523,23 @@ function q18Consultar(valor){
       <button onclick="gnvAcaoFechar()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--tx2);line-height:1">×</button>
     </div>
 
-    <div id="gnv-acao-rc" style="font-size:12px;color:var(--az);background:var(--azc);border:1px solid var(--azm);border-radius:8px;padding:.5rem .75rem;margin:.75rem 0">—</div>
+    <div id="gnv-acao-rc" style="background:#f0f4ff;border:1px solid var(--azm);border-radius:8px;padding:6px 12px;font-size:12px;margin-bottom:.75rem;color:var(--az)">—</div>
+
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:1.25rem;flex-wrap:wrap">
+      <div id="gnv-acao-tipo-badge" style="display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;background:var(--azc);color:var(--azm)">—</div>
+      <div id="gnv-acao-fila-badge" style="display:none;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;background:var(--amc);color:var(--am)"></div>
+    </div>
 
     <div id="gnv-etapa-fila">
-      <div style="font-size:11px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:.5rem">↓ Fila — para onde foi?</div>
-      <div id="gnv-acao-filas" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.75rem"></div>
-      <button type="button" onclick="gnvAcaoIrConclusao()"
-        style="width:100%;background:var(--vdc);border:1.5px solid var(--vd);border-radius:9px;padding:12px;cursor:pointer;
-               font-size:13px;font-weight:700;color:var(--vd);margin-bottom:1rem">🏁 Concluído — ir para conclusão ›</button>
+      <div style="font-size:11px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.75rem">↓ Fila — para onde foi?</div>
+      <div id="gnv-acao-filas" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem"></div>
     </div>
 
     <div id="gnv-etapa-conclusao" style="display:none">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:.5rem">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem">
         <button type="button" onclick="gnvAcaoVoltar()"
-          style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--azm);font-weight:700;padding:0">‹ Voltar</button>
-        <span style="font-size:11px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">↓ Tipo de conclusão</span>
+          style="background:none;border:none;font-size:12px;color:var(--azm);cursor:pointer;font-weight:600;padding:0">‹ Voltar</button>
+        <div style="font-size:11px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px">↓ Tipo de conclusão</div>
       </div>
       <div id="gnv-acao-conclusoes" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem"></div>
     </div>
@@ -29990,18 +30040,18 @@ async function fdiaInicializar(){
   // Atenção: comparação exata. "MDG" e "MDG Equipe SCOMP" são destinos
   // diferentes — sem a linha do SCOMP os itens sumiam da composição.
   const cntComp = {
-    pedido:      acoes.filter(a=>a.conclusao==='Pedido'||a.tratamento==='Pedido').length,
-    republicacao:acoes.filter(a=>a.conclusao==='Republicação'||a.tratamento==='Republicação').length,
-    xgl:         acoes.filter(a=>a.conclusao==='XGL'||a.tratamento==='XGL').length,
-    thiago:      acoes.filter(a=>a.conclusao==='Validação Thiago'||a.tratamento==='Validação Thiago'||a.conclusao==='VALIDAÇÃO DO THIAGO').length,
-    devolucao:   acoes.filter(a=>a.conclusao==='Devolução'||a.tratamento==='Devolução').length,
-    mdg:         acoes.filter(a=>a.conclusao==='MDG'||a.tratamento==='MDG').length,
-    mdgScomp:    acoes.filter(a=>a.conclusao==='MDG Equipe SCOMP'||a.tratamento==='MDG Equipe SCOMP'||a.conclusao==='MDG EQUIPE SCOMP'||a.tratamento==='MDG EQUIPE SCOMP').length,
-    parecerista: acoes.filter(a=>a.conclusao==='Parecerista'||a.tratamento==='Parecerista'||a.conclusao==='PARECERISTA'||a.tratamento==='PARECERISTA').length,
-    nova_reserva:acoes.filter(a=>a.conclusao==='Nova Reserva'||a.tratamento==='Nova Reserva').length,
+    pedido:      acoes.filter(a=>_tratEh(a,'Pedido')).length,
+    republicacao:acoes.filter(a=>_tratEh(a,'Republicação')).length,
+    xgl:         acoes.filter(a=>_tratEh(a,'XGL')).length,
+    thiago:      acoes.filter(a=>_tratEh(a,'Validação Thiago')).length,
+    devolucao:   acoes.filter(a=>_tratEh(a,'Devolução')).length,
+    mdg:         acoes.filter(a=>_tratEh(a,'MDG')).length,
+    mdgScomp:    acoes.filter(a=>_tratEh(a,'MDG Equipe SCOMP')).length,
+    parecerista: acoes.filter(a=>_tratEh(a,'Parecerista')).length,
+    nova_reserva:acoes.filter(a=>_tratEh(a,'Nova Reserva')).length,
     nova_reserva_acao: acoes.filter(a=>a.tipo==='nova_reserva').length,
-    forn:        acoes.filter(a=>a.conclusao==='Fornecedor'||a.tratamento==='Fornecedor'||a.conclusao==='FORNECEDOR').length,
-    req:         acoes.filter(a=>a.conclusao==='Requisitante'||a.tratamento==='Requisitante'||a.conclusao==='REQUISITANTE').length,
+    forn:        acoes.filter(a=>_tratEh(a,'Fornecedor')).length,
+    req:         acoes.filter(a=>_tratEh(a,'Requisitante')).length,
   };
 
   // Breakdown — Itens Tratados
@@ -30348,16 +30398,17 @@ async function fdiaSalvar(){
 
   // Composição — contagem dos tipos de conclusão
   const cntComp = {
-    pedido:       acoes.filter(a=>!a.anulada&&(a.conclusao==='Pedido'||a.tratamento==='Pedido')).length,
-    republicacao: acoes.filter(a=>!a.anulada&&(a.conclusao==='Republicação'||a.tratamento==='Republicação')).length,
-    xgl:          acoes.filter(a=>!a.anulada&&(a.conclusao==='XGL'||a.tratamento==='XGL')).length,
-    thiago:       acoes.filter(a=>!a.anulada&&(a.conclusao==='Validação Thiago'||a.tratamento==='Validação Thiago'||a.conclusao==='VALIDAÇÃO DO THIAGO')).length,
-    devolucao:    acoes.filter(a=>!a.anulada&&(a.conclusao==='Devolução'||a.tratamento==='Devolução')).length,
-    mdg:          acoes.filter(a=>!a.anulada&&(a.conclusao==='MDG'||a.tratamento==='MDG')).length,
-    forn:         acoes.filter(a=>!a.anulada&&(a.conclusao==='Fornecedor'||a.tratamento==='Fornecedor'||a.conclusao==='FORNECEDOR')).length,
-    req:          acoes.filter(a=>!a.anulada&&(a.conclusao==='Requisitante'||a.tratamento==='Requisitante'||a.conclusao==='REQUISITANTE')).length,
-    parecerista:  acoes.filter(a=>!a.anulada&&(a.tratamento==='Parecerista'||a.tratamento==='PARECERISTA')).length,
-    nova_reserva: acoes.filter(a=>!a.anulada&&(a.conclusao==='Nova Reserva'||a.tratamento==='Nova Reserva')).length,
+    pedido:       acoes.filter(a=>!a.anulada&&_tratEh(a,'Pedido')).length,
+    republicacao: acoes.filter(a=>!a.anulada&&_tratEh(a,'Republicação')).length,
+    xgl:          acoes.filter(a=>!a.anulada&&_tratEh(a,'XGL')).length,
+    thiago:       acoes.filter(a=>!a.anulada&&_tratEh(a,'Validação Thiago')).length,
+    devolucao:    acoes.filter(a=>!a.anulada&&_tratEh(a,'Devolução')).length,
+    mdg:          acoes.filter(a=>!a.anulada&&_tratEh(a,'MDG')).length,
+    mdgScomp:     acoes.filter(a=>!a.anulada&&_tratEh(a,'MDG Equipe SCOMP')).length,
+    forn:         acoes.filter(a=>!a.anulada&&_tratEh(a,'Fornecedor')).length,
+    req:          acoes.filter(a=>!a.anulada&&_tratEh(a,'Requisitante')).length,
+    parecerista:  acoes.filter(a=>!a.anulada&&_tratEh(a,'Parecerista')).length,
+    nova_reserva: acoes.filter(a=>!a.anulada&&_tratEh(a,'Nova Reserva')).length,
     nova_reserva_acao: acoes.filter(a=>!a.anulada&&a.tipo==='nova_reserva').length,
   };
 
@@ -33758,18 +33809,30 @@ var _GNV_DOC_RESUMO = 'resumo_upload';
 // caso vale o prazo de retorno que veio na planilha, se houver.
 // Ícone de cada fila — mesmo tratamento visual dos cards do modal da
 // Governança antiga, com o prazo logo abaixo do nome.
+// As filas são guardadas em caixa alta (é o valor que vai para o banco e para
+// os cards de contagem). Nos cards do modal elas aparecem como no modal antigo.
+var _GNV_FILA_NOME = {
+  'MDG':                 'MDG',
+  'MDG SCOMP':           'MDG SCOMP',
+  'PARADA REQUISITANTE': 'Parada Requisitante',
+  'PARADA FORNECEDOR':   'Parada Fornecedor',
+  'PARECERISTA':         'Parecerista'
+};
+
 var _GNV_FILA_ICONE = {
   'MDG':                 '🗂',
   'MDG SCOMP':           '🗂',
   'PARADA REQUISITANTE': '👤',
-  'PARADA FORNECEDOR':   '🏭'
+  'PARADA FORNECEDOR':   '🏭',
+  'PARECERISTA':         '📝'
 };
 
 var GOV_NOVA_PRAZOS = {
   'MDG':                 4,
   'MDG SCOMP':           10,
   'PARADA REQUISITANTE': 5,
-  'PARADA FORNECEDOR':   2
+  'PARADA FORNECEDOR':   2,
+  'PARECERISTA':         5
 };
 
 // "Patec em Andamento" e "Patec Finalizado" não são fila de tratamento: são o
@@ -34863,7 +34926,18 @@ async function _gnvBuscaAnexar(rcBusca, el){
   var achados = _gnvBase.filter(function(r){
     return String(r.rc || '').indexOf(String(rcBusca).trim()) !== -1;
   });
-  if (!achados.length) return;
+  if (!achados.length) {
+    // a RC existe na Governança mas ainda não entrou na planilha desta aba:
+    // é melhor dizer isso do que só "nenhum resultado"
+    var n = window._gnvBuscaOutrasAbas || 0;
+    var vz = el.querySelector('[data-gnv-vazio]');
+    if (vz && n) {
+      vz.innerHTML = 'RC <strong>' + _cobEsc(String(rcBusca)) + '</strong> não está na base da Governança Nova.'
+        + '<br><span style="font-size:11px">Ela existe na Governança (' + n + ' item(ns)). '
+        + 'Para tratar por aqui, inclua a RC na próxima planilha desta aba.</span>';
+    }
+    return;
+  }
 
   // se as abas antigas não acharam nada, tira a mensagem de vazio
   var vazio = el.querySelector('[data-gnv-vazio]');
@@ -34966,8 +35040,17 @@ function gnvAcaoAbrir(chave, tipo){
   if (tit) tit.textContent = 'Confirmar ação — ' + cfg.label;
 
   var badge = document.getElementById('gnv-acao-rc');
-  if (badge) badge.innerHTML = '📋 RC <strong>' + _cobEsc(r.rc) + '</strong> · Item ' + _cobEsc(r.itemRc || '—')
+  if (badge) badge.innerHTML = '📋 RC: <strong>' + _cobEsc(r.rc) + '</strong> · Item ' + _cobEsc(r.itemRc || '—')
     + ' · OP ' + _cobEsc(r.oportunidade || '—');
+
+  var tipoBadge = document.getElementById('gnv-acao-tipo-badge');
+  if (tipoBadge) tipoBadge.textContent = (cfg.emoji ? cfg.emoji + ' ' : '') + cfg.label;
+  var filaBadge = document.getElementById('gnv-acao-fila-badge');
+  if (filaBadge) {
+    var fAtual = _gnvLinhaCalc(r).fila || '';
+    filaBadge.textContent = '📍 Fila atual: ' + (_GNV_FILA_NOME[fAtual] || fAtual);
+    filaBadge.style.display = fAtual ? 'inline-flex' : 'none';
+  }
 
   // botões de fila a partir da tabela de prazos
   var box = document.getElementById('gnv-acao-filas');
@@ -34975,15 +35058,22 @@ function gnvAcaoAbrir(chave, tipo){
     var atual = _gnvLinhaCalc(r).fila;
     box.innerHTML = Object.keys(GOV_NOVA_PRAZOS).map(function(f){
       var dias = GOV_NOVA_PRAZOS[f];
-      return '<button type="button" data-fila="' + _cobEsc(f) + '" onclick="gnvAcaoSelFila(this)"'
+      return '<button type="button" class="acao-sel-btn" data-fila="' + _cobEsc(f) + '" onclick="gnvAcaoSelFila(this)"'
         + ' style="background:' + (f === atual ? 'var(--azc)' : 'var(--cin)') + ';border:1.5px solid '
-        + (f === atual ? 'var(--azm)' : 'var(--brd)') + ';border-radius:10px;padding:.875rem .5rem;cursor:pointer;'
+        + (f === atual ? 'var(--azm)' : 'var(--brd)') + ';border-radius:10px;padding:.875rem;cursor:pointer;'
         + 'text-align:center;transition:all .18s">'
         + '<div style="font-size:20px;margin-bottom:4px">' + (_GNV_FILA_ICONE[f] || '📋') + '</div>'
-        + '<div style="font-size:12px;font-weight:600;color:var(--tx)">' + _cobEsc(f) + '</div>'
-        + '<div style="font-size:9.5px;font-weight:600;color:var(--tx2);margin-top:2px">'
+        + '<div style="font-size:12px;font-weight:600;color:var(--tx)">'
+        + _cobEsc(_GNV_FILA_NOME[f] || f) + '</div>'
+        + '<div style="font-size:10px;font-weight:600;color:var(--tx2);margin-top:2px">'
         + (dias ? dias + ' dias úteis' : 'sem prazo') + '</div></button>';
-    }).join('');
+    }).join('')
+    // o "Concluído" é o último card da grade, ocupando a linha inteira — igual ao antigo
+    + '<button type="button" class="acao-sel-btn" onclick="gnvAcaoIrConclusao()"'
+    + ' style="background:var(--vdc);border:1.5px solid var(--vd);border-radius:10px;padding:.875rem;cursor:pointer;'
+    + 'text-align:center;grid-column:span 2;transition:all .18s">'
+    + '<div style="font-size:20px;margin-bottom:4px">🏁</div>'
+    + '<div style="font-size:12px;font-weight:700;color:var(--vd)">Concluído — ir para conclusão ›</div></button>';
   }
 
   var calc = _gnvLinhaCalc(r);
@@ -35036,10 +35126,11 @@ function gnvAcaoIrConclusao(){
   var box = document.getElementById('gnv-acao-conclusoes');
   if (box) {
     box.innerHTML = _GNV_CONCLUSOES.map(function(x){
-      return '<button type="button" data-conc="' + _cobEsc(x.nome) + '" onclick="gnvAcaoSelConclusao(this)"'
-        + ' style="background:' + x.bg + ';border:1.5px solid ' + x.cor + ';border-radius:9px;padding:14px 6px;'
-        + 'cursor:pointer;font-size:12.5px;font-weight:700;color:' + x.cor + ';line-height:1.4">'
-        + '<div style="font-size:18px">' + x.emoji + '</div>' + _cobEsc(x.nome) + '</button>';
+      return '<button type="button" class="acao-sel-btn" data-conc="' + _cobEsc(x.nome) + '" onclick="gnvAcaoSelConclusao(this)"'
+        + ' style="background:' + x.bg + ';border:1.5px solid ' + x.cor + ';border-radius:10px;padding:.875rem;'
+        + 'cursor:pointer;text-align:center;transition:all .18s">'
+        + '<div style="font-size:20px;margin-bottom:4px">' + x.emoji + '</div>'
+        + '<div style="font-size:12px;font-weight:600;color:' + x.cor + '">' + _cobEsc(x.nome) + '</div></button>';
     }).join('');
   }
   _gnvAcaoTrocarEtapa();
@@ -35073,12 +35164,9 @@ function _gnvAcaoTrocarEtapa(){
 function gnvAcaoSelConclusao(btn){
   if (!_gnvAcaoCtx) return;
   _gnvAcaoCtx.conclusao = btn.getAttribute('data-conc') || '';
-  var box = document.getElementById('gnv-acao-conclusoes');
-  if (box) [].forEach.call(box.children, function(b){
-    var on = (b === btn);
-    b.style.outline = on ? '3px solid rgba(26,45,79,.35)' : 'none';
-    b.style.transform = on ? 'scale(.98)' : 'none';
-  });
+  document.querySelectorAll('#gnv-acao-conclusoes .acao-sel-btn')
+    .forEach(function(b){ b.classList.remove('selecionado'); });
+  btn.classList.add('selecionado');
 }
 
 function gnvAcaoSelFila(btn){
@@ -35091,15 +35179,9 @@ function gnvAcaoSelFila(btn){
     var d = document.getElementById('gnv-acao-solic'); if (d) d.value = _gnvHoje();
   }
   _gnvAcaoCtx.fila = nova;
-  var box = document.getElementById('gnv-acao-filas');
-  if (box) [].forEach.call(box.children, function(b){
-    var on = (b === btn);
-    b.style.background  = on ? 'var(--azm)' : 'var(--cin)';
-    b.style.borderColor = on ? 'var(--azm)' : 'var(--brd)';
-    var divs = b.querySelectorAll('div');
-    if (divs[1]) divs[1].style.color = on ? '#fff' : 'var(--tx)';
-    if (divs[2]) divs[2].style.color = on ? 'rgba(255,255,255,.85)' : 'var(--tx2)';
-  });
+  document.querySelectorAll('#gnv-acao-filas .acao-sel-btn')
+    .forEach(function(b){ b.classList.remove('selecionado'); });
+  btn.classList.add('selecionado');
   _gnvAcaoPrevia();
 }
 
