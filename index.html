@@ -35343,7 +35343,8 @@ function _gnvAcaoPrevia(){
   el.innerHTML = pr
     ? 'Prazo de retorno: <strong style="color:var(--az)">' + pr.split('-').reverse().join('/') + '</strong>'
       + ' <span style="color:var(--tx2)">(' + GOV_NOVA_PRAZOS[fila] + ' dias úteis a partir do envio)</span>'
-    : '<span style="color:var(--am)">Esta fila não tem prazo definido — o item fica sem data de retorno.</span>';
+    : '<span style="color:var(--am)">Esta fila não tem prazo definido — o item fica <strong>sem data de retorno</strong>'
+      + ((_gnvEdit[_gnvAcaoCtx && _gnvAcaoCtx.chave] || {}).prazoRetManual ? ' (o prazo atual é zerado).' : '.') + '</span>';
 }
 
 function gnvAcaoIrConclusao(){
@@ -35519,7 +35520,13 @@ async function gnvAcaoConfirmar(){
   // fila sem prazo caindo num prazo antigo da planilha.
   var prazoNovo = _gnvPrazoRetorno(_gnvAcaoCtx.fila, envio);
   var ed = _gnvEdit[_gnvAcaoCtx.chave] || {};
-  var prazoVigente = prazoNovo || ed.prazoRetManual || '';
+  // O prazo que veio da planilha foi calculado para um envio anterior: se o
+  // envio novo já passou dele, ele não vale mais e é zerado na gravação —
+  // então não pode barrar o lançamento (era o caso de tirar da fila um item
+  // com prazo velho de 21/09 num envio de 24/09).
+  var prazoManual = ed.prazoRetManual || '';
+  if (prazoManual && prazoManual < envio) prazoManual = '';
+  var prazoVigente = prazoNovo || prazoManual;
   if (!ehConclusao && prazoVigente && prazoVigente < envio) {
     mostrarErro('A data de envio (' + envio.split('-').reverse().join('/') + ') é posterior ao prazo de retorno ('
       + prazoVigente.split('-').reverse().join('/') + '). Ajuste a data ou escolha uma fila com prazo.');
