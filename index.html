@@ -34072,10 +34072,9 @@ async function govNovaRender(){
     var ajuste   = await _gnvBackfillFilas();
     var msg = [];
     if (migrados) msg.push(migrados + ' item(ns) tinham Patec em Andamento/Finalizado na Fila — movidos para Status do Patec');
-    if (ajuste) {
-      if (ajuste['PARECERISTA']) msg.push(ajuste['PARECERISTA'] + ' em Patec em Andamento e sem fila foram para Parecerista');
-      if (ajuste['AG. AÇÃO'])    msg.push(ajuste['AG. AÇÃO']    + ' em Patec Finalizado e sem fila foram para Ag. Ação');
-    }
+    if (ajuste) Object.keys(ajuste).forEach(function(rotulo){
+      if (ajuste[rotulo]) msg.push(ajuste[rotulo] + ' ' + rotulo);
+    });
     if (msg.length) {
       _gnvMsg('↻ ' + msg.join('. ') + '.', 'var(--azm)');
       setTimeout(function(){ _gnvMsg(''); }, 10000);
@@ -34134,53 +34133,73 @@ async function _gnvMigrarFilaPatec(){
 // Roda uma vez só, e o marcador fica no banco, não no navegador — senão cada
 // pessoa da equipe repetiria o acerto.
 var _GNV_DOC_AJUSTE_FILAS = 'ajuste_filas_iniciais';
+// Sobe de número quando as regras mudam, para o acerto rodar de novo sobre a
+// carga que já está no banco. O marcador guarda a versão que já passou.
+var _GNV_AJUSTE_VERSAO = 3;
 
+// Fila e Status do Patec se completam: quem tem um diz qual é o outro.
+// Uma regra por item, na ordem abaixo.
 var _GNV_REGRAS_AJUSTE = [
-  { status: 'Patec em Andamento', fila: 'PARECERISTA' },
-  { status: 'Patec Finalizado',   fila: 'AG. AÇÃO'    }
+  { rotulo: 'em Patec em Andamento e sem fila foram para Parecerista',
+    testa: function(st, fila){ return !fila && st === 'Patec em Andamento'; },
+    poe:   { fila: 'PARECERISTA' } },
+
+  { rotulo: 'em Patec Finalizado e sem fila foram para Ag. Ação',
+    testa: function(st, fila){ return !fila && st === 'Patec Finalizado'; },
+    poe:   { fila: 'AG. AÇÃO' } },
+
+  // Já está numa fila de terceiro (MDG, parada, etc.): o Patec saiu daqui, só
+  // falta o retorno. Quem está com o parecerista não entra — o Patec ainda
+  // depende do parecer.
+  { rotulo: 'sem Status do Patec e já em fila de tratamento viraram Patec Finalizado',
+    testa: function(st, fila){ return !st && !!fila && fila !== 'PARECERISTA'; },
+    poe:   { statusPatec: 'Patec Finalizado' } }
 ];
 
 async function _gnvBackfillFilas(){
   var marca = _gnvEdit[_GNV_DOC_AJUSTE_FILAS];
-  if (marca && marca.feito) return null;
+  if (marca && marca.feito && (marca.versao || 0) >= _GNV_AJUSTE_VERSAO) return null;
 
   var db = (typeof getDB === 'function') ? getDB() : null;
   if (!db) return null;
 
   var mudancas = [], contagem = {};
-  _GNV_REGRAS_AJUSTE.forEach(function(regra){
-    contagem[regra.fila] = 0;
-    _gnvBase.forEach(function(r){
-      var e = _gnvEdit[r.id] || {};
-      if (e.fila) return;                           // já tem fila: não toca
-      if (e.conclusao) return;                      // concluído: fica como está
-      if (_gnvStatusPatecCanonico(e.statusPatec || r.statusPatec || '') !== regra.status) return;
-      mudancas.push({ id: r.id, fila: regra.fila });
-      contagem[regra.fila]++;
-    });
+  _gnvBase.forEach(function(r){
+    var e = _gnvEdit[r.id] || {};
+    if (e.conclusao) return;                        // concluído: fica como está
+    var st   = _gnvStatusPatecCanonico(e.statusPatec || r.statusPatec || '');
+    var fila = e.fila || '';
+    for (var i = 0; i < _GNV_REGRAS_AJUSTE.length; i++) {
+      var regra = _GNV_REGRAS_AJUSTE[i];
+      if (!regra.testa(st, fila)) continue;
+      mudancas.push({ id: r.id, poe: regra.poe });
+      contagem[regra.rotulo] = (contagem[regra.rotulo] || 0) + 1;
+      break;                                        // uma regra por item
+    }
   });
 
   mudancas.forEach(function(m){
     _gnvEdit[m.id] = _gnvEdit[m.id] || {};
-    _gnvEdit[m.id].fila = m.fila;
+    for (var k in m.poe) _gnvEdit[m.id][k] = m.poe[k];
   });
 
   try {
     var lote = db.batch(), n = 0, lotes = [];
     mudancas.forEach(function(m){
-      lote.set(db.collection(_GNV_COL_EDIT).doc(m.id), { fila: m.fila }, { merge: true });
+      lote.set(db.collection(_GNV_COL_EDIT).doc(m.id), m.poe, { merge: true });
       n++;
       if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
     });
-    lote.set(db.collection(_GNV_COL_EDIT).doc(_GNV_DOC_AJUSTE_FILAS),
-             { feito: true, qtd: mudancas.length, por: contagem, em: new Date().toISOString() }, { merge: true });
+    var reg = { feito: true, versao: _GNV_AJUSTE_VERSAO, qtd: mudancas.length,
+                por: contagem, em: new Date().toISOString() };
+    lote.set(db.collection(_GNV_COL_EDIT).doc(_GNV_DOC_AJUSTE_FILAS), reg, { merge: true });
     lotes.push(lote);
     var seq = Promise.resolve();
     lotes.forEach(function(b){ seq = seq.then(function(){ return b.commit(); }); });
     await seq;
-    _gnvEdit[_GNV_DOC_AJUSTE_FILAS] = { feito: true, qtd: mudancas.length, por: contagem };
+    _gnvEdit[_GNV_DOC_AJUSTE_FILAS] = reg;
   } catch (err) {
-    console.warn('acerto de filas da carga:', err);
+    console.warn('acerto da carga inicial:', err);
     return null;
   }
   return contagem;
