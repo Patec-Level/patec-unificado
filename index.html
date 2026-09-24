@@ -4620,7 +4620,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <button class="btn btn-s" style="font-size:11px" onclick="govNovaBaixarModelo()" title="Baixa a planilha em branco, já com os cabeçalhos certos">📄 Baixar modelo</button>
             <span id="gnv-msg" style="font-size:11.5px;color:var(--tx2)"></span>
           </div>
-          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Oportunidade, Item OP, Centro, Tipo, Prazo, SLA, Tipo de Processo, Processo</strong> — obrigatória: RC. A ordem não importa, a leitura é pelo nome.</div>
+          <div style="font-size:10px;color:var(--tx2);margin-top:8px">Colunas lidas: <strong>Analista, RC, Item RC, Oportunidade, Item OP, Centro, Tipo, Prazo, SLA, Tipo de Processo, Processo</strong> — obrigatória: RC. A ordem não importa, a leitura é pelo nome.<br>Para a <strong>carga inicial</strong>, a planilha também pode trazer <strong>Fila, Data da solicitação, Envio, Cobrança e Prazo de retorno</strong>: esses só preenchem o que ainda estiver em branco e nunca sobrepõem o que a equipe já tratou.</div>
           <div id="gnv-resumo"></div>
         </div>
 
@@ -32549,6 +32549,7 @@ function govCobrancaUpload(ev){
           fila: cFila ? limpo(l[cFila]) : '',
           atualizadoEm: new Date().toISOString()
         });
+
       }
       if (!registros.length) throw new Error('Nenhuma RC válida encontrada.');
 
@@ -33694,14 +33695,30 @@ var _GNV_DOC_RESUMO = 'resumo_upload';
 // feriados cadastrados em ADM › Feriados (mesma lista do resto do sistema).
 // Para mudar o prazo de uma fila, ou incluir fila nova, é só mexer aqui.
 // null = fila sem prazo definido (não calcula data de retorno).
+// CONFERIR OS DIAS: os três primeiros vieram por equivalência com a tabela
+// antiga do FAST (Parada Fornecedor↔FORNECEDOR, Parada Requisitante↔REQUISITANTE,
+// MDG SCOMP↔MDG EQUIPE SCOMP). As duas etapas PATEC estão como null porque não
+// havia número equivalente. null = a fila não calcula prazo automático; nesse
+// caso vale o prazo de retorno que veio na planilha, se houver.
 var GOV_NOVA_PRAZOS = {
-  'AG. TRATAMENTO':   null,
-  'FORNECEDOR':       2,
-  'MDG':              4,
-  'MDG EQUIPE SCOMP': 10,
-  'REQUISITANTE':     5,
-  'PARECERISTA':      5
+  'PATEC EM ANDAMENTO':  null,
+  'PATEC FINALIZADO':    null,
+  'MDG':                 4,
+  'MDG SCOMP':           10,
+  'PARADA REQUISITANTE': 5,
+  'PARADA FORNECEDOR':   2
 };
+
+// A planilha traz a fila com espaço sobrando e caixa variada ("Patec em Andamento ").
+// Aqui ela vira o nome canônico da tabela acima; fila desconhecida entra como veio.
+function _gnvFilaCanonica(v){
+  var s = String(v == null ? '' : v).trim().replace(/\s+/g, ' ');
+  if (!s || s === '#N/A' || s === '#N/D' || s === '—' || s === '-') return '';
+  var alvo = s.toUpperCase();
+  var achou = null;
+  Object.keys(GOV_NOVA_PRAZOS).forEach(function(f){ if (f.toUpperCase() === alvo) achou = f; });
+  return achou || s;
+}
 
 var _gnvBase   = [];    // linhas da planilha
 var _gnvEdit   = {};    // chave -> { dataSolic, fila, envio, cobranca }
@@ -33766,7 +33783,10 @@ function _gnvDiasParado(dataSolic){
 
 function _gnvLinhaCalc(r){
   var e = _gnvEdit[r.id] || {};
-  var prazoRet = _gnvPrazoRetorno(e.fila || '', e.envio || '');
+  // o cálculo (Envio + dias úteis da fila) tem prioridade; quando a fila não
+  // tem prazo definido ou ainda não houve envio, vale o prazo que veio na
+  // planilha da carga inicial
+  var prazoRet = _gnvPrazoRetorno(e.fila || '', e.envio || '') || (e.prazoRetManual || '');
   return {
     dataSolic: e.dataSolic || '',
     fila:      e.fila || '',
@@ -34132,10 +34152,21 @@ function govNovaUpload(ev){
       var cSla   = _cobCol(am, ['SLA']);
       var cTpProc= _cobColExata(am, ['Tipo de Processo', 'Tipo Processo']);
       var cProc  = _cobColExata(am, ['Processo']);
+      // Colunas do dashboard — opcionais, servem para a carga inicial.
+      // Só preenchem o que ainda estiver em branco; nunca sobrepõem edição.
+      var cFila   = _cobColExata(am, ['Fila']);
+      var cSolic  = _cobCol(am, ['Data da solicitação', 'Data da solicitacao', 'Data de solicitação']);
+      var cEnvio  = _cobColExata(am, ['Envio', 'Data de Envio']);
+      var cCobr   = _cobColExata(am, ['Cobrança', 'Cobranca']);
+      var cPrazoR = _cobCol(am, ['Prazo de retorno', 'Prazo de Retorno', 'Data de Retorno']);
 
+      // '—' e '-' são o "vazio" das planilhas da equipe — sem isso o traço
+      // seria gravado como se fosse conteúdo
       var limpo = function(v){
         var s = String(v == null ? '' : v).trim();
-        return (s === '#N/A' || s === '#N/D' || s === 'undefined') ? '' : s;
+        if (s === '#N/A' || s === '#N/D' || s === 'undefined') return '';
+        if (s === '—' || s === '–' || s === '-' || s === '--') return '';
+        return s;
       };
       var num = function(v){ return limpo(v).replace(/\.0$/, ''); };
       // Coluna de data: se o Excel mandar a célula formatada como data, ela
@@ -34157,8 +34188,15 @@ function govNovaUpload(ev){
         }
         return s;
       };
+      // mesma leitura, mas devolvendo aaaa-mm-dd (formato dos campos de data)
+      var dataISO = function(v){
+        var br = dataCel(v);
+        var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(br);
+        return m ? (m[3] + '-' + m[2] + '-' + m[1]) : '';
+      };
 
       var registros = [], vistos = {}, duplicadas = [], semRc = 0, i;
+      var iniciais = {};   // chave -> campos do dashboard vindos da planilha
       for (i = 0; i < linhas.length; i++) {
         var l = linhas[i];
         var rc = num(l[cRc]);
@@ -34183,6 +34221,17 @@ function govNovaUpload(ev){
           processo:     cProc   ? limpo(l[cProc])   : '',
           atualizadoEm: new Date().toISOString()
         });
+
+        var ini = {};
+        if (cFila)   { var f = _gnvFilaCanonica(l[cFila]); if (f) ini.fila = f; }
+        if (cSolic)  { var ds = dataISO(l[cSolic]); if (ds) ini.dataSolic = ds; }
+        if (cEnvio)  { var en = dataISO(l[cEnvio]); if (en) ini.envio = en; }
+        if (cPrazoR) { var pr = dataISO(l[cPrazoR]); if (pr) ini.prazoRetManual = pr; }
+        if (cCobr)   {
+          var cb = limpo(l[cCobr]);
+          if (cb !== '' && !isNaN(parseInt(cb, 10))) ini.cobranca = Math.max(0, parseInt(cb, 10));
+        }
+        if (Object.keys(ini).length) iniciais[id] = ini;
       }
       if (!registros.length) throw new Error('Nenhuma RC válida encontrada.');
 
@@ -34196,7 +34245,15 @@ function govNovaUpload(ev){
 
       // Apaga e regrava SOMENTE _GNV_COL_BASE. A coleção de edição
       // (_GNV_COL_EDIT) não entra neste lote em nenhuma hipótese.
-      db.collection(_GNV_COL_BASE).get().then(function(snap){
+      var nIniciais = 0;
+      Promise.all([
+        db.collection(_GNV_COL_BASE).get(),
+        db.collection(_GNV_COL_EDIT).get()    // para saber o que a equipe já preencheu
+      ]).then(function(res){
+        var snap = res[0];
+        var jaEditado = {};
+        res[1].forEach(function(d){ jaEditado[d.id] = d.data() || {}; });
+
         var lotes = [], lote = db.batch(), n = 0;
         snap.forEach(function(doc){
           lote.delete(doc.ref); n++;
@@ -34207,6 +34264,26 @@ function govNovaUpload(ev){
           lote.set(db.collection(_GNV_COL_BASE).doc(registros[j].id), registros[j]); n++;
           if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
         }
+
+        // Carga inicial dos campos do dashboard.
+        // REGRA: só entra no campo que ainda está em branco. Se a equipe já
+        // preencheu (inclusive com 0), a planilha não encosta.
+        for (j = 0; j < registros.length; j++) {
+          var ini = iniciais[registros[j].id];
+          if (!ini) continue;
+          var atual = jaEditado[registros[j].id] || {};
+          var patch = {};
+          Object.keys(ini).forEach(function(campo){
+            if (atual[campo] !== undefined && atual[campo] !== '') return;
+            patch[campo] = ini[campo];
+          });
+          if (!Object.keys(patch).length) continue;
+          patch.atualizadoEm = new Date().toISOString();
+          lote.set(db.collection(_GNV_COL_EDIT).doc(registros[j].id), patch, { merge: true });
+          nIniciais++; n++;
+          if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
+        }
+
         lotes.push(lote);
         var seq = Promise.resolve();
         lotes.forEach(function(b){ seq = seq.then(function(){ return b.commit(); }); });
@@ -34218,6 +34295,7 @@ function govNovaUpload(ev){
           .catch(function(e){ console.warn('resumo do upload não gravou:', e); });
       }).then(function(){
         _gnvMsg('✅ ' + registros.length + ' itens carregados'
+          + (nIniciais ? ' — ' + nIniciais + ' com fila/cobrança/prazo vindos da planilha' : '')
           + (duplicadas.length ? ' — ' + duplicadas.length + ' linha(s) repetida(s) ignorada(s)' : '')
           + '. As edições da equipe foram preservadas.', duplicadas.length ? '#b45309' : 'var(--vd)');
         govNovaRender();
