@@ -33811,7 +33811,14 @@ var _GNV_DOC_RESUMO = 'resumo_upload';
 // Governança antiga, com o prazo logo abaixo do nome.
 // As filas são guardadas em caixa alta (é o valor que vai para o banco e para
 // os cards de contagem). Nos cards do modal elas aparecem como no modal antigo.
+// Filas que existem na coluna, mas não são "para onde o item foi": ninguém
+// escolhe AG. AÇÃO no modal — é onde o item fica enquanto espera a nossa ação.
+// Por isso ela não entra em GOV_NOVA_PRAZOS (que é a lista de destinos) e não
+// tem prazo: o item mantém o prazo que veio da planilha.
+var _GNV_FILAS_EXTRA = ['AG. AÇÃO'];
+
 var _GNV_FILA_NOME = {
+  'AG. AÇÃO':            'Ag. Ação',
   'MDG':                 'MDG',
   'MDG SCOMP':           'MDG SCOMP',
   'PARADA REQUISITANTE': 'Parada Requisitante',
@@ -33820,6 +33827,7 @@ var _GNV_FILA_NOME = {
 };
 
 var _GNV_FILA_ICONE = {
+  'AG. AÇÃO':            '⏳',
   'MDG':                 '🗂',
   'MDG SCOMP':           '🗂',
   'PARADA REQUISITANTE': '👤',
@@ -33875,6 +33883,7 @@ function _gnvFilaCanonica(v){
   var alvo = s.toUpperCase();
   var achou = null;
   Object.keys(GOV_NOVA_PRAZOS).forEach(function(f){ if (f.toUpperCase() === alvo) achou = f; });
+  _GNV_FILAS_EXTRA.forEach(function(f){ if (f.toUpperCase() === alvo) achou = f; });
   return achou || s;
 }
 
@@ -34060,9 +34069,16 @@ async function govNovaRender(){
     });
 
     var migrados = await _gnvMigrarFilaPatec();
-    if (migrados) {
-      _gnvMsg('↻ ' + migrados + ' item(ns) tinham Patec em Andamento/Finalizado na Fila — movidos para Status do Patec.', 'var(--azm)');
-      setTimeout(function(){ _gnvMsg(''); }, 8000);
+    var ajuste   = await _gnvBackfillFilas();
+    var msg = [];
+    if (migrados) msg.push(migrados + ' item(ns) tinham Patec em Andamento/Finalizado na Fila — movidos para Status do Patec');
+    if (ajuste) {
+      if (ajuste['PARECERISTA']) msg.push(ajuste['PARECERISTA'] + ' em Patec em Andamento e sem fila foram para Parecerista');
+      if (ajuste['AG. AÇÃO'])    msg.push(ajuste['AG. AÇÃO']    + ' em Patec Finalizado e sem fila foram para Ag. Ação');
+    }
+    if (msg.length) {
+      _gnvMsg('↻ ' + msg.join('. ') + '.', 'var(--azm)');
+      setTimeout(function(){ _gnvMsg(''); }, 10000);
     }
 
     var av = document.getElementById('gnv-atualizado');
@@ -34107,6 +34123,67 @@ async function _gnvMigrarFilaPatec(){
     } catch (err) { console.warn('migração fila→status:', err); }
   }
   return ajustes.length;
+}
+
+// Segunda parte do acerto da carga antiga. A migração acima tirou "Patec em
+// Andamento" e "Patec Finalizado" da coluna Fila (viraram status), e esses
+// itens ficaram sem fila nenhuma — apareciam como "— sem fila —". Cada um vai
+// para onde de fato está: o que segue em andamento está com o parecerista; o
+// que já foi finalizado está esperando a nossa ação. Nenhuma das duas filas
+// tem prazo próprio aqui, então prazo e status continuam como estavam.
+// Roda uma vez só, e o marcador fica no banco, não no navegador — senão cada
+// pessoa da equipe repetiria o acerto.
+var _GNV_DOC_AJUSTE_FILAS = 'ajuste_filas_iniciais';
+
+var _GNV_REGRAS_AJUSTE = [
+  { status: 'Patec em Andamento', fila: 'PARECERISTA' },
+  { status: 'Patec Finalizado',   fila: 'AG. AÇÃO'    }
+];
+
+async function _gnvBackfillFilas(){
+  var marca = _gnvEdit[_GNV_DOC_AJUSTE_FILAS];
+  if (marca && marca.feito) return null;
+
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!db) return null;
+
+  var mudancas = [], contagem = {};
+  _GNV_REGRAS_AJUSTE.forEach(function(regra){
+    contagem[regra.fila] = 0;
+    _gnvBase.forEach(function(r){
+      var e = _gnvEdit[r.id] || {};
+      if (e.fila) return;                           // já tem fila: não toca
+      if (e.conclusao) return;                      // concluído: fica como está
+      if (_gnvStatusPatecCanonico(e.statusPatec || r.statusPatec || '') !== regra.status) return;
+      mudancas.push({ id: r.id, fila: regra.fila });
+      contagem[regra.fila]++;
+    });
+  });
+
+  mudancas.forEach(function(m){
+    _gnvEdit[m.id] = _gnvEdit[m.id] || {};
+    _gnvEdit[m.id].fila = m.fila;
+  });
+
+  try {
+    var lote = db.batch(), n = 0, lotes = [];
+    mudancas.forEach(function(m){
+      lote.set(db.collection(_GNV_COL_EDIT).doc(m.id), { fila: m.fila }, { merge: true });
+      n++;
+      if (n % 400 === 0) { lotes.push(lote); lote = db.batch(); }
+    });
+    lote.set(db.collection(_GNV_COL_EDIT).doc(_GNV_DOC_AJUSTE_FILAS),
+             { feito: true, qtd: mudancas.length, por: contagem, em: new Date().toISOString() }, { merge: true });
+    lotes.push(lote);
+    var seq = Promise.resolve();
+    lotes.forEach(function(b){ seq = seq.then(function(){ return b.commit(); }); });
+    await seq;
+    _gnvEdit[_GNV_DOC_AJUSTE_FILAS] = { feito: true, qtd: mudancas.length, por: contagem };
+  } catch (err) {
+    console.warn('acerto de filas da carga:', err);
+    return null;
+  }
+  return contagem;
 }
 
 // ── Filtros ──────────────────────────────────────────────────────
@@ -34916,6 +34993,7 @@ async function _gnvGarantirDados(){
     _gnvEdit = {};
     res[1].forEach(function(d){ _gnvEdit[d.id] = d.data(); });
     await _gnvMigrarFilaPatec();
+    await _gnvBackfillFilas();
   } catch (e) { console.warn('_gnvGarantirDados:', e); }
 }
 
