@@ -7182,6 +7182,11 @@ function go(id, el) {
     }, 100);
   }
   if(id==='governanca') setTimeout(()=>{
+    // no FAST o tópico abre direto na Governança Nova
+    try{
+      const _padrao = govAplicarAbasDoModulo();
+      if(_padrao !== 'gov') govMainTab(_padrao, document.getElementById('gov-main-tab-'+_padrao));
+    }catch(e){}
     const promises = [];
     if(!Object.keys(_govDados||{}).length)        promises.push(govCarregarFirebase());
     if(!_radarDados?.length)                       promises.push(fbCarregarRadar().then(()=>{ setTimeout(paAtualizarBacklogAuto,800); }));
@@ -18352,7 +18357,37 @@ function _govUrgPainelSync(){
   try{ if(typeof prodInicializarPainel==='function') prodInicializarPainel(); }catch(e){}
   try{ const e=window._govUltimoEquipe; if(e && typeof govAtualizarVelocimetroEquipe==='function') govAtualizarVelocimetroEquipe(e.total, e.meta); }catch(e){}
 }
+// No FAST o trabalho passou a ser todo na Governança Nova. Estas abas ficam
+// escondidas lá — mas o CÓDIGO delas continua no arquivo de propósito: a aba
+// nova usa funções que moram nesses módulos (_cobEsc, _cobCol, _cobColExata,
+// _cobManualLabel, _cobManualColab da Cobrança por Status; govAddDiasUteis,
+// com a lista de feriados, e govBuscarRC da Governança). Apagar o código
+// quebraria a aba nova. No ADLV nada muda.
+var GOV_ABAS_OCULTAS_FAST = ['gov', 'pc', 'sla', 'prazo', 'cobranca'];
+
+function _govFast(){
+  try { return typeof _cobEhFast === 'function' ? _cobEhFast() : false; } catch (e) { return false; }
+}
+
+// Esconde/mostra os botões conforme o módulo e devolve a aba que deve ficar
+// aberta (no FAST, a Governança Nova).
+function govAplicarAbasDoModulo(){
+  var fast = _govFast();
+  GOV_ABAS_OCULTAS_FAST.forEach(function(t){
+    var b = document.getElementById('gov-main-tab-' + t);
+    if (!b) return;
+    // no ADLV a Cobrança por Status já era oculta; as outras voltam a aparecer
+    b.style.display = fast ? 'none' : (t === 'cobranca' ? 'none' : '');
+  });
+  return fast ? 'govnova' : 'gov';
+}
+
 function govMainTab(aba, btn){
+  // No FAST as abas antigas estão escondidas: qualquer caminho que leve a elas
+  // (atalho da Planilha Crítica, link interno) cai na Governança Nova.
+  if (_govFast() && GOV_ABAS_OCULTAS_FAST.indexOf(aba) !== -1) {
+    aba = 'govnova'; btn = document.getElementById('gov-main-tab-govnova');
+  }
   // "Cobrança por Status" só existe no FAST — no ADLV cai na Governança
   if(aba==='cobranca' && typeof _cobEhFast==='function' && !_cobEhFast()){
     aba = 'gov'; btn = document.getElementById('gov-main-tab-gov');
@@ -35858,10 +35893,17 @@ function reuniaoAbrir(){
 }
 
 function _cobAplicarModulo(){
-  var btn  = document.getElementById('gov-main-tab-cobranca');
   var pane = document.getElementById('gov-main-content-cobranca');
   var fast = _cobEhFast();
-  if (btn) btn.style.display = fast ? '' : 'none';
+  // as abas antigas ficam escondidas no FAST (o código continua no arquivo)
+  var abaPadrao = govAplicarAbasDoModulo();
+  // se a aba aberta era uma das escondidas, troca pela padrão do módulo
+  var abertaEscondida = GOV_ABAS_OCULTAS_FAST.some(function(t){
+    var c = document.getElementById('gov-main-content-' + t);
+    var b = document.getElementById('gov-main-tab-' + t);
+    return c && c.style.display !== 'none' && b && b.style.display === 'none';
+  });
+  if (abertaEscondida) govMainTab(abaPadrao, document.getElementById('gov-main-tab-' + abaPadrao));
   // o tópico Reunião também é exclusivo do FAST
   var itReu = document.getElementById('sb-reuniao-it');
   if (itReu) itReu.style.display = fast ? '' : 'none';
