@@ -34313,7 +34313,30 @@ function gnvLimparFiltros(){
   _gnvDesenhar();
 }
 
-function _gnvTipoProcDe(r){ return String(r.tipoProcesso || '').trim(); }
+// Na planilha da equipe o tipo de processo ora vem na coluna "Tipo de
+// Processo" (Status B), ora na coluna "Processo" (E&P) — nunca nas duas ao
+// mesmo tempo. Como os tipos são uma lista fechada, quando o valor de
+// Processo é um deles ele vale como tipo. Um processo de verdade (PR-2201,
+// por exemplo) não bate com a lista e continua sendo só processo.
+function _gnvTipoProcCanonico(v){
+  var t = String(v == null ? '' : v).trim().replace(/\s+/g, ' ');
+  if (!t || _GNV_VAZIOS.test(t)) return '';
+  var alvo = t.toUpperCase().replace(/\s*&\s*/g, '&');
+  var achou = '';
+  _GNV_TIPOPROC.forEach(function(x){
+    if (x.nome.toUpperCase().replace(/\s*&\s*/g, '&') === alvo) achou = x.nome;
+  });
+  return achou;
+}
+
+function _gnvTipoProcDe(r){
+  var t = _gnvTipoProcCanonico(r.tipoProcesso);
+  if (t) return t;
+  if (String(r.tipoProcesso || '').trim() && !_GNV_VAZIOS.test(String(r.tipoProcesso).trim())) {
+    return String(r.tipoProcesso).trim();     // valor que não está na lista: respeita como veio
+  }
+  return _gnvTipoProcCanonico(r.processo);    // o tipo veio na coluna Processo
+}
 
 function _gnvFiltrar(){
   var lista = _gnvBaseAba();
@@ -34620,7 +34643,7 @@ function _gnvDesenhar(){
         + (c.dias == null ? '—' : c.dias) + '</td>'
       + '<td>' + _cobEsc(r.prazo || '—') + '</td>'
       + '<td>' + _cobEsc(r.sla || '—') + '</td>'
-      + '<td>' + _cobEsc(r.tipoProcesso || '—') + '</td>'
+      + '<td>' + _cobEsc(_gnvTipoProcDe(r) || '—') + '</td>'
       + '<td>' + _cobEsc(r.processo || '—') + '</td>'
       + '<td><button title="Abrir esta RC no Buscar RC para tratar"'
         + ' onclick="gnvAbrirNaBusca(\'' + String(r.rc || '').replace(/'/g, "\\'") + '\')"'
@@ -34741,7 +34764,7 @@ function _gnvDesenharConcluidos(){
       + '<td style="text-align:center">' + _cobEsc(c.centro || '—') + '</td>'
       + '<td>' + _cobEsc(c.concluidoPor || '—') + '</td>'
       + '<td style="color:var(--tx2)">' + _cobEsc(c.fila || '—') + '</td>'
-      + '<td>' + _cobEsc(r.tipoProcesso || '—') + '</td>'
+      + '<td>' + _cobEsc(_gnvTipoProcDe(r) || '—') + '</td>'
       + '<td>' + _cobEsc(r.processo || '—') + '</td>'
       + '<td style="white-space:nowrap;position:sticky;right:0;background:var(--bg);box-shadow:-4px 0 6px -4px rgba(0,0,0,.18)">'
         + '<button title="Ver todas as ações desta RC" onclick="gnvHistoricoDe(\'' + String(r.rc || '').replace(/'/g, "\\'") + '\')"'
@@ -35092,7 +35115,7 @@ function govNovaExportar(){
       c.statusPatec||'',
       br(c.dataSolic), c.fila||'', br(c.envio), br(c.prazoRet),
       c.status||'', c.cobranca, (c.dias == null ? '' : c.dias),
-      r.prazo||'', r.sla||'', r.tipoProcesso||'', r.processo||'',
+      r.prazo||'', r.sla||'', _gnvTipoProcDe(r), r.processo||'',
       c.conclusao||'', br(c.finalizadoEm), c.centro||'', c.concluidoPor||''
     ]);
   });
@@ -35194,7 +35217,7 @@ function _gnvBuscaHtml(achados, rcBusca){
                 + (c.finalizadoEm ? ' em ' + fmt(c.finalizadoEm) : '')
                 + (c.centro ? ' · centro ' + _cobEsc(c.centro) : '') + '</span>'
               : '')
-       +   (r.processo ? '<span style="font-size:11px;color:var(--tx2)">' + _cobEsc(r.tipoProcesso || '') + ' ' + _cobEsc(r.processo) + '</span>' : '')
+       +   (r.processo || _gnvTipoProcDe(r) ? '<span style="font-size:11px;color:var(--tx2)">' + _cobEsc(_gnvTipoProcDe(r)) + ' ' + _cobEsc(r.processo || '') + '</span>' : '')
        + '</div>'
 
        // estado atual + campos editáveis
