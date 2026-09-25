@@ -204,6 +204,8 @@ tfoot td{background:linear-gradient(180deg,#EEF3FA,#E8EFF8);font-weight:700;posi
 
 /* ── TABS ── */
 .stabs{display:flex;gap:4px;margin-bottom:1.25rem;flex-wrap:wrap;padding:3px;background:rgba(13,35,71,.04);border-radius:10px;width:fit-content}
+.gnv-col-acao{ display:table-cell; }
+#reu-tabela .gnv-col-acao{ display:none; }   /* a Reunião é só leitura */
 .stab{padding:5px 14px;font-size:11.5px;border:none;border-radius:7px;background:transparent;cursor:pointer;color:var(--tx2);transition:all .18s;font-weight:500}
 .stab:hover{background:rgba(255,255,255,.7);color:var(--tx)}
 .stab.active{background:#fff;color:var(--azm);font-weight:700;box-shadow:0 1px 6px rgba(13,35,71,.12)}
@@ -4321,7 +4323,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
     <div id="p-reuniao" class="page">
 
       <div style="display:flex;gap:0;margin-bottom:1.25rem;border-bottom:2px solid var(--brd);align-items:center">
-        <button id="reu-tab-cobranca" onclick="reuTab('patec',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--azm);border-bottom:3px solid var(--azm);margin-bottom:-2px">💳 PATEC</button>
+        <button id="reu-tab-cobranca" onclick="reuTab('patec',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--azm);border-bottom:3px solid var(--azm);margin-bottom:-2px">🗂 PATEC</button>
         <button id="reu-tab-pedidos" onclick="reuTab('pedidos',this)" style="padding:.6rem 1.4rem;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;color:var(--tx2);border-bottom:3px solid transparent;margin-bottom:-2px">📦 Gestão de Pedidos</button>
         <div style="margin-left:auto;display:flex;align-items:center;gap:10px;padding-bottom:6px">
           <span id="reu-export-msg" style="font-size:11px;color:var(--tx2)"></span>
@@ -34097,6 +34099,25 @@ function _gnvLinhaCalc(r){
   };
 }
 
+// A aba PATEC do tópico Reunião mostra exatamente a Governança Nova. Em vez
+// de duplicar o desenho, cada bloco é escrito nos dois lugares — mesmo
+// esquema que a Cobrança por Status já usa com #cob-cards / #reu-cards.
+var _GNV_ESPELHO = {
+  'gnv-cards':    'reu-cards',
+  'gnv-subcards': 'reu-subcards',
+  'gnv-tabela':   'reu-tabela'
+};
+
+function _gnvPor(id, html, display){
+  [id, _GNV_ESPELHO[id]].forEach(function(alvo){
+    if (!alvo) return;
+    var el = document.getElementById(alvo);
+    if (!el) return;
+    el.innerHTML = html;
+    if (display !== undefined) el.style.display = display;
+  });
+}
+
 // ── Carga ────────────────────────────────────────────────────────
 async function govNovaRender(){
   if (!_gnvEhFast()) return;
@@ -34105,10 +34126,10 @@ async function govNovaRender(){
 
   var db = (typeof getDB === 'function') ? getDB() : null;
   if (!db) {
-    wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⚠ Firebase indisponível.</div>';
+    _gnvPor('gnv-tabela', '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⚠ Firebase indisponível.</div>');
     return;
   }
-  wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⏳ Carregando...</div>';
+  _gnvPor('gnv-tabela', '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">⏳ Carregando...</div>');
 
   try {
     var res = await Promise.all([
@@ -34146,7 +34167,7 @@ async function govNovaRender(){
     }
     _gnvDesenhar();
   } catch (err) {
-    wrap.innerHTML = '<div style="padding:2rem;color:var(--vm);font-size:13px">❌ ' + _cobEsc(err.message) + '</div>';
+    _gnvPor('gnv-tabela', '<div style="padding:2rem;color:var(--vm);font-size:13px">❌ ' + _cobEsc(err.message) + '</div>');
   }
 }
 
@@ -34389,7 +34410,7 @@ function _gnvDesenharSub(){
   var el = document.getElementById('gnv-subcards');
   if (!el) return;
 
-  if (!_gnvFiltroFila || _gnvAba === 'concluidos') { el.innerHTML = ''; el.style.display = 'none'; return; }
+  if (!_gnvFiltroFila || _gnvAba === 'concluidos') { _gnvPor('gnv-subcards', '', 'none'); return; }
 
   var itens = _gnvBaseAba().filter(function(r){
     if ((_gnvLinhaCalc(r).fila || 'Sem fila') !== _gnvFiltroFila) return false;
@@ -34430,8 +34451,7 @@ function _gnvDesenharSub(){
   }
   html += '</div>';
 
-  el.innerHTML = html;
-  el.style.display = 'block';
+  _gnvPor('gnv-subcards', html, 'block');
 }
 
 // ── Desenho ──────────────────────────────────────────────────────
@@ -34449,10 +34469,10 @@ function _gnvDesenhar(){
   }
 
   if (!_gnvBase.length) {
-    if (cards) cards.innerHTML = '';
+    _gnvPor('gnv-cards', '');
     _gnvDesenharSub();
-    wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">'
-      + '📄 Nenhum item carregado ainda.<br><span style="font-size:11px">Use <strong>📤 Subir planilha</strong> acima.</span></div>';
+    _gnvPor('gnv-tabela', '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">'
+      + '📄 Nenhum item carregado ainda.<br><span style="font-size:11px">Use <strong>📤 Subir planilha</strong> acima.</span></div>');
     return;
   }
 
@@ -34577,10 +34597,10 @@ function _gnvDesenhar(){
         + '</div>';
     });
 
-    cards.innerHTML = '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
+    _gnvPor('gnv-cards', '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
       + lateral
       + '<div style="flex:1 1 0;min-width:0"><div style="display:flex;gap:12px;flex-wrap:wrap">' + filaCards + '</div></div>'
-      + '</div>';
+      + '</div>');
   }
 
   _gnvDesenharSub();
@@ -34597,7 +34617,8 @@ function _gnvDesenhar(){
     + '<th style="' + AUTO_BG + '">Status</th>'
     + '<th>Cobrança</th>'
     + '<th style="' + AUTO_BG + '">Dias parados</th>'
-    + '<th>Prazo</th><th>SLA</th><th>Tipo de Processo</th><th>Processo</th><th></th>'
+    + '<th>Prazo</th><th>SLA</th><th>Tipo de Processo</th><th>Processo</th>'
+    + '<th class="gnv-col-acao"></th>'
     + '</tr></thead><tbody>';
 
   var fmt = function(d){ return d ? String(d).split('-').reverse().join('/') : '—'; };
@@ -34645,7 +34666,7 @@ function _gnvDesenhar(){
       + '<td>' + _cobEsc(r.sla || '—') + '</td>'
       + '<td>' + _cobEsc(_gnvTipoProcDe(r) || '—') + '</td>'
       + '<td>' + _cobEsc(r.processo || '—') + '</td>'
-      + '<td><button title="Abrir esta RC no Buscar RC para tratar"'
+      + '<td class="gnv-col-acao"><button title="Abrir esta RC no Buscar RC para tratar"'
         + ' onclick="gnvAbrirNaBusca(\'' + String(r.rc || '').replace(/'/g, "\\'") + '\')"'
         + ' style="background:var(--azc);border:1px solid var(--azm);border-radius:6px;padding:2px 9px;'
         + 'cursor:pointer;font-size:10px;color:var(--azm);font-weight:700;white-space:nowrap">tratar ↑</button></td>'
@@ -34661,8 +34682,8 @@ function _gnvDesenhar(){
   if (_gnvBusca) legenda += ' — "' + _cobEsc(_gnvBusca) + '"';
   legenda += '. Prazo de retorno = Envio + dias úteis da fila (pula fim de semana e feriados).';
 
-  wrap.innerHTML = '<div class="tw" style="max-height:600px">' + t + '</div>'
-    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">' + legenda + '</div>';
+  _gnvPor('gnv-tabela', '<div class="tw" style="max-height:600px">' + t + '</div>'
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">' + legenda + '</div>');
 }
 
 // ── Aba Concluídos: histórico dos itens finalizados ──────────────
@@ -34720,14 +34741,14 @@ function _gnvDesenharConcluidos(){
         + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">Fora da planilha</div>'
         + '</div>';
     }
-    cards.innerHTML = html + '</div></div></div>';
+    _gnvPor('gnv-cards', html + '</div></div></div>');
   }
 
   _gnvDesenharSub();
 
   if (!base.length) {
-    wrap.innerHTML = '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">'
-      + '✅ Nenhum item concluído ainda.<br><span style="font-size:11px">Itens saem daqui da lista em andamento quando recebem uma conclusão.</span></div>';
+    _gnvPor('gnv-tabela', '<div style="padding:2.5rem;text-align:center;color:var(--tx2);font-size:13px">'
+      + '✅ Nenhum item concluído ainda.<br><span style="font-size:11px">Itens saem daqui da lista em andamento quando recebem uma conclusão.</span></div>');
     return;
   }
 
@@ -34739,7 +34760,7 @@ function _gnvDesenharConcluidos(){
     + '<th>Centro</th><th>Tipo</th><th>Conclusão</th><th>Data de conclusão</th>'
     + '<th>Centro da conclusão</th><th>Concluído por</th><th>Última fila</th>'
     + '<th>Tipo de Processo</th><th>Processo</th>'
-    + '<th style="position:sticky;right:0;background:var(--cin);box-shadow:-4px 0 6px -4px rgba(0,0,0,.18)"></th>'
+    + '<th class="gnv-col-acao" style="position:sticky;right:0;background:var(--cin);box-shadow:-4px 0 6px -4px rgba(0,0,0,.18)"></th>'
     + '</tr></thead><tbody>';
 
   for (var i = 0; i < lista.length; i++) {
@@ -34766,7 +34787,7 @@ function _gnvDesenharConcluidos(){
       + '<td style="color:var(--tx2)">' + _cobEsc(c.fila || '—') + '</td>'
       + '<td>' + _cobEsc(_gnvTipoProcDe(r) || '—') + '</td>'
       + '<td>' + _cobEsc(r.processo || '—') + '</td>'
-      + '<td style="white-space:nowrap;position:sticky;right:0;background:var(--bg);box-shadow:-4px 0 6px -4px rgba(0,0,0,.18)">'
+      + '<td class="gnv-col-acao" style="white-space:nowrap;position:sticky;right:0;background:var(--bg);box-shadow:-4px 0 6px -4px rgba(0,0,0,.18)">'
         + '<button title="Ver todas as ações desta RC" onclick="gnvHistoricoDe(\'' + String(r.rc || '').replace(/'/g, "\\'") + '\')"'
         + ' style="background:var(--cin);border:1px solid var(--brd);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11px">📋</button> '
         + '<button title="Reabrir: registrar uma fila devolve o item para a lista em andamento"'
@@ -34783,8 +34804,8 @@ function _gnvDesenharConcluidos(){
   if (_gnvBusca) legenda += ' — "' + _cobEsc(_gnvBusca) + '"';
   legenda += '. Mais recentes primeiro.';
 
-  wrap.innerHTML = '<div class="tw" style="max-height:600px">' + t + '</div>'
-    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">' + legenda + '</div>';
+  _gnvPor('gnv-tabela', '<div class="tw" style="max-height:600px">' + t + '</div>'
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">' + legenda + '</div>');
 }
 
 function gnvHistoricoDe(rc){
@@ -35723,12 +35744,14 @@ function reuniaoExportar(){
   }
   _reuExpMsg('⏳ Montando o arquivo...');
 
+  // A aba PATEC virou a Governança Nova, então a exportação vem da base dela.
+  // Carrega pelo caminho normal da aba: assim a coleção de edição entra junto
+  // e o cálculo de fila, prazo e status é o mesmo que está na tela.
   Promise.all([
-    _reuLerColecao('cobranca_status', _COB_DOC_RESUMO),
+    Promise.resolve(_gnvGarantirDados()).then(function(){ return (_gnvBase || []).slice(); }),
     _reuLerColecao(_PED_COLECAO, _PED_DOC_RESUMO)
   ]).then(function(res){
-    // se o Firebase falhar, usa o que já está carregado na tela
-    var patec   = res[0] || _cobDados || [];
+    var patec   = res[0] || [];
     var pedidos = res[1] || _pedDados || [];
 
     if (!patec.length && !pedidos.length) {
@@ -35738,7 +35761,7 @@ function reuniaoExportar(){
     }
 
     patec = patec.slice().sort(function(a, b){
-      var d = _cobQtd(b) - _cobQtd(a);
+      var d = (_gnvLinhaCalc(b).cobranca || 0) - (_gnvLinhaCalc(a).cobranca || 0);
       if (d) return d;
       return String(a.rc || '').localeCompare(String(b.rc || ''));
     });
@@ -35750,22 +35773,33 @@ function reuniaoExportar(){
       return String(a.rc || '').localeCompare(String(b.rc || ''));
     });
 
+    var br = function(d){ return d ? String(d).split('-').reverse().join('/') : ''; };
     var linhasPatec = patec.map(function(r){
+      var c = _gnvLinhaCalc(r);
       return {
         'Analista': r.analista || '',
         'RC': r.rc || '',
         'Item RC': r.itemRc || '',
-        'Data de Retorno': r.dataRetorno || '',
-        'Status': r.status || '',
+        'Oportunidade': r.oportunidade || '',
+        'Item OP': r.itemOp || '',
         'Centro': r.centro || '',
-        'Cobranças': _cobQtd(r),
         'Tipo': r.tipo || '',
-        'Tipo de Cobrança': r.tipoCobranca || '',
-        'Fila': _cobFila(r),
+        'Status do Patec': c.statusPatec || '',
+        'Data da solicitação': br(c.dataSolic),
+        'Fila': c.fila || '',
+        'Envio': br(c.envio),
+        'Prazo de Retorno': br(c.prazoRet),
+        'Status': c.status || '',
+        'Cobranças': c.cobranca || 0,
+        'Dias parados': (c.dias == null ? '' : c.dias),
         'Prazo': r.prazo || '',
         'SLA': r.sla || '',
-        'Tipo de Processo': _cobVerifTipo(r) || (r.verificar || ''),
-        'Processo': r.processo || ''
+        'Tipo de Processo': _gnvTipoProcDe(r),
+        'Processo': r.processo || '',
+        'Conclusão': c.conclusao || (c.foraDaBase ? 'Fora da planilha' : ''),
+        'Data de conclusão': br(c.finalizadoEm || c.foraEm),
+        'Centro da conclusão': c.centro || '',
+        'Concluído por': c.concluidoPor || ''
       };
     });
     var linhasPedidos = pedidos.map(function(r){
@@ -35806,8 +35840,9 @@ function reuniaoAbrir(){
     if (_pedDados && _pedDados.length) _pedDesenhar();
     govPedidosRender();
   } else {
-    if (_cobDados && _cobDados.length) _cobDesenhar();
-    govCobrancaRender();
+    // a aba PATEC mostra a Governança Nova (era a Cobrança por Status)
+    if (_gnvBase && _gnvBase.length) _gnvDesenhar();
+    govNovaRender();
   }
 }
 
