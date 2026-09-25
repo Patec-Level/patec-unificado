@@ -34350,6 +34350,10 @@ function _gnvTipoProcCanonico(v){
   return achou;
 }
 
+// ATENÇÃO: isto é para CONTAR nos cards e filtrar, não para exibir. As
+// colunas da tabela e da exportação mostram cada uma o seu campo, como veio
+// da planilha: "Tipo de Processo" traz Status B / Nova Reserva, e "Processo"
+// traz o E&P. Quem mistura os dois é só o card, para o E&P ser contado.
 function _gnvTipoProcDe(r){
   var t = _gnvTipoProcCanonico(r.tipoProcesso);
   if (t) return t;
@@ -34664,7 +34668,7 @@ function _gnvDesenhar(){
         + (c.dias == null ? '—' : c.dias) + '</td>'
       + '<td>' + _cobEsc(r.prazo || '—') + '</td>'
       + '<td>' + _cobEsc(r.sla || '—') + '</td>'
-      + '<td>' + _cobEsc(_gnvTipoProcDe(r) || '—') + '</td>'
+      + '<td>' + _cobEsc(r.tipoProcesso || '—') + '</td>'
       + '<td>' + _cobEsc(r.processo || '—') + '</td>'
       + '<td class="gnv-col-acao"><button title="Abrir esta RC no Buscar RC para tratar"'
         + ' onclick="gnvAbrirNaBusca(\'' + String(r.rc || '').replace(/'/g, "\\'") + '\')"'
@@ -34785,7 +34789,7 @@ function _gnvDesenharConcluidos(){
       + '<td style="text-align:center">' + _cobEsc(c.centro || '—') + '</td>'
       + '<td>' + _cobEsc(c.concluidoPor || '—') + '</td>'
       + '<td style="color:var(--tx2)">' + _cobEsc(c.fila || '—') + '</td>'
-      + '<td>' + _cobEsc(_gnvTipoProcDe(r) || '—') + '</td>'
+      + '<td>' + _cobEsc(r.tipoProcesso || '—') + '</td>'
       + '<td>' + _cobEsc(r.processo || '—') + '</td>'
       + '<td class="gnv-col-acao" style="white-space:nowrap;position:sticky;right:0;background:var(--bg);box-shadow:-4px 0 6px -4px rgba(0,0,0,.18)">'
         + '<button title="Ver todas as ações desta RC" onclick="gnvHistoricoDe(\'' + String(r.rc || '').replace(/'/g, "\\'") + '\')"'
@@ -35136,7 +35140,7 @@ function govNovaExportar(){
       c.statusPatec||'',
       br(c.dataSolic), c.fila||'', br(c.envio), br(c.prazoRet),
       c.status||'', c.cobranca, (c.dias == null ? '' : c.dias),
-      r.prazo||'', r.sla||'', _gnvTipoProcDe(r), r.processo||'',
+      r.prazo||'', r.sla||'', r.tipoProcesso||'', r.processo||'',
       c.conclusao||'', br(c.finalizadoEm), c.centro||'', c.concluidoPor||''
     ]);
   });
@@ -35238,7 +35242,7 @@ function _gnvBuscaHtml(achados, rcBusca){
                 + (c.finalizadoEm ? ' em ' + fmt(c.finalizadoEm) : '')
                 + (c.centro ? ' · centro ' + _cobEsc(c.centro) : '') + '</span>'
               : '')
-       +   (r.processo || _gnvTipoProcDe(r) ? '<span style="font-size:11px;color:var(--tx2)">' + _cobEsc(_gnvTipoProcDe(r)) + ' ' + _cobEsc(r.processo || '') + '</span>' : '')
+       +   (r.processo || r.tipoProcesso ? '<span style="font-size:11px;color:var(--tx2)">' + _cobEsc(r.tipoProcesso || '') + ' ' + _cobEsc(r.processo || '') + '</span>' : '')
        + '</div>'
 
        // estado atual + campos editáveis
@@ -35794,7 +35798,7 @@ function reuniaoExportar(){
         'Dias parados': (c.dias == null ? '' : c.dias),
         'Prazo': r.prazo || '',
         'SLA': r.sla || '',
-        'Tipo de Processo': _gnvTipoProcDe(r),
+        'Tipo de Processo': r.tipoProcesso || '',
         'Processo': r.processo || '',
         'Conclusão': c.conclusao || (c.foraDaBase ? 'Fora da planilha' : ''),
         'Data de conclusão': br(c.finalizadoEm || c.foraEm),
