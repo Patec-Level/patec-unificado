@@ -3257,23 +3257,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <!-- FAST -->
             <div>
               <div style="font-size:12px;font-weight:800;color:#C07A12;margin-bottom:.625rem;padding-bottom:6px;border-bottom:2px solid #C07A1222">🟧 FAST</div>
-              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:.5rem">
-                <input type="date" id="ce-mon-fast-dt-inicio" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px" onchange="renderCeMonitoramento('fast')">
-                <span style="font-size:10px;color:var(--tx2)">até</span>
-                <input type="date" id="ce-mon-fast-dt-fim" style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px" onchange="renderCeMonitoramento('fast')">
-                <button class="btn btn-s" style="font-size:10px;padding:3px 8px" onclick="ceMonPeriodoHoje('fast')">📅 Hoje</button>
-              </div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.625rem">
-                <button id="ce-mon-fast-btn-finalizado" class="btn btn-p" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('fast','finalizado',this)">✅ Finalizado</button>
-                <button id="ce-mon-fast-btn-abertura" class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('fast','abertura',this)">📂 Abertura</button>
-                <button id="ce-mon-fast-btn-geral" class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="ceMonSelecionarIndicador('fast','geral',this)">📊 Geral</button>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;margin-bottom:.625rem" id="ce-mon-fast-kpis"></div>
-              <div style="position:relative;height:220px;margin-bottom:.625rem"><canvas id="ce-mon-fast-chart"></canvas></div>
-              <div class="tw" style="max-height:240px"><table>
-                <thead id="ce-mon-fast-thead"><tr><th>Data</th><th>PATEC Final.</th><th>Ag. Finalizar</th><th>Ag. Trat.</th></tr></thead>
-                <tbody id="ce-mon-fast-tb-body"></tbody>
-              </table></div>
+              <!-- O FAST saiu do Radar e passou para a Governança Nova: aqui
+                   vale a foto diária dela, não mais o Resumo do dia. -->
+              <div id="ce-evo-card"></div>
             </div>
           </div>
         </div>
@@ -3841,6 +3827,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button id="pa-tab-btn-finalizado" class="stab active" onclick="paSetTabInterna('finalizado',this)">✅ Finalizado</button>
         <button id="pa-tab-btn-abrirpatec" class="stab" onclick="paSetTabInterna('abrirpatec',this)">📂 Abrir PATEC</button>
         <button id="pa-tab-btn-monitoramento" class="stab" onclick="paSetTabInterna('monitoramento',this)">📈 Monitoramento do PATEC</button>
+        <button id="pa-tab-btn-evolucao" class="stab" onclick="paSetTabInterna('evolucao',this)">🆕 Evolução Diária</button>
       </div>
 
       <!-- ABA: FINALIZADO (conteúdo original do Plano de Ação, intacto) -->
@@ -4054,6 +4041,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       </div>
 
       </div><!-- /pa-tab-monitoramento -->
+
+      <!-- Evolução Diária — foto da Governança Nova, uma por dia -->
+      <div id="pa-tab-evolucao" style="display:none">
+        <div class="cd" id="pa-evo-card"></div>
+      </div><!-- /pa-tab-evolucao -->
 
     </div>
 
@@ -4764,32 +4756,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <button class="btn btn-s" style="font-size:11px" onclick="gnvLimparFiltros()">✕ Limpar filtros</button>
             <span style="margin-left:auto;font-size:10px;color:var(--tx2)">A lista abaixo é só de consulta — a edição é feita pelo <strong>🔍 Buscar RC</strong> acima.</span>
           </div>
-        </div>
-
-        <!-- Evolução diária: uma foto por dia da própria base -->
-        <div class="cd" style="margin-bottom:1rem;padding:.875rem 1rem">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:.5rem">
-            <div>
-              <div style="font-size:13px;font-weight:700;color:var(--az)">📈 Evolução diária</div>
-              <div style="font-size:10.5px;color:var(--tx2);margin-top:2px">
-                Quantos itens estavam em cada situação no fim de cada dia. A foto é gravada sozinha,
-                uma vez por dia, quando alguém abre esta aba.
-              </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <label style="font-size:10.5px;color:var(--tx2)">Período</label>
-              <select id="gnv-graf-dias" onchange="gnvRenderGrafico()"
-                style="font-size:11.5px;padding:4px 8px;border:1.5px solid var(--brd);border-radius:6px;background:var(--bg);color:var(--tx)">
-                <option value="15">últimos 15 dias</option>
-                <option value="30" selected>últimos 30 dias</option>
-                <option value="90">últimos 90 dias</option>
-                <option value="0">tudo</option>
-              </select>
-            </div>
-          </div>
-          <div id="gnv-graf-vazio" style="display:none;padding:2rem;text-align:center;color:var(--tx2);font-size:12px"></div>
-          <div id="gnv-graf-box" style="position:relative;height:280px"><canvas id="gnv-graf-canvas"></canvas></div>
-          <div id="gnv-graf-tabela" style="margin-top:.75rem"></div>
         </div>
 
         <div id="gnv-tabela"></div>
@@ -15823,17 +15789,25 @@ function paSetTabInterna(aba, btn){
   const tabFin = document.getElementById('pa-tab-finalizado');
   const tabAP  = document.getElementById('pa-tab-abrirpatec');
   const tabMon = document.getElementById('pa-tab-monitoramento');
+  const tabEvo = document.getElementById('pa-tab-evolucao');
   const btnFin = document.getElementById('pa-tab-btn-finalizado');
   const btnAP  = document.getElementById('pa-tab-btn-abrirpatec');
   const btnMon = document.getElementById('pa-tab-btn-monitoramento');
+  const btnEvo = document.getElementById('pa-tab-btn-evolucao');
   if(tabFin) tabFin.style.display = aba==='finalizado' ? 'block' : 'none';
   if(tabAP)  tabAP.style.display  = aba==='abrirpatec' ? 'block' : 'none';
   if(tabMon) tabMon.style.display = aba==='monitoramento' ? 'block' : 'none';
+  if(tabEvo) tabEvo.style.display = aba==='evolucao' ? 'block' : 'none';
   if(btnFin) btnFin.classList.toggle('active', aba==='finalizado');
   if(btnAP)  btnAP.classList.toggle('active', aba==='abrirpatec');
   if(btnMon) btnMon.classList.toggle('active', aba==='monitoramento');
+  if(btnEvo) btnEvo.classList.toggle('active', aba==='evolucao');
   // Re-renderizar a aba que acabou de ficar visível (canvas só desenha corretamente quando visível)
-  if(aba==='finalizado'){ try{ renderPlanoAcao(); }catch(e){} }
+  if(aba==='evolucao'){
+    try{ gnvMontarGrafico('pa-evo-card', 'pa-evo', 'Evolução diária — Governança Nova',
+      'Quantos itens estavam em cada situação no fim de cada dia. A foto é gravada sozinha, uma vez por dia, quando alguém abre a Governança Nova.'); }catch(e){}
+  }
+  else if(aba==='finalizado'){ try{ renderPlanoAcao(); }catch(e){} }
   else if(aba==='abrirpatec'){ try{ renderAbrirPatecCardsDia(); renderAbrirPatecCascata(); }catch(e){} }
   else if(aba==='monitoramento'){
     // Novo — não afeta as abas Finalizado/Abrir PATEC. Recarrega Resumo do
@@ -18175,6 +18149,7 @@ function feriadosReRenderizarTelas(){
   ['adlv','fast'].forEach(mod=>{
     try{ if(typeof renderCeMonitoramento==='function') renderCeMonitoramento(mod); }catch(e){}
   });
+  try{ ceEvolucaoFast(); }catch(e){}
 }
 
 // ── ADM → Feriados ──
@@ -28383,7 +28358,15 @@ function _ceRenderDesfechos(mod){
 }
 
 // ── Abre a aba: carrega os dois módulos ──
+// Lado FAST do Monitoramento: a foto diária da Governança Nova
+function ceEvolucaoFast(){
+  if (typeof gnvMontarGrafico !== 'function') return;
+  gnvMontarGrafico('ce-evo-card', 'ce-evo', 'Evolução diária — Governança Nova',
+    'Itens em cada situação no fim de cada dia. A foto é gravada sozinha quando alguém abre a Governança Nova.');
+}
+
 function ceAbrir(){
+  try{ ceEvolucaoFast(); }catch(e){}
   // datas padrão dos filtros de desfecho
   const hoje=_ceHojeLocal(); const de30=_ceISOmenosDias(hoje,30);
   ['adlv','fast'].forEach(mod=>{
@@ -34190,20 +34173,28 @@ var _GNV_SERIES = [
   { chave:'patecFinalizado', rotulo:'Patec Finalizado',   cor:'#0E9E6A' },
   { chave:'concluidos',      rotulo:'Concluídos',         cor:'#7C3AED' }
 ];
-var _gnvGraf = null;
+// Um desenho, vários lugares: o gráfico vive no Plano de Ação e no Controle
+// das Equipes. Cada canvas guarda a sua instância para poder ser refeito.
+var _gnvGrafs = {};
+
+var _GNV_GRAF_PADRAO = {
+  canvas:'gnv-graf-canvas', box:'gnv-graf-box', vazio:'gnv-graf-vazio',
+  tabela:'gnv-graf-tabela', dias:'gnv-graf-dias'
+};
 
 function _gnvDataBR(d){
   var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d || ''));
   return m ? (m[3] + '/' + m[2]) : String(d || '');
 }
 
-function gnvRenderGrafico(){
-  var box   = document.getElementById('gnv-graf-box');
-  var vazio = document.getElementById('gnv-graf-vazio');
-  var tab   = document.getElementById('gnv-graf-tabela');
+function gnvRenderGrafico(alvo){
+  var A = Object.assign({}, _GNV_GRAF_PADRAO, alvo || {});
+  var box   = document.getElementById(A.box);
+  var vazio = document.getElementById(A.vazio);
+  var tab   = document.getElementById(A.tabela);
   if (!box) return;
 
-  var selDias = document.getElementById('gnv-graf-dias');
+  var selDias = document.getElementById(A.dias);
   var dias = selDias ? parseInt(selDias.value, 10) : 30;
   var lista = _gnvHist.slice();
   if (dias > 0) lista = lista.slice(-dias);
@@ -34239,10 +34230,10 @@ function gnvRenderGrafico(){
     };
   });
 
-  var cv = document.getElementById('gnv-graf-canvas');
+  var cv = document.getElementById(A.canvas);
   if (!cv || typeof Chart === 'undefined') return;
-  if (_gnvGraf) { try { _gnvGraf.destroy(); } catch (e) {} _gnvGraf = null; }
-  _gnvGraf = new Chart(cv, {
+  if (_gnvGrafs[A.canvas]) { try { _gnvGrafs[A.canvas].destroy(); } catch (e) {} }
+  _gnvGrafs[A.canvas] = new Chart(cv, {
     type: 'line',
     data: { labels: labels, datasets: dados },
     options: {
@@ -34287,6 +34278,52 @@ function gnvRenderGrafico(){
       + '<div style="font-size:10px;color:var(--tx2);margin-top:5px">'
       + lista.length + ' dia(s) no gráfico · últimos ' + ult.length + ' na tabela.</div>';
   }
+}
+
+// HTML do card, para não repetir o markup nos dois lugares onde ele aparece
+function gnvGraficoHTML(pref, titulo, sub){
+  return '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:.5rem">'
+    +   '<div>'
+    +     '<div style="font-size:13px;font-weight:700;color:var(--az)">📈 ' + titulo + '</div>'
+    +     '<div style="font-size:10.5px;color:var(--tx2);margin-top:2px">' + sub + '</div>'
+    +   '</div>'
+    +   '<div style="display:flex;align-items:center;gap:8px">'
+    +     '<label style="font-size:10.5px;color:var(--tx2)">Período</label>'
+    +     '<select id="' + pref + '-dias" onchange="gnvRenderGraficoEm(\'' + pref + '\')"'
+    +     ' style="font-size:11.5px;padding:4px 8px;border:1.5px solid var(--brd);border-radius:6px;background:var(--bg);color:var(--tx)">'
+    +       '<option value="15">últimos 15 dias</option>'
+    +       '<option value="30" selected>últimos 30 dias</option>'
+    +       '<option value="90">últimos 90 dias</option>'
+    +       '<option value="0">tudo</option>'
+    +     '</select>'
+    +   '</div>'
+    + '</div>'
+    + '<div id="' + pref + '-vazio" style="display:none;padding:2rem;text-align:center;color:var(--tx2);font-size:12px"></div>'
+    + '<div id="' + pref + '-box" style="position:relative;height:280px"><canvas id="' + pref + '-canvas"></canvas></div>'
+    + '<div id="' + pref + '-tabela" style="margin-top:.75rem"></div>';
+}
+
+function _gnvAlvo(pref){
+  return { canvas: pref + '-canvas', box: pref + '-box', vazio: pref + '-vazio',
+           tabela: pref + '-tabela', dias: pref + '-dias' };
+}
+
+function gnvRenderGraficoEm(pref){ gnvRenderGrafico(_gnvAlvo(pref)); }
+
+// Monta o card num container e desenha — carrega o histórico se ainda não veio.
+// Usado fora da Governança Nova (Plano de Ação e Controle das Equipes), onde a
+// base da aba pode nunca ter sido aberta nesta sessão.
+async function gnvMontarGrafico(idContainer, pref, titulo, sub){
+  var el = document.getElementById(idContainer);
+  if (!el) return;
+  if (el.getAttribute('data-graf') !== pref) {
+    el.innerHTML = gnvGraficoHTML(pref, titulo, sub);
+    el.setAttribute('data-graf', pref);
+  }
+  try {
+    if (!_gnvHist.length) await _gnvCarregarHistorico();
+  } catch (e) { console.warn('histórico do gráfico:', e); }
+  gnvRenderGrafico(_gnvAlvo(pref));
 }
 
 // ── Foto diária ──────────────────────────────────────────────────
@@ -34408,7 +34445,6 @@ async function govNovaRender(){
     try {
       await _gnvCarregarHistorico();
       await _gnvGravarFoto();
-      gnvRenderGrafico();
     } catch (e) { console.warn('evolução diária:', e); }
   } catch (err) {
     _gnvPor('gnv-tabela', '<div style="padding:2rem;color:var(--vm);font-size:13px">❌ ' + _cobEsc(err.message) + '</div>');
