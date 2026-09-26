@@ -4766,6 +4766,32 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
 
+        <!-- Evolução diária: uma foto por dia da própria base -->
+        <div class="cd" style="margin-bottom:1rem;padding:.875rem 1rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:.5rem">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--az)">📈 Evolução diária</div>
+              <div style="font-size:10.5px;color:var(--tx2);margin-top:2px">
+                Quantos itens estavam em cada situação no fim de cada dia. A foto é gravada sozinha,
+                uma vez por dia, quando alguém abre esta aba.
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <label style="font-size:10.5px;color:var(--tx2)">Período</label>
+              <select id="gnv-graf-dias" onchange="gnvRenderGrafico()"
+                style="font-size:11.5px;padding:4px 8px;border:1.5px solid var(--brd);border-radius:6px;background:var(--bg);color:var(--tx)">
+                <option value="15">últimos 15 dias</option>
+                <option value="30" selected>últimos 30 dias</option>
+                <option value="90">últimos 90 dias</option>
+                <option value="0">tudo</option>
+              </select>
+            </div>
+          </div>
+          <div id="gnv-graf-vazio" style="display:none;padding:2rem;text-align:center;color:var(--tx2);font-size:12px"></div>
+          <div id="gnv-graf-box" style="position:relative;height:280px"><canvas id="gnv-graf-canvas"></canvas></div>
+          <div id="gnv-graf-tabela" style="margin-top:.75rem"></div>
+        </div>
+
         <div id="gnv-tabela"></div>
       </div>
 
@@ -34155,6 +34181,180 @@ function _gnvPor(id, html, display){
   });
 }
 
+// ── Gráfico de evolução ──────────────────────────────────────────
+// Três séries, todas na mesma unidade (nº de itens) e no mesmo eixo:
+// quantos itens estavam em Patec em Andamento, em Patec Finalizado e já
+// concluídos ao fim de cada dia. Cores conferidas para daltonismo.
+var _GNV_SERIES = [
+  { chave:'patecAndamento',  rotulo:'Patec em Andamento', cor:'#2563EB' },
+  { chave:'patecFinalizado', rotulo:'Patec Finalizado',   cor:'#0E9E6A' },
+  { chave:'concluidos',      rotulo:'Concluídos',         cor:'#7C3AED' }
+];
+var _gnvGraf = null;
+
+function _gnvDataBR(d){
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d || ''));
+  return m ? (m[3] + '/' + m[2]) : String(d || '');
+}
+
+function gnvRenderGrafico(){
+  var box   = document.getElementById('gnv-graf-box');
+  var vazio = document.getElementById('gnv-graf-vazio');
+  var tab   = document.getElementById('gnv-graf-tabela');
+  if (!box) return;
+
+  var selDias = document.getElementById('gnv-graf-dias');
+  var dias = selDias ? parseInt(selDias.value, 10) : 30;
+  var lista = _gnvHist.slice();
+  if (dias > 0) lista = lista.slice(-dias);
+
+  if (!lista.length) {
+    box.style.display = 'none';
+    if (tab) tab.innerHTML = '';
+    if (vazio) {
+      vazio.style.display = 'block';
+      vazio.innerHTML = '📈 Ainda não há histórico.<br>'
+        + '<span style="font-size:11px">A primeira foto é gravada hoje; a linha começa a crescer a partir de amanhã.</span>';
+    }
+    return;
+  }
+  box.style.display = '';
+  if (vazio) vazio.style.display = 'none';
+
+  var labels = lista.map(function(x){ return _gnvDataBR(x.data); });
+  var dados = _GNV_SERIES.map(function(sr){
+    return {
+      label: sr.rotulo,
+      data: lista.map(function(x){ var v = x[sr.chave]; return (v === undefined || v === null) ? null : v; }),
+      borderColor: sr.cor,
+      backgroundColor: sr.cor,
+      borderWidth: 2,
+      pointRadius: 4,
+      pointHoverRadius: 6,
+      pointBackgroundColor: '#fff',
+      pointBorderWidth: 2,
+      tension: 0,
+      fill: false,
+      spanGaps: true
+    };
+  });
+
+  var cv = document.getElementById('gnv-graf-canvas');
+  if (!cv || typeof Chart === 'undefined') return;
+  if (_gnvGraf) { try { _gnvGraf.destroy(); } catch (e) {} _gnvGraf = null; }
+  _gnvGraf = new Chart(cv, {
+    type: 'line',
+    data: { labels: labels, datasets: dados },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      layout: { padding: { top: 10, right: 8, bottom: 0, left: 0 } },
+      plugins: {
+        legend: { display: true, position: 'top', align: 'start',
+                  labels: { boxWidth: 12, boxHeight: 12, font: { size: 11 }, color: '#5A6A7E', usePointStyle: false } },
+        tooltip: { enabled: true, backgroundColor: 'rgba(13,27,42,.92)', titleFont: { size: 11 },
+                   bodyFont: { size: 11 }, padding: 9, displayColors: true },
+        datalabels: { display: false }
+      },
+      scales: {
+        y: { beginAtZero: true, grid: { color: '#EEF1F5' }, border: { display: false },
+             ticks: { font: { size: 10 }, color: '#5A6A7E', precision: 0 } },
+        x: { grid: { display: false }, border: { color: '#DDE3EE' },
+             ticks: { font: { size: 10 }, color: '#5A6A7E', maxRotation: 0, autoSkipPadding: 12 } }
+      }
+    }
+  });
+
+  // a mesma informação em texto — serve de leitura acessível e de conferência
+  if (tab) {
+    var ult = lista.slice(-8);
+    var t = '<div class="tw" style="max-height:220px"><table><thead><tr><th>Data</th>'
+      + _GNV_SERIES.map(function(sr){
+          return '<th style="text-align:center"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;'
+            + 'background:' + sr.cor + ';margin-right:5px"></span>' + sr.rotulo + '</th>';
+        }).join('')
+      + '<th style="text-align:center">Em andamento</th></tr></thead><tbody>';
+    ult.slice().reverse().forEach(function(x){
+      t += '<tr><td style="font-weight:700">' + _gnvDataBR(x.data) + '</td>'
+        + _GNV_SERIES.map(function(sr){
+            var v = x[sr.chave];
+            return '<td style="text-align:center;font-weight:600">' + ((v === undefined || v === null) ? '—' : v) + '</td>';
+          }).join('')
+        + '<td style="text-align:center;color:var(--tx2)">' + (x.emAndamento == null ? '—' : x.emAndamento) + '</td></tr>';
+    });
+    t += '</tbody></table></div>';
+    tab.innerHTML = t
+      + '<div style="font-size:10px;color:var(--tx2);margin-top:5px">'
+      + lista.length + ' dia(s) no gráfico · últimos ' + ult.length + ' na tabela.</div>';
+  }
+}
+
+// ── Foto diária ──────────────────────────────────────────────────
+// Um documento por dia, com a contagem do fim daquele dia. É gravado quando
+// alguém abre a aba: o do dia corrente vai sendo atualizado ao longo do dia e
+// os anteriores ficam congelados. Assim o gráfico se alimenta sozinho, sem
+// depender de ninguém lembrar de fechar nada.
+var _GNV_COL_HIST = 'gov_nova_historico';
+var _gnvHist = [];          // [{ data, patecAndamento, patecFinalizado, concluidos, ... }]
+var _gnvHistUltGrav = '';   // evita regravar a mesma coisa a cada re-render
+
+function _gnvContagemDoDia(){
+  var c = { patecAndamento: 0, patecFinalizado: 0, semStatus: 0,
+            concluidos: 0, concluidosDia: 0, foraDaPlanilha: 0, emAndamento: 0, total: 0 };
+  var hoje = _gnvHoje();
+  _gnvBase.forEach(function(r){
+    c.total++;
+    var calc = _gnvLinhaCalc(r);
+    if (_gnvEhConcluido(r)) {
+      if (calc.foraDaBase && !calc.conclusao) { c.foraDaPlanilha++; return; }
+      c.concluidos++;
+      if (calc.finalizadoEm === hoje) c.concluidosDia++;
+      return;
+    }
+    c.emAndamento++;
+    if (calc.statusPatec === 'Patec Finalizado')      c.patecFinalizado++;
+    else if (calc.statusPatec === 'Patec em Andamento') c.patecAndamento++;
+    else c.semStatus++;
+  });
+  return c;
+}
+
+async function _gnvGravarFoto(){
+  if (!_gnvBase.length) return;
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!db) return;
+  var hoje = _gnvHoje();
+  var c = _gnvContagemDoDia();
+  var assinatura = hoje + '|' + JSON.stringify(c);
+  if (_gnvHistUltGrav === assinatura) return;   // nada mudou desde a última
+  var reg = Object.assign({ data: hoje, ts: new Date().toISOString() }, c);
+  try {
+    await db.collection(_GNV_COL_HIST).doc(hoje).set(reg, { merge: true });
+    _gnvHistUltGrav = assinatura;
+    var i = -1;
+    _gnvHist.forEach(function(x, k){ if (x.data === hoje) i = k; });
+    if (i >= 0) _gnvHist[i] = reg; else _gnvHist.push(reg);
+    _gnvHist.sort(function(a, b){ return String(a.data).localeCompare(String(b.data)); });
+  } catch (e) { console.warn('foto do dia:', e); }
+}
+
+async function _gnvCarregarHistorico(){
+  var db = (typeof getDB === 'function') ? getDB() : null;
+  if (!db) return;
+  try {
+    var snap = await db.collection(_GNV_COL_HIST).get();
+    var out = [];
+    snap.forEach(function(d){
+      if (/^__.*__$/.test(d.id)) return;
+      var o = d.data() || {};
+      if (!o.data) o.data = d.id;
+      out.push(o);
+    });
+    out.sort(function(a, b){ return String(a.data).localeCompare(String(b.data)); });
+    _gnvHist = out;
+  } catch (e) { console.warn('histórico da aba nova:', e); }
+}
+
 // ── Carga ────────────────────────────────────────────────────────
 async function govNovaRender(){
   if (!_gnvEhFast()) return;
@@ -34203,6 +34403,13 @@ async function govNovaRender(){
       av.textContent = 'Base de ' + new Date(_gnvResumo.atualizadoEm).toLocaleString('pt-BR');
     }
     _gnvDesenhar();
+
+    // histórico e foto do dia — não podem derrubar a tela se falharem
+    try {
+      await _gnvCarregarHistorico();
+      await _gnvGravarFoto();
+      gnvRenderGrafico();
+    } catch (e) { console.warn('evolução diária:', e); }
   } catch (err) {
     _gnvPor('gnv-tabela', '<div style="padding:2rem;color:var(--vm);font-size:13px">❌ ' + _cobEsc(err.message) + '</div>');
   }
