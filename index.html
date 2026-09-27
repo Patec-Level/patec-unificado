@@ -5221,7 +5221,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <thead>
               <tr>
                 <th>Analista</th>
-                <th id="gov-th-status-mapa" style="display:none">Status Mapa</th>
+                <th id="gov-th-status-mapa">Status do Patec</th>
                 <th>Fila Level Board</th>
                 <th>SLA</th>
                 <th>RC</th>
@@ -5272,6 +5272,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <thead>
               <tr>
                 <th>Analista</th>
+                <th id="gov-th-status-patec-and">Status do Patec</th>
                 <th>Fila Level Board</th>
                 <th>SLA</th>
                 <th>RC</th>
@@ -18830,6 +18831,7 @@ function govFabNrLimpar(){ _govFabLimpar('gov-fnr', nrRender); }
 // (_radarDados + _govDados) e das bases do XGL, Status B e Nova
 // Reserva. Aqui só se conta e se desenha.
 // ══════════════════════════════════════════════════════════════
+var _govPainelSp   = null;    // card de Status do Patec clicado
 var _govPainelTrat = null;    // card de Status de Tratamento clicado
 var _govPainelVenc = false;   // aviso de vencidas clicado
 var _govPainelAux  = false;   // já pediu XGL / Status B / Nova Reserva
@@ -18862,7 +18864,7 @@ function _govPainelLinhas(){
     if (cls !== 'Finalizado' && cls !== 'Andamento') return;
     if ((_govDados[govChave(r)] || {}).finalizado) return;
     out.push({ r: r,
-      sp: (cls === 'Finalizado' ? 'PATEC Finalizado' : 'PATEC em Andamento'),
+      sp: _govStatusPatecDe(r),
       trat: _govPainelTratDe(r),
       status: _govFabStatusMapa(r) });
   });
@@ -18871,10 +18873,11 @@ function _govPainelLinhas(){
 
 // Filtro dos cards — entra por cima do filtro de combinação de cada aba.
 function _govPainelAplicar(lista){
-  if (!_govPainelTrat && !_govPainelVenc) return lista;
+  if (!_govPainelTrat && !_govPainelVenc && !_govPainelSp) return lista;
   return lista.filter(function(r){
-    if (_govPainelTrat && _govPainelTratDe(r) !== _govPainelTrat) return false;
-    if (_govPainelVenc && _govFabStatusMapa(r) !== 'ATRASADO') return false;
+    if (_govPainelSp   && _govStatusPatecDe(r)  !== _govPainelSp)   return false;
+    if (_govPainelTrat && _govPainelTratDe(r)   !== _govPainelTrat) return false;
+    if (_govPainelVenc && _govFabStatusMapa(r)  !== 'ATRASADO')     return false;
     return true;
   });
 }
@@ -18894,8 +18897,19 @@ function govPainelFiltrarVenc(){
   _govPainelRedesenhar();
 }
 function govPainelLimpar(){
+  _govPainelSp   = null;
   _govPainelTrat = null;
   _govPainelVenc = false;
+  _govPainelRedesenhar();
+}
+
+// Card de Status do Patec: abre a aba onde o item mora e, quando o
+// status é um recorte dentro dela (Cancelado, 100% Reprovado), filtra.
+function govPainelFiltrarSp(nome){
+  var x = GOV_STATUS_PATEC_DET.filter(function(d){ return d.nome === nome; })[0];
+  if (_govPainelSp === nome) { _govPainelSp = null; }
+  else { _govPainelSp = nome; }
+  if (x && _govTabAtiva !== x.aba) { govPainelIrAba(x.aba); return; }
   _govPainelRedesenhar();
 }
 
@@ -18939,11 +18953,22 @@ function _govPainelQtdNr(){
     return !((_nrDados[nrChave(r.rc, r.item)] || {}).finalizado); }).length; } catch (e) { return 0; }
 }
 
-// As abas que viraram card
-var _GOV_PAINEL_SP = [
-  { nome:'PATEC em Andamento', aba:'andamento', cor:'var(--azm)', bg:'var(--azc)' },
-  { nome:'PATEC Finalizado',   aba:'mapa',      cor:'var(--vd)',  bg:'var(--vdc)' }
-];
+// Status do Patec — os quatro, separados. A aba "PATEC Finalizado"
+// continua guardando os três (Finalizado, Cancelado e 100% Reprovado),
+// mas aqui cada um tem o seu número.
+// Os dois cards de Status do Patec. O de Finalizado SOMA os três
+// status que moram na aba dele (Finalizado, Cancelado e 100%
+// Reprovado) — é a mesma conta do Resumo do dia. Quem quiser ver a
+// separação tem a coluna "Status do Patec" na tabela.
+// (govPainelFiltrarSp continua funcionando para cards futuros.)
+function _GOV_PAINEL_SP(){
+  return [
+    { nome:'PATEC em Andamento', aba:'andamento', cor:'var(--azm)', bg:'var(--azc)',
+      inclui:['PATEC em Andamento'] },
+    { nome:'PATEC Finalizado',   aba:'mapa',      cor:'var(--vd)',  bg:'var(--vdc)',
+      inclui:['PATEC Finalizado','PATEC Cancelado','PATEC 100% Reprovado'] }
+  ];
+}
 var _GOV_PAINEL_TP = [
   { nome:'XGL',          aba:'xgl',         cor:'#7c3aed',   bg:'#ede9fe',    qtd:_govPainelQtdXgl },
   { nome:'Status B',     aba:'statusb',     cor:'var(--vd)', bg:'var(--vdc)', qtd:_govPainelQtdSb },
@@ -18994,9 +19019,11 @@ function govPainelRender(){
 
   // ── Status do Patec: as duas abas viraram card ──
   var cardsSp = '';
-  _GOV_PAINEL_SP.forEach(function(x){
-    var qtd = porSp[x.nome] || 0;
-    var on  = (_govTabAtiva === x.aba);
+  _GOV_PAINEL_SP().forEach(function(x){
+    var qtd = 0;
+    (x.inclui || [x.nome]).forEach(function(k){ qtd += (porSp[k] || 0); });
+    var on  = _govPainelSp ? ((x.inclui || [x.nome]).indexOf(_govPainelSp) !== -1)
+                           : (_govTabAtiva === x.aba);
     cardsSp += '<div onclick="govPainelIrAba(\'' + x.aba + '\')" title="Abrir ' + esc(x.nome) + '"'
       + ' style="cursor:pointer;background:' + (on ? x.cor : x.bg) + ';color:' + (on ? '#fff' : x.cor)
       + ';border:1.5px solid ' + x.cor + ';border-radius:8px;padding:8px 14px;text-align:center;'
@@ -19054,18 +19081,23 @@ function govPainelRender(){
       + '</div>';
   });
 
-  var rodape = (_govPainelTrat || _govPainelVenc)
+  var marcas = [];
+  if (_govPainelSp)   marcas.push(esc(_govPainelSp));
+  if (_govPainelTrat) marcas.push(esc(_govPainelTrat));
+  if (_govPainelVenc) marcas.push('somente vencidos');
+  var rodape = marcas.length
     ? '<div style="margin-top:.75rem;font-size:10.5px;color:var(--tx2)">Filtro dos cards: <strong>'
-      + (_govPainelTrat ? esc(_govPainelTrat) : '') + (_govPainelTrat && _govPainelVenc ? ' + ' : '')
-      + (_govPainelVenc ? 'somente vencidos' : '') + '</strong> — vale para as duas abas de PATEC. '
+      + marcas.join(' + ') + '</strong> — vale para as duas abas de PATEC. '
       + '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="govPainelLimpar()">✕ limpar</button></div>'
     : '';
 
   box.innerHTML = '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
     + lateral
     + '<div style="flex:1 1 0;min-width:0"><div style="display:flex;gap:12px;flex-wrap:wrap">' + cardsTrat + '</div>'
-    + '<div style="margin-top:.75rem;font-size:10px;color:var(--tx2)">Os cards de <strong>Status do Patec</strong> e '
-    + '<strong>Tipo de Processo</strong> abrem a aba. Os de <strong>Status de Tratamento</strong> filtram a lista.</div>'
+    + '<div style="margin-top:.75rem;font-size:10px;color:var(--tx2)">'
+    + '<strong>PATEC Finalizado</strong> soma Finalizado + Cancelado + 100% Reprovado — a coluna '
+    + '<strong>Status do Patec</strong> da tabela mostra qual é qual. '
+    + 'Os cards de Status do Patec e Tipo de Processo abrem a aba; os de <strong>Status de Tratamento</strong> filtram a lista.</div>'
     + '</div></div>' + rodape;
 }
 
@@ -19156,6 +19188,52 @@ async function govInicializar(){
 // etapa). Comparação por palavra-chave (sem diferenciar maiúscula/
 // minúscula), pra não depender de bater a frase exata. Exige "finalizado"
 // também nos dois casos, pra não confundir com "Analisar PATEC Cancelado".
+// O "Status do Patec" de verdade, sem juntar tudo num balaio só.
+// _classificarStatusMapa continua dizendo em QUAL ABA o item cai
+// ('Finalizado' junta Finalizado + Cancelado + 100% Reprovado, como
+// sempre foi e como o Resumo do dia também soma). Esta função diz o
+// que o item É, para a coluna e para os cards:
+//   'Analisar PATEC Finalizado'                  → PATEC Finalizado
+//   'Aguardar PATEC ser Finalizado'              → PATEC em Andamento
+//   'Analisar PATEC Cancelado'                   → PATEC Cancelado
+//   'PATEC Finalizado sem fornecedores aprovados'→ PATEC 100% Reprovado
+//   (também pega a variante 'PATEC Fin. sem fornecedores aprovados')
+const GOV_STATUS_PATEC_DET = [
+  { nome:'PATEC em Andamento',   curto:'Em Andamento',   aba:'andamento', cor:'var(--azm)', bg:'var(--azc)' },
+  { nome:'PATEC Finalizado',     curto:'Finalizado',     aba:'mapa',      cor:'var(--vd)',  bg:'var(--vdc)' },
+  { nome:'PATEC Cancelado',      curto:'Cancelado',      aba:'mapa',      cor:'var(--tx2)', bg:'var(--cin)' },
+  { nome:'PATEC 100% Reprovado', curto:'100% Reprovado', aba:'mapa',      cor:'var(--vm)',  bg:'var(--vmc)' }
+];
+
+function _govStatusPatecDetalhe(analistaAuto){
+  const aa = (analistaAuto||'').trim().toLowerCase();
+  if(!aa) return '';
+  if(aa.includes('cancelad')) return 'PATEC Cancelado';
+  // "sem fornecedores aprovados" — o 100% reprovado
+  if(aa.includes('sem') && aa.includes('fornecedor')) return 'PATEC 100% Reprovado';
+  if(aa.includes('aguardar') && aa.includes('finalizado')) return 'PATEC em Andamento';
+  if(aa.includes('finalizado') && aa.includes('sem')) return 'PATEC 100% Reprovado';
+  if(aa.includes('finalizado')) return 'PATEC Finalizado';
+  return '';
+}
+
+// Detalhe da linha, com a aba como rede de segurança
+function _govStatusPatecDe(r){
+  const det = _govStatusPatecDetalhe(r && r.analista_auto);
+  if(det) return det;
+  const cls = _classificarStatusMapa(r && r.analista_auto);
+  if(cls === 'Andamento')  return 'PATEC em Andamento';
+  if(cls === 'Finalizado') return 'PATEC Finalizado';
+  return '';
+}
+
+function _govStatusPatecBadge(nome){
+  const x = GOV_STATUS_PATEC_DET.find(d => d.nome === nome);
+  if(!x) return '<span style="color:var(--tx2)">—</span>';
+  return '<span style="font-size:10px;font-weight:700;color:' + x.cor + ';background:' + x.bg
+       + ';padding:2px 8px;border-radius:20px;white-space:nowrap">' + x.curto + '</span>';
+}
+
 function _classificarStatusMapa(analistaAuto){
   const aa = (analistaAuto||'').trim().toLowerCase();
   if(aa.includes('analisar') && aa.includes('patec') && aa.includes('finalizado')) return 'Finalizado';
@@ -19314,8 +19392,9 @@ function govRenderMapa(dados, tbodyId){
 
   // Cabeçalho "Status Mapa" e "Histórico de Cobrança" só aparecem no FAST
   // (só existem na tabela MAPA)
+  // "Status do Patec" agora aparece sempre, nos dois módulos
   const thStatusMapa = document.getElementById('gov-th-status-mapa');
-  if(thStatusMapa) thStatusMapa.style.display = 'none';
+  if(thStatusMapa) thStatusMapa.style.display = '';
   const thCobranca = document.getElementById('gov-th-cobranca');
   if(thCobranca) thCobranca.style.display = (_moduloAtivo === 'fast') ? '' : 'none';
   const thCobrancaAnd = document.getElementById('gov-th-cobranca-and');
@@ -19341,7 +19420,7 @@ function govRenderMapa(dados, tbodyId){
   var _fabPfx = tbodyId === 'gov-andamento-tbody' ? 'gov-fand' : 'gov-fmapa';
   var _fabSp  = tbodyId === 'gov-andamento-tbody' ? 'PATEC em Andamento' : 'PATEC Finalizado';
   var _fabBase = dados.filter(function(r){ return !(_govDados[govChave(r)]?.finalizado); });
-  var _fabMeta = _fabBase.map(function(r){ return { r:r, statusPatec:_fabSp, fila:String(r.fila||'').trim(), status:_govUrgStatusLabel(_govFabStatusMapa(r)), analista:String(r.analista||'').trim() }; });
+  var _fabMeta = _fabBase.map(function(r){ return { r:r, statusPatec:(_govStatusPatecDe(r) || _fabSp), fila:String(r.fila||'').trim(), status:_govUrgStatusLabel(_govFabStatusMapa(r)), analista:String(r.analista||'').trim() }; });
   _govFabInit(_fabPfx, _fabMeta, function(){ govRenderMapa(dados, tbodyId); });
   var _fabVis = _govFabFiltrar(_fabPfx, _fabMeta).map(function(x){ return x.r; });
   // filtro dos cards do painel (ADLV) — por cima do filtro de combinação
@@ -19379,7 +19458,7 @@ function govRenderMapa(dados, tbodyId){
     // "Aguardar PATEC ser Finalizado" → "PATEC Em Andamento". Comparação
     // por palavra-chave (sem diferenciar maiúscula/minúscula) pra não
     // depender de bater a frase exata.
-    const tdStatusMapa = '';
+    const tdStatusMapa = '<td style="font-size:11px">' + _govStatusPatecBadge(_govStatusPatecDe(r)) + '</td>';
 
     // Coluna "Histórico de Cobrança" — exclusiva do FAST. Lista cada vez
     // que o Status de Tratamento foi alterado pra essa RC (data + etapa),
@@ -19618,10 +19697,10 @@ async function govExportar(){
 
   const grupoMercDe = r => r.grupo_merc || (_radarDados||[]).find(x=>String(x.rc||'').trim()===String(r.rc||'').trim()&&x.grupo_merc)?.grupo_merc || '';
 
-  const headerMapaBase = ['Analista','Fila Level Board','Validade Proposta','Idas Mercado','SLA','RC','Item RC','Oportunidade','Item OP','Status Tratamento','Envio','Prazo Retorno','Status','Finalizado','Comentário'];
+  const headerMapaBase = ['Analista','Status do Patec','Fila Level Board','Validade Proposta','Idas Mercado','SLA','RC','Item RC','Oportunidade','Item OP','Status Tratamento','Envio','Prazo Retorno','Status','Finalizado','Comentário'];
   const headerMapaExtra = isFastExp ? ['NM','Tipo de Avaliação'] : [];
   const linhaMapa = (r, m, statusAtual, prazo, statusCalc) => {
-    const base = [r.analista,r.fila,r.validade,r.idas,r.sla,r.rc,r.seq,r.num_oport,r.item_op||r.item_rc,statusAtual,m.envio||'',prazo||'',statusCalc,m.finalizado||'',m.comentario||''];
+    const base = [r.analista,_govStatusPatecDe(r),r.fila,r.validade,r.idas,r.sla,r.rc,r.seq,r.num_oport,r.item_op||r.item_rc,statusAtual,m.envio||'',prazo||'',statusCalc,m.finalizado||'',m.comentario||''];
     if(isFastExp) base.push(r.nm||'', r.tipo_aval||'');
     base.push(grupoMercDe(r));
     return base;
