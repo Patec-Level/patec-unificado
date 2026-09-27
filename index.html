@@ -19018,21 +19018,34 @@ function _govPainelCarregarAux(){
 // ── Planilha Crítica: as mesmas contas da tela dela ───────────────
 // Vencidos e Críticos saem de pcDadosBase; 100% Reprovado, Cancelado
 // e PID têm função própria; Tirar do Fluxo vem do backlog (_bkDados).
-function _govPcQtd(){
-  var o = { vencidos:0, reprovado:0, fluxo:0, cancelado:0, pid:0 };
+// A lista de cada recorte da Planilha Crítica — as mesmas funções que a
+// tela dela usa, sem nenhum filtro de tela aplicado por cima.
+function _govPcLista(qual){
   try {
-    if (typeof pcDadosBase === 'function') {
-      o.vencidos = pcDadosBase().filter(function(r){
+    if (qual === 'venc' && typeof pcDadosBase === 'function') {
+      return pcDadosBase().filter(function(r){
         return String(r.validade || '').toLowerCase().indexOf('vencid') !== -1;
-      }).length;
+      });
     }
-    if (typeof pcDadosReprovado === 'function') o.reprovado = pcDadosReprovado().length;
-    if (typeof pcDadosCancelado === 'function') o.cancelado = pcDadosCancelado().length;
-    if (typeof pcDadosPid       === 'function') o.pid       = pcDadosPid().length;
-    if (typeof pcGetFluxo       === 'function') o.fluxo     = pcGetFluxo().length;
-    else if (typeof _dirTirarFluxo === 'function') o.fluxo  = _dirTirarFluxo().length;
+    if (qual === 'reprov' && typeof pcDadosReprovado === 'function') return pcDadosReprovado();
+    if (qual === 'cancel' && typeof pcDadosCancelado === 'function') return pcDadosCancelado();
+    if (qual === 'pid'    && typeof pcDadosPid       === 'function') return pcDadosPid();
+    if (qual === 'fluxo') {
+      if (typeof pcGetFluxo === 'function') return pcGetFluxo();
+      if (typeof _dirTirarFluxo === 'function') return _dirTirarFluxo();
+    }
   } catch (e) {}
-  return o;
+  return [];
+}
+
+function _govPcQtd(){
+  return {
+    vencidos:  _govPcLista('venc').length,
+    reprovado: _govPcLista('reprov').length,
+    fluxo:     _govPcLista('fluxo').length,
+    cancelado: _govPcLista('cancel').length,
+    pid:       _govPcLista('pid').length
+  };
 }
 
 // ── Analista Pedido ──────────────────────────────────────────────
@@ -19145,51 +19158,129 @@ function govPainelDetalhe(qual){
   govPainelRender();
 }
 
+// As listas que abrem embaixo dos cards. Tudo na mesma página: o card
+// não troca de tela, só abre a lista aqui — o botão "abrir a tela" é o
+// único caminho para a tela cheia, e só se você clicar nele.
+function _govDetDefs(){
+  var pat = function(r){ return (typeof _govStatusPatecDe === 'function') ? _govStatusPatecDe(r) : ''; };
+  var tra = function(r){ return (typeof govTratDe === 'function') ? govTratDe(r) : ''; };
+  var cRC = { t:'RC',          v:function(r){ return r.rc || '—'; }, st:'font-weight:700;color:var(--az)' };
+  var cIT = { t:'Item da RC',  v:function(r){ return r.seq || r.item_rc || '—'; } };
+  var cAN = { t:'Analista',    v:function(r){ return (r.analista && r.analista !== '#N/A') ? r.analista : '—'; } };
+  var cFI = { t:'Fila',        v:function(r){ return r.fila || '—'; } };
+  var cSL = { t:'SLA',         v:function(r){ return r.sla || '—'; }, st:'text-align:center' };
+  var cTR = { t:'Status Tratamento', v:function(r){ return tra(r) || '—'; } };
+
+  return {
+    venc: {
+      t:'⏰ Vencidos', aba:'vencido',
+      sub:'Itens com a validade da proposta vencida, em PATEC Finalizado — a mesma conta da aba Vencido da Planilha Crítica.',
+      cols:[cRC, cIT, cAN, cFI, { t:'Validade', v:function(r){ return r.validade || '—'; }, st:'color:var(--vm);font-weight:600' }, cSL, cTR],
+      lista:function(){ return _govPcLista('venc'); }
+    },
+    reprov: {
+      t:'❌ 100% Reprovado', aba:'reprovado',
+      sub:'STATUS MAPA = PATEC Finalizado sem fornecedores aprovados.',
+      cols:[cRC, cIT, cAN, cFI, cSL, cTR],
+      lista:function(){ return _govPcLista('reprov'); }
+    },
+    fluxo: {
+      t:'🗑 Tirar do Fluxo', aba:'fluxo',
+      sub:'Itens marcados como LIBERAR na coluna Tirar do Fluxo do backlog. Cada item aparece uma vez.',
+      cols:[cAN, cFI, cRC, cIT, { t:'Oportunidade', v:function(r){ return r.num_oport || '—'; } }],
+      lista:function(){ return _govPcLista('fluxo'); }
+    },
+    cancel: {
+      t:'🚫 Cancelado', aba:'cancelado',
+      sub:'STATUS MAPA = Analisar PATEC Cancelado.',
+      cols:[cRC, cIT, cAN, cFI, cSL, cTR],
+      lista:function(){ return _govPcLista('cancel'); }
+    },
+    pid: {
+      t:'📌 PID', aba:'pid',
+      sub:'Itens com PID preenchido no Radar, em PATEC Finalizado ou Em Andamento.',
+      cols:[cRC, cIT, cAN, cFI, cSL, { t:'Status do Patec', v:function(r){ return pat(r) || '—'; } }],
+      lista:function(){ return _govPcLista('pid'); }
+    },
+    prorrog: {
+      t:'📆 Urgência por Prazo — itens para prorrogação', aba:'prazo',
+      sub:'Itens vencidos e em urgência máxima com PATEC Finalizado e AG. AÇÃO. 100% Reprovado e Cancelados não entram aqui.',
+      cols:[
+        { t:'RC', v:function(x){ return x.rc; }, st:'font-weight:700;color:var(--az)' },
+        { t:'Item da RC', v:function(x){ return x.itemRc || '—'; } },
+        { t:'Analista', v:function(x){ return x.analista || '—'; } },
+        { t:'Fila', v:function(x){ return x.fila || '—'; } },
+        { t:'Prazo', v:function(x){ return x.prazoOp; }, st:'text-align:center' },
+        { t:'SLA', v:function(x){ return x.sla; }, st:'text-align:center' }
+      ],
+      lista:function(){ return _govProrrogacao(); },
+      vazio:'Nenhum item para prorrogação.'
+    },
+    topsla: {
+      t:'⏱️ Urgência por SLA — Top 10 da carteira', aba:'sla',
+      sub:'As 10 RCs de maior SLA em PATEC Finalizado que ainda estão em tratamento — item concluído não entra. Uma RC aparece uma vez, pelo maior SLA dos itens dela.',
+      cols:[
+        { t:'#', v:function(x, i){ return (i + 1) + 'º'; }, st:'color:var(--tx2)' },
+        { t:'RC', v:function(x){ return x.rc; }, st:'font-weight:700;color:var(--az)' },
+        { t:'Item da RC', v:function(x){ return x.item || '—'; } },
+        { t:'Analista', v:function(x){ return x.analista || '—'; } },
+        { t:'SLA (dias)', v:function(x){ return x.sla; }, st:'text-align:center;font-weight:700' },
+        { t:'Status Tratamento', v:function(x){ return x.trat || '—'; } },
+        { t:'Fase atual', v:function(x){ return x.fase; }, st:function(x){
+            return x.fase === 'Fora do prazo' ? 'color:var(--vm);font-weight:700'
+                 : x.fase === 'Dentro do prazo' ? 'color:var(--vd);font-weight:700'
+                 : 'color:var(--am);font-weight:700'; } },
+        { t:'Sem ação', v:function(x){ return x.diasTxt; }, st:'color:var(--tx2)' }
+      ],
+      lista:function(){ return _govTopSla(10); },
+      vazio:'Nada em tratamento com SLA para listar.'
+    }
+  };
+}
+
 function _govPainelDetalheHTML(){
   if (!_govPainelDet) return '';
+  var d = _govDetDefs()[_govPainelDet];
+  if (!d) return '';
   var esc = _govPainelEsc;
-  var th = function(t){ return '<th style="text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;'
-    + 'color:var(--tx2);padding:4px 8px;border-bottom:1px solid var(--brd)">' + esc(t) + '</th>'; };
-  var td = function(t, st){ return '<td style="font-size:11px;padding:4px 8px;' + (st || '') + '">' + esc(t) + '</td>'; };
 
-  var titulo, sub, cab, corpo, atalho;
+  var linhas = [];
+  try { linhas = d.lista() || []; } catch (e) { linhas = []; }
 
-  if (_govPainelDet === 'prorrog') {
-    var lp = _govProrrogacao();
-    titulo = '📆 Urgência por Prazo — itens para prorrogação';
-    sub = 'Itens vencidos e em urgência máxima com PATEC Finalizado e AG. AÇÃO. 100% Reprovado e Cancelados não entram aqui.';
-    atalho = 'govMainTab(\'prazo\', document.getElementById(\'gov-main-tab-prazo\'))';
-    cab = th('RC') + th('Item da RC') + th('Analista') + th('Fila') + th('Prazo') + th('SLA');
-    corpo = lp.length ? lp.map(function(x){
-      return '<tr>' + td(x.rc, 'font-weight:700;color:var(--az)') + td(x.itemRc || '—')
-        + td(x.analista || '—') + td(x.fila || '—')
-        + td(x.prazoOp, 'text-align:center') + td(x.sla, 'text-align:center') + '</tr>';
-    }).join('') : '<tr><td colspan="6" style="padding:12px;text-align:center;color:var(--tx2);font-size:11.5px">Nenhum item para prorrogação.</td></tr>';
-  } else {
-    var ls = _govTopSla(10);
-    titulo = '⏱️ Urgência por SLA — Top 10 da carteira';
-    sub = 'As 10 RCs de maior SLA em PATEC Finalizado que ainda estão em tratamento — item concluído não entra. Uma RC aparece uma vez, pelo maior SLA dos itens dela.';
-    atalho = 'govMainTab(\'sla\', document.getElementById(\'gov-main-tab-sla\'))';
-    cab = th('#') + th('RC') + th('Item da RC') + th('Analista') + th('SLA (dias)') + th('Status Tratamento') + th('Fase atual') + th('Sem ação');
-    corpo = ls.length ? ls.map(function(x, i){
-      var cor = x.fase === 'Fora do prazo' ? 'color:var(--vm);font-weight:700'
-              : x.fase === 'Dentro do prazo' ? 'color:var(--vd);font-weight:700'
-              : 'color:var(--am);font-weight:700';
-      return '<tr>' + td((i + 1) + 'º', 'color:var(--tx2)') + td(x.rc, 'font-weight:700;color:var(--az)')
-        + td(x.item || '—') + td(x.analista || '—')
-        + td(x.sla, 'text-align:center;font-weight:700') + td(x.trat || '—')
-        + td(x.fase, cor) + td(x.diasTxt, 'color:var(--tx2)') + '</tr>';
-    }).join('') : '<tr><td colspan="8" style="padding:12px;text-align:center;color:var(--tx2);font-size:11.5px">Nada em tratamento com SLA para listar.</td></tr>';
-  }
+  var cab = d.cols.map(function(c){
+    return '<th style="text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;'
+      + 'color:var(--tx2);padding:4px 8px;border-bottom:1px solid var(--brd);white-space:nowrap">'
+      + esc(c.t) + '</th>';
+  }).join('');
+
+  var corpo = linhas.length
+    ? linhas.map(function(x, i){
+        return '<tr>' + d.cols.map(function(c){
+          var st = (typeof c.st === 'function') ? c.st(x, i) : (c.st || '');
+          var v;
+          try { v = c.v(x, i); } catch (e) { v = '—'; }
+          return '<td style="font-size:11px;padding:4px 8px;' + st + '">' + esc(v) + '</td>';
+        }).join('') + '</tr>';
+      }).join('')
+    : '<tr><td colspan="' + d.cols.length + '" style="padding:12px;text-align:center;color:var(--tx2);font-size:11.5px">'
+      + esc(d.vazio || 'Nada para listar.') + '</td></tr>';
+
+  var btnAba = document.getElementById('gov-main-tab-' + d.aba) ? true : false;
+  var atalho = (d.aba === 'prazo' || d.aba === 'sla')
+    ? 'govMainTab(\'' + d.aba + '\', document.getElementById(\'gov-main-tab-' + d.aba + '\'))'
+    : 'govIrPlanilhaCritica(\'' + d.aba + '\')';
 
   return '<div style="margin-top:.875rem;background:var(--bg);border:1.5px solid var(--brd);border-radius:10px;padding:.75rem .875rem">'
     + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
-    +   '<span style="font-size:12px;font-weight:800;color:var(--az)">' + esc(titulo) + '</span>'
-    +   '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="' + atalho + '">abrir a tela</button>'
+    +   '<span style="font-size:12px;font-weight:800;color:var(--az)">' + esc(d.t) + '</span>'
+    +   '<span style="font-size:11px;color:var(--tx2)">' + linhas.length
+    +   (linhas.length === 1 ? ' item' : ' itens') + '</span>'
+    +   '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="' + atalho + '" '
+    +   'title="Sair daqui e abrir a tela cheia">abrir a tela</button>'
     +   '<button class="btn btn-s" style="font-size:10px;padding:1px 8px;margin-left:auto" onclick="govPainelDetalhe(\'\')">✕ fechar</button>'
     + '</div>'
-    + '<div style="font-size:10.5px;color:var(--tx2);margin-bottom:8px">' + esc(sub) + '</div>'
-    + '<div class="tw" style="max-height:260px"><table style="width:100%"><thead><tr>' + cab + '</tr></thead>'
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-bottom:8px">' + esc(d.sub) + '</div>'
+    + '<div class="tw" style="max-height:300px"><table style="width:100%"><thead><tr>' + cab + '</tr></thead>'
     + '<tbody>' + corpo + '</tbody></table></div>'
     + '</div>';
 }
@@ -19379,10 +19470,12 @@ function govPainelRender(){
   var pc = _govPcQtd(), aa = _govAaQtd();
 
   var cartao = function(qtd, rotulo, cor, bg, clique, dica, largura){
+    // card com a lista aberta fica aceso, igual aos de Status de Tratamento
+    var on = !!(clique && _govPainelDet && clique.indexOf("govPainelDetalhe('" + _govPainelDet + "')") === 0);
     return '<div ' + (clique ? 'onclick="' + clique + '" ' : '')
       + 'title="' + esc(dica || rotulo) + '"'
       + ' style="' + (clique ? 'cursor:pointer' : 'cursor:default')
-      + ';background:' + bg + ';color:' + cor
+      + ';background:' + (on ? cor : bg) + ';color:' + (on ? '#fff' : cor)
       + ';border:1.5px solid ' + cor + ';border-radius:8px;padding:8px 14px;text-align:center;'
       + 'line-height:1.2;flex:' + (largura || '1 1 0') + ';min-width:112px">'
       + '<div style="font-size:19px;font-weight:800">' + qtd + '</div>'
@@ -19398,11 +19491,11 @@ function govPainelRender(){
 
   var blocoCritica = titulo('Planilha Crítica')
     + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
-    + cartao(pc.vencidos,  'Vencidos',       'var(--vm)',  'var(--vmc)', "govIrPlanilhaCritica('vencido')",   'Abrir a aba Vencido da Planilha Crítica')
-    + cartao(pc.reprovado, '100% Reprovado', 'var(--vm)',  'var(--vmc)', "govIrPlanilhaCritica('reprovado')", 'Abrir a aba 100% Reprovado')
-    + cartao(pc.fluxo,     'Tirar do Fluxo', 'var(--tx2)', 'var(--cin)', "govIrPlanilhaCritica('fluxo')",     'Abrir a aba Tirar do Fluxo')
-    + cartao(pc.cancelado, 'Cancelado',      'var(--am)',  'var(--amc)', "govIrPlanilhaCritica('cancelado')", 'Abrir a aba Cancelado')
-    + cartao(pc.pid,       'PID',            'var(--azm)', 'var(--azc)', "govIrPlanilhaCritica('pid')",       'Abrir a aba PID')
+    + cartao(pc.vencidos,  'Vencidos',       'var(--vm)',  'var(--vmc)', "govPainelDetalhe('venc')",   'Ver a lista aqui mesmo')
+    + cartao(pc.reprovado, '100% Reprovado', 'var(--vm)',  'var(--vmc)', "govPainelDetalhe('reprov')", 'Ver a lista aqui mesmo')
+    + cartao(pc.fluxo,     'Tirar do Fluxo', 'var(--tx2)', 'var(--cin)', "govPainelDetalhe('fluxo')",  'Ver a lista aqui mesmo')
+    + cartao(pc.cancelado, 'Cancelado',      'var(--am)',  'var(--amc)', "govPainelDetalhe('cancel')", 'Ver a lista aqui mesmo')
+    + cartao(pc.pid,       'PID',            'var(--azm)', 'var(--azc)', "govPainelDetalhe('pid')",    'Ver a lista aqui mesmo')
     + '</div>'
     + titulo('Analista Pedido · Urgência')
     + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
