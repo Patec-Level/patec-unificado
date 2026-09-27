@@ -19052,6 +19052,15 @@ function _govPcQtd(){
 // Pedidos Fáceis = todas as regras MENOS a 3 (essas podem virar pedido
 // direto). Possíveis MDG = só a Regra 3, que pede conferência no SAP e
 // costuma virar cadastro no MDG.
+// Os itens do Analista Pedido, separados pelo mesmo critério dos cards
+function _govAaLista(qual){
+  try {
+    var lista = (typeof _aaPub !== 'undefined' && _aaPub) ? _aaPub : [];
+    var ehR3 = function(a){ return String(a.regra || '').toLowerCase().indexOf('regra 3') !== -1; };
+    return (qual === 'mdg') ? lista.filter(ehR3) : lista.filter(function(a){ return !ehR3(a); });
+  } catch (e) { return []; }
+}
+
 function _govAaQtd(){
   var o = { faceis:0, mdg:0, faceisRc:0, mdgRc:0, temBase:false };
   try {
@@ -19072,9 +19081,23 @@ function _govAaQtd(){
 // Mesma regra do Direcionamento da Equipe: vencidos e em urgência
 // máxima de prazo, com PATEC Finalizado e ainda em AG. AÇÃO.
 // 100% Reprovado e Cancelado não entram.
+// Devolve as LINHAS do Radar, para a lista poder montar as mesmas
+// colunas da tabela da Governança. A regra é a mesma do Direcionamento
+// da Equipe (_dirProrrogacao) — o teste compara os dois tamanhos.
 function _govProrrogacao(){
-  if (typeof _dirProrrogacao === 'function') { try { return _dirProrrogacao(); } catch (e) {} }
-  return [];
+  var out = [];
+  try {
+    out = (typeof _radarDados !== 'undefined' ? (_radarDados || []) : []).filter(function(r){
+      if (String(r.analista_auto || '').trim() !== 'Analisar PATEC Finalizado') return false;
+      var f = (typeof _govUrgPrazoFaixa === 'function') ? _govUrgPrazoFaixa(Number(r.prazo_c || 0)) : null;
+      if (f !== 'vencida' && f !== 'max') return false;
+      var m = {};
+      try { m = _govDados[govChave(r)] || {}; } catch (e) {}
+      var st = (typeof _govUrgStatusTrat === 'function') ? _govUrgStatusTrat(m, r.fila || '', r) : '';
+      return String(st || '').toUpperCase() === 'AG. AÇÃO';
+    }).sort(function(a, b){ return Number(b.prazo_c || 0) - Number(a.prazo_c || 0); });
+  } catch (e) {}
+  return out;
 }
 
 // ── Urgência por SLA: o Top N da carteira ─────────────────────────
@@ -19141,7 +19164,7 @@ function _govTopSla(n){
                       .filter(function(x){ return !isNaN(x); });
         if (ds.length) d = Math.floor((hoje - new Date(Math.max.apply(null, ds))) / 86400000);
       }
-      return { rc:it.rc, item:it.item, analista:it.analista, fila:it.fila, sla:it.sla,
+      return { _ref:it._ref, rc:it.rc, item:it.item, analista:it.analista, fila:it.fila, sla:it.sla,
                trat:trat, fase:fase,
                dias: d,
                diasTxt: (d === null ? 'sem ação registrada' : (d === 0 ? 'movimentado hoje' : d + ' dia(s) sem ação')) };
@@ -19161,78 +19184,154 @@ function govPainelDetalhe(qual){
 // As listas que abrem embaixo dos cards. Tudo na mesma página: o card
 // não troca de tela, só abre a lista aqui — o botão "abrir a tela" é o
 // único caminho para a tela cheia, e só se você clicar nele.
-function _govDetDefs(){
-  var pat = function(r){ return (typeof _govStatusPatecDe === 'function') ? _govStatusPatecDe(r) : ''; };
-  var tra = function(r){ return (typeof govTratDe === 'function') ? govTratDe(r) : ''; };
-  var cRC = { t:'RC',          v:function(r){ return r.rc || '—'; }, st:'font-weight:700;color:var(--az)' };
-  var cIT = { t:'Item da RC',  v:function(r){ return r.seq || r.item_rc || '—'; } };
-  var cAN = { t:'Analista',    v:function(r){ return (r.analista && r.analista !== '#N/A') ? r.analista : '—'; } };
-  var cFI = { t:'Fila',        v:function(r){ return r.fila || '—'; } };
-  var cSL = { t:'SLA',         v:function(r){ return r.sla || '—'; }, st:'text-align:center' };
-  var cTR = { t:'Status Tratamento', v:function(r){ return tra(r) || '—'; } };
+//
+// Todas as listas usam AS MESMAS COLUNAS da tabela da Governança, na
+// mesma ordem, sem Envio e sem Prazo de Retorno.
+var _GOV_DET_COLS = [
+  { t:'Analista',          k:'analista' },
+  { t:'Status do Patec',   k:'statusPatec', st:'font-weight:700' },
+  { t:'Fila Level Board',  k:'fila' },
+  { t:'SLA',               k:'sla',    st:'text-align:center' },
+  { t:'RC',                k:'rc',     st:'font-weight:700;color:var(--az)' },
+  { t:'Item RC',           k:'itemRc' },
+  { t:'Oportunidade',      k:'oport' },
+  { t:'Item OP',           k:'itemOp' },
+  { t:'Status Tratamento', k:'trat' },
+  { t:'Status',            k:'status', st:function(x){
+      return x.status === 'ATRASADO' ? 'color:var(--vm);font-weight:700'
+           : x.status === 'DENTRO DO PRAZO' ? 'color:var(--vd);font-weight:700'
+           : x.status === 'CONCLUÍDO' ? 'color:var(--az);font-weight:700'
+           : 'color:var(--tx2)'; } }
+];
 
+// Índice do Radar, para completar as colunas das listas que vêm de
+// outra base (backlog do Tirar do Fluxo, Analista Pedido).
+function _govRadarIdx(){
+  var byRcSeq = {}, byRc = {};
+  try {
+    (typeof _radarDados !== 'undefined' ? (_radarDados || []) : []).forEach(function(r){
+      var rc = String(r.rc || '').trim();
+      if (!rc) return;
+      if (!byRc[rc]) byRc[rc] = r;
+      var k = rc + '|' + String(r.seq || '').trim();
+      if (!byRcSeq[k]) byRcSeq[k] = r;
+    });
+  } catch (e) {}
+  return { byRc:byRc, byRcSeq:byRcSeq };
+}
+
+// Uma linha da lista, a partir da linha do Radar
+function _govDetLinha(r, extra){
+  var m = {};
+  try { m = _govDados[govChave(r)] || {}; } catch (e) {}
+  var trat = '';
+  try { trat = govTratDe(r, m); } catch (e) { trat = m.status || ''; }
+  var st = '';
+  try { st = govCalcStatus(govCalcPrazo(trat, m.envio || ''), m.finalizado || ''); } catch (e) {}
+  var o = {
+    analista:    (r.analista && r.analista !== '#N/A') ? r.analista : '—',
+    statusPatec: ((typeof _govStatusPatecDe === 'function') ? _govStatusPatecDe(r) : '') || '—',
+    fila:        r.fila || '—',
+    sla:         r.sla || '—',
+    rc:          r.rc || '—',
+    itemRc:      r.seq || r.item_rc || '—',
+    oport:       r.num_oport || '—',
+    itemOp:      r.item_op || r.item_rc || '—',
+    trat:        trat || '—',
+    status:      st || '—'
+  };
+  if (extra) Object.keys(extra).forEach(function(k){ if (extra[k] != null && extra[k] !== '') o[k] = extra[k]; });
+  return o;
+}
+
+// Linha vinda de outra base: procura o item no Radar para completar as
+// colunas; o que não achar fica com o que veio da própria base.
+function _govDetLinhaFora(idx, rc, itemRc, campos){
+  rc = String(rc || '').trim();
+  itemRc = String(itemRc || '').trim();
+  var r = idx.byRcSeq[rc + '|' + itemRc] || idx.byRc[rc];
+  if (r) return _govDetLinha(r, { rc:rc, itemRc:itemRc || undefined });
+  var o = { analista:'—', statusPatec:'—', fila:'—', sla:'—', rc:rc || '—',
+            itemRc:itemRc || '—', oport:'—', itemOp:'—', trat:'—', status:'—' };
+  if (campos) Object.keys(campos).forEach(function(k){ if (campos[k]) o[k] = campos[k]; });
+  return o;
+}
+
+function _govDetDefs(){
   return {
     venc: {
       t:'⏰ Vencidos', aba:'vencido',
       sub:'Itens com a validade da proposta vencida, em PATEC Finalizado — a mesma conta da aba Vencido da Planilha Crítica.',
-      cols:[cRC, cIT, cAN, cFI, { t:'Validade', v:function(r){ return r.validade || '—'; }, st:'color:var(--vm);font-weight:600' }, cSL, cTR],
-      lista:function(){ return _govPcLista('venc'); }
+      lista:function(){ return _govPcLista('venc').map(function(r){ return _govDetLinha(r); }); }
     },
     reprov: {
       t:'❌ 100% Reprovado', aba:'reprovado',
       sub:'STATUS MAPA = PATEC Finalizado sem fornecedores aprovados.',
-      cols:[cRC, cIT, cAN, cFI, cSL, cTR],
-      lista:function(){ return _govPcLista('reprov'); }
+      lista:function(){ return _govPcLista('reprov').map(function(r){ return _govDetLinha(r); }); }
     },
     fluxo: {
       t:'🗑 Tirar do Fluxo', aba:'fluxo',
       sub:'Itens marcados como LIBERAR na coluna Tirar do Fluxo do backlog. Cada item aparece uma vez.',
-      cols:[cAN, cFI, cRC, cIT, { t:'Oportunidade', v:function(r){ return r.num_oport || '—'; } }],
-      lista:function(){ return _govPcLista('fluxo'); }
+      lista:function(){
+        var idx = _govRadarIdx();
+        return _govPcLista('fluxo').map(function(x){
+          return _govDetLinhaFora(idx, x.rc, x.seq || x.item_rc,
+            { analista:x.analista, fila:x.fila, oport:x.num_oport, itemOp:x.item_rc });
+        });
+      }
     },
     cancel: {
       t:'🚫 Cancelado', aba:'cancelado',
       sub:'STATUS MAPA = Analisar PATEC Cancelado.',
-      cols:[cRC, cIT, cAN, cFI, cSL, cTR],
-      lista:function(){ return _govPcLista('cancel'); }
+      lista:function(){ return _govPcLista('cancel').map(function(r){ return _govDetLinha(r); }); }
     },
     pid: {
       t:'📌 PID', aba:'pid',
       sub:'Itens com PID preenchido no Radar, em PATEC Finalizado ou Em Andamento.',
-      cols:[cRC, cIT, cAN, cFI, cSL, { t:'Status do Patec', v:function(r){ return pat(r) || '—'; } }],
-      lista:function(){ return _govPcLista('pid'); }
+      lista:function(){ return _govPcLista('pid').map(function(r){ return _govDetLinha(r); }); }
+    },
+    aptos: {
+      t:'📦 Aptos a pedido', aba:'aa',
+      sub:'Analista Pedido — todas as regras menos a 3. São os itens que podem virar pedido direto.',
+      lista:function(){
+        var idx = _govRadarIdx();
+        return _govAaLista('aptos').map(function(a){
+          return _govDetLinhaFora(idx, a.rc, a.item,
+            { analista:a.analista, oport:a.oport, itemOp:a.itemop });
+        });
+      },
+      vazio:'Sem resultado do Analista Pedido carregado.'
+    },
+    mdg: {
+      t:'🧩 Possíveis MDG', aba:'aa',
+      sub:'Analista Pedido — só a Regra 3 (NM Filho). Pede conferência no SAP antes e costuma virar cadastro no MDG.',
+      lista:function(){
+        var idx = _govRadarIdx();
+        return _govAaLista('mdg').map(function(a){
+          return _govDetLinhaFora(idx, a.rc, a.item,
+            { analista:a.analista, oport:a.oport, itemOp:a.itemop });
+        });
+      },
+      vazio:'Sem resultado do Analista Pedido carregado.'
     },
     prorrog: {
       t:'📆 Urgência por Prazo — itens para prorrogação', aba:'prazo',
       sub:'Itens vencidos e em urgência máxima com PATEC Finalizado e AG. AÇÃO. 100% Reprovado e Cancelados não entram aqui.',
-      cols:[
-        { t:'RC', v:function(x){ return x.rc; }, st:'font-weight:700;color:var(--az)' },
-        { t:'Item da RC', v:function(x){ return x.itemRc || '—'; } },
-        { t:'Analista', v:function(x){ return x.analista || '—'; } },
-        { t:'Fila', v:function(x){ return x.fila || '—'; } },
-        { t:'Prazo', v:function(x){ return x.prazoOp; }, st:'text-align:center' },
-        { t:'SLA', v:function(x){ return x.sla; }, st:'text-align:center' }
-      ],
-      lista:function(){ return _govProrrogacao(); },
+      lista:function(){ return _govProrrogacao().map(function(r){ return _govDetLinha(r); }); },
       vazio:'Nenhum item para prorrogação.'
     },
     topsla: {
       t:'⏱️ Urgência por SLA — Top 10 da carteira', aba:'sla',
       sub:'As 10 RCs de maior SLA em PATEC Finalizado que ainda estão em tratamento — item concluído não entra. Uma RC aparece uma vez, pelo maior SLA dos itens dela.',
-      cols:[
-        { t:'#', v:function(x, i){ return (i + 1) + 'º'; }, st:'color:var(--tx2)' },
-        { t:'RC', v:function(x){ return x.rc; }, st:'font-weight:700;color:var(--az)' },
-        { t:'Item da RC', v:function(x){ return x.item || '—'; } },
-        { t:'Analista', v:function(x){ return x.analista || '—'; } },
-        { t:'SLA (dias)', v:function(x){ return x.sla; }, st:'text-align:center;font-weight:700' },
-        { t:'Status Tratamento', v:function(x){ return x.trat || '—'; } },
-        { t:'Fase atual', v:function(x){ return x.fase; }, st:function(x){
-            return x.fase === 'Fora do prazo' ? 'color:var(--vm);font-weight:700'
-                 : x.fase === 'Dentro do prazo' ? 'color:var(--vd);font-weight:700'
-                 : 'color:var(--am);font-weight:700'; } },
-        { t:'Sem ação', v:function(x){ return x.diasTxt; }, st:'color:var(--tx2)' }
-      ],
-      lista:function(){ return _govTopSla(10); },
+      // única com uma coluna a mais: "Sem ação", que é o motivo do Top 10
+      extraCols:[{ t:'Sem ação', k:'diasTxt', st:'color:var(--tx2)' }],
+      lista:function(){
+        return _govTopSla(10).map(function(x){
+          return x._ref ? _govDetLinha(x._ref, { diasTxt:x.diasTxt })
+                        : { analista:x.analista, statusPatec:'—', fila:x.fila, sla:x.sla, rc:x.rc,
+                            itemRc:x.item, oport:'—', itemOp:'—', trat:x.trat, status:'—', diasTxt:x.diasTxt };
+        });
+      },
       vazio:'Nada em tratamento com SLA para listar.'
     }
   };
@@ -19243,32 +19342,32 @@ function _govPainelDetalheHTML(){
   var d = _govDetDefs()[_govPainelDet];
   if (!d) return '';
   var esc = _govPainelEsc;
+  var cols = _GOV_DET_COLS.concat(d.extraCols || []);
 
   var linhas = [];
   try { linhas = d.lista() || []; } catch (e) { linhas = []; }
 
-  var cab = d.cols.map(function(c){
+  var cab = cols.map(function(c){
     return '<th style="text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;'
       + 'color:var(--tx2);padding:4px 8px;border-bottom:1px solid var(--brd);white-space:nowrap">'
       + esc(c.t) + '</th>';
   }).join('');
 
   var corpo = linhas.length
-    ? linhas.map(function(x, i){
-        return '<tr>' + d.cols.map(function(c){
-          var st = (typeof c.st === 'function') ? c.st(x, i) : (c.st || '');
-          var v;
-          try { v = c.v(x, i); } catch (e) { v = '—'; }
-          return '<td style="font-size:11px;padding:4px 8px;' + st + '">' + esc(v) + '</td>';
+    ? linhas.map(function(x){
+        return '<tr>' + cols.map(function(c){
+          var st = (typeof c.st === 'function') ? c.st(x) : (c.st || '');
+          return '<td style="font-size:11px;padding:4px 8px;' + st + '">' + esc(x[c.k]) + '</td>';
         }).join('') + '</tr>';
       }).join('')
-    : '<tr><td colspan="' + d.cols.length + '" style="padding:12px;text-align:center;color:var(--tx2);font-size:11.5px">'
+    : '<tr><td colspan="' + cols.length + '" style="padding:12px;text-align:center;color:var(--tx2);font-size:11.5px">'
       + esc(d.vazio || 'Nada para listar.') + '</td></tr>';
 
-  var btnAba = document.getElementById('gov-main-tab-' + d.aba) ? true : false;
   var atalho = (d.aba === 'prazo' || d.aba === 'sla')
     ? 'govMainTab(\'' + d.aba + '\', document.getElementById(\'gov-main-tab-' + d.aba + '\'))'
-    : 'govIrPlanilhaCritica(\'' + d.aba + '\')';
+    : (d.aba === 'aa'
+        ? 'govIrAnalistaPedido(' + (_govPainelDet === 'mdg' ? 'true' : 'false') + ')'
+        : 'govIrPlanilhaCritica(\'' + d.aba + '\')');
 
   return '<div style="margin-top:.875rem;background:var(--bg);border:1.5px solid var(--brd);border-radius:10px;padding:.75rem .875rem">'
     + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
@@ -19499,11 +19598,11 @@ function govPainelRender(){
     + '</div>'
     + titulo('Analista Pedido · Urgência')
     + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
-    + cartao(aa.faceis, 'Aptos a pedido', 'var(--vd)', 'var(--vdc)', 'govIrAnalistaPedido(false)',
-             'Todas as regras menos a 3 — ' + aa.faceisRc + ' RC(s). Abre o Analista Pedido já filtrado.',
+    + cartao(aa.faceis, 'Aptos a pedido', 'var(--vd)', 'var(--vdc)', "govPainelDetalhe('aptos')",
+             'Todas as regras menos a 3 — ' + aa.faceisRc + ' RC(s). Ver a lista aqui mesmo.',
              '0 1 200px')
-    + cartao(aa.mdg,    'Possíveis MDG',  '#7c3aed',   '#ede9fe',   'govIrAnalistaPedido(true)',
-             'Só a Regra 3 (conferir no SAP) — ' + aa.mdgRc + ' RC(s). Abre o Analista Pedido já filtrado.',
+    + cartao(aa.mdg,    'Possíveis MDG',  '#7c3aed',   '#ede9fe',   "govPainelDetalhe('mdg')",
+             'Só a Regra 3 (conferir no SAP) — ' + aa.mdgRc + ' RC(s). Ver a lista aqui mesmo.',
              '0 1 200px')
     + cartao(_govProrrogacao().length, 'Prorrogação', 'var(--am)', 'var(--amc)', "govPainelDetalhe('prorrog')",
              'Vencidos e em urgência máxima de prazo, com PATEC Finalizado e AG. AÇÃO. Clique para ver a lista.',
