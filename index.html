@@ -18469,7 +18469,7 @@ function _govUrgRadarIndex(){
 // da Governança (Em Andamento → Parecerista). Sem ela (XGL, Status B),
 // segue valendo só a regra da fila.
 function _govUrgStatusTrat(m, fila, linha){
-  const statusAtual=(m&&m.status) || (linha ? govTratPadrao(linha)
+  const statusAtual=(linha ? govTratDe(linha, m) : (m&&m.status)) || (linha ? govTratPadrao(linha)
     : (GOV_FILAS_AG.some(function(f){ return String(fila||'').toUpperCase().includes(f.toUpperCase()); })?'AG. TRATAMENTO':''));
   return govCalcStatus(govCalcPrazo(statusAtual, (m&&m.envio)||''), (m&&m.finalizado)||'');
 }
@@ -18825,6 +18825,51 @@ function _govFabLimpar(prefix, applyFn){
 //   fila PATEC / Análise de Oportunidade → AG. TRATAMENTO (como já era)
 // Só o que aparece na tela — nada é gravado, e um status preenchido à
 // mão sempre ganha deste padrão.
+// ── Padrão único do Status de Tratamento ──────────────────────────
+// O texto gravado varia ("PARECERISTA", "Parecerista", "Validação do
+// Thiago"...). Sem padronizar, cada variação virava um card próprio e
+// a soma saía errada. A chave ignora caixa, acento e pontuação; o
+// rótulo devolvido é sempre o da lista oficial.
+function _govTratChave(v){
+  return String(v == null ? '' : v)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9]+/g, ' ')
+    .trim().toUpperCase();
+}
+
+function _govTratOficiais(){
+  var l = [];
+  [ (typeof GOV_STATUS_OPCOES_ADLV !== 'undefined') ? GOV_STATUS_OPCOES_ADLV : null,
+    (typeof GOV_STATUS_OPCOES_FAST !== 'undefined') ? GOV_STATUS_OPCOES_FAST : null,
+    (typeof GOV_STATUS_OPCOES      !== 'undefined') ? GOV_STATUS_OPCOES      : null,
+    (typeof XGL_STATUS_OPCOES      !== 'undefined') ? XGL_STATUS_OPCOES      : null,
+    (typeof SB_STATUS_OPCOES       !== 'undefined') ? SB_STATUS_OPCOES       : null
+  ].forEach(function(arr){
+    if (!arr) return;
+    arr.forEach(function(x){ if (l.indexOf(x) === -1) l.push(x); });
+  });
+  return l;
+}
+
+function govTratCanonico(v){
+  var k = _govTratChave(v);
+  if (!k) return '';
+  var of = _govTratOficiais();
+  for (var i = 0; i < of.length; i++) if (_govTratChave(of[i]) === k) return of[i];
+  return k;   // valor fora da lista: ao menos entra padronizado
+}
+
+// O Status de Tratamento de um item, já padronizado.
+// PATEC em Andamento é sempre PARECERISTA — o que estiver gravado
+// continua guardado e volta a valer quando o PATEC for finalizado.
+function govTratDe(r, m){
+  m = m || (r ? (_govDados[govChave(r)] || {}) : {});
+  try {
+    if (typeof _govStatusPatecDe === 'function' && _govStatusPatecDe(r) === 'PATEC em Andamento') return 'PARECERISTA';
+  } catch (e) {}
+  return govTratCanonico(m.status || '') || govTratPadrao(r);
+}
+
 function govTratPadrao(r){
   try {
     if (typeof _govStatusPatecDe === 'function' && _govStatusPatecDe(r) === 'PATEC em Andamento') return 'PARECERISTA';
@@ -18836,7 +18881,7 @@ function govTratPadrao(r){
 
 function _govFabStatusMapa(r){
   var m=_govDados[govChave(r)]||{};
-  var st = m.status || govTratPadrao(r);
+  var st = govTratDe(r, m);
   return govCalcStatus(govCalcPrazo(st, m.envio||''), m.finalizado||'');
 }
 function govFabMapaLimpar(){ _govFabLimpar('gov-fmapa', function(){ govRenderMapa(govListaGovernanca()); }); }
@@ -18871,7 +18916,7 @@ function _govPainelEsc(v){
 // preenche sozinho.
 function _govPainelTratDe(r){
   var m = _govDados[govChave(r)] || {};
-  var st = m.status || govTratPadrao(r);
+  var st = govTratDe(r, m);
   return st || 'SEM STATUS';
 }
 
@@ -19536,7 +19581,7 @@ function govRenderMapa(dados, tbodyId){
 
     // Padrão de Status de Tratamento (ver govTratPadrao):
     // Em Andamento → Parecerista; fila PATEC/Análise de Op. → Ag. Tratamento
-    let statusAtual = m.status || govTratPadrao(r);
+    let statusAtual = govTratDe(r, m);
 
     const envio     = m.envio || '';
     const prazo     = govCalcPrazo(statusAtual, envio);
@@ -19815,7 +19860,7 @@ async function govExportar(){
   dadosMapa.forEach(r => {
     const chave = govChave(r);
     const m = _govDados[chave] || {};
-    const statusAtual = m.status || govTratPadrao(r);
+    const statusAtual = govTratDe(r, m);
     const prazo = govCalcPrazo(statusAtual, m.envio||'');
     const statusCalc = govCalcStatus(prazo, m.finalizado||'');
     wsMapa.push(linhaMapa(r, m, statusAtual, prazo, statusCalc));
@@ -19830,7 +19875,7 @@ async function govExportar(){
     dadosAndExp.forEach(r => {
       const chave = govChave(r);
       const m = _govDados[chave] || {};
-      const statusAtual = m.status || govTratPadrao(r);
+      const statusAtual = govTratDe(r, m);
       const prazo = govCalcPrazo(statusAtual, m.envio||'');
       const statusCalc = govCalcStatus(prazo, m.finalizado||'');
       wsAnd.push(linhaMapa(r, m, statusAtual, prazo, statusCalc));
@@ -20270,7 +20315,7 @@ function govBuscarRC(rc, alvo){
   dadosMapa.filter(r=>(r.rc||'').includes(rcBusca)).forEach(r=>{
     const chave = govChave(r);
     const m = _govDados[chave]||{};
-    let statusDefault = m.status || govTratPadrao(r);
+    let statusDefault = govTratDe(r, m);
     const prazo = govCalcPrazo(statusDefault, m.envio||'');
     const status = govCalcStatus(prazo, m.finalizado||'');
     resultados.push({aba:'MAPA', abaLabel:'🗺 PATEC Finalizado', chave, analista:r.analista||'—', rc:r.rc, seq:r.seq, op:r.num_oport, item:r.item_op||r.item_rc,
@@ -20288,7 +20333,7 @@ function govBuscarRC(rc, alvo){
   dadosAndamento.filter(r=>(r.rc||'').includes(rcBusca)).forEach(r=>{
     const chave = govChave(r);
     const m = _govDados[chave]||{};
-    let statusDefault = m.status || govTratPadrao(r);
+    let statusDefault = govTratDe(r, m);
     const prazo = govCalcPrazo(statusDefault, m.envio||'');
     const status = govCalcStatus(prazo, m.finalizado||'');
     resultados.push({aba:'MAPA', abaLabel:'⏳ Em Andamento', chave, analista:r.analista||'—', rc:r.rc, seq:r.seq, op:r.num_oport, item:r.item_op||r.item_rc,
@@ -21637,7 +21682,7 @@ function govRenderConcluidos(){
     const origem = _moduloAtivo === 'fast' ? 'PATEC Finalizado' : 'PATEC Finalizado';
     rows.push({ origem, analista: r.analista||'—', fila: r.fila||'—', sla: r.sla||'—',
       rc: r.rc||'—', item_rc: r.seq||'—', op: r.num_oport||'—', seq: r.item_op||r.item_rc||'—',
-      status: m.status||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado, grupo_merc: r.grupo_merc||'—' });
+      status: govTratCanonico(m.status)||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado, grupo_merc: r.grupo_merc||'—' });
   });
 
   // ── PATEC em Andamento ──
@@ -21649,7 +21694,7 @@ function govRenderConcluidos(){
     const prazo = govCalcPrazo(m.status||'', m.envio||'');
     rows.push({ origem: 'PATEC em Andamento', analista: r.analista||'—', fila: r.fila||'—', sla: r.sla||'—',
       rc: r.rc||'—', item_rc: r.seq||'—', op: r.num_oport||'—', seq: r.item_op||r.item_rc||'—',
-      status: m.status||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado, grupo_merc: r.grupo_merc||'—' });
+      status: govTratCanonico(m.status)||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado, grupo_merc: r.grupo_merc||'—' });
   });
 
   // ── XGL ──
@@ -21660,7 +21705,7 @@ function govRenderConcluidos(){
     const prazo = govCalcPrazo(m.status||'', m.envio||'');
     rows.push({ origem: 'XGL', analista: r.analista||'—', fila: '—', sla: '—',
       rc: r.rc||'—', item_rc: r.item||'—', op: r.oport||'—', seq: r.itemop||'—',
-      status: m.status||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado, grupo_merc: _grupoMercPorRC(r.rc)||'—' });
+      status: govTratCanonico(m.status)||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado, grupo_merc: _grupoMercPorRC(r.rc)||'—' });
   });
 
   // ── Status B ──
@@ -21672,7 +21717,7 @@ function govRenderConcluidos(){
     const prazo = govCalcPrazo(m.status||'', m.envio||'');
     rows.push({ origem: 'Status B', analista: r.analista||'—', fila: '—', sla: '—',
       rc: r.rc||'—', item_rc: r.seq||'—', op: r.op||'—', seq: r.item||'—',
-      status: m.status||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado, grupo_merc: _grupoMercPorRC(r.rc)||'—' });
+      status: govTratCanonico(m.status)||'—', envio: m.envio||'—', prazo: prazo||'—', finalizado: m.finalizado, grupo_merc: _grupoMercPorRC(r.rc)||'—' });
   });
 
   // Nova Reserva concluídos
@@ -21682,7 +21727,7 @@ function govRenderConcluidos(){
     if(!m.finalizado) return;
     rows.push({ origem: 'Nova Reserva', analista: r.analista||'—', fila: '—', sla: '—',
       rc: r.rc||'—', item_rc: r.item||'—', op: '—', seq: '—',
-      status: m.status||'—', envio: m.envio||'—', prazo: nrCalcPrazo(m.envio||'')||'—', finalizado: m.finalizado, grupo_merc: _grupoMercPorRC(r.rc)||'—' });
+      status: govTratCanonico(m.status)||'—', envio: m.envio||'—', prazo: nrCalcPrazo(m.envio||'')||'—', finalizado: m.finalizado, grupo_merc: _grupoMercPorRC(r.rc)||'—' });
   });
 
   // ── Itens da base embutida que saíram do radar (só MAPA) ──
@@ -21696,7 +21741,7 @@ function govRenderConcluidos(){
     const prazo = govCalcPrazo(v.status||'', v.envio||'');
     rows.push({ origem: v._origem || 'PATEC Finalizado', analista: '—', fila: '—', sla: '—',
       rc: partes[0]||'—', item_rc: partes[1]||'—', op: partes[2]||'—', seq: partes[3]||'—',
-      status: v.status||'—', envio: v.envio||'—', prazo: prazo||'—', finalizado: v.finalizado, grupo_merc: _grupoMercPorRC(partes[0])||'—' });
+      status: govTratCanonico(v.status)||'—', envio: v.envio||'—', prazo: prazo||'—', finalizado: v.finalizado, grupo_merc: _grupoMercPorRC(partes[0])||'—' });
   });
 
   // Só a RC consultada
