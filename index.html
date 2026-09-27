@@ -18385,6 +18385,12 @@ function _govUrgPainelSync(){
 // quebraria a aba nova. No ADLV nada muda.
 var GOV_ABAS_OCULTAS_FAST = ['gov', 'pc', 'sla', 'prazo', 'cobranca'];
 
+// Abas cujo BOTÃO fica escondido em qualquer módulo. As telas continuam
+// inteiras e continuam sendo o destino do botão "abrir a tela" dos cards
+// da Governança — só não têm mais botão próprio no topo, porque a
+// navegação passou a ser pelo painel.
+var GOV_ABAS_SEMPRE_OCULTAS = ['cobranca', 'pc', 'sla', 'prazo'];
+
 function _govFast(){
   try { return typeof _cobEhFast === 'function' ? _cobEhFast() : false; } catch (e) { return false; }
 }
@@ -18396,8 +18402,7 @@ function govAplicarAbasDoModulo(){
   GOV_ABAS_OCULTAS_FAST.forEach(function(t){
     var b = document.getElementById('gov-main-tab-' + t);
     if (!b) return;
-    // no ADLV a Cobrança por Status já era oculta; as outras voltam a aparecer
-    b.style.display = fast ? 'none' : (t === 'cobranca' ? 'none' : '');
+    b.style.display = (fast || GOV_ABAS_SEMPRE_OCULTAS.indexOf(t) !== -1) ? 'none' : '';
   });
   return fast ? 'govnova' : 'gov';
 }
@@ -37259,7 +37264,9 @@ function _cobAplicarModulo(){
   // as abas antigas ficam escondidas no FAST (o código continua no arquivo)
   var abaPadrao = govAplicarAbasDoModulo();
   // se a aba aberta era uma das escondidas, troca pela padrão do módulo
-  var abertaEscondida = GOV_ABAS_OCULTAS_FAST.some(function(t){
+  // só no FAST: no ADLV a Planilha Crítica e as Urgências continuam
+  // podendo ficar abertas, mesmo sem botão no topo
+  var abertaEscondida = fast && GOV_ABAS_OCULTAS_FAST.some(function(t){
     var c = document.getElementById('gov-main-content-' + t);
     var b = document.getElementById('gov-main-tab-' + t);
     return c && c.style.display !== 'none' && b && b.style.display === 'none';
