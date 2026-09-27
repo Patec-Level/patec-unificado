@@ -5149,6 +5149,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <!-- Painel gráfico separado (colapsável) -->
       <div id="gov-prod-painel" style="display:none"></div>
 
+      <!-- Painel de cards — mesmo desenho da Governança Nova do FAST.
+           Só a estética muda: os números continuam vindo do Radar
+           Estratégico (_radarDados + _govDados) e das bases do XGL,
+           Status B e Nova Reserva, exatamente como antes. -->
+      <div id="gov-painel-cards" style="margin-bottom:1rem;padding:.875rem 0"></div>
+
       <!-- Abas -->
       <div class="stabs" style="margin-bottom:1rem;display:flex;align-items:center;flex-wrap:wrap;gap:6px">
         <button class="stab active" id="gov-nav-andamento-btn" onclick="govSetTab('andamento',this)">⏳ PATEC em Andamento</button>
@@ -18814,6 +18820,255 @@ function govFabXglLimpar(){ _govFabLimpar('gov-fxgl', xglRender); }
 function govFabSbLimpar(){ _govFabLimpar('gov-fsb', sbRender); }
 function govFabNrLimpar(){ _govFabLimpar('gov-fnr', nrRender); }
 
+// ══════════════════════════════════════════════════════════════
+// PAINEL DE CARDS DA GOVERNANÇA (ADLV)
+// Mesmo desenho da Governança Nova do FAST, que é mais funcional:
+// um card grande com o total em carteira, o aviso de vencidas logo
+// abaixo, e as abas viram cards (Status do Patec, Tipo de Processo)
+// mais a quebra por Status de Tratamento do lado direito.
+// A alimentação NÃO muda: continua tudo vindo do Radar Estratégico
+// (_radarDados + _govDados) e das bases do XGL, Status B e Nova
+// Reserva. Aqui só se conta e se desenha.
+// ══════════════════════════════════════════════════════════════
+var _govPainelTrat = null;    // card de Status de Tratamento clicado
+var _govPainelVenc = false;   // aviso de vencidas clicado
+var _govPainelAux  = false;   // já pediu XGL / Status B / Nova Reserva
+
+function _govPainelEsc(v){
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Status de Tratamento do item — o mesmo valor que a coluna da tabela
+// mostra, inclusive o AG. TRATAMENTO que o PATEC/Análise de Oportunidade
+// preenche sozinho.
+function _govPainelTratDe(r){
+  var m = _govDados[govChave(r)] || {};
+  var st = m.status || '';
+  if (!st && GOV_FILAS_AG.some(function(f){
+        return String(r.fila || '').toUpperCase().indexOf(f.toUpperCase()) !== -1; })) {
+    st = 'AG. TRATAMENTO';
+  }
+  return st || 'SEM STATUS';
+}
+
+// A carteira: o que está nas duas abas de PATEC e ainda não foi
+// finalizado (finalizado vai para a aba Concluídos, como sempre).
+function _govPainelLinhas(){
+  var out = [];
+  (typeof _radarDados !== 'undefined' && _radarDados ? _radarDados : []).forEach(function(r){
+    var cls = _classificarStatusMapa(r.analista_auto);
+    if (cls !== 'Finalizado' && cls !== 'Andamento') return;
+    if ((_govDados[govChave(r)] || {}).finalizado) return;
+    out.push({ r: r,
+      sp: (cls === 'Finalizado' ? 'PATEC Finalizado' : 'PATEC em Andamento'),
+      trat: _govPainelTratDe(r),
+      status: _govFabStatusMapa(r) });
+  });
+  return out;
+}
+
+// Filtro dos cards — entra por cima do filtro de combinação de cada aba.
+function _govPainelAplicar(lista){
+  if (!_govPainelTrat && !_govPainelVenc) return lista;
+  return lista.filter(function(r){
+    if (_govPainelTrat && _govPainelTratDe(r) !== _govPainelTrat) return false;
+    if (_govPainelVenc && _govFabStatusMapa(r) !== 'ATRASADO') return false;
+    return true;
+  });
+}
+
+function _govPainelRedesenhar(){
+  govPainelRender();
+  if (_govTabAtiva === 'andamento') govRenderAndamento();
+  else govRenderMapa(govFiltroMapaPadrao());
+}
+
+function govPainelFiltrarTrat(nome){
+  _govPainelTrat = (_govPainelTrat === nome) ? null : nome;
+  _govPainelRedesenhar();
+}
+function govPainelFiltrarVenc(){
+  _govPainelVenc = !_govPainelVenc;
+  _govPainelRedesenhar();
+}
+function govPainelLimpar(){
+  _govPainelTrat = null;
+  _govPainelVenc = false;
+  _govPainelRedesenhar();
+}
+
+// Leva para a aba do card clicado, marcando o botão certo.
+function govPainelIrAba(aba){
+  var alvo = null;
+  var bs = document.querySelectorAll('#gov-main-content-gov .stabs .stab');
+  for (var i = 0; i < bs.length; i++) {
+    if (String(bs[i].getAttribute('onclick') || '').indexOf("govSetTab('" + aba + "'") !== -1) { alvo = bs[i]; break; }
+  }
+  govSetTab(aba, alvo);
+  govPainelRender();
+}
+
+// XGL, Status B e Nova Reserva só carregam quando a aba é aberta. O painel
+// precisa do número antes disso: pede uma vez e se redesenha quando chega.
+function _govPainelCarregarAux(){
+  if (_govPainelAux) return;
+  _govPainelAux = true;
+  var tarefas = [];
+  try {
+    if ((typeof _xglItens === 'undefined' || !_xglItens.length) && typeof xglCarregarFirebase === 'function') tarefas.push(xglCarregarFirebase());
+    if ((typeof _sbItens  === 'undefined' || !_sbItens.length)  && typeof sbCarregarFirebase  === 'function') tarefas.push(sbCarregarFirebase());
+    if ((typeof _nrItens  === 'undefined' || !_nrItens.length)  && typeof nrCarregarFirebase  === 'function') tarefas.push(nrCarregarFirebase());
+  } catch (e) { return; }
+  if (!tarefas.length) return;
+  Promise.all(tarefas.map(function(t){ return Promise.resolve(t).catch(function(){}); }))
+    .then(function(){ try { govPainelRender(); } catch (e) {} });
+}
+
+function _govPainelQtdXgl(){
+  try { return (_xglItens || []).filter(function(r){
+    return !((_xglDados[xglChave(r.rc, r.item, r.oport, r.itemop)] || {}).finalizado); }).length; } catch (e) { return 0; }
+}
+function _govPainelQtdSb(){
+  try { return (_sbItens || []).filter(function(r){
+    return !((_sbDados[sbChave(r.rc, r.seq, r.op, r.item)] || {}).finalizado); }).length; } catch (e) { return 0; }
+}
+function _govPainelQtdNr(){
+  try { return (_nrItens || []).filter(function(r){
+    return !((_nrDados[nrChave(r.rc, r.item)] || {}).finalizado); }).length; } catch (e) { return 0; }
+}
+
+// As abas que viraram card
+var _GOV_PAINEL_SP = [
+  { nome:'PATEC em Andamento', aba:'andamento', cor:'var(--azm)', bg:'var(--azc)' },
+  { nome:'PATEC Finalizado',   aba:'mapa',      cor:'var(--vd)',  bg:'var(--vdc)' }
+];
+var _GOV_PAINEL_TP = [
+  { nome:'XGL',          aba:'xgl',         cor:'#7c3aed',   bg:'#ede9fe',    qtd:_govPainelQtdXgl },
+  { nome:'Status B',     aba:'statusb',     cor:'var(--vd)', bg:'var(--vdc)', qtd:_govPainelQtdSb },
+  { nome:'Nova Reserva', aba:'novareserva', cor:'#6D28D9',   bg:'#ede9fe',    qtd:_govPainelQtdNr }
+];
+
+function govPainelRender(){
+  var box = document.getElementById('gov-painel-cards');
+  if (!box) return;
+  // painel é do ADLV; no FAST quem manda é a Governança Nova
+  if (typeof _moduloAtivo !== 'undefined' && _moduloAtivo === 'fast') {
+    box.style.display = 'none'; box.innerHTML = ''; return;
+  }
+  box.style.display = '';
+
+  _govPainelCarregarAux();
+
+  var linhas = _govPainelLinhas();
+  var porSp = {}, porTrat = {}, nVenc = 0;
+  linhas.forEach(function(x){
+    porSp[x.sp]     = (porSp[x.sp]     || 0) + 1;
+    porTrat[x.trat] = (porTrat[x.trat] || 0) + 1;
+    if (x.status === 'ATRASADO') nVenc++;
+  });
+
+  var esc = _govPainelEsc;
+  var q   = function(v){ return String(v).replace(/'/g, "\\'"); };
+  var semFiltro = (!_govPainelTrat && !_govPainelVenc);
+
+  // ── 1ª linha: total em carteira (Patec em Andamento + Finalizado) ──
+  var cardTotal = '<div style="display:flex;margin-bottom:10px">'
+    + '<div onclick="govPainelLimpar()" title="Mostrar todos os itens da carteira"'
+    + ' style="cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;flex:1 1 auto;'
+    + 'background:' + (semFiltro ? 'var(--azm)' : 'var(--azc)') + ';color:' + (semFiltro ? '#fff' : 'var(--azm)')
+    + ';border:1.5px solid var(--azm);border-radius:8px;padding:7px 18px;line-height:1.1">'
+    + '<span style="font-size:22px;font-weight:800">' + linhas.length + '</span>'
+    + '<span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Em<br>carteira</span>'
+    + '</div></div>';
+
+  // ── logo abaixo: tudo o que está vencido ──
+  var avisoVenc = nVenc
+    ? '<div onclick="govPainelFiltrarVenc()" title="Ver só os itens vencidos"'
+      + ' style="cursor:pointer;font-size:10px;font-weight:700;'
+      + (_govPainelVenc ? 'color:#fff;background:var(--vm)' : 'color:var(--vm);background:var(--vmc)')
+      + ';border:1px solid var(--vm);border-radius:6px;padding:3px 10px;text-align:center;margin-bottom:8px">'
+      + '⚠ ' + nVenc + ' vencida(s)' + (_govPainelVenc ? ' · ✕ limpar' : '') + '</div>'
+    : '';
+
+  // ── Status do Patec: as duas abas viraram card ──
+  var cardsSp = '';
+  _GOV_PAINEL_SP.forEach(function(x){
+    var qtd = porSp[x.nome] || 0;
+    var on  = (_govTabAtiva === x.aba);
+    cardsSp += '<div onclick="govPainelIrAba(\'' + x.aba + '\')" title="Abrir ' + esc(x.nome) + '"'
+      + ' style="cursor:pointer;background:' + (on ? x.cor : x.bg) + ';color:' + (on ? '#fff' : x.cor)
+      + ';border:1.5px solid ' + x.cor + ';border-radius:8px;padding:8px 14px;text-align:center;'
+      + 'line-height:1.2;flex:1 1 0;min-width:150px">'
+      + '<div style="font-size:19px;font-weight:800">' + qtd + '</div>'
+      + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + esc(x.nome) + '</div>'
+      + '</div>';
+  });
+
+  // ── Tipo de Processo: XGL, Status B e Nova Reserva ──
+  var cardsTp = '';
+  _GOV_PAINEL_TP.forEach(function(t){
+    var qtd = 0;
+    try { qtd = t.qtd() || 0; } catch (e) { qtd = 0; }
+    var on = (_govTabAtiva === t.aba);
+    cardsTp += '<div onclick="govPainelIrAba(\'' + t.aba + '\')" title="Abrir ' + esc(t.nome) + '"'
+      + ' style="cursor:pointer;background:' + (on ? t.cor : t.bg) + ';color:' + (on ? '#fff' : t.cor)
+      + ';border:1.5px solid ' + t.cor + ';border-radius:8px;padding:8px 14px;text-align:center;'
+      + 'line-height:1.2;flex:1 1 0;min-width:104px">'
+      + '<div style="font-size:19px;font-weight:800">' + qtd + '</div>'
+      + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + esc(t.nome) + '</div>'
+      + '</div>';
+  });
+
+  var lateral = '<div style="border-right:1px dashed var(--brd);padding-right:18px;min-width:360px">'
+    + cardTotal
+    + avisoVenc
+    + '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">'
+    +   '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">Status do Patec</span>'
+    + '</div>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">' + cardsSp + '</div>'
+    + '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">'
+    +   '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">Tipo de Processo</span>'
+    + '</div>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cardsTp + '</div>'
+    + '</div>';
+
+  // ── à direita: a quebra por Status de Tratamento ──
+  var ordem = (typeof GOV_STATUS_OPCOES !== 'undefined' ? GOV_STATUS_OPCOES : []).slice()
+                .filter(function(x){ return porTrat[x]; });
+  Object.keys(porTrat).forEach(function(k){ if (ordem.indexOf(k) === -1) ordem.push(k); });
+  ordem.sort(function(a, b){ return porTrat[b] - porTrat[a]; });
+
+  var cardsTrat = '';
+  ordem.forEach(function(k){
+    var on = (_govPainelTrat === k);
+    cardsTrat += '<div onclick="govPainelFiltrarTrat(\'' + q(k) + '\')" title="Filtrar por ' + esc(k) + '"'
+      + ' style="cursor:pointer;background:' + (on ? '#1A2D4F' : 'var(--bg)')
+      + ';color:' + (on ? '#fff' : 'var(--tx)')
+      + ';border:1.5px solid ' + (on ? '#1A2D4F' : 'var(--brd)')
+      + ';border-top:3px solid #1A2D4F;border-radius:8px;padding:8px 18px;text-align:center;'
+      + 'line-height:1.2;flex:1 1 0;min-width:130px">'
+      + '<div style="font-size:19px;font-weight:800">' + porTrat[k] + '</div>'
+      + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + esc(k) + '</div>'
+      + '</div>';
+  });
+
+  var rodape = (_govPainelTrat || _govPainelVenc)
+    ? '<div style="margin-top:.75rem;font-size:10.5px;color:var(--tx2)">Filtro dos cards: <strong>'
+      + (_govPainelTrat ? esc(_govPainelTrat) : '') + (_govPainelTrat && _govPainelVenc ? ' + ' : '')
+      + (_govPainelVenc ? 'somente vencidos' : '') + '</strong> — vale para as duas abas de PATEC. '
+      + '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="govPainelLimpar()">✕ limpar</button></div>'
+    : '';
+
+  box.innerHTML = '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
+    + lateral
+    + '<div style="flex:1 1 0;min-width:0"><div style="display:flex;gap:12px;flex-wrap:wrap">' + cardsTrat + '</div>'
+    + '<div style="margin-top:.75rem;font-size:10px;color:var(--tx2)">Os cards de <strong>Status do Patec</strong> e '
+    + '<strong>Tipo de Processo</strong> abrem a aba. Os de <strong>Status de Tratamento</strong> filtram a lista.</div>'
+    + '</div></div>' + rodape;
+}
+
 function govSetTab(aba, btn){
   // Aba XGL é exclusiva do ADLV
   if(aba === 'xgl' && _moduloAtivo === 'fast'){
@@ -18834,6 +19089,7 @@ function govSetTab(aba, btn){
   if(aba === 'xgl'){ if(!_xglItens||!_xglItens.length){ xglCarregarFirebase().then(xglRender); } else { xglRender(); } }
   if(aba === 'concluidos') govRenderConcluidos();
   if(aba === 'andamento') govRenderAndamento();
+  try { govPainelRender(); } catch(e){}
 }
 
 async function govInicializar(){
@@ -18843,6 +19099,7 @@ async function govInicializar(){
     await new Promise(r=>setTimeout(r,200));
   }
   // Lista padrão do MAPA — module-aware (ver govFiltroMapaPadrao)
+  govPainelRender();
   const dados = govFiltroMapaPadrao();
   if(!dados.length){
     document.getElementById('gov-sem-dados').style.display = 'block';
@@ -18887,6 +19144,7 @@ async function govInicializar(){
 
   govRenderMapa(dados);
   govRenderAndamento();
+  govPainelRender();
 }
 
 // Lista padrão de itens do MAPA (Governança). No ADLV, continua exatamente
@@ -19086,6 +19344,8 @@ function govRenderMapa(dados, tbodyId){
   var _fabMeta = _fabBase.map(function(r){ return { r:r, statusPatec:_fabSp, fila:String(r.fila||'').trim(), status:_govUrgStatusLabel(_govFabStatusMapa(r)), analista:String(r.analista||'').trim() }; });
   _govFabInit(_fabPfx, _fabMeta, function(){ govRenderMapa(dados, tbodyId); });
   var _fabVis = _govFabFiltrar(_fabPfx, _fabMeta).map(function(x){ return x.r; });
+  // filtro dos cards do painel (ADLV) — por cima do filtro de combinação
+  if (_moduloAtivo !== 'fast' && typeof _govPainelAplicar === 'function') _fabVis = _govPainelAplicar(_fabVis);
   tbody.innerHTML = _fabVis.map((r, idx) => {
     const chave = govChave(r);
     const m = _govDados[chave] || {};
