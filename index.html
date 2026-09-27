@@ -5251,6 +5251,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Validade Proposta</th>
                 <th>Idas Mercado</th>
                 <th>Grupo Mercadorias</th>
+                <th>Data da Solicitação</th>
+                <th>Cobrança</th>
+                <th>Dias Parados</th>
               </tr>
             </thead>
             <tbody id="gov-mapa-tbody"></tbody>
@@ -5302,6 +5305,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <th>Validade Proposta</th>
                 <th>Idas Mercado</th>
                 <th>Grupo Mercadorias</th>
+                <th>Data da Solicitação</th>
+                <th>Cobrança</th>
+                <th>Dias Parados</th>
               </tr>
             </thead>
             <tbody id="gov-andamento-tbody"></tbody>
@@ -18358,6 +18364,20 @@ function govCalcPrazo(status, envio){
   return govAddDiasUteis(envio, dias);
 }
 
+// Dias parados: corridos desde a Data da Solicitação, igual ao FAST.
+function _govHojeISO(){
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function _govDiasParado(dataSolic){
+  if (!dataSolic) return null;
+  var a = new Date(String(dataSolic) + 'T12:00:00');
+  if (isNaN(a.getTime())) return null;
+  var b = new Date(_govHojeISO() + 'T12:00:00');
+  return Math.max(0, Math.round((b - a) / 86400000));
+}
+
 function govCalcStatus(prazo, finalizado){
   if(finalizado && finalizado !== '') return 'CONCLUÍDO';
   if(!prazo) return 'AG. AÇÃO';
@@ -18859,11 +18879,32 @@ function _govTratOficiais(){
   return l;
 }
 
+// Apelidos do mesmo status que existem gravados na base. Sem isto,
+// "Validação Thiago" e "VALIDAÇÃO DO THIAGO" viram dois cards e a soma
+// sai errada — foi o mesmo problema do Parecerista.
+var _GOV_TRAT_APELIDOS = {
+  'VALIDACAO DO THIAGO': ['VALIDACAO THIAGO', 'VAL THIAGO', 'VALIDACAO DO THIAGO', 'THIAGO'],
+  'MDG EQUIPE SCOMP':    ['MDG SCOMP', 'MDG EQUIPE SCOMP'],
+  'AG. TRATAMENTO':      ['AG TRATAMENTO', 'AGUARDANDO TRATAMENTO'],
+  'PARECERISTA':         ['PARECERISTA', 'AG PARECERISTA']
+};
+
 function govTratCanonico(v){
   var k = _govTratChave(v);
   if (!k) return '';
   var of = _govTratOficiais();
-  for (var i = 0; i < of.length; i++) if (_govTratChave(of[i]) === k) return of[i];
+  var i;
+  for (i = 0; i < of.length; i++) if (_govTratChave(of[i]) === k) return of[i];
+  // não bateu pelo nome: tenta pelos apelidos conhecidos
+  var achou = '';
+  Object.keys(_GOV_TRAT_APELIDOS).forEach(function(oficialChave){
+    if (achou) return;
+    if (_GOV_TRAT_APELIDOS[oficialChave].indexOf(k) === -1) return;
+    for (var j = 0; j < of.length; j++) {
+      if (_govTratChave(of[j]) === oficialChave) { achou = of[j]; return; }
+    }
+  });
+  if (achou) return achou;
   return k;   // valor fora da lista: ao menos entra padronizado
 }
 
@@ -20155,6 +20196,11 @@ function govRenderMapa(dados, tbodyId){
       <td style="font-size:11px;${corVal(r.validade)}">${r.validade||'—'}</td>
       <td style="text-align:center">${r.idas||'—'}</td>
       <td style="font-size:11px">${r.grupo_merc||'—'}</td>
+      <td style="text-align:center;font-size:11px">${m.dataSolic?fmtBR(m.dataSolic):'—'}</td>
+      <td style="text-align:center;font-size:11px;${Number(m.cobranca||0)>0?'font-weight:700;color:var(--am)':'color:var(--tx2)'}">${Number(m.cobranca||0)}</td>
+      ${(()=>{ const _dp = m.finalizado ? null : _govDiasParado(m.dataSolic||'');
+               const _cor = _dp === null ? 'color:var(--tx2)' : (_dp >= 10 ? 'color:var(--vm);font-weight:700' : 'font-weight:600');
+               return `<td style="text-align:center;font-size:11px;${_cor}">${_dp === null ? '—' : _dp}</td>`; })()}
     </tr>`;
   }).join('');
 }
@@ -20364,12 +20410,14 @@ async function govExportar(){
     const base = [r.analista,_govStatusPatecDe(r),r.fila,r.validade,r.idas,r.sla,r.rc,r.seq,r.num_oport,r.item_op||r.item_rc,statusAtual,m.envio||'',prazo||'',statusCalc,m.finalizado||'',m.comentario||''];
     if(isFastExp) base.push(r.nm||'', r.tipo_aval||'');
     base.push(grupoMercDe(r));
+    base.push(m.dataSolic || '', Number(m.cobranca || 0),
+              m.finalizado ? '' : (_govDiasParado(m.dataSolic || '') === null ? '' : _govDiasParado(m.dataSolic || '')));
     return base;
   };
 
   // ── Aba MAPA (PATEC Finalizado) ──
   const dadosMapa = govFiltroMapaPadrao();
-  const wsMapa = [[...headerMapaBase, ...headerMapaExtra, 'Grupo Mercadorias']];
+  const wsMapa = [[...headerMapaBase, ...headerMapaExtra, 'Grupo Mercadorias', 'Data da Solicitação', 'Cobrança', 'Dias Parados']];
   dadosMapa.forEach(r => {
     const chave = govChave(r);
     const m = _govDados[chave] || {};
@@ -26397,12 +26445,12 @@ function q18Consultar(valor){
     <div id="acao-estagio-1">
       <div style="font-size:11px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.75rem">↓ Status de Tratamento — para onde foi?</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem">
-        <button class="acao-sel-btn" onclick="acaoSelecionarTratamento(this,'Fornecedor')"
+        <button class="acao-sel-btn" onclick="acaoSelecionarTratamento(this,'FORNECEDOR')"
           style="background:var(--cin);border:1.5px solid var(--brd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;transition:all .18s">
           <div style="font-size:20px;margin-bottom:4px">🏭</div>
           <div style="font-size:12px;font-weight:600;color:var(--tx)">Fornecedor</div>
         </button>
-        <button class="acao-sel-btn" onclick="acaoSelecionarTratamento(this,'Requisitante')"
+        <button class="acao-sel-btn" onclick="acaoSelecionarTratamento(this,'REQUISITANTE')"
           style="background:var(--cin);border:1.5px solid var(--brd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;transition:all .18s">
           <div style="font-size:20px;margin-bottom:4px">👤</div>
           <div style="font-size:12px;font-weight:600;color:var(--tx)">Requisitante</div>
@@ -26412,7 +26460,7 @@ function q18Consultar(valor){
           <div style="font-size:20px;margin-bottom:4px">🗂</div>
           <div style="font-size:12px;font-weight:600;color:var(--tx)">MDG</div>
         </button>
-        <button class="acao-sel-btn" id="acao-btn-validacao-thiago" onclick="acaoSelecionarTratamento(this,'Validação Thiago')"
+        <button class="acao-sel-btn" id="acao-btn-validacao-thiago" onclick="acaoSelecionarTratamento(this,'VALIDAÇÃO DO THIAGO')"
           style="background:var(--cin);border:1.5px solid var(--brd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;transition:all .18s">
           <div style="font-size:20px;margin-bottom:4px">✔️</div>
           <div style="font-size:12px;font-weight:600;color:var(--tx)">Validação Thiago</div>
@@ -26422,10 +26470,16 @@ function q18Consultar(valor){
           <div style="font-size:20px;margin-bottom:4px">🗂</div>
           <div style="font-size:12px;font-weight:600;color:var(--tx)">MDG Equipe SCOMP</div>
         </button>
-        <button class="acao-sel-btn" id="acao-btn-parecerista" onclick="acaoSelecionarTratamento(this,'Parecerista')"
+        <button class="acao-sel-btn" id="acao-btn-parecerista" onclick="acaoSelecionarTratamento(this,'PARECERISTA')"
           style="background:var(--cin);border:1.5px solid var(--brd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;transition:all .18s">
           <div style="font-size:20px;margin-bottom:4px">📝</div>
           <div style="font-size:12px;font-weight:600;color:var(--tx)">Parecerista</div>
+        </button>
+        <button class="acao-sel-btn" onclick="acaoSelecionarTratamento(this,'AG. TRATAMENTO')"
+          style="background:var(--cin);border:1.5px dashed var(--tx2);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;grid-column:span 2;transition:all .18s">
+          <div style="font-size:20px;margin-bottom:4px">⏳</div>
+          <div style="font-size:12px;font-weight:600;color:var(--tx)">Sai da fila — volta para Ag. Tratamento</div>
+          <div style="font-size:9.5px;font-weight:600;color:var(--tx2);margin-top:2px">sem prazo · não conta na produção</div>
         </button>
         <button class="acao-sel-btn" onclick="acaoSelecionarTratamento(this,'Concluído')"
           style="background:var(--vdc);border:1.5px solid var(--vd);border-radius:10px;padding:.875rem;cursor:pointer;text-align:center;grid-column:span 2;transition:all .18s">
@@ -26490,12 +26544,27 @@ function q18Consultar(valor){
       ✓ <span id="acao-selecao-texto">—</span>
     </div>
 
-    <!-- Data de Envio -->
-    <div style="margin-bottom:.75rem">
-      <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">📅 Data de Envio <span style="color:var(--vm)">*</span></div>
-      <input type="date" id="acao-data-envio"
-        style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px">
+    <!-- Data da solicitação + Data de envio, lado a lado (padrão do FAST) -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:.75rem">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">🗓 Data da solicitação <span style="color:var(--vm)">*</span></div>
+        <input type="date" id="acao-data-solic"
+          style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px">
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">📅 Data de Envio <span style="color:var(--vm)">*</span></div>
+        <input type="date" id="acao-data-envio" oninput="_acaoPrazoPrevia()"
+          style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px">
+      </div>
     </div>
+
+    <!-- Cobrança -->
+    <div style="margin-bottom:.25rem;max-width:180px">
+      <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">💳 Cobrança</div>
+      <input type="number" min="0" id="acao-cobranca" value="0"
+        style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px;text-align:center">
+    </div>
+    <div id="acao-prazo-previa" style="font-size:11px;color:var(--tx2);margin-bottom:.75rem"></div>
 
     <!-- Finalizado -->
     <div style="margin-bottom:.75rem" id="acao-finalizado-box">
@@ -30129,6 +30198,13 @@ function prodAbrirModalRC(chave, tipo){
 
   // Pré-preencher com dados existentes (tenta gov_mapa, xgl, sb)
   const _gd = _govDados[chave] || _xglDados[chave] || _sbDados[chave] || {};
+  try { _acaoPintarPrazos(); } catch(e){}
+  const _solicEl = document.getElementById('acao-data-solic');
+  if(_solicEl) _solicEl.value = _gd.dataSolic || _govHojeISO();
+  const _cobrEl = document.getElementById('acao-cobranca');
+  if(_cobrEl) _cobrEl.value = Number(_gd.cobranca || 0);
+  const _prevEl = document.getElementById('acao-prazo-previa');
+  if(_prevEl) _prevEl.textContent = '';
   const _envioEl = document.getElementById('acao-data-envio');
   const _finEl   = document.getElementById('acao-data-finalizado');
   if(_envioEl && _gd.envio) _envioEl.value = _gd.envio;
@@ -30169,7 +30245,9 @@ function prodAbrirModal(origem, tipo){
   _rcChavesXgl.forEach(c => _rcChaveColecao[c] = 'gov_xgl');
   _rcChavesSb.forEach(c => _rcChaveColecao[c] = 'gov_sb');
   const _rcChave = _rcChaves.length > 0 ? _rcChaves[0] : null;
-  _prodCtx = { origem, tipo, tratamento: null, conclusao: null, rcChave: _rcChave, rcChaves: _rcChaves, rcChaveColecao: _rcChaveColecao, rcBusca: _rcBusca };
+  // tipoOriginal guarda o botão clicado: "Sai da fila" troca o tipo só na
+  // hora de registrar, então voltar atrás na escolha não perde o original
+  _prodCtx = { origem, tipo, tipoOriginal: tipo, saiuDaFila: false, tratamento: null, conclusao: null, rcChave: _rcChave, rcChaves: _rcChaves, rcChaveColecao: _rcChaveColecao, rcBusca: _rcBusca };
   console.log('[Modal] RC:', _rcBusca, '| chaves encontradas:', _rcChaves.length);
   const cfg = PROD_TIPO_LABELS[tipo];
 
@@ -30230,11 +30308,68 @@ function prodFecharModal(){
   _prodCtx = { origem:null, tipo:null, tratamento:null, conclusao:null };
 }
 
+// Escreve embaixo de cada fila quantos dias úteis ela tem, lendo a
+// tabela de prazos do módulo (GOV_PRAZOS). Roda toda vez que o card
+// abre, então acompanha uma mudança de regra sem tocar no HTML.
+function _acaoPintarPrazos(){
+  try {
+    document.querySelectorAll('#acao-estagio-1 .acao-sel-btn').forEach(function(b){
+      var oc = String(b.getAttribute('onclick') || '');
+      var m = oc.match(/acaoSelecionarTratamento\(this,'([^']+)'\)/);
+      if (!m) return;
+      var trat = m[1];
+      if (trat === 'Concluído' || trat === 'AG. TRATAMENTO') return;   // já têm texto próprio
+      var dias = govCalcPrazoDias(trat);
+      var el = b.querySelector('[data-acao-prazo]');
+      if (!el) {
+        el = document.createElement('div');
+        el.setAttribute('data-acao-prazo', '1');
+        el.style.cssText = 'font-size:10px;font-weight:600;color:var(--tx2);margin-top:2px';
+        b.appendChild(el);
+      }
+      el.textContent = dias ? dias + ' dias úteis' : 'sem prazo';
+    });
+  } catch (e) {}
+}
+
+// Quantos dias úteis uma fila tem, pela mesma tabela que calcula o prazo
+function govCalcPrazoDias(status){
+  var su = String(status || '').toUpperCase();
+  var achou = null;
+  Object.keys(GOV_PRAZOS).forEach(function(k){
+    if (achou === null && su.indexOf(k) !== -1) achou = GOV_PRAZOS[k];
+  });
+  return achou;
+}
+
+// Prévia: com a fila escolhida e a data de envio, qual seria o prazo
+function _acaoPrazoPrevia(){
+  var el = document.getElementById('acao-prazo-previa');
+  if (!el) return;
+  var trat  = (_prodCtx && _prodCtx.tratamento) || '';
+  var envio = (document.getElementById('acao-data-envio') || {}).value || '';
+  if (!trat || trat === 'Concluído' || !envio) { el.textContent = ''; return; }
+  var prazo = govCalcPrazo(trat, envio);
+  el.innerHTML = prazo
+    ? 'Prazo de retorno: <strong>' + prazo.split('-').reverse().join('/') + '</strong>'
+    : 'Esta fila não tem prazo de retorno — o item fica em <strong>Ag. Ação</strong>.';
+}
+
 function acaoSelecionarTratamento(btn, tratamento){
   document.querySelectorAll('#acao-estagio-1 .acao-sel-btn').forEach(b=>b.classList.remove('selecionado'));
   btn.classList.add('selecionado');
+  const _filaAntes = _prodCtx.tratamento;
   _prodCtx.tratamento = tratamento;
   _prodCtx.conclusao  = null;
+  // "Sai da fila" é volta para a nossa mão: fica sem prazo e não entra
+  // na produção do dia — só no histórico da RC.
+  _prodCtx.saiuDaFila = (tratamento === 'AG. TRATAMENTO');
+  // trocou de fila: a cobrança zera e a contagem recomeça hoje
+  if (tratamento !== 'Concluído' && tratamento !== _filaAntes) {
+    const _c = document.getElementById('acao-cobranca');   if (_c) _c.value = 0;
+    const _d = document.getElementById('acao-data-solic'); if (_d) _d.value = _govHojeISO();
+  }
+  try { _acaoPrazoPrevia(); } catch(e){}
 
   if(tratamento === 'Concluído'){
     // Avançar para estágio 2
@@ -30361,6 +30496,10 @@ function acaoVoltarEstagio1(){
 async function prodConfirmarAcao(){
   const errEl = document.getElementById('acao-erro');
   errEl.style.display = 'none';
+
+  // Tirar da fila não é tratamento: o item volta para a nossa mão. Vai para
+  // o histórico da RC, mas fica fora da meta do dia — mesma regra do FAST.
+  _prodCtx.tipo = _prodCtx.saiuDaFila ? 'saida_fila' : (_prodCtx.tipoOriginal || _prodCtx.tipo);
 
   if(!_prodCtx.tratamento){
     errEl.textContent = 'Selecione o status de tratamento.';
@@ -30549,6 +30688,15 @@ async function prodConfirmarAcao(){
       if(!_govDados[_chave]) _govDados[_chave] = {};
       if(_statusGov)         _govDados[_chave].status     = _statusGov;
       if(_envioParaDestino)  _govDados[_chave].envio       = _envioParaDestino;
+      // Data da solicitação e cobrança — alimentam as colunas novas
+      const _solicVal = (document.getElementById('acao-data-solic')?.value||'').trim();
+      const _cobrVal  = Math.max(0, parseInt((document.getElementById('acao-cobranca')?.value), 10) || 0);
+      if(_solicVal) _govDados[_chave].dataSolic = _solicVal;
+      _govDados[_chave].cobranca = _cobrVal;
+      if(_memDestino && _memDestino[_chaveParaSalvar]){
+        if(_solicVal) _memDestino[_chaveParaSalvar].dataSolic = _solicVal;
+        _memDestino[_chaveParaSalvar].cobranca = _cobrVal;
+      }
       if(_aplicarXglNestaChave) _govDados[_chave].finalizado  = '';
       else if(_finParaDestino) _govDados[_chave].finalizado = _finParaDestino;
       _govDados[_chave]._manual = true; // edição pelo card: vence a base embutida
