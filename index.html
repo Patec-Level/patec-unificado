@@ -5162,11 +5162,20 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <div class="stabs" id="gov-abas-linha" style="margin-bottom:1rem;display:flex;align-items:center;flex-wrap:wrap;gap:6px">
         <button class="stab active" id="gov-nav-andamento-btn" style="display:none" onclick="govSetTab('andamento',this)">⏳ PATEC em Andamento</button>
         <button class="stab" style="display:none" onclick="govSetTab('mapa',this)">🗺 PATEC Finalizado</button>
-        <button class="stab" id="gov-nav-xgl-btn" style="display:none" onclick="govSetTab('xgl',this)">📋 XGL</button>
+        <button class="stab" id="gov-nav-xgl-btn" style="display:none" onclick="govSetTab('xgl',this)">📋 PATEC</button>
         <button class="stab" style="display:none" onclick="govSetTab('statusb',this)">📊 Status B</button>
         <button class="stab" style="display:none" onclick="govSetTab('novareserva',this)">🎫 Nova Reserva</button>
         <button class="stab" style="display:none" onclick="govSetTab('concluidos',this)">✅ Concluídos</button>
         <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;color:var(--tx2);white-space:nowrap">✅ Concluídos:</span>
+          <input id="gov-conc-rc-input" type="text" placeholder="Nº da RC..."
+            title="Consulta um item já concluído — a lista só é montada para a RC pedida"
+            style="font-size:12px;padding:5px 10px;border:1.5px solid var(--brd);border-radius:6px;width:130px;background:var(--bg);color:var(--tx)"
+            onkeydown="if(event.key==='Enter') govConsultarConcluidos(this.value.trim())"
+            oninput="this.value=this.value.replace(/\D/g,'')">
+          <button onclick="govConsultarConcluidos(document.getElementById('gov-conc-rc-input').value.trim())"
+            style="font-size:11px;padding:5px 12px;background:var(--vd);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;white-space:nowrap">Consultar</button>
+          <span style="width:10px"></span>
           <span style="font-size:12px;color:var(--tx2);white-space:nowrap">📋 Histórico RC:</span>
           <input id="gov-hist-rc-input" type="text" placeholder="Nº da RC..."
             style="font-size:12px;padding:5px 10px;border:1.5px solid var(--brd);border-radius:6px;width:150px;background:var(--bg);color:var(--tx)"
@@ -5193,8 +5202,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
           <div style="font-size:10px;color:var(--tx2);margin-top:6px">Escolha um ou mais valores em cada filtro — dentro do filtro soma (OU), entre filtros combina (E).</div>
         </div>
-        <!-- KPIs MAPA -->
-        <div class="kgrid" id="gov-kpis" style="margin-bottom:1rem"></div>
+        <!-- KPIs MAPA — escondidos: os cards do painel já mostram
+             em carteira, vencidas e concluídos. govInicializar continua
+             preenchendo, então nada quebra se um dia voltar. -->
+        <div class="kgrid" id="gov-kpis" style="margin-bottom:1rem;display:none"></div>
 
         <!-- DIAGNÓSTICO: por que uma RC não aparece na Governança -->
         <div class="cd" style="margin-bottom:1rem;border-left:3px solid var(--azm)">
@@ -5266,7 +5277,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
           <div style="font-size:10px;color:var(--tx2);margin-top:6px">Escolha um ou mais valores em cada filtro — dentro do filtro soma (OU), entre filtros combina (E).</div>
         </div>
-        <div class="kgrid" id="gov-andamento-kpis" style="margin-bottom:1rem"></div>
+        <div class="kgrid" id="gov-andamento-kpis" style="margin-bottom:1rem;display:none"></div>
         <div id="gov-andamento-sem-dados" style="text-align:center;padding:3rem;color:var(--tx2);font-size:13px;display:none">
           📡 Nenhum item em "Aguardar PATEC ser Finalizado" no momento.
         </div>
@@ -18460,8 +18471,12 @@ function _govUrgRadarIndex(){
 }
 
 // Status de tratamento (DENTRO DO PRAZO / ATRASADO / AG. AÇÃO / CONCLUÍDO)
-function _govUrgStatusTrat(m, fila){
-  const statusAtual=(m&&m.status) || (GOV_FILAS_AG.some(function(f){ return String(fila||'').toUpperCase().includes(f.toUpperCase()); })?'AG. TRATAMENTO':'');
+// `linha` é a linha do Radar, quando existe: com ela o padrão é o mesmo
+// da Governança (Em Andamento → Parecerista). Sem ela (XGL, Status B),
+// segue valendo só a regra da fila.
+function _govUrgStatusTrat(m, fila, linha){
+  const statusAtual=(m&&m.status) || (linha ? govTratPadrao(linha)
+    : (GOV_FILAS_AG.some(function(f){ return String(fila||'').toUpperCase().includes(f.toUpperCase()); })?'AG. TRATAMENTO':''));
   return govCalcStatus(govCalcPrazo(statusAtual, (m&&m.envio)||''), (m&&m.finalizado)||'');
 }
 
@@ -18483,7 +18498,7 @@ function _govUrgUniverso(){
       itemRc:    String(itemRc||'').trim(),
       oport:     String(oport||'').trim(),
       itemOp:    String(itemOp||'').trim(),
-      statusTrat:_govUrgStatusTrat(m, rr.fila||'')
+      statusTrat:_govUrgStatusTrat(m, rr.fila||'', rr)
     });
   };
   // PATEC Finalizado (radar classificado)
@@ -18629,7 +18644,7 @@ function _govUrgPrazoUniverso(){
       itemRc:    String(r.item_rc||r.seq||'').trim(),
       oport:     String(r.num_oport||'').trim(),
       itemOp:    String(r.item_op||'').trim(),
-      statusTrat:_govUrgStatusTrat(m, r.fila||'')
+      statusTrat:_govUrgStatusTrat(m, r.fila||'', r)
     });
   });
   return out;
@@ -18811,10 +18826,23 @@ function _govFabLimpar(prefix, applyFn){
   if(applyFn) applyFn();
 }
 // status calc (espelha o calculo inline das tabelas MAPA/Andamento)
+// Status de Tratamento padrão de um item que ainda não tem um escolhido:
+//   PATEC em Andamento  → PARECERISTA (é com ele que o item está)
+//   fila PATEC / Análise de Oportunidade → AG. TRATAMENTO (como já era)
+// Só o que aparece na tela — nada é gravado, e um status preenchido à
+// mão sempre ganha deste padrão.
+function govTratPadrao(r){
+  try {
+    if (typeof _govStatusPatecDe === 'function' && _govStatusPatecDe(r) === 'PATEC em Andamento') return 'PARECERISTA';
+  } catch (e) {}
+  var fila = String((r && r.fila) || '').toUpperCase();
+  if (GOV_FILAS_AG.some(function(f){ return fila.indexOf(f.toUpperCase()) !== -1; })) return 'AG. TRATAMENTO';
+  return '';
+}
+
 function _govFabStatusMapa(r){
   var m=_govDados[govChave(r)]||{};
-  var st=m.status||'';
-  if(!st && GOV_FILAS_AG.some(function(f){ return (r.fila||'').toUpperCase().includes(f.toUpperCase()); })) st='AG. TRATAMENTO';
+  var st = m.status || govTratPadrao(r);
   return govCalcStatus(govCalcPrazo(st, m.envio||''), m.finalizado||'');
 }
 function govFabMapaLimpar(){ _govFabLimpar('gov-fmapa', function(){ govRenderMapa(govListaGovernanca()); }); }
@@ -18849,11 +18877,7 @@ function _govPainelEsc(v){
 // preenche sozinho.
 function _govPainelTratDe(r){
   var m = _govDados[govChave(r)] || {};
-  var st = m.status || '';
-  if (!st && GOV_FILAS_AG.some(function(f){
-        return String(r.fila || '').toUpperCase().indexOf(f.toUpperCase()) !== -1; })) {
-    st = 'AG. TRATAMENTO';
-  }
+  var st = m.status || govTratPadrao(r);
   return st || 'SEM STATUS';
 }
 
@@ -18970,10 +18994,10 @@ function _GOV_PAINEL_SP(){
     { nome:'PATEC em Andamento', cor:'var(--azm)', bg:'var(--azc)',
       inclui:['PATEC em Andamento'] },
     { nome:'PATEC Finalizado',   cor:'var(--vd)',  bg:'var(--vdc)',
-      inclui:['PATEC Finalizado','PATEC Cancelado','PATEC 100% Reprovado'] },
-    // Concluídos não é Status do Patec: é a outra tela, que junta as
-    // cinco origens. Por isso abre a aba em vez de filtrar.
-    { nome:'Concluídos', aba:'concluidos', cor:'var(--az)', bg:'var(--azc)', concluidos:true }
+      inclui:['PATEC Finalizado','PATEC Cancelado','PATEC 100% Reprovado'] }
+    // Concluídos saiu daqui: são milhares de itens e montar a lista
+    // inteira pesava a tela. Virou consulta por RC, na linha do
+    // Histórico RC (ver govConsultarConcluidos).
   ];
 }
 
@@ -19127,11 +19151,6 @@ function govPainelRender(){
     +   '<span id="gov-painel-contagem" style="font-size:11px;font-weight:700;color:var(--azm);'
     +   'background:var(--azc);border:1.5px solid var(--azm);border-radius:20px;padding:2px 12px">'
     +   nLista + (nLista === 1 ? ' item na lista' : ' itens na lista') + '</span>'
-    +   '<span style="font-size:10px;color:var(--tx2)">'
-    +   'Tudo numa lista só: <strong>PATEC Finalizado</strong> (Finalizado + Cancelado + 100% Reprovado) e '
-    +   '<strong>PATEC em Andamento</strong> — a coluna <strong>Status do Patec</strong> mostra qual é qual, '
-    +   'e cada card filtra o seu. <strong>XGL</strong>, <strong>Status B</strong>, <strong>Nova Reserva</strong> e '
-    +   '<strong>Concluídos</strong> são telas próprias: o card abre, e o card grande traz de volta.</span>'
     + '</div>'
     + '</div></div>' + rodape;
 }
@@ -19521,11 +19540,9 @@ function govRenderMapa(dados, tbodyId){
     const chave = govChave(r);
     const m = _govDados[chave] || {};
 
-    // Auto-preencher AG. TRATAMENTO se fila = PATEC ou ANALISE DE OPORTUNIDADE e sem status
-    let statusAtual = m.status || '';
-    if(!statusAtual && GOV_FILAS_AG.some(f => (r.fila||'').toUpperCase().includes(f.toUpperCase()))){
-      statusAtual = 'AG. TRATAMENTO';
-    }
+    // Padrão de Status de Tratamento (ver govTratPadrao):
+    // Em Andamento → Parecerista; fila PATEC/Análise de Op. → Ag. Tratamento
+    let statusAtual = m.status || govTratPadrao(r);
 
     const envio     = m.envio || '';
     const prazo     = govCalcPrazo(statusAtual, envio);
@@ -19804,7 +19821,7 @@ async function govExportar(){
   dadosMapa.forEach(r => {
     const chave = govChave(r);
     const m = _govDados[chave] || {};
-    const statusAtual = m.status || (GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase())) ? 'AG. TRATAMENTO' : '');
+    const statusAtual = m.status || govTratPadrao(r);
     const prazo = govCalcPrazo(statusAtual, m.envio||'');
     const statusCalc = govCalcStatus(prazo, m.finalizado||'');
     wsMapa.push(linhaMapa(r, m, statusAtual, prazo, statusCalc));
@@ -19819,7 +19836,7 @@ async function govExportar(){
     dadosAndExp.forEach(r => {
       const chave = govChave(r);
       const m = _govDados[chave] || {};
-      const statusAtual = m.status || (GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase())) ? 'AG. TRATAMENTO' : '');
+      const statusAtual = m.status || govTratPadrao(r);
       const prazo = govCalcPrazo(statusAtual, m.envio||'');
       const statusCalc = govCalcStatus(prazo, m.finalizado||'');
       wsAnd.push(linhaMapa(r, m, statusAtual, prazo, statusCalc));
@@ -20259,8 +20276,7 @@ function govBuscarRC(rc, alvo){
   dadosMapa.filter(r=>(r.rc||'').includes(rcBusca)).forEach(r=>{
     const chave = govChave(r);
     const m = _govDados[chave]||{};
-    let statusDefault = m.status || '';
-    if(!statusDefault && GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase()))) statusDefault = 'AG. TRATAMENTO';
+    let statusDefault = m.status || govTratPadrao(r);
     const prazo = govCalcPrazo(statusDefault, m.envio||'');
     const status = govCalcStatus(prazo, m.finalizado||'');
     resultados.push({aba:'MAPA', abaLabel:'🗺 PATEC Finalizado', chave, analista:r.analista||'—', rc:r.rc, seq:r.seq, op:r.num_oport, item:r.item_op||r.item_rc,
@@ -20278,8 +20294,7 @@ function govBuscarRC(rc, alvo){
   dadosAndamento.filter(r=>(r.rc||'').includes(rcBusca)).forEach(r=>{
     const chave = govChave(r);
     const m = _govDados[chave]||{};
-    let statusDefault = m.status || '';
-    if(!statusDefault && GOV_FILAS_AG.some(f=>(r.fila||'').toUpperCase().includes(f.toUpperCase()))) statusDefault = 'AG. TRATAMENTO';
+    let statusDefault = m.status || govTratPadrao(r);
     const prazo = govCalcPrazo(statusDefault, m.envio||'');
     const status = govCalcStatus(prazo, m.finalizado||'');
     resultados.push({aba:'MAPA', abaLabel:'⏳ Em Andamento', chave, analista:r.analista||'—', rc:r.rc, seq:r.seq, op:r.num_oport, item:r.item_op||r.item_rc,
@@ -21565,30 +21580,51 @@ async function govCarregarBase(){
 
 
 // ── CONCLUÍDOS ──
+// O campo de dentro da tela é a mesma consulta: mudou a RC, remonta.
+// Antes ele escondia linhas de uma lista já montada; agora não existe
+// lista montada para esconder.
 function concFiltrarRC(valor){
-  const filtro = (valor||'').trim().toLowerCase();
-  const rows = document.querySelectorAll('#gov-tbody-concluidos tr');
-  let visíveis = 0;
-  rows.forEach(tr => {
-    // RC está na 5ª célula (index 4)
-    const rc = (tr.cells[4]?.textContent||'').toLowerCase();
-    const mostrar = !filtro || rc.includes(filtro);
-    tr.style.display = mostrar ? '' : 'none';
-    if(mostrar) visíveis++;
-  });
-  const ct = document.getElementById('gov-count-concluidos');
-  if(ct){
-    const total = rows.length;
-    ct.textContent = filtro
-      ? `${visíveis} de ${total} item(ns) concluído(s) — filtrando por RC "${valor.trim()}"`
-      : `${total} item(ns) concluído(s)`;
-  }
+  _govConcFiltro = String(valor || '').trim();
+  const campo = document.getElementById('gov-conc-rc-input');
+  if (campo) campo.value = _govConcFiltro;
+  govRenderConcluidos();
 }
+
+// Abre a tela de Concluídos já com a RC pedida. É o único caminho:
+// sem RC a tela não monta linha nenhuma, porque a base de concluídos
+// tem milhares de itens e cada linha ainda procura o histórico de
+// cobrança da RC — era isso que pesava.
+function govConsultarConcluidos(rc){
+  rc = String(rc || '').trim();
+  const campo = document.getElementById('gov-conc-rc-input');
+  if (campo && campo.value.trim() !== rc) campo.value = rc;
+  const destino = document.getElementById('conc-filtro-rc');
+  if (destino) destino.value = rc;
+  _govConcFiltro = rc;
+  if (_govTabAtiva !== 'concluidos') { govPainelIrAba('concluidos'); return; }
+  govRenderConcluidos();
+}
+
+// RC atualmente consultada na tela de Concluídos ('' = nenhuma)
+var _govConcFiltro = '';
 
 function govRenderConcluidos(){
   const tbody = document.getElementById('gov-tbody-concluidos');
   const ct    = document.getElementById('gov-count-concluidos');
   if(!tbody) return;
+
+  // Sem RC pedida, não monta nada — só diz o que fazer e quantos existem
+  const _filtroRC = String(_govConcFiltro || '').trim();
+  if(!_filtroRC){
+    let _tot = 0;
+    try { _tot = _govConcluidosQtd(); } catch(e){}
+    if(ct) ct.textContent = _tot + ' item(ns) concluído(s) na base';
+    tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:var(--tx2);padding:2rem;font-size:12.5px">'
+      + '🔍 Digite o número da RC em <strong>✅ Concluídos</strong> para consultar.<br>'
+      + '<span style="font-size:11px">A lista não é montada inteira de propósito: são ' + _tot
+      + ' itens, e montar todos deixava a tela pesada.</span></td></tr>';
+    return;
+  }
 
   const _grupoMercPorRC = rc => {
     const f = (_radarDados||[]).find(x => String(x.rc||'').trim() === String(rc||'').trim() && x.grupo_merc);
@@ -21669,10 +21705,17 @@ function govRenderConcluidos(){
       status: v.status||'—', envio: v.envio||'—', prazo: prazo||'—', finalizado: v.finalizado, grupo_merc: _grupoMercPorRC(partes[0])||'—' });
   });
 
-  // Ordenar por data de finalização desc
-  rows.sort((a,b) => (b.finalizado||'').localeCompare(a.finalizado||''));
+  // Só a RC consultada
+  const _achadas = rows.filter(r => String(r.rc||'').indexOf(_filtroRC) !== -1);
 
-  if(ct) ct.textContent = rows.length + ' item(ns) concluído(s)';
+  // Ordenar por data de finalização desc
+  _achadas.sort((a,b) => (b.finalizado||'').localeCompare(a.finalizado||''));
+  rows.length = 0;
+  _achadas.forEach(r => rows.push(r));
+
+  if(ct) ct.textContent = rows.length
+    ? rows.length + ' item(ns) concluído(s) da RC ' + _filtroRC
+    : 'Nenhum item concluído encontrado para a RC ' + _filtroRC;
 
   const corOrigem = o => {
     if(o==='PATEC Finalizado') return 'var(--az)';
@@ -21704,7 +21747,7 @@ function govRenderConcluidos(){
     <td style="color:var(--vd);font-weight:700">${fmtBR(r.finalizado)}</td>
     <td style="font-size:11px">${r.grupo_merc}</td>
   </tr>`;
-  }).join('') : '<tr><td colspan="15" style="text-align:center;color:var(--tx2);padding:1.5rem">Nenhum item concluído ainda.</td></tr>';
+  }).join('') : '<tr><td colspan="15" style="text-align:center;color:var(--tx2);padding:1.5rem">Nenhum item concluído para a RC ' + _filtroRC + '.</td></tr>';
 }
 
 
@@ -26440,7 +26483,10 @@ function _entrarNoApp(){
   // Fluxo (Planilha Crítica), PATEC em Andamento (Governança), a opção "XGL"
   // no Concluído e "Validação Thiago" são exclusivas do ADLV. Entradas Plano
   // de Ação já é liberada para os dois módulos.
-  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','gov-nav-xgl-btn','pc-nav-fluxo-btn','acao-btn-xgl','acao-btn-validacao-thiago'].forEach(id=>{
+  // gov-nav-xgl-btn saiu desta lista: o botão da aba fica sempre
+  // escondido (a navegação é pelo card do painel) e o ajuste por
+  // módulo estava reacendendo ele no ADLV.
+  ['adm-nav-email-teste-btn','adm-nav-apresentacao-btn','adm-nav-apresentacao1-btn','pc-nav-fluxo-btn','acao-btn-xgl','acao-btn-validacao-thiago'].forEach(id=>{
     const btnAdlv = document.getElementById(id);
     if(btnAdlv) btnAdlv.style.display = (_moduloAtivo==='fast') ? 'none' : '';
   });
@@ -37042,7 +37088,7 @@ function _dirProrrogacao(){
       if (f !== 'vencida' && f !== 'max') return false;
       var m = {};
       try { m = (typeof _govDados !== 'undefined' && _govDados[govChave(r)]) || {}; } catch (e) {}
-      var st = (typeof _govUrgStatusTrat === 'function') ? _govUrgStatusTrat(m, r.fila||'') : '';
+      var st = (typeof _govUrgStatusTrat === 'function') ? _govUrgStatusTrat(m, r.fila||'', r) : '';
       return String(st||'').toUpperCase() === 'AG. AÇÃO';
     }).map(function(r){
       return { rc:String(r.rc||'').trim(), itemRc:String(r.item_rc||r.seq||'').trim(),
