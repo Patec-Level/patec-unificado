@@ -33080,6 +33080,39 @@ function _fcLinhas(tab){
   return (tab.tBodies[0] ? [].slice.call(tab.tBodies[0].rows) : []);
 }
 
+// Algumas tabelas têm colunas escondidas no cabeçalho (<th style="display:none">)
+// cujo <td> nem chega a ser gerado na linha. Aí o índice do cabeçalho não serve
+// para ler a célula: era isso que fazia "Fila Level Board" mostrar os números do
+// Item RC e "Prazo Retorno" mostrar Atrasado/Dentro do prazo.
+// Este mapa diz, para cada cabeçalho, qual célula da linha corresponde a ele
+// (-1 = coluna sem célula no corpo).
+function _fcOculto(th){
+  if (!th) return true;
+  if (th.style && th.style.display === 'none') return true;
+  try { return getComputedStyle(th).display === 'none'; } catch (e) { return false; }
+}
+
+function _fcMapa(tab){
+  var lin = tab.tHead && tab.tHead.rows[0];
+  var linhas = _fcLinhas(tab);
+  if (!lin || !linhas.length) return null;
+
+  var n = lin.cells.length, i, mapa = [];
+  // a linha de referência é a que tem mais células (algumas podem ter colspan)
+  var nb = 0;
+  for (i = 0; i < linhas.length; i++) nb = Math.max(nb, linhas[i].cells.length);
+
+  if (nb === n) { for (i = 0; i < n; i++) mapa.push(i); return mapa; }
+
+  var visiveis = [], nv = 0;
+  for (i = 0; i < n; i++) { var v = !_fcOculto(lin.cells[i]); visiveis.push(v); if (v) nv++; }
+  // só dá para alinhar se o corpo tiver exatamente as colunas visíveis
+  if (nv !== nb) return null;
+  var k = 0;
+  for (i = 0; i < n; i++) mapa.push(visiveis[i] ? k++ : -1);
+  return mapa;
+}
+
 // valores permitidos de uma coluna (null = todos)
 function _fcFiltro(chave, col){
   var e = _FC_ESTADO[chave];
@@ -33092,13 +33125,15 @@ function _fcTemFiltro(chave){
 }
 
 // a linha passa nos filtros de todas as colunas (ou de todas menos `exceto`)
-function _fcPassa(tr, cols, chave, exceto){
-  var i, f, v;
+function _fcPassa(tr, cols, chave, exceto, mapa){
+  var i, f, v, j;
   for (i = 0; i < cols.length; i++) {
     if (i === exceto) continue;
     f = _fcFiltro(chave, cols[i]);
     if (!f) continue;
-    v = _fcTxt(tr.cells[i]);
+    j = mapa ? mapa[i] : i;
+    if (j == null || j < 0) continue;
+    v = _fcTxt(tr.cells[j]);
     if (f.indexOf(v) === -1) return false;
   }
   return true;
@@ -33109,9 +33144,10 @@ function _fcAplicar(tab){
   if (!cols) return;
   var chave = _fcChave(tab);
   var linhas = _fcLinhas(tab);
+  var mapa = _fcMapa(tab);
   var i, vis = 0;
   for (i = 0; i < linhas.length; i++) {
-    var ok = _fcPassa(linhas[i], cols, chave, -1);
+    var ok = _fcPassa(linhas[i], cols, chave, -1, mapa);
     linhas[i].style.display = ok ? '' : 'none';
     if (ok) vis++;
   }
@@ -33171,12 +33207,15 @@ function _fcAbrir(tab, idx, botao){
   var cols = _fcCabecalhos(tab);
   if (!cols) return;
   var chave = _fcChave(tab), col = cols[idx];
+  var mapa = _fcMapa(tab);
+  var jc = mapa ? mapa[idx] : idx;
+  if (jc == null || jc < 0) return;          // coluna sem célula no corpo
 
   // valores disponíveis considerando os filtros das OUTRAS colunas
   var linhas = _fcLinhas(tab), cont = {}, i, v;
   for (i = 0; i < linhas.length; i++) {
-    if (!_fcPassa(linhas[i], cols, chave, idx)) continue;
-    v = _fcTxt(linhas[i].cells[idx]);
+    if (!_fcPassa(linhas[i], cols, chave, idx, mapa)) continue;
+    v = _fcTxt(linhas[i].cells[jc]);
     cont[v] = (cont[v] || 0) + 1;
   }
   var valores = Object.keys(cont).sort(function(a, b){
@@ -33267,7 +33306,12 @@ function _fcAbrir(tab, idx, botao){
 // ── instalação ──
 function _fcAssinatura(tab){
   var cols = _fcCabecalhos(tab);
-  return (cols ? cols.join('§') : '') + '#' + _fcLinhas(tab).length;
+  // a visibilidade entra na assinatura: ao mostrar/esconder uma coluna os ▾
+  // precisam ser refeitos, senão ficam apontando para a célula errada
+  var vis = '';
+  var lin = tab.tHead && tab.tHead.rows[0];
+  if (lin) for (var i = 0; i < lin.cells.length; i++) vis += _fcOculto(lin.cells[i]) ? '0' : '1';
+  return (cols ? cols.join('§') : '') + '#' + _fcLinhas(tab).length + '#' + vis;
 }
 
 function _fcInstalar(tab){
@@ -33284,10 +33328,20 @@ function _fcInstalar(tab){
   var sig = _fcAssinatura(tab);
   if (temBotoes && tab.getAttribute('data-fc-sig') === sig) return;   // nada mudou
 
+  // sem alinhamento confiável entre cabeçalho e linha, não instala o filtro —
+  // é melhor não ter o ▾ do que ele filtrar pela coluna errada
+  var mapaInst = _fcMapa(tab);
+  if (!mapaInst) return;
+
   var i;
   for (i = 0; i < lin.cells.length; i++) {
     var th = lin.cells[i];
     if (th.getAttribute('data-fc-nome') === null) th.setAttribute('data-fc-nome', _fcTxt(th));
+    if (mapaInst[i] < 0) {                         // coluna escondida: sem ▾
+      var velho = th.querySelector('[data-fc-btn]');
+      if (velho) velho.remove();
+      continue;
+    }
     if (th.querySelector('[data-fc-btn]')) continue;
     var b = document.createElement('span');
     b.setAttribute('data-fc-btn', String(i));
