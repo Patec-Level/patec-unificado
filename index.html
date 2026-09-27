@@ -5313,7 +5313,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <div id="gov-tab-xgl" style="display:none">
 
         <!-- Filtro de combinacao (Status Patec x Fila Levelboard x Status) -->
-        <div class="cd" style="margin-bottom:1rem;padding:.75rem 1rem">
+        <div class="cd" id="gov-filtros-xgl" style="margin-bottom:1rem;padding:.75rem 1rem;display:none">
           <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">
             <span style="font-size:12px;font-weight:700;color:var(--az);align-self:center">🔎 Filtros</span>
             <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status Patec<div class="gov-ms" id="gov-fxgl-ms-patec" style="position:relative;min-width:185px"></div></label>
@@ -5327,7 +5327,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         </div>
 
         <!-- KPIs XGL -->
-        <div class="kgrid" id="xgl-kpis" style="margin-bottom:1rem"></div>
+        <div class="kgrid" id="xgl-kpis" style="margin-bottom:1rem;display:none"></div>
 
         <!-- Botão adicionar novo item -->
         <div style="margin-bottom:.75rem;display:flex;gap:8px;align-items:center">
@@ -5479,7 +5479,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <div id="gov-tab-statusb" style="display:none">
 
         <!-- Filtro de combinacao (Status Patec x Fila Levelboard x Status) -->
-        <div class="cd" style="margin-bottom:1rem;padding:.75rem 1rem">
+        <div class="cd" id="gov-filtros-statusb" style="margin-bottom:1rem;padding:.75rem 1rem;display:none">
           <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">
             <span style="font-size:12px;font-weight:700;color:var(--az);align-self:center">🔎 Filtros</span>
             <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status Patec<div class="gov-ms" id="gov-fsb-ms-patec" style="position:relative;min-width:185px"></div></label>
@@ -5493,7 +5493,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         </div>
 
         <!-- KPIs Status B -->
-        <div class="kgrid" id="sb-kpis" style="margin-bottom:1rem"></div>
+        <div class="kgrid" id="sb-kpis" style="margin-bottom:1rem;display:none"></div>
 
         <!-- Botão adicionar -->
         <div style="margin-bottom:.75rem;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -5609,10 +5609,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
 
-        <div class="kgrid" id="nr-kpis" style="margin-bottom:1rem"></div>
+        <div class="kgrid" id="nr-kpis" style="margin-bottom:1rem;display:none"></div>
 
         <!-- Filtro de combinacao (Status Patec x Fila Levelboard x Status x Analista) -->
-        <div class="cd" style="margin-bottom:1rem;padding:.75rem 1rem">
+        <div class="cd" id="gov-filtros-novareserva" style="margin-bottom:1rem;padding:.75rem 1rem;display:none">
           <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">
             <span style="font-size:12px;font-weight:700;color:var(--az);align-self:center">🔎 Filtros</span>
             <label style="font-size:11px;color:var(--tx2);font-weight:600;display:flex;flex-direction:column;gap:3px">Status Patec<div class="gov-ms" id="gov-fnr-ms-patec" style="position:relative;min-width:185px"></div></label>
@@ -19616,7 +19616,7 @@ function _govPainelRenderInterno(){
       + esc(t) + '</span></div>';
   };
 
-  var blocoCritica = titulo('Planilha Crítica')
+  var blocoCritica = titulo('· Onde focar hoje')
     + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     + cartao(pc.vencidos,  'Vencidos',       'var(--vm)',  'var(--vmc)', "govPainelDetalhe('venc')",   'Ver a lista aqui mesmo')
     + cartao(pc.reprovado, '100% Reprovado', 'var(--vm)',  'var(--vmc)', "govPainelDetalhe('reprov')", 'Ver a lista aqui mesmo')
@@ -19624,7 +19624,6 @@ function _govPainelRenderInterno(){
     + cartao(pc.cancelado, 'Cancelado',      'var(--am)',  'var(--amc)', "govPainelDetalhe('cancel')", 'Ver a lista aqui mesmo')
     + cartao(pc.pid,       'PID',            'var(--azm)', 'var(--azc)', "govPainelDetalhe('pid')",    'Ver a lista aqui mesmo')
     + '</div>'
-    + titulo('Analista Pedido · Urgência')
     + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     + cartao(aa.faceis, 'Aptos a pedido', 'var(--vd)', 'var(--vdc)', "govPainelDetalhe('aptos')",
              'Todas as regras menos a 3 — ' + aa.faceisRc + ' RC(s). Ver a lista aqui mesmo.',
@@ -19687,7 +19686,8 @@ function _govPainelRenderInterno(){
     + blocoCritica
     // margin-top:auto encosta o bloco no rodapé da coluna, alinhando
     // com a última linha da lateral (Tipo de Processo / Nova Reserva)
-    + '<div style="margin-top:auto"><div style="display:flex;gap:12px;flex-wrap:wrap">' + cardsTrat + '</div>'
+    + '<div style="margin-top:auto">' + titulo('Detalhamento da Governança')
+    + '<div style="display:flex;gap:12px;flex-wrap:wrap">' + cardsTrat + '</div>'
     + '<div style="margin-top:.75rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
     +   '<span id="gov-painel-contagem" style="font-size:11px;font-weight:700;color:var(--azm);'
     +   'background:var(--azc);border:1.5px solid var(--azm);border-radius:20px;padding:2px 12px">'
