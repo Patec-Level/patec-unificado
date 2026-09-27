@@ -19020,19 +19020,38 @@ function _govPainelCarregarAux(){
 // e PID têm função própria; Tirar do Fluxo vem do backlog (_bkDados).
 // A lista de cada recorte da Planilha Crítica — as mesmas funções que a
 // tela dela usa, sem nenhum filtro de tela aplicado por cima.
+// Item já concluído não aparece em card nenhum: ele sai da carteira e
+// vai para a aba Concluídos, que é só de consulta.
+function _govEstaConcluido(r){
+  try { return !!(_govDados[govChave(r)] || {}).finalizado; } catch (e) { return false; }
+}
+
+// Mesma pergunta para um item que veio de outra base (backlog, Analista
+// Pedido): procura no Radar. Se não estiver lá, não dá para saber que
+// foi concluído — então fica na lista em vez de sumir.
+function _govConcluidoFora(idx, rc, itemRc){
+  var k = String(rc || '').trim();
+  var r = idx.byRcSeq[k + '|' + String(itemRc || '').trim()] || idx.byRc[k];
+  return r ? _govEstaConcluido(r) : false;
+}
+
 function _govPcLista(qual){
   try {
+    var semConcluido = function(l){ return l.filter(function(r){ return !_govEstaConcluido(r); }); };
     if (qual === 'venc' && typeof pcDadosBase === 'function') {
-      return pcDadosBase().filter(function(r){
+      return semConcluido(pcDadosBase().filter(function(r){
         return String(r.validade || '').toLowerCase().indexOf('vencid') !== -1;
-      });
+      }));
     }
-    if (qual === 'reprov' && typeof pcDadosReprovado === 'function') return pcDadosReprovado();
-    if (qual === 'cancel' && typeof pcDadosCancelado === 'function') return pcDadosCancelado();
-    if (qual === 'pid'    && typeof pcDadosPid       === 'function') return pcDadosPid();
+    if (qual === 'reprov' && typeof pcDadosReprovado === 'function') return semConcluido(pcDadosReprovado());
+    if (qual === 'cancel' && typeof pcDadosCancelado === 'function') return semConcluido(pcDadosCancelado());
+    if (qual === 'pid'    && typeof pcDadosPid       === 'function') return semConcluido(pcDadosPid());
     if (qual === 'fluxo') {
-      if (typeof pcGetFluxo === 'function') return pcGetFluxo();
-      if (typeof _dirTirarFluxo === 'function') return _dirTirarFluxo();
+      var l = [];
+      if (typeof pcGetFluxo === 'function') l = pcGetFluxo();
+      else if (typeof _dirTirarFluxo === 'function') l = _dirTirarFluxo();
+      var idx = _govRadarIdx();
+      return l.filter(function(x){ return !_govConcluidoFora(idx, x.rc, x.seq || x.item_rc || x.item); });
     }
   } catch (e) {}
   return [];
@@ -19056,6 +19075,9 @@ function _govPcQtd(){
 function _govAaLista(qual){
   try {
     var lista = (typeof _aaPub !== 'undefined' && _aaPub) ? _aaPub : [];
+    var idx = _govRadarIdx();
+    // item concluído não entra: já foi para a aba Concluídos
+    lista = lista.filter(function(a){ return !_govConcluidoFora(idx, a.rc, a.item); });
     var ehR3 = function(a){ return String(a.regra || '').toLowerCase().indexOf('regra 3') !== -1; };
     return (qual === 'mdg') ? lista.filter(ehR3) : lista.filter(function(a){ return !ehR3(a); });
   } catch (e) { return []; }
@@ -19064,11 +19086,10 @@ function _govAaLista(qual){
 function _govAaQtd(){
   var o = { faceis:0, mdg:0, faceisRc:0, mdgRc:0, temBase:false };
   try {
-    var lista = (typeof _aaPub !== 'undefined' && _aaPub) ? _aaPub : [];
-    o.temBase = !!lista.length;
-    var ehR3 = function(a){ return String(a.regra || '').toLowerCase().indexOf('regra 3') !== -1; };
-    var f = lista.filter(function(a){ return !ehR3(a); });
-    var m = lista.filter(ehR3);
+    o.temBase = !!((typeof _aaPub !== 'undefined' && _aaPub) ? _aaPub.length : 0);
+    // pelas mesmas listas dos cards — ou seja, já sem os concluídos
+    var f = _govAaLista('aptos');
+    var m = _govAaLista('mdg');
     o.faceis = f.length;
     o.mdg    = m.length;
     o.faceisRc = Object.keys(f.reduce(function(x, a){ x[a.rc] = 1; return x; }, {})).length;
@@ -19175,6 +19196,7 @@ function _govTopSla(n){
 
 // Qual lista está aberta embaixo dos cards ('' = nenhuma)
 var _govPainelDet = '';
+var _GOV_PAINEL_PINTANDO = false;
 
 function govPainelDetalhe(qual){
   _govPainelDet = (_govPainelDet === qual) ? '' : qual;
@@ -19473,6 +19495,12 @@ var _GOV_PAINEL_TP = [
 ];
 
 function govPainelRender(){
+  if (_GOV_PAINEL_PINTANDO) return;     // já estamos desenhando
+  _GOV_PAINEL_PINTANDO = true;
+  try { _govPainelRenderInterno(); } finally { _GOV_PAINEL_PINTANDO = false; }
+}
+
+function _govPainelRenderInterno(){
   var box = document.getElementById('gov-painel-cards');
   if (!box) return;
   // painel é do ADLV; no FAST quem manda é a Governança Nova
@@ -20049,6 +20077,11 @@ function govRenderMapa(dados, tbodyId){
   if (tbodyId === 'gov-mapa-tbody') {
     var _cnt = document.getElementById('gov-painel-contagem');
     if (_cnt) _cnt.textContent = _fabVis.length + (_fabVis.length === 1 ? ' item na lista' : ' itens na lista');
+  }
+  // os cards acompanham a tabela: redesenhou, recalcula. É o que mantém
+  // os números certos depois de concluir um item ou subir um Radar novo.
+  if (tbodyId === 'gov-mapa-tbody' && _moduloAtivo !== 'fast') {
+    try { govPainelRender(); } catch (e) {}
   }
   tbody.innerHTML = _fabVis.map((r, idx) => {
     const chave = govChave(r);
@@ -21826,6 +21859,14 @@ async function govBuscaSalvarAtualizar(aba, chave, campo, valor, el){
   const rpStatus = document.getElementById('pc-reprov-status-'+idKey);
   if(rpPrazo) rpPrazo.textContent = prazo ? fmtBR(prazo) : '—';
   if(rpStatus){ rpStatus.textContent = statusCalc||'—'; rpStatus.style.cssText = govCorStatus(statusCalc); }
+  // concluiu ou mudou o status por aqui: a lista e os cards acompanham
+  try {
+    if(typeof govListaGovernanca === 'function' && _moduloAtivo !== 'fast'){
+      if(_govTabAtiva === 'andamento') govRenderAndamento();
+      else govRenderMapa(govListaGovernanca());
+      govPainelRender();
+    }
+  } catch(e){}
 }
 
 async function govBuscaSalvar(aba, chave, campo, valor){
@@ -30572,6 +30613,8 @@ async function prodConfirmarAcao(){
   }
   try{ if(typeof nrRender==='function' && document.getElementById('gov-tab-novareserva')) nrRender(); }catch(e){}
   try{ if(typeof govRenderConcluidos==='function' && document.getElementById('gov-tab-concluidos') && document.getElementById('gov-tab-concluidos').style.display!=='none') govRenderConcluidos(); }catch(e){}
+  // painel da Governança: recalcula junto com o resto
+  try{ if(typeof govPainelRender==='function' && document.getElementById('gov-painel-cards')) govPainelRender(); }catch(e){}
   const _pcBEl = document.getElementById('pc-busca');
   if(_pcBEl && _pcBEl.value) pcBuscarRCDetalhe(_pcBEl.value);
 
