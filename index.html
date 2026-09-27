@@ -19055,6 +19055,145 @@ function _govAaQtd(){
   return o;
 }
 
+// ── Urgência por Prazo: itens para prorrogação ────────────────────
+// Mesma regra do Direcionamento da Equipe: vencidos e em urgência
+// máxima de prazo, com PATEC Finalizado e ainda em AG. AÇÃO.
+// 100% Reprovado e Cancelado não entram.
+function _govProrrogacao(){
+  if (typeof _dirProrrogacao === 'function') { try { return _dirProrrogacao(); } catch (e) {} }
+  return [];
+}
+
+// ── Urgência por SLA: o Top N da carteira ─────────────────────────
+// Só "Analisar PATEC Finalizado" e só o que está em tratamento —
+// item já concluído sai da conta antes de montar o ranking, então o
+// Top 10 é sempre das 10 maiores da carteira viva.
+// Uma RC entra uma vez só, pelo maior SLA dos itens dela.
+function _govTopSla(n){
+  n = n || 10;
+  var out = [];
+  try {
+    var BASE = (typeof _radarDados !== 'undefined' ? (_radarDados || []) : []).filter(function(r){
+      if (String(r.analista_auto || '').trim() !== 'Analisar PATEC Finalizado') return false;
+      var m = {};
+      try { m = _govDados[govChave(r)] || {}; } catch (e) {}
+      return !m.finalizado;
+    });
+    if (!BASE.length) return out;
+
+    var porRC = {};
+    BASE.forEach(function(r){
+      var rc = String(r.rc || '').trim();
+      if (!rc) return;
+      var sla = Number(r.sla) || 0;
+      if (!porRC[rc] || sla > porRC[rc].sla) {
+        porRC[rc] = { rc:rc, sla:sla, fila:r.fila || '—',
+          item:String(r.item_rc || r.seq || '').trim(),
+          analista:(r.analista && r.analista !== '#N/A') ? r.analista : '—', _ref:r };
+      }
+    });
+    var top = Object.keys(porRC).map(function(k){ return porRC[k]; })
+      .filter(function(x){ return x.sla > 0; })
+      .sort(function(a, b){ return b.sla - a.sla; })
+      .slice(0, n);
+
+    // dias sem ação só para os que ficaram no topo — não vale varrer tudo
+    var acoes = [];
+    try {
+      var c = window._prodAcoesCache || {};
+      Object.keys(c).forEach(function(d){ acoes = acoes.concat(c[d] || []); });
+      acoes = acoes.filter(function(a){ return !a.anulada; });
+    } catch (e) {}
+    var hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+
+    out = top.map(function(it){
+      var m = {};
+      try { m = _govDados[govChave(it._ref)] || {}; } catch (e) {}
+      var trat = govTratDe(it._ref, m);
+      var fase;
+      try {
+        var sg = govCalcStatus(govCalcPrazo(trat, m.envio || ''), '');
+        if (!m.status && !m.envio)            fase = 'Precisa de ação';
+        else if (sg === 'ATRASADO')           fase = 'Fora do prazo';
+        else if (sg === 'DENTRO DO PRAZO')    fase = 'Dentro do prazo';
+        else                                  fase = 'Precisa de ação';
+      } catch (e) { fase = '—'; }
+      var lista = acoes.filter(function(a){
+        return String(a.rc || '').trim() === it.rc
+            || String(a.rcChave || '').indexOf(it.rc + '|') === 0;
+      });
+      var d = null;
+      if (lista.length) {
+        var ds = lista.map(function(a){ return new Date(a.data + 'T00:00:00'); })
+                      .filter(function(x){ return !isNaN(x); });
+        if (ds.length) d = Math.floor((hoje - new Date(Math.max.apply(null, ds))) / 86400000);
+      }
+      return { rc:it.rc, item:it.item, analista:it.analista, fila:it.fila, sla:it.sla,
+               trat:trat, fase:fase,
+               dias: d,
+               diasTxt: (d === null ? 'sem ação registrada' : (d === 0 ? 'movimentado hoje' : d + ' dia(s) sem ação')) };
+    });
+  } catch (e) {}
+  return out;
+}
+
+// Qual lista está aberta embaixo dos cards ('' = nenhuma)
+var _govPainelDet = '';
+
+function govPainelDetalhe(qual){
+  _govPainelDet = (_govPainelDet === qual) ? '' : qual;
+  govPainelRender();
+}
+
+function _govPainelDetalheHTML(){
+  if (!_govPainelDet) return '';
+  var esc = _govPainelEsc;
+  var th = function(t){ return '<th style="text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;'
+    + 'color:var(--tx2);padding:4px 8px;border-bottom:1px solid var(--brd)">' + esc(t) + '</th>'; };
+  var td = function(t, st){ return '<td style="font-size:11px;padding:4px 8px;' + (st || '') + '">' + esc(t) + '</td>'; };
+
+  var titulo, sub, cab, corpo, atalho;
+
+  if (_govPainelDet === 'prorrog') {
+    var lp = _govProrrogacao();
+    titulo = '📆 Urgência por Prazo — itens para prorrogação';
+    sub = 'Itens vencidos e em urgência máxima com PATEC Finalizado e AG. AÇÃO. 100% Reprovado e Cancelados não entram aqui.';
+    atalho = 'govMainTab(\'prazo\', document.getElementById(\'gov-main-tab-prazo\'))';
+    cab = th('RC') + th('Item da RC') + th('Analista') + th('Fila') + th('Prazo') + th('SLA');
+    corpo = lp.length ? lp.map(function(x){
+      return '<tr>' + td(x.rc, 'font-weight:700;color:var(--az)') + td(x.itemRc || '—')
+        + td(x.analista || '—') + td(x.fila || '—')
+        + td(x.prazoOp, 'text-align:center') + td(x.sla, 'text-align:center') + '</tr>';
+    }).join('') : '<tr><td colspan="6" style="padding:12px;text-align:center;color:var(--tx2);font-size:11.5px">Nenhum item para prorrogação.</td></tr>';
+  } else {
+    var ls = _govTopSla(10);
+    titulo = '⏱️ Urgência por SLA — Top 10 da carteira';
+    sub = 'As 10 RCs de maior SLA em PATEC Finalizado que ainda estão em tratamento — item concluído não entra. Uma RC aparece uma vez, pelo maior SLA dos itens dela.';
+    atalho = 'govMainTab(\'sla\', document.getElementById(\'gov-main-tab-sla\'))';
+    cab = th('#') + th('RC') + th('Item da RC') + th('Analista') + th('SLA (dias)') + th('Status Tratamento') + th('Fase atual') + th('Sem ação');
+    corpo = ls.length ? ls.map(function(x, i){
+      var cor = x.fase === 'Fora do prazo' ? 'color:var(--vm);font-weight:700'
+              : x.fase === 'Dentro do prazo' ? 'color:var(--vd);font-weight:700'
+              : 'color:var(--am);font-weight:700';
+      return '<tr>' + td((i + 1) + 'º', 'color:var(--tx2)') + td(x.rc, 'font-weight:700;color:var(--az)')
+        + td(x.item || '—') + td(x.analista || '—')
+        + td(x.sla, 'text-align:center;font-weight:700') + td(x.trat || '—')
+        + td(x.fase, cor) + td(x.diasTxt, 'color:var(--tx2)') + '</tr>';
+    }).join('') : '<tr><td colspan="8" style="padding:12px;text-align:center;color:var(--tx2);font-size:11.5px">Nada em tratamento com SLA para listar.</td></tr>';
+  }
+
+  return '<div style="margin-top:.875rem;background:var(--bg);border:1.5px solid var(--brd);border-radius:10px;padding:.75rem .875rem">'
+    + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
+    +   '<span style="font-size:12px;font-weight:800;color:var(--az)">' + esc(titulo) + '</span>'
+    +   '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="' + atalho + '">abrir a tela</button>'
+    +   '<button class="btn btn-s" style="font-size:10px;padding:1px 8px;margin-left:auto" onclick="govPainelDetalhe(\'\')">✕ fechar</button>'
+    + '</div>'
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-bottom:8px">' + esc(sub) + '</div>'
+    + '<div class="tw" style="max-height:260px"><table style="width:100%"><thead><tr>' + cab + '</tr></thead>'
+    + '<tbody>' + corpo + '</tbody></table></div>'
+    + '</div>';
+}
+
 // Acha um botão pelo que ele chama — mais firme do que contar posição
 function _govBotaoPor(sel, fn, aba){
   var bs = document.querySelectorAll(sel);
@@ -19265,13 +19404,19 @@ function govPainelRender(){
     + cartao(pc.cancelado, 'Cancelado',      'var(--am)',  'var(--amc)', "govIrPlanilhaCritica('cancelado')", 'Abrir a aba Cancelado')
     + cartao(pc.pid,       'PID',            'var(--azm)', 'var(--azc)', "govIrPlanilhaCritica('pid')",       'Abrir a aba PID')
     + '</div>'
-    + titulo('Analista Pedido')
+    + titulo('Analista Pedido · Urgência')
     + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
-    + cartao(aa.faceis, 'Pedidos Fáceis', 'var(--vd)', 'var(--vdc)', 'govIrAnalistaPedido(false)',
+    + cartao(aa.faceis, 'Aptos a pedido', 'var(--vd)', 'var(--vdc)', 'govIrAnalistaPedido(false)',
              'Todas as regras menos a 3 — ' + aa.faceisRc + ' RC(s). Abre o Analista Pedido já filtrado.',
              '0 1 200px')
     + cartao(aa.mdg,    'Possíveis MDG',  '#7c3aed',   '#ede9fe',   'govIrAnalistaPedido(true)',
              'Só a Regra 3 (conferir no SAP) — ' + aa.mdgRc + ' RC(s). Abre o Analista Pedido já filtrado.',
+             '0 1 200px')
+    + cartao(_govProrrogacao().length, 'Prorrogação', 'var(--am)', 'var(--amc)', "govPainelDetalhe('prorrog')",
+             'Vencidos e em urgência máxima de prazo, com PATEC Finalizado e AG. AÇÃO. Clique para ver a lista.',
+             '0 1 200px')
+    + cartao(_govTopSla(10).length, 'Top 10 SLA', 'var(--vm)', 'var(--vmc)', "govPainelDetalhe('topsla')",
+             'As RCs de maior SLA ainda em tratamento. Clique para ver a lista.',
              '0 1 200px')
     + (aa.temBase ? ''
        : '<div style="align-self:center;font-size:10px;color:var(--tx2)">Sem resultado do Analista Pedido carregado.</div>')
@@ -19329,7 +19474,7 @@ function govPainelRender(){
     +   nLista + (nLista === 1 ? ' item na lista' : ' itens na lista') + '</span>'
     + '</div>'
     + '</div>'          // fecha o bloco encostado no rodapé
-    + '</div></div>' + rodape;
+    + '</div></div>' + _govPainelDetalheHTML() + rodape;
 }
 
 function govSetTab(aba, btn){
