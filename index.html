@@ -19004,10 +19004,99 @@ function _govPainelCarregarAux(){
     if ((typeof _xglItens === 'undefined' || !_xglItens.length) && typeof xglCarregarFirebase === 'function') tarefas.push(xglCarregarFirebase());
     if ((typeof _sbItens  === 'undefined' || !_sbItens.length)  && typeof sbCarregarFirebase  === 'function') tarefas.push(sbCarregarFirebase());
     if ((typeof _nrItens  === 'undefined' || !_nrItens.length)  && typeof nrCarregarFirebase  === 'function') tarefas.push(nrCarregarFirebase());
+    // Tirar do Fluxo vem do backlog; Pedidos Fáceis / Possíveis MDG, do Analista Pedido
+    if ((typeof _bkDados === 'undefined' || !_bkDados || !_bkDados.rows || !_bkDados.rows.length)
+        && typeof bkCarregarFirebase === 'function') tarefas.push(bkCarregarFirebase());
+    if ((typeof _aaPub === 'undefined' || !_aaPub || !_aaPub.length)
+        && typeof aaPublicoCarregar === 'function') tarefas.push(aaPublicoCarregar());
   } catch (e) { return; }
   if (!tarefas.length) return;
   Promise.all(tarefas.map(function(t){ return Promise.resolve(t).catch(function(){}); }))
     .then(function(){ try { govPainelRender(); } catch (e) {} });
+}
+
+// ── Planilha Crítica: as mesmas contas da tela dela ───────────────
+// Vencidos e Críticos saem de pcDadosBase; 100% Reprovado, Cancelado
+// e PID têm função própria; Tirar do Fluxo vem do backlog (_bkDados).
+function _govPcQtd(){
+  var o = { vencidos:0, reprovado:0, fluxo:0, cancelado:0, pid:0 };
+  try {
+    if (typeof pcDadosBase === 'function') {
+      o.vencidos = pcDadosBase().filter(function(r){
+        return String(r.validade || '').toLowerCase().indexOf('vencid') !== -1;
+      }).length;
+    }
+    if (typeof pcDadosReprovado === 'function') o.reprovado = pcDadosReprovado().length;
+    if (typeof pcDadosCancelado === 'function') o.cancelado = pcDadosCancelado().length;
+    if (typeof pcDadosPid       === 'function') o.pid       = pcDadosPid().length;
+    if (typeof pcGetFluxo       === 'function') o.fluxo     = pcGetFluxo().length;
+    else if (typeof _dirTirarFluxo === 'function') o.fluxo  = _dirTirarFluxo().length;
+  } catch (e) {}
+  return o;
+}
+
+// ── Analista Pedido ──────────────────────────────────────────────
+// Pedidos Fáceis = todas as regras MENOS a 3 (essas podem virar pedido
+// direto). Possíveis MDG = só a Regra 3, que pede conferência no SAP e
+// costuma virar cadastro no MDG.
+function _govAaQtd(){
+  var o = { faceis:0, mdg:0, faceisRc:0, mdgRc:0, temBase:false };
+  try {
+    var lista = (typeof _aaPub !== 'undefined' && _aaPub) ? _aaPub : [];
+    o.temBase = !!lista.length;
+    var ehR3 = function(a){ return String(a.regra || '').toLowerCase().indexOf('regra 3') !== -1; };
+    var f = lista.filter(function(a){ return !ehR3(a); });
+    var m = lista.filter(ehR3);
+    o.faceis = f.length;
+    o.mdg    = m.length;
+    o.faceisRc = Object.keys(f.reduce(function(x, a){ x[a.rc] = 1; return x; }, {})).length;
+    o.mdgRc    = Object.keys(m.reduce(function(x, a){ x[a.rc] = 1; return x; }, {})).length;
+  } catch (e) {}
+  return o;
+}
+
+// Acha um botão pelo que ele chama — mais firme do que contar posição
+function _govBotaoPor(sel, fn, aba){
+  var bs = document.querySelectorAll(sel);
+  for (var i = 0; i < bs.length; i++) {
+    if (String(bs[i].getAttribute('onclick') || '').indexOf(fn + "('" + aba + "'") !== -1) return bs[i];
+  }
+  return null;
+}
+
+// Card da Planilha Crítica → abre a aba dela
+function govIrPlanilhaCritica(aba){
+  try {
+    govMainTab('pc', document.getElementById('gov-main-tab-pc'));
+    setTimeout(function(){
+      try { pcSetTab(aba, _govBotaoPor('#pc-tabs .stab', 'pcSetTab', aba)); } catch (e) {}
+    }, 60);
+  } catch (e) {}
+}
+
+// Card do Analista Pedido → abre a tela já com o recorte do card
+function govIrAnalistaPedido(soRegra3){
+  try {
+    var it = document.getElementById('sb-aa-it');
+    if (typeof go === 'function') go('analista-auto', it);
+    setTimeout(function(){
+      try {
+        if (typeof aaSetTab === 'function') aaSetTab('pedido');
+        var sel = document.getElementById('aa-pub-filtro-regra');
+        var cbs = document.querySelectorAll('.aa-combo-regra');
+        if (soRegra3) {
+          // Possíveis MDG: só a Regra 3
+          if (typeof aaComboTodas === 'function') aaComboTodas(false);
+          if (sel) { sel.value = 'Regra 3'; if (typeof aaRegraSingleChange === 'function') aaRegraSingleChange(); }
+        } else {
+          // Pedidos Fáceis: todas menos a Regra 3
+          if (sel) sel.value = '';
+          for (var i = 0; i < cbs.length; i++) cbs[i].checked = (cbs[i].value !== 'Regra 3');
+          if (typeof aaComboMudou === 'function') aaComboMudou();
+        }
+      } catch (e) {}
+    }, 400);
+  } catch (e) {}
 }
 
 function _govPainelQtdXgl(){
@@ -19147,7 +19236,48 @@ function govPainelRender(){
     + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cardsTp + '</div>'
     + '</div>';
 
-  // ── à direita: a quebra por Status de Tratamento ──
+  // ── topo da direita: Planilha Crítica e Analista Pedido ──
+  var pc = _govPcQtd(), aa = _govAaQtd();
+
+  var cartao = function(qtd, rotulo, cor, bg, clique, dica, largura){
+    return '<div ' + (clique ? 'onclick="' + clique + '" ' : '')
+      + 'title="' + esc(dica || rotulo) + '"'
+      + ' style="' + (clique ? 'cursor:pointer' : 'cursor:default')
+      + ';background:' + bg + ';color:' + cor
+      + ';border:1.5px solid ' + cor + ';border-radius:8px;padding:8px 14px;text-align:center;'
+      + 'line-height:1.2;flex:' + (largura || '1 1 0') + ';min-width:112px">'
+      + '<div style="font-size:19px;font-weight:800">' + qtd + '</div>'
+      + '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px">' + esc(rotulo) + '</div>'
+      + '</div>';
+  };
+
+  var titulo = function(t){
+    return '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">'
+      + '<span style="font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px">'
+      + esc(t) + '</span></div>';
+  };
+
+  var blocoCritica = titulo('Planilha Crítica')
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+    + cartao(pc.vencidos,  'Vencidos',       'var(--vm)',  'var(--vmc)', "govIrPlanilhaCritica('vencido')",   'Abrir a aba Vencido da Planilha Crítica')
+    + cartao(pc.reprovado, '100% Reprovado', 'var(--vm)',  'var(--vmc)', "govIrPlanilhaCritica('reprovado')", 'Abrir a aba 100% Reprovado')
+    + cartao(pc.fluxo,     'Tirar do Fluxo', 'var(--tx2)', 'var(--cin)', "govIrPlanilhaCritica('fluxo')",     'Abrir a aba Tirar do Fluxo')
+    + cartao(pc.cancelado, 'Cancelado',      'var(--am)',  'var(--amc)', "govIrPlanilhaCritica('cancelado')", 'Abrir a aba Cancelado')
+    + cartao(pc.pid,       'PID',            'var(--azm)', 'var(--azc)', "govIrPlanilhaCritica('pid')",       'Abrir a aba PID')
+    + '</div>'
+    + titulo('Analista Pedido')
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+    + cartao(aa.faceis, 'Pedidos Fáceis', 'var(--vd)', 'var(--vdc)', 'govIrAnalistaPedido(false)',
+             'Todas as regras menos a 3 — ' + aa.faceisRc + ' RC(s). Abre o Analista Pedido já filtrado.',
+             '0 1 200px')
+    + cartao(aa.mdg,    'Possíveis MDG',  '#7c3aed',   '#ede9fe',   'govIrAnalistaPedido(true)',
+             'Só a Regra 3 (conferir no SAP) — ' + aa.mdgRc + ' RC(s). Abre o Analista Pedido já filtrado.',
+             '0 1 200px')
+    + (aa.temBase ? ''
+       : '<div style="align-self:center;font-size:10px;color:var(--tx2)">Sem resultado do Analista Pedido carregado.</div>')
+    + '</div>';
+
+  // ── embaixo, na linha da Nova Reserva: Status de Tratamento ──
   var ordem = (typeof GOV_STATUS_OPCOES !== 'undefined' ? GOV_STATUS_OPCOES : []).slice()
                 .filter(function(x){ return porTrat[x]; });
   Object.keys(porTrat).forEach(function(k){ if (ordem.indexOf(k) === -1) ordem.push(k); });
@@ -19186,14 +19316,19 @@ function govPainelRender(){
       + '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="govPainelLimpar()">✕ limpar</button></div>'
     : '';
 
-  box.innerHTML = '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;padding-right:20px">'
+  box.innerHTML = '<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:stretch;padding-right:20px">'
     + lateral
-    + '<div style="flex:1 1 0;min-width:0"><div style="display:flex;gap:12px;flex-wrap:wrap">' + cardsTrat + '</div>'
+    + '<div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column">'
+    + blocoCritica
+    // margin-top:auto encosta o bloco no rodapé da coluna, alinhando
+    // com a última linha da lateral (Tipo de Processo / Nova Reserva)
+    + '<div style="margin-top:auto"><div style="display:flex;gap:12px;flex-wrap:wrap">' + cardsTrat + '</div>'
     + '<div style="margin-top:.75rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
     +   '<span id="gov-painel-contagem" style="font-size:11px;font-weight:700;color:var(--azm);'
     +   'background:var(--azc);border:1.5px solid var(--azm);border-radius:20px;padding:2px 12px">'
     +   nLista + (nLista === 1 ? ' item na lista' : ' itens na lista') + '</span>'
     + '</div>'
+    + '</div>'          // fecha o bloco encostado no rodapé
     + '</div></div>' + rodape;
 }
 
