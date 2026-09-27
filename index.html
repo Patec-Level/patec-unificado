@@ -5167,15 +5167,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button class="stab" style="display:none" onclick="govSetTab('novareserva',this)">🎫 Nova Reserva</button>
         <button class="stab" style="display:none" onclick="govSetTab('concluidos',this)">✅ Concluídos</button>
         <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
-          <span style="font-size:12px;color:var(--tx2);white-space:nowrap">✅ Concluídos:</span>
-          <input id="gov-conc-rc-input" type="text" placeholder="Nº da RC..."
-            title="Consulta um item já concluído — a lista só é montada para a RC pedida"
-            style="font-size:12px;padding:5px 10px;border:1.5px solid var(--brd);border-radius:6px;width:130px;background:var(--bg);color:var(--tx)"
-            onkeydown="if(event.key==='Enter') govConsultarConcluidos(this.value.trim())"
-            oninput="this.value=this.value.replace(/\D/g,'')">
-          <button onclick="govConsultarConcluidos(document.getElementById('gov-conc-rc-input').value.trim())"
-            style="font-size:11px;padding:5px 12px;background:var(--vd);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;white-space:nowrap">Consultar</button>
-          <span style="width:10px"></span>
+          <!-- O campo de consulta de Concluídos saiu daqui: o Histórico RC
+               já atende. A tela continua existindo e continua montando só a
+               RC pedida (govConsultarConcluidos / concFiltrarRC). -->
           <span style="font-size:12px;color:var(--tx2);white-space:nowrap">📋 Histórico RC:</span>
           <input id="gov-hist-rc-input" type="text" placeholder="Nº da RC..."
             style="font-size:12px;padding:5px 10px;border:1.5px solid var(--brd);border-radius:6px;width:150px;background:var(--bg);color:var(--tx)"
