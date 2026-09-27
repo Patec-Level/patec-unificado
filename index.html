@@ -4745,8 +4745,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
 
-        <!-- Cards no mesmo layout da Cobrança por Status: total + Tipo de Processo + Fila -->
-        <div class="cd" style="margin-bottom:1rem;padding:.875rem 1rem">
+        <!-- Cards no mesmo layout da Cobrança por Status: total + Tipo de Processo + Fila.
+             Sem o cartão branco: os cards ficam sobre o fundo da página, como na aba
+             PATEC da Reunião — era a diferença de cor entre as duas telas. -->
+        <div style="margin-bottom:1rem;padding:.875rem 0">
           <div id="gnv-cards"></div>
           <div id="gnv-subcards" style="display:none;margin-top:.75rem;padding:.6rem .875rem;background:var(--vmc);border:1px solid var(--vm);border-radius:8px"></div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:.75rem;padding-top:.75rem;border-top:1px dashed var(--brd)">
@@ -34179,8 +34181,29 @@ var _gnvGrafs = {};
 
 var _GNV_GRAF_PADRAO = {
   canvas:'gnv-graf-canvas', box:'gnv-graf-box', vazio:'gnv-graf-vazio',
-  tabela:'gnv-graf-tabela', dias:'gnv-graf-dias'
+  tabela:'gnv-graf-tabela', de:'gnv-graf-de', ate:'gnv-graf-ate'
 };
+
+// Período inicial igual ao do ADLV: últimos 14 dias até hoje.
+function _gnvGrafPeriodoPadrao(A){
+  var hoje = _gnvHoje();
+  var elDe = document.getElementById(A.de), elAte = document.getElementById(A.ate);
+  if (elAte && !elAte.value) elAte.value = hoje;
+  if (elDe && !elDe.value) {
+    var d = new Date(hoje + 'T12:00:00');
+    d.setDate(d.getDate() - 14);
+    elDe.value = d.toISOString().split('T')[0];
+  }
+}
+
+function gnvGrafPeriodoHoje(pref){
+  var A = _gnvAlvo(pref);
+  var elDe = document.getElementById(A.de), elAte = document.getElementById(A.ate);
+  if (elDe) elDe.value = '';
+  if (elAte) elAte.value = '';
+  _gnvGrafPeriodoPadrao(A);
+  gnvRenderGrafico(A);
+}
 
 function _gnvDataBR(d){
   var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d || ''));
@@ -34194,10 +34217,18 @@ function gnvRenderGrafico(alvo){
   var tab   = document.getElementById(A.tabela);
   if (!box) return;
 
-  var selDias = document.getElementById(A.dias);
-  var dias = selDias ? parseInt(selDias.value, 10) : 30;
-  var lista = _gnvHist.slice();
-  if (dias > 0) lista = lista.slice(-dias);
+  // mesmo período do ADLV: De / até, com o botão Hoje
+  var elDe  = document.getElementById(A.de);
+  var elAte = document.getElementById(A.ate);
+  if (elDe && elAte && (!elDe.value || !elAte.value)) _gnvGrafPeriodoPadrao(A);
+  var de  = elDe  ? elDe.value  : '';
+  var ate = elAte ? elAte.value : '';
+  var lista = _gnvHist.filter(function(x){
+    var d = String(x.data || '');
+    if (de  && d < de)  return false;
+    if (ate && d > ate) return false;
+    return true;
+  });
 
   if (!lista.length) {
     box.style.display = 'none';
@@ -34276,7 +34307,7 @@ function gnvRenderGrafico(alvo){
     t += '</tbody></table></div>';
     tab.innerHTML = t
       + '<div style="font-size:10px;color:var(--tx2);margin-top:5px">'
-      + lista.length + ' dia(s) no gráfico · últimos ' + ult.length + ' na tabela.</div>';
+      + lista.length + ' dia(s) no período · últimos ' + ult.length + ' na tabela.</div>';
   }
 }
 
@@ -34287,15 +34318,14 @@ function gnvGraficoHTML(pref, titulo, sub){
     +     '<div style="font-size:13px;font-weight:700;color:var(--az)">📈 ' + titulo + '</div>'
     +     '<div style="font-size:10.5px;color:var(--tx2);margin-top:2px">' + sub + '</div>'
     +   '</div>'
-    +   '<div style="display:flex;align-items:center;gap:8px">'
-    +     '<label style="font-size:10.5px;color:var(--tx2)">Período</label>'
-    +     '<select id="' + pref + '-dias" onchange="gnvRenderGraficoEm(\'' + pref + '\')"'
-    +     ' style="font-size:11.5px;padding:4px 8px;border:1.5px solid var(--brd);border-radius:6px;background:var(--bg);color:var(--tx)">'
-    +       '<option value="15">últimos 15 dias</option>'
-    +       '<option value="30" selected>últimos 30 dias</option>'
-    +       '<option value="90">últimos 90 dias</option>'
-    +       '<option value="0">tudo</option>'
-    +     '</select>'
+    +   '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+    +     '<input type="date" id="' + pref + '-de" onchange="gnvRenderGraficoEm(\'' + pref + '\')"'
+    +     ' style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px">'
+    +     '<span style="font-size:10px;color:var(--tx2)">até</span>'
+    +     '<input type="date" id="' + pref + '-ate" onchange="gnvRenderGraficoEm(\'' + pref + '\')"'
+    +     ' style="font-size:11px;padding:3px 7px;border:1.5px solid var(--brd);border-radius:6px">'
+    +     '<button class="btn btn-s" style="font-size:10px;padding:3px 8px"'
+    +     ' onclick="gnvGrafPeriodoHoje(\'' + pref + '\')">📅 Hoje</button>'
     +   '</div>'
     + '</div>'
     + '<div id="' + pref + '-vazio" style="display:none;padding:2rem;text-align:center;color:var(--tx2);font-size:12px"></div>'
@@ -34305,7 +34335,7 @@ function gnvGraficoHTML(pref, titulo, sub){
 
 function _gnvAlvo(pref){
   return { canvas: pref + '-canvas', box: pref + '-box', vazio: pref + '-vazio',
-           tabela: pref + '-tabela', dias: pref + '-dias' };
+           tabela: pref + '-tabela', de: pref + '-de', ate: pref + '-ate' };
 }
 
 function gnvRenderGraficoEm(pref){ gnvRenderGrafico(_gnvAlvo(pref)); }
@@ -36392,9 +36422,11 @@ function _dirGarantirDados(){
   try { if (typeof _garantirCacheAcoes === 'function' && !window._prodCacheOK) _garantirCacheAcoes(); } catch (e) {}
 
   if (_dirMod() === 'fast') {
-    if (typeof _cobCarregarDados === 'function') add(function(){
-      if (typeof _cobDados !== 'undefined' && _cobDados && _cobDados.length) return null;
-      return _cobCarregarDados();
+    // o FAST passou a se apoiar na Governança Nova
+    if (typeof _gnvGarantirDados === 'function') add(function(){ return _gnvGarantirDados(); });
+    if (typeof _gnvCarregarHistorico === 'function') add(function(){
+      if (typeof _gnvHist !== 'undefined' && _gnvHist && _gnvHist.length) return null;
+      return _gnvCarregarHistorico();
     });
     if (typeof nrCarregarFirebase === 'function') add(function(){
       if (typeof _nrItens !== 'undefined' && _nrItens && _nrItens.length) return null;
@@ -36666,40 +36698,64 @@ function _dirAnalistaPedido(){
 }
 
 // FAST — Cobrança por Status: itens vencidos (status Atrasado)
-function _dirCobVencidos(){
-  var out = [];
+// A lista de trabalho do FAST: os itens em andamento da Governança Nova, já
+// com fila, status e dias parados calculados como na tela.
+function _dirGnvLista(){
   try {
-    var lista = (typeof _cobDados !== 'undefined' && _cobDados) ? _cobDados : [];
-    out = lista.filter(function(r){
-      return String(_cobNorm(r.status || '')).indexOf('atras') !== -1;
+    if (typeof _gnvBase === 'undefined' || !_gnvBase) return [];
+    return _gnvBase.filter(function(r){
+      return !(typeof _gnvEhConcluido === 'function' && _gnvEhConcluido(r));
     }).map(function(r){
-      return { rc:r.rc||'—', item:r.itemRc||'—', status:r.status||'—',
-               fila:(typeof _cobFila === 'function' ? (_cobFila(r) || '—') : (r.fila || '—')) };
-    }).sort(function(a, b){ return String(a.fila).localeCompare(String(b.fila), 'pt-BR') || String(a.rc).localeCompare(String(b.rc)); });
-  } catch (e) {}
-  return out;
+      var c = _gnvLinhaCalc(r);
+      return { rc:r.rc||'—', item:r.itemRc||'—', analista:r.analista||'—',
+               fila:c.fila || 'Sem fila', status:c.status || '—',
+               statusPatec:c.statusPatec || '—', dias:(c.dias == null ? null : c.dias),
+               prazoRet:c.prazoRet || '', cobranca:c.cobranca || 0,
+               tipoProc:(typeof _gnvTipoProcDe === 'function' ? _gnvTipoProcDe(r) : '') };
+    });
+  } catch (e) { return []; }
+}
+
+function _dirCobVencidos(){
+  try {
+    return _dirGnvLista().filter(function(x){ return x.status === 'VENCIDA'; })
+      .sort(function(a, b){
+        return String(a.fila).localeCompare(String(b.fila), 'pt-BR')
+            || String(a.rc).localeCompare(String(b.rc));
+      });
+  } catch (e) { return []; }
+}
+
+// Quantas RCs estão paradas há 10 dias ou mais no mesmo status.
+var _DIR_DIAS_PARADO = 10;
+function _dirParados(){
+  try {
+    return _dirGnvLista().filter(function(x){ return x.dias != null && x.dias >= _DIR_DIAS_PARADO; })
+      .sort(function(a, b){ return (b.dias - a.dias) || String(a.rc).localeCompare(String(b.rc)); });
+  } catch (e) { return []; }
 }
 
 // FAST — como a carteira fechou: composição da Cobrança por Status
+// FAST — como a carteira está: composição da Governança Nova
 function _dirCobPanorama(){
-  var o = { total:0, filas:[], ep:0, nr:0, sb:0, dt:'' };
+  var o = { total:0, filas:[], ep:0, nr:0, sb:0, dt:'', andamento:0, finalizado:0 };
   try {
-    var lista = (typeof _cobDados !== 'undefined' && _cobDados) ? _cobDados : [];
+    var lista = _dirGnvLista();
     o.total = lista.length;
     var mapa = {};
-    lista.forEach(function(r){
-      var f = ((typeof _cobFila === 'function') ? _cobFila(r) : r.fila) || 'Sem fila';
-      var k = _cobNorm(f);
-      if (!mapa[k]) mapa[k] = { nome:f, n:0 };
-      mapa[k].n++;
-      var v = (typeof _cobVerifTipo === 'function') ? _cobVerifTipo(r) : '';
-      if (v === 'Status B') o.sb++;
-      if (v === 'Nova Reserva') o.nr++;
-      if ((typeof _cobProcTipo === 'function') && _cobProcTipo(r) === 'E&P') o.ep++;
+    lista.forEach(function(x){
+      var f = x.fila || 'Sem fila';
+      if (!mapa[f]) mapa[f] = { nome:f, n:0 };
+      mapa[f].n++;
+      if (x.tipoProc === 'Status B')     o.sb++;
+      if (x.tipoProc === 'Nova Reserva') o.nr++;
+      if (x.tipoProc === 'E&P')          o.ep++;
+      if (x.statusPatec === 'Patec em Andamento') o.andamento++;
+      if (x.statusPatec === 'Patec Finalizado')   o.finalizado++;
     });
     o.filas = Object.keys(mapa).map(function(k){ return mapa[k]; }).sort(function(a, b){ return b.n - a.n; });
-    if (typeof _cobResumo !== 'undefined' && _cobResumo && _cobResumo.atualizadoEm) {
-      var d = new Date(_cobResumo.atualizadoEm);
+    if (typeof _gnvResumo !== 'undefined' && _gnvResumo && _gnvResumo.atualizadoEm) {
+      var d = new Date(_gnvResumo.atualizadoEm);
       if (!isNaN(d)) o.dt = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
     }
   } catch (e) {}
@@ -36716,6 +36772,7 @@ function _dirColetar(){
   if (d.mod === 'fast') {
     d.cob = _dirCobVencidos();
     d.cobPan = _dirCobPanorama();
+    d.parados = _dirParados();
     d.filas = _dirFilas();
   } else {
     d.fluxo = _dirTirarFluxo();
@@ -36754,11 +36811,11 @@ function _dirPrioridades(d){
         texto: 'Devemos terminar o dia sem nenhum item em 100% Reprovado ou Cancelado. Esses itens são nossa obrigação e precisam estar tratados até o final do dia.' },
       { titulo:'Terminar o dia sem nenhum item Atrasado', n:d.cob.length, tom:'critico',
         num: _dirItens(d.cob.length) + (d.cob.length === 1 ? ' atrasado' : ' atrasados'),
-        det: 'Cobrança por Status — ' + d.cob.length + ' de ' + d.cobPan.total + ' itens da carteira',
+        det: 'Governança Nova — ' + d.cob.length + ' de ' + d.cobPan.total + ' itens em andamento',
         texto: 'Processar todos os itens elegíveis, garantindo que nenhum fique pendente ou para trás.' },
       { titulo:'Monitorar o retorno de Nova Reserva', n:d.cobPan.nr + d.filas.nr, tom:'atencao',
         num: _dirItens(d.cobPan.nr + d.filas.nr),
-        det: junta([{ rot:'Cobrança por Status', n:d.cobPan.nr }, { rot:'Governança aguardando retorno', n:d.filas.nr }]),
+        det: junta([{ rot:'Governança Nova', n:d.cobPan.nr }, { rot:'Governança aguardando retorno', n:d.filas.nr }]),
         texto: 'Quando o retorno chegar, ajustar no SAP o número de acompanhamento.' }
     ];
   } else {
@@ -36808,11 +36865,21 @@ function _dirPrioridades(d){
 
 function _dirRisco(d){
   if (d.mod === 'fast') {
+    var par = (d.parados || []).length;
+    // parado há 10 dias ou mais no mesmo status: ninguém mexeu, e some do radar
+    var _rcs = function(n){ return n + (n === 1 ? ' RC está parada' : ' RCs estão paradas'); };
+    var txtPar = par
+      ? ' Além disso, ' + _rcs(par) + ' há ' + _DIR_DIAS_PARADO
+        + ' dias ou mais no mesmo status — sem nenhuma movimentação. Precisam de uma ação hoje, nem que seja trocar a fila.'
+      : '';
     if (d.cob.length) return { nivel:'alto', titulo:'Itens vencidos',
       txt: _dirItens(d.cob.length) + (d.cob.length === 1 ? ' vencido' : ' vencidos')
-         + ' na Cobrança por Status — todos devem ser concluídos hoje. Precisamos encerrar o dia com zero itens vencidos no FAST.' };
+         + ' na Governança Nova — todos devem ser concluídos hoje. Precisamos encerrar o dia com zero itens vencidos no FAST.' + txtPar };
+    if (par) return { nivel:'alto', titulo:'RCs paradas há ' + _DIR_DIAS_PARADO + ' dias ou mais',
+      txt: 'Nenhum item vencido, mas ' + _rcs(par) + ' há ' + _DIR_DIAS_PARADO
+         + ' dias ou mais no mesmo status, sem nenhuma movimentação. Precisam de uma ação hoje, nem que seja trocar a fila.' };
     return { nivel:'ok', titulo:'Nenhum item vencido',
-      txt: 'A Cobrança por Status está sem item vencido. É assim que o FAST tem que fechar o dia.' };
+      txt: 'A Governança Nova está sem item vencido e sem item parado há ' + _DIR_DIAS_PARADO + ' dias ou mais. É assim que o FAST tem que fechar o dia.' };
   }
   var v = d.pc.vencidos.length, s = d.slaAlto;
   if (v || s) return { nivel:'alto', titulo:'Vencidos e SLA alto',
@@ -36963,14 +37030,14 @@ function _dirCardHTML(d){
   if (d.mod === 'fast') {
     // FAST: como a carteira fechou o dia anterior (Cobrança por Status)
     var cp = d.cobPan;
-    h += _dirTitulo('Fechamento do dia anterior');
-    h += '<div style="font-size:11px;color:' + _DIR_C.tx2 + ';margin-bottom:6px">Cobrança por Status'
-       + (cp.dt ? ' · base de ' + _dirEsc(cp.dt) : '') + ' — o primeiro card é o total de itens da carteira.</div>';
+    h += _dirTitulo('Como a carteira está');
+    h += '<div style="font-size:11px;color:' + _DIR_C.tx2 + ';margin-bottom:6px">Governança Nova'
+       + (cp.dt ? ' · base de ' + _dirEsc(cp.dt) : '') + ' — o primeiro card é o total de itens em andamento.</div>';
     if (!cp.total) {
-      h += '<div style="font-size:11.5px;color:' + _DIR_C.tx2 + '">Sem base de Cobrança por Status carregada.</div>';
+      h += '<div style="font-size:11.5px;color:' + _DIR_C.tx2 + '">Sem base da Governança Nova carregada.</div>';
     } else {
       var cels = [_dirCel('<div style="font-size:24px;font-weight:800;color:#ffffff;line-height:1">' + cp.total + '</div>'
-        + '<div style="font-size:10px;font-weight:700;color:#C9D6EA;margin-top:4px;line-height:1.25">TOTAL DE ITENS</div>'
+        + '<div style="font-size:10px;font-weight:700;color:#C9D6EA;margin-top:4px;line-height:1.25">EM ANDAMENTO</div>'
         + '<div style="font-size:9.5px;margin-top:2px">\u00A0</div>', _DIR_C.az, _DIR_C.az)];
       cp.filas.forEach(function(f){ cels.push(_dirCartao(f.n, f.nome, '', _DIR_C.azm, _DIR_C.cin)); });
       h += _dirGrade(cels, 5);
@@ -37007,16 +37074,30 @@ function _dirCardHTML(d){
 
   // 4 — detalhamento
   if (d.mod === 'fast') {
-    h += _dirTitulo('Cobrança por Status — itens vencidos');
+    h += _dirTitulo('Governança Nova — itens vencidos');
     h += '<div style="display:inline-block;background:' + (d.cob.length ? _DIR_C.vmc : _DIR_C.vdc) + ';border:1px solid '
        + (d.cob.length ? _DIR_C.vm : _DIR_C.vd) + ';border-radius:8px;padding:8px 16px;margin-bottom:6px">'
        + '<span style="font-size:22px;font-weight:800;color:' + (d.cob.length ? _DIR_C.vm : _DIR_C.vd) + '">' + d.cob.length + '</span>'
        + '<span style="font-size:11px;color:' + _DIR_C.tx2 + ';font-weight:700"> vencidos de ' + d.cobPan.total + ' itens</span></div>';
     if (d.cob.length) {
-      h += _dirTabela(['RC', 'Item da RC', 'Status', 'Fila'],
-        d.cob.map(function(x){ return [x.rc, x.item, x.status, x.fila]; }), 60);
+      h += _dirTabela(['RC', 'Item da RC', 'Analista', 'Fila', 'Dias parados'],
+        d.cob.map(function(x){ return [x.rc, x.item, x.analista, x.fila, (x.dias == null ? '—' : x.dias)]; }), 60);
     } else {
-      h += '<div style="font-size:11.5px;color:' + _DIR_C.vd + '">✅ Nenhum item vencido na Cobrança por Status.</div>';
+      h += '<div style="font-size:11.5px;color:' + _DIR_C.vd + '">✅ Nenhum item vencido na Governança Nova.</div>';
+    }
+
+    // RCs paradas há 10 dias ou mais no mesmo status
+    var par = d.parados || [];
+    h += _dirTitulo('RCs paradas há ' + _DIR_DIAS_PARADO + ' dias ou mais no mesmo status');
+    h += '<div style="display:inline-block;background:' + (par.length ? _DIR_C.vmc : _DIR_C.vdc) + ';border:1px solid '
+       + (par.length ? _DIR_C.vm : _DIR_C.vd) + ';border-radius:8px;padding:8px 16px;margin-bottom:6px">'
+       + '<span style="font-size:22px;font-weight:800;color:' + (par.length ? _DIR_C.vm : _DIR_C.vd) + '">' + par.length + '</span>'
+       + '<span style="font-size:11px;color:' + _DIR_C.tx2 + ';font-weight:700"> sem movimentação de ' + d.cobPan.total + ' itens</span></div>';
+    if (par.length) {
+      h += _dirTabela(['RC', 'Item da RC', 'Analista', 'Fila', 'Dias parados'],
+        par.map(function(x){ return [x.rc, x.item, x.analista, x.fila, x.dias]; }), 60);
+    } else {
+      h += '<div style="font-size:11.5px;color:' + _DIR_C.vd + '">✅ Nenhuma RC parada há ' + _DIR_DIAS_PARADO + ' dias ou mais.</div>';
     }
   } else {
     // lista só aparece quando há item (a seção some junto, sem buraco)
@@ -37051,10 +37132,10 @@ function _dirCardHTML(d){
   // gráfico do Plano de Ação › Monitoramento do PATEC, no filtro que
   // estiver aplicado lá (vira imagem para poder ser colado/exportado)
   if (d.grafico && d.grafico.img) {
-    h += _dirTitulo('Monitoramento do PATEC');
+    h += _dirTitulo(d.mod === 'fast' ? 'Evolução diária' : 'Monitoramento do PATEC');
     if (d.grafico.legenda) h += '<div style="font-size:11px;color:' + _DIR_C.tx2 + ';margin-bottom:6px">'
       + _dirEsc(d.grafico.legenda) + '</div>';
-    h += '<img src="' + d.grafico.img + '" alt="Monitoramento do PATEC" '
+    h += '<img src="' + d.grafico.img + '" alt="' + (d.mod === 'fast' ? 'Evolução diária' : 'Monitoramento do PATEC') + '" '
        + 'style="display:block;width:100%;max-width:860px;border:1px solid ' + _DIR_C.brd + ';border-radius:8px"/>';
   }
 
@@ -37070,6 +37151,68 @@ function _dirCardHTML(d){
 // tela por um instante e devolvida ao estado anterior (mesmo caminho que a
 // Apresentação já usa para capturar esse gráfico).
 var _dirGrafAtivos = 0, _dirGrafEstado = null;
+
+// FAST: o card leva o gráfico de evolução da Governança Nova. Desenha num
+// canvas fora da tela e devolve a imagem — sem depender de abrir outra aba,
+// como o gráfico antigo precisava fazer.
+function _dirGraficoEvolucao(){
+  return new Promise(function(res){
+    try {
+      if (typeof Chart === 'undefined' || typeof _GNV_SERIES === 'undefined') return res(null);
+      var pronto = (!_gnvHist || !_gnvHist.length) && typeof _gnvCarregarHistorico === 'function'
+        ? Promise.resolve(_gnvCarregarHistorico()).catch(function(){ return null; })
+        : Promise.resolve();
+      pronto.then(function(){
+        var lista = (_gnvHist || []).slice(-30);
+        if (!lista.length) return res(null);
+
+        var alvo = document.getElementById('dir-graf-canvas');
+        if (!alvo) {
+          alvo = document.createElement('canvas');
+          alvo.id = 'dir-graf-canvas';
+          alvo.style.cssText = 'position:fixed;left:-99999px;top:0';
+          document.body.appendChild(alvo);
+        }
+        alvo.width = 880; alvo.height = 340;
+        if (alvo._chart) { try { alvo._chart.destroy(); } catch (e) {} }
+        alvo._chart = new Chart(alvo, {
+          type: 'line',
+          data: {
+            labels: lista.map(function(x){ return _gnvDataBR(x.data); }),
+            datasets: _GNV_SERIES.map(function(sr){
+              return { label: sr.rotulo,
+                       data: lista.map(function(x){ var v = x[sr.chave]; return (v == null) ? null : v; }),
+                       borderColor: sr.cor, backgroundColor: sr.cor, borderWidth: 2,
+                       pointRadius: 3, pointBackgroundColor: '#fff', pointBorderWidth: 2,
+                       tension: 0, fill: false, spanGaps: true };
+            })
+          },
+          options: {
+            responsive: false, animation: false,
+            layout: { padding: { top: 14, right: 10, bottom: 2, left: 2 } },
+            plugins: {
+              legend: { display: true, labels: { font: { size: 11 }, boxWidth: 14, color: '#5A6A7E' } },
+              tooltip: { enabled: false },
+              datalabels: { display: false }
+            },
+            scales: {
+              y: { beginAtZero: true, grid: { color: '#EEF1F5' }, ticks: { font: { size: 10 }, color: '#5A6A7E', precision: 0 } },
+              x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#5A6A7E' } }
+            }
+          }
+        });
+        var img = '';
+        try { img = alvo.toDataURL('image/png'); } catch (e) {}
+        try { alvo._chart.destroy(); alvo._chart = null; } catch (e) {}
+        if (!img) return res(null);
+        res({ img: img,
+              legenda: 'Evolução diária da Governança Nova — ' + _gnvDataBR(lista[0].data)
+                     + ' a ' + _gnvDataBR(lista[lista.length - 1].data)
+                     + ' · itens em cada situação no fim de cada dia.' });
+      });
+    } catch (e) { res(null); }
+  });
+}
 
 function _dirGraficoPatec(){
   return new Promise(function(res){
@@ -37199,9 +37342,10 @@ function _dirTexto(d){
   }
   T.push('');
   if (d.mod === 'fast') {
-    T.push('2) FECHAMENTO DO DIA ANTERIOR — Cobrança por Status'
+    T.push('2) COMO A CARTEIRA ESTÁ — Governança Nova'
          + (d.cobPan.dt ? ' (base de ' + d.cobPan.dt + ')' : ''));
-    T.push('  Total de itens: ' + d.cobPan.total);
+    T.push('  Itens em andamento: ' + d.cobPan.total);
+    T.push('  Paradas há ' + _DIR_DIAS_PARADO + ' dias ou mais: ' + ((d.parados || []).length));
     if (d.cobPan.filas.length) T.push('  ' + d.cobPan.filas.map(function(f){ return f.nome + ': ' + f.n; }).join(' | '));
   } else {
     T.push('2) GOVERNANÇA');
@@ -37240,7 +37384,7 @@ function _dirTexto(d){
   }
   if (d.grafico && d.grafico.legenda) {
     T.push('');
-    T.push('MONITORAMENTO DO PATEC — ' + d.grafico.legenda + ' (o gráfico vai na versão formatada/imagem)');
+    T.push((d.mod === 'fast' ? 'EVOLUÇÃO DIÁRIA — ' : 'MONITORAMENTO DO PATEC — ') + d.grafico.legenda + ' (o gráfico vai na versão formatada/imagem)');
   }
   return T.join('\n');
 }
@@ -37264,7 +37408,9 @@ function dirGerar(){
   _dirMsg('Carregando as bases…', 'var(--azm)');
   pintar('<div style="padding:24px;text-align:center;color:var(--tx2);font-size:12px">⏳ Montando o direcionamento…</div>');
   _dirGarantirDados().then(function(){
-    return _dirGraficoPatec().catch(function(){ return null; });
+    // FAST usa o gráfico da Governança Nova; o ADLV segue com o Monitoramento
+    var g = (_dirMod() === 'fast') ? _dirGraficoEvolucao() : _dirGraficoPatec();
+    return Promise.resolve(g).catch(function(){ return null; });
   }).then(function(graf){
     try {
       _DIR = _dirColetar();
