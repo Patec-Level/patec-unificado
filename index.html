@@ -10694,8 +10694,10 @@ function cpLerMedicao(linhas, dataAlvo){
   var iEl   = _cpAchaCol(cabs, ['CODIGO_ELIMINACAO_ITEM_PEDIDO','CODIGO_ELIMINACAO','COD_ELIMINACAO','ELIMINACAO','ELIMINADO']);
   var iCh   = _cpAchaCol(cabs, ['CHAVE','CHAVE_PEDIDO']);
   var iPd   = _cpAchaCol(cabs, ['PEDIDO','NUMERO_PEDIDO','NUM_PEDIDO']);
+  var iRc   = _cpAchaCol(cabs, ['REQUISICAO','RC','NUMERO_RC','NUM_RC','REQUISICAO_COMPRA','REQ']);
+  var iIt   = _cpAchaCol(cabs, ['LINHAREQUISICAO','LINHA_REQUISICAO','ITEM_RC','ITEM_REQUISICAO','ITEM_DA_RC','SEQ']);
   r.colunas = { comprador:iQuem, status:iSt, data:iDt, eliminacao:iEl,
-                memorizado:iMem, emitido:iEmi, chave:iCh, pedido:iPd };
+                memorizado:iMem, emitido:iEmi, chave:iCh, pedido:iPd, rc:iRc, item:iIt };
 
   var mapa = {};
   var pega = function(nome){
@@ -10726,7 +10728,6 @@ function cpLerMedicao(linhas, dataAlvo){
       return r;
     }
     r.formato = 'cru';
-    var vistosMem = {};
     for (var b = iCab + 1; b < linhas.length; b++) {
       var lb = linhas[b] || [];
       var nomeB = String(lb[iQuem] == null ? '' : lb[iQuem]).trim();
@@ -10741,14 +10742,12 @@ function cpLerMedicao(linhas, dataAlvo){
       var oB = pega(nomeB);
       if (st === 'memorizado') {
         oB.memorizado++; r.memorizado++;
-        // a lista que a equipe recebe: chave + pedido, sem repetir
-        if (iCh !== -1 || iPd !== -1) {
-          var ch = iCh === -1 ? '' : String(lb[iCh] == null ? '' : lb[iCh]).trim();
-          var pd = iPd === -1 ? '' : String(lb[iPd] == null ? '' : lb[iPd]).trim();
-          if (ch || pd) {
-            var k = ch + '|' + pd;
-            if (!vistosMem[k]) { vistosMem[k] = 1; r.itensMem.push({ nome:nomeB, chave:ch, pedido:pd }); }
-          }
+        // A lista que a equipe recebe: uma linha por ITEM memorizado,
+        // a mesma conta do card. Um pedido com 3 itens aparece 3 vezes.
+        if (iCh !== -1 || iPd !== -1 || iRc !== -1) {
+          var pega1 = function(j){ return j === -1 ? '' : String(lb[j] == null ? '' : lb[j]).trim(); };
+          var ch = pega1(iCh), pd = pega1(iPd), rc = pega1(iRc), it = pega1(iIt);
+          if (ch || pd || rc) r.itensMem.push({ nome:nomeB, chave:ch, pedido:pd, rc:rc, item:it });
         }
       }
       else if (st === 'emitido') { oB.emitido++; r.emitido++; }
@@ -10885,7 +10884,8 @@ async function cpSalvarDia(){
         return { nome:c.nome, memorizado:+c.memorizado||0, emitido:+c.emitido||0, total:+c.total||0 };
       }),
       itensMem: (d.itensMem || []).slice(0, 5000).map(function(i){
-        return { nome:String(i.nome||''), chave:String(i.chave||''), pedido:String(i.pedido||'') };
+        return { nome:String(i.nome||''), chave:String(i.chave||''), pedido:String(i.pedido||''),
+                 rc:String(i.rc||''), item:String(i.item||'') };
       }),
       memorizado: +d.memorizado || 0,
       emitido: +d.emitido || 0,
@@ -11224,7 +11224,7 @@ function cpRenderListaMem(){
   var h = '<div class="cd" style="border-top:3px solid ' + CP_COR_MEM + '">'
     + '<div class="cd-t" style="justify-content:space-between">'
     +   '<span>📋 Memorizados de ' + cpDataBR(d.data) + ' — ' + cpNum(itens.length)
-    +     (itens.length === 1 ? ' pedido' : ' pedidos') + ' para liberar</span>'
+    +     (itens.length === 1 ? ' item' : ' itens') + ' para liberar</span>'
     +   '<span style="display:flex;gap:8px">'
     +     '<button class="btn btn-s" onclick="cpCopiarListaMem()">📋 Copiar</button>'
     +     '<button class="btn btn-s" onclick="cpBaixarListaMem()">⬇ Baixar Excel</button>'
@@ -11239,12 +11239,15 @@ function cpRenderListaMem(){
   }
 
   h += '<div style="overflow:auto;max-height:420px"><table>'
-    + '<thead><tr><th>#</th><th>Comprador</th><th>Chave</th><th>Pedido</th></tr></thead><tbody>';
+    + '<thead><tr><th>#</th><th>Comprador</th><th>Chave</th><th>Pedido</th>'
+    + '<th>RC</th><th>Item RC</th></tr></thead><tbody>';
   itens.forEach(function(i, k){
     h += '<tr><td style="color:var(--tx2)">' + (k+1) + '</td>'
       + '<td>' + cpEsc(i.nome) + '</td>'
       + '<td style="font-weight:600">' + cpEsc(i.chave) + '</td>'
-      + '<td style="font-weight:700;color:var(--az)">' + cpEsc(i.pedido) + '</td></tr>';
+      + '<td style="font-weight:700;color:var(--az)">' + cpEsc(i.pedido) + '</td>'
+      + '<td style="font-weight:700;color:var(--azm)">' + cpEsc(i.rc || '—') + '</td>'
+      + '<td>' + cpEsc(i.item || '—') + '</td></tr>';
   });
   h += '</tbody></table></div></div>';
   box.innerHTML = h;
@@ -11255,14 +11258,18 @@ function cpTextoListaMem(){
   var itens = cpItensMem();
   var l = [];
   l.push('PEDIDOS MEMORIZADOS — ' + cpDataBR(d.data) + ' (' + itens.length
-       + (itens.length === 1 ? ' pedido' : ' pedidos') + ')');
+       + (itens.length === 1 ? ' item' : ' itens') + ')');
   var porQuem = {};
   itens.forEach(function(i){ (porQuem[i.nome] = porQuem[i.nome] || []).push(i); });
   Object.keys(porQuem).sort().forEach(function(nome){
     l.push('');
     l.push(nome + ' (' + porQuem[nome].length + '):');
     porQuem[nome].forEach(function(i){
-      l.push('  ' + (i.chave ? i.chave + ' · ' : '') + i.pedido);
+      var p = [];
+      if (i.chave) p.push(i.chave);
+      if (i.pedido) p.push('Pedido ' + i.pedido);
+      if (i.rc) p.push('RC ' + i.rc + (i.item ? '/' + i.item : ''));
+      l.push('  ' + p.join(' · '));
     });
   });
   return l.join('\n');
@@ -11277,10 +11284,10 @@ function cpBaixarListaMem(){
     var d = _cpDia || {};
     var itens = cpItensMem();
     if (!itens.length) return;
-    var aoa = [['Comprador','Chave','Pedido']];
-    itens.forEach(function(i){ aoa.push([i.nome, i.chave, i.pedido]); });
+    var aoa = [['Comprador','Chave','Pedido','RC','Item RC']];
+    itens.forEach(function(i){ aoa.push([i.nome, i.chave, i.pedido, i.rc || '', i.item || '']); });
     var ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [{ wch:38 }, { wch:12 }, { wch:16 }];
+    ws['!cols'] = [{ wch:38 }, { wch:12 }, { wch:16 }, { wch:14 }, { wch:10 }];
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Memorizados');
     XLSX.writeFile(wb, 'Memorizados_' + String(d.data || '').replace(/-/g,'') + '.xlsx');
