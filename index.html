@@ -866,6 +866,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <button class="stab" id="adm-nav-online-btn" onclick="setAdmTab('online',this)">🕐 Último Acesso</button>
         <button class="stab" onclick="setAdmTab('rt-producao',this)">📡 Produção Tempo Real</button>
         <button class="stab" id="adm-nav-controle-equipes-btn" onclick="setAdmTab('controle-equipes',this)">🧭 Controle das Equipes</button>
+        <button class="stab" onclick="setAdmTab('controle-pedidos',this)">📦 Controle de Pedidos</button>
         <button class="stab" onclick="setAdmTab('metas',this)">🎯 Metas e Gap</button>
         <button class="stab" onclick="setAdmTab('meta-gap',this)">📌 Meta & Gap (Topbar)</button>
         <button class="stab" onclick="setAdmTab('senhas',this)">🔑 Senhas</button>
@@ -1272,6 +1273,52 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <strong style="font-size:12px">Base atual no Firebase:</strong>
           <span id="q18-firebase-info" style="font-size:12px;color:var(--tx2)"> Verificando...</span>
         </div>
+      </div>
+
+      <!-- ── CONTROLE DE PEDIDOS — meta da equipe x possibilidades ── -->
+      <div id="adm-controle-pedidos" class="adm-tab" style="display:none">
+
+        <div class="cd" style="border-top:3px solid var(--azm)">
+          <div class="cd-t">📦 Controle de Pedidos — medição do dia</div>
+
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:.9rem">
+            <div>
+              <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">DATA DA MEDIÇÃO</label>
+              <input type="date" id="cp-data" onchange="cpTrocarData()"
+                style="font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;color:var(--az);font-weight:600">
+            </div>
+            <div>
+              <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">POSSIBILIDADES DE PEDIDO</label>
+              <input type="number" id="cp-possib" min="0" step="1" placeholder="254"
+                style="width:120px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
+            </div>
+            <div>
+              <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">META DA EQUIPE</label>
+              <input type="number" id="cp-meta" min="0" step="1" placeholder="135"
+                style="width:120px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
+            </div>
+            <button class="btn btn-p" onclick="cpSalvarParametros()">💾 Salvar números do dia</button>
+            <button class="btn btn-s" onclick="cpCopiarResumo()">📋 Copiar resumo p/ equipe</button>
+          </div>
+
+          <div style="border:2px dashed var(--brd);border-radius:10px;padding:1.4rem;text-align:center;cursor:pointer;background:var(--cin)"
+            onclick="document.getElementById('cp-file-input').click()"
+            ondragover="event.preventDefault()" ondrop="cpHandleDrop(event)">
+            <div style="font-size:26px;margin-bottom:.4rem">📄</div>
+            <div style="font-size:13px;font-weight:600">Arraste aqui a medição de momento</div>
+            <div style="font-size:11px;color:var(--tx2);margin-top:4px">
+              ou clique para selecionar · a medição substitui a do dia escolhido
+            </div>
+            <input type="file" id="cp-file-input" accept=".xlsx,.xls,.csv" style="display:none"
+              onchange="cpHandleUpload(this.files[0]); this.value='';">
+          </div>
+          <div id="cp-status" style="margin-top:.7rem;font-size:12px"></div>
+          <div id="cp-leitura" style="margin-top:.5rem;font-size:11px;color:var(--tx2)"></div>
+        </div>
+
+        <div id="cp-painel"></div>
+        <div id="cp-equipe"></div>
+        <div id="cp-historico"></div>
       </div>
 
       <!-- ── GESTÃO DE CICLOS ── -->
@@ -10371,6 +10418,7 @@ function setAdmTab(id,btn){
   if(id==='analise-nm') setTimeout(()=>{ aNmAbrir(); },50);
   if(id==='analise-concluidos') setTimeout(gcaAbrir,50);
   if(id==='controle-equipes') setTimeout(ceAbrir,50);
+  if(id==='controle-pedidos') setTimeout(cpAbrir,50);
   if(id==='analista-auto') setTimeout(()=>{ aaVerificarDados(); if(window._aaAptas) aaCarregarResultadoFirebase(); aaSetTab('pedido'); },50);
   if(id==='meta-gap') setTimeout(initMetaGapADM,50);
   if(id==='ferias-adm') setTimeout(renderFeriasForm,50);
@@ -10446,6 +10494,616 @@ function setAdmTab(id,btn){
   if(id!=='controle-equipes' && typeof _cePararRT==='function') _cePararRT();
   document.getElementById('adm-'+id).style.display='block';
 }
+
+// ══════════════════════════════════════════════════════════════════
+// CONTROLE DE PEDIDOS — meta da equipe x possibilidades do dia
+//
+// O André sobe a "medição de momento" (a extração que ele tira ao
+// longo do dia) e a tela calcula sozinha quanto falta para a meta e
+// para as possibilidades. Um documento por DATA: subir a medição de
+// ontem grava em ontem, subir a de hoje vai alimentando hoje. O dia
+// de hoje fica "Em andamento"; os dias passados, "Finalizado".
+//
+// A contagem é de LINHAS (é o que a tabela dinâmica dele conta), e
+// "feito" = memorizado + emitido. No SAP, STATUS_PROCESSO 2 é
+// memorizado e 3 é emitido — a leitura também aceita esses nomes
+// escritos por extenso e o arquivo já dinamizado.
+// ══════════════════════════════════════════════════════════════════
+
+var CP_COL = 'controle_pedidos';
+var CP_COR_MEM = '#3266AD';   // memorizado
+var CP_COR_EMI = '#0E9E6A';   // emitido
+var _cpDia  = null;   // medição + parâmetros do dia selecionado
+var _cpHist = [];     // resumo dos últimos dias, mais novo primeiro
+var _cpCarregando = false;
+
+function cpHojeISO(){
+  var h = new Date();
+  return h.getFullYear() + '-' + String(h.getMonth()+1).padStart(2,'0') + '-' + String(h.getDate()).padStart(2,'0');
+}
+function cpDataSel(){
+  var el = document.getElementById('cp-data');
+  return (el && el.value) || cpHojeISO();
+}
+function cpSituacao(data){ return data === cpHojeISO() ? 'andamento' : 'finalizado'; }
+function cpDataBR(iso){
+  var m = String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[3]+'/'+m[2]+'/'+m[1] : String(iso||'');
+}
+function cpNum(n){ return (+n||0).toLocaleString('pt-BR'); }
+function cpPct(parte, todo){
+  todo = +todo || 0;
+  if (!todo) return 0;
+  return (+parte||0) / todo;
+}
+function cpPctTxt(x){ return (x*100).toFixed(1).replace('.',',') + '%'; }
+function cpEsc(t){
+  return String(t == null ? '' : t)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function cpQuem(){
+  try { if (typeof colabLogado !== 'undefined' && colabLogado) return colabLogado; } catch (e) {}
+  return 'ADM';
+}
+
+// ── leitura do arquivo ────────────────────────────────────────────
+
+// Cabeçalho sem acento, sem espaço, em maiúsculas: "Criação Pedido" e
+// "CRIACAO_PEDIDO" viram a mesma coisa.
+function cpNormCab(v){
+  return String(v == null ? '' : v)
+    .normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .toUpperCase().replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'');
+}
+
+// Data em qualquer formato que o Excel entrega: Date, número de série,
+// "2026-09-28T00:00:00" ou "28/09/2026".
+function cpDataISO(v){
+  if (v == null || v === '') return '';
+  var dd;
+  if (v instanceof Date && !isNaN(v)) dd = v;
+  else if (typeof v === 'number' && isFinite(v)) dd = new Date(Math.round((v - 25569) * 86400000));
+  if (dd) {
+    return dd.getUTCFullYear() + '-' + String(dd.getUTCMonth()+1).padStart(2,'0')
+         + '-' + String(dd.getUTCDate()).padStart(2,'0');
+  }
+  var t = String(v).trim();
+  var m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return m[1] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[3]).padStart(2,'0');
+  m = t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/);
+  if (m) return m[3] + '-' + String(m[2]).padStart(2,'0') + '-' + String(m[1]).padStart(2,'0');
+  return '';
+}
+
+// 2 = memorizado, 3 = emitido. Qualquer outro status não é "feito" —
+// ele aparece à parte, para nada sumir sem aviso.
+function cpStatusNome(v){
+  var t = String(v == null ? '' : v).trim();
+  if (t === '') return '';
+  var n = parseFloat(t.replace(',','.'));
+  if (isFinite(n) && String(t).replace(/[\s,.0]+$/,'') !== '') {
+    if (n === 2) return 'memorizado';
+    if (n === 3) return 'emitido';
+  }
+  var c = cpNormCab(t);
+  if (c.indexOf('MEMORIZAD') !== -1) return 'memorizado';
+  if (c.indexOf('EMITID')    !== -1) return 'emitido';
+  return '';
+}
+
+function _cpAchaCol(cabs, nomes){
+  for (var i = 0; i < nomes.length; i++) {
+    var j = cabs.indexOf(nomes[i]);
+    if (j !== -1) return j;
+  }
+  return -1;
+}
+
+// Recebe as linhas cruas da planilha (array de arrays, primeira linha =
+// cabeçalho) e devolve a medição agregada por comprador.
+function cpLerMedicao(linhas, dataAlvo){
+  var r = { compradores:[], memorizado:0, emitido:0, outros:0, total:0,
+            lidas:0, foraDaData:0, eliminadas:0, formato:'', colunas:{}, aviso:'' };
+  if (!linhas || !linhas.length) { r.aviso = 'Arquivo vazio.'; return r; }
+
+  // acha a linha de cabeçalho — costuma ser a 1a, mas o arquivo pode
+  // vir com um título em cima
+  var iCab = -1, cabs = [];
+  for (var k = 0; k < Math.min(linhas.length, 12); k++) {
+    var c = (linhas[k] || []).map(cpNormCab);
+    var temQuem = _cpAchaCol(c, ['RESP_PEDIDO','COMPRADOR','RESPONSAVEL','RESP','NOME_COMPRADOR','ANALISTA','USUARIO']) !== -1;
+    if (temQuem) { iCab = k; cabs = c; break; }
+  }
+  if (iCab === -1) {
+    r.aviso = 'Não achei a coluna do comprador. O arquivo precisa ter RESP_PEDIDO (ou Comprador).';
+    return r;
+  }
+
+  var iQuem = _cpAchaCol(cabs, ['RESP_PEDIDO','COMPRADOR','RESPONSAVEL','RESP','NOME_COMPRADOR','ANALISTA','USUARIO']);
+  var iMem  = _cpAchaCol(cabs, ['MEMORIZADO','MEMORIZADOS']);
+  var iEmi  = _cpAchaCol(cabs, ['EMITIDO','EMITIDOS']);
+  var iSt   = _cpAchaCol(cabs, ['STATUS_PROCESSO','STATUS','SITUACAO','STATUS_DO_PROCESSO']);
+  var iDt   = _cpAchaCol(cabs, ['CRIACAO_PEDIDO','DATA_CRIACAO','DT_CRIACAO','CRIACAO','DATA','DATA_DO_PEDIDO']);
+  var iEl   = _cpAchaCol(cabs, ['CODIGO_ELIMINACAO_ITEM_PEDIDO','CODIGO_ELIMINACAO','COD_ELIMINACAO','ELIMINACAO','ELIMINADO']);
+  r.colunas = { comprador:iQuem, status:iSt, data:iDt, eliminacao:iEl, memorizado:iMem, emitido:iEmi };
+
+  var mapa = {};
+  var pega = function(nome){
+    var ch = String(nome || '').trim();
+    if (!mapa[ch]) mapa[ch] = { nome:ch, memorizado:0, emitido:0, total:0 };
+    return mapa[ch];
+  };
+
+  // ── formato já dinamizado: Comprador | Memorizado | Emitidos ──
+  if (iMem !== -1 || iEmi !== -1) {
+    r.formato = 'dinamizado';
+    for (var a = iCab + 1; a < linhas.length; a++) {
+      var la = linhas[a] || [];
+      var nomeA = String(la[iQuem] == null ? '' : la[iQuem]).trim();
+      if (!nomeA) continue;
+      if (cpNormCab(nomeA).indexOf('TOTAL_GERAL') === 0) continue;
+      var mm = Math.round(+String(la[iMem] == null ? 0 : la[iMem]).replace(',','.') || 0);
+      var ee = Math.round(+String(la[iEmi] == null ? 0 : la[iEmi]).replace(',','.') || 0);
+      var oA = pega(nomeA);
+      oA.memorizado += mm; oA.emitido += ee; oA.total += mm + ee;
+      r.memorizado += mm; r.emitido += ee; r.lidas += mm + ee;
+    }
+  } else {
+    // ── formato cru: uma linha por item de pedido ──
+    if (iSt === -1) {
+      r.aviso = 'Não achei a coluna de status. Inclua STATUS_PROCESSO (2 = memorizado, 3 = emitido) '
+              + 'ou as colunas Memorizado e Emitidos já somadas.';
+      return r;
+    }
+    r.formato = 'cru';
+    for (var b = iCab + 1; b < linhas.length; b++) {
+      var lb = linhas[b] || [];
+      var nomeB = String(lb[iQuem] == null ? '' : lb[iQuem]).trim();
+      if (!nomeB) continue;
+      if (iEl !== -1 && String(lb[iEl] == null ? '' : lb[iEl]).trim() !== '') { r.eliminadas++; continue; }
+      if (iDt !== -1 && dataAlvo) {
+        var d = cpDataISO(lb[iDt]);
+        if (d && d !== dataAlvo) { r.foraDaData++; continue; }
+      }
+      r.lidas++;
+      var st = cpStatusNome(lb[iSt]);
+      var oB = pega(nomeB);
+      if (st === 'memorizado') { oB.memorizado++; r.memorizado++; }
+      else if (st === 'emitido') { oB.emitido++; r.emitido++; }
+      else { r.outros++; continue; }
+      oB.total++;
+    }
+  }
+
+  r.total = r.memorizado + r.emitido;
+  r.compradores = Object.keys(mapa).map(function(k2){ return mapa[k2]; })
+    .filter(function(o){ return o.total > 0; })
+    .sort(function(x, y){ return y.total - x.total || x.nome.localeCompare(y.nome); });
+  if (!r.compradores.length && !r.aviso) {
+    r.aviso = 'Nenhum pedido memorizado ou emitido encontrado'
+            + (dataAlvo ? ' para ' + cpDataBR(dataAlvo) : '') + '.';
+  }
+  return r;
+}
+
+// ── upload ────────────────────────────────────────────────────────
+function cpHandleDrop(e){
+  e.preventDefault();
+  var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) cpHandleUpload(f);
+}
+
+async function cpHandleUpload(file){
+  if (!file) return;
+  var st = document.getElementById('cp-status');
+  var lt = document.getElementById('cp-leitura');
+  var data = cpDataSel();
+  if (st) st.innerHTML = '⏳ Lendo a medição...';
+  if (lt) lt.innerHTML = '';
+  try {
+    var buf = await file.arrayBuffer();
+    var wb = XLSX.read(buf, { type:'array', cellDates:true });
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    var linhas = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:true });
+    var med = cpLerMedicao(linhas, data);
+
+    if (med.aviso && !med.compradores.length) {
+      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ ' + cpEsc(med.aviso) + '</span>';
+      return;
+    }
+
+    _cpDia = _cpDia && _cpDia.data === data ? _cpDia : cpDiaVazio(data);
+    _cpDia.compradores = med.compradores;
+    _cpDia.memorizado  = med.memorizado;
+    _cpDia.emitido     = med.emitido;
+    _cpDia.total       = med.total;
+    _cpDia.outros      = med.outros;
+    _cpDia.arquivo     = file.name;
+    _cpDia.atualizadoEm = new Date().toISOString();
+    _cpDia.atualizadoPor = cpQuem();
+    cpLerParametrosDaTela();
+
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ <strong>' + cpEsc(file.name) + '</strong> — '
+      + cpNum(med.total) + ' pedidos em ' + cpDataBR(data) + ', ' + med.compradores.length
+      + (med.compradores.length === 1 ? ' comprador' : ' compradores') + '</span>';
+    if (lt) lt.innerHTML = cpTextoLeitura(med, data);
+
+    cpRender();
+    await cpSalvarDia();
+  } catch (e2) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Erro ao ler: ' + cpEsc(e2.message) + '</span>';
+  }
+}
+
+function cpTextoLeitura(med, data){
+  var t = [];
+  t.push(med.formato === 'dinamizado' ? 'Arquivo já somado por comprador.'
+                                      : cpNum(med.lidas) + ' linhas consideradas.');
+  if (med.eliminadas) t.push(cpNum(med.eliminadas) + ' item(ns) eliminado(s) fora da conta.');
+  if (med.foraDaData) t.push(cpNum(med.foraDaData) + ' de outras datas fora da conta (a medição é de ' + cpDataBR(data) + ').');
+  if (med.outros) t.push('<span style="color:var(--am)">' + cpNum(med.outros)
+    + ' linha(s) com outro status — não entram em "feito". Me avise se elas deveriam contar.</span>');
+  if (med.colunas && med.colunas.data === -1 && med.formato === 'cru')
+    t.push('<span style="color:var(--am)">O arquivo não tem coluna de data — contei tudo em ' + cpDataBR(data) + '.</span>');
+  return t.join(' · ');
+}
+
+// ── estado e persistência ─────────────────────────────────────────
+function cpDiaVazio(data){
+  var ult = _cpHist && _cpHist.length ? _cpHist[0] : null;   // herda os números do último dia
+  return { data:data,
+           possibilidades: ult ? (+ult.possibilidades || 0) : 0,
+           meta:           ult ? (+ult.meta || 0) : 0,
+           compradores:[], memorizado:0, emitido:0, total:0, outros:0,
+           arquivo:'', atualizadoEm:'', atualizadoPor:'' };
+}
+
+function cpLerParametrosDaTela(){
+  if (!_cpDia) return;
+  var ep = document.getElementById('cp-possib'), em = document.getElementById('cp-meta');
+  if (ep && ep.value !== '') _cpDia.possibilidades = Math.max(0, Math.round(+ep.value || 0));
+  if (em && em.value !== '') _cpDia.meta = Math.max(0, Math.round(+em.value || 0));
+}
+
+function cpPintarParametros(){
+  var ep = document.getElementById('cp-possib'), em = document.getElementById('cp-meta');
+  if (ep) ep.value = _cpDia && _cpDia.possibilidades ? _cpDia.possibilidades : '';
+  if (em) em.value = _cpDia && _cpDia.meta ? _cpDia.meta : '';
+}
+
+async function cpSalvarParametros(){
+  var data = cpDataSel();
+  if (!_cpDia || _cpDia.data !== data) _cpDia = cpDiaVazio(data);
+  cpLerParametrosDaTela();
+  _cpDia.atualizadoEm = new Date().toISOString();
+  _cpDia.atualizadoPor = cpQuem();
+  cpRender();
+  var ok = await cpSalvarDia();
+  var st = document.getElementById('cp-status');
+  if (st) st.innerHTML = ok
+    ? '<span style="color:var(--vd)">✓ Números de ' + cpDataBR(data) + ' salvos.</span>'
+    : '<span style="color:var(--am)">Números aplicados na tela, mas não consegui gravar no Firebase.</span>';
+}
+
+async function cpSalvarDia(){
+  if (!_cpDia) return false;
+  try {
+    var db = getDB(); if (!db) return false;
+    var d = _cpDia;
+    await db.collection(CP_COL).doc(d.data).set({
+      data: d.data,
+      possibilidades: +d.possibilidades || 0,
+      meta: +d.meta || 0,
+      compradores: (d.compradores || []).map(function(c){
+        return { nome:c.nome, memorizado:+c.memorizado||0, emitido:+c.emitido||0, total:+c.total||0 };
+      }),
+      memorizado: +d.memorizado || 0,
+      emitido: +d.emitido || 0,
+      total: +d.total || 0,
+      outros: +d.outros || 0,
+      arquivo: d.arquivo || '',
+      atualizadoEm: d.atualizadoEm || new Date().toISOString(),
+      atualizadoPor: d.atualizadoPor || cpQuem()
+    });
+    await cpCarregarHistorico();
+    cpRenderHistorico();   // o histórico na tela acompanha a gravação
+    return true;
+  } catch (e) { console.warn('cpSalvarDia:', e); return false; }
+}
+
+async function cpCarregarDia(data){
+  try {
+    var db = getDB(); if (!db) { _cpDia = _cpDia && _cpDia.data === data ? _cpDia : cpDiaVazio(data); return; }
+    var doc = await db.collection(CP_COL).doc(data).get();
+    if (doc && doc.exists) {
+      var d = doc.data() || {};
+      _cpDia = { data:data,
+                 possibilidades:+d.possibilidades||0, meta:+d.meta||0,
+                 compradores:d.compradores||[], memorizado:+d.memorizado||0,
+                 emitido:+d.emitido||0, total:+d.total||0, outros:+d.outros||0,
+                 arquivo:d.arquivo||'', atualizadoEm:d.atualizadoEm||'', atualizadoPor:d.atualizadoPor||'' };
+    } else {
+      _cpDia = cpDiaVazio(data);
+    }
+  } catch (e) {
+    console.warn('cpCarregarDia:', e);
+    _cpDia = cpDiaVazio(data);
+  }
+}
+
+async function cpCarregarHistorico(){
+  try {
+    var db = getDB(); if (!db) return;
+    var snap = null;
+    try { snap = await db.collection(CP_COL).orderBy('data','desc').limit(120).get(); }
+    catch (e1) { snap = await db.collection(CP_COL).get(); }
+    var out = [];
+    snap.forEach(function(doc){
+      var d = doc.data() || {};
+      out.push({ data:d.data || doc.id, possibilidades:+d.possibilidades||0, meta:+d.meta||0,
+                 memorizado:+d.memorizado||0, emitido:+d.emitido||0, total:+d.total||0,
+                 atualizadoEm:d.atualizadoEm||'' });
+    });
+    out.sort(function(a,b){ return a.data < b.data ? 1 : (a.data > b.data ? -1 : 0); });
+    _cpHist = out;
+  } catch (e) { console.warn('cpCarregarHistorico:', e); }
+}
+
+async function cpAbrir(){
+  if (_cpCarregando) return;
+  _cpCarregando = true;
+  try {
+    var el = document.getElementById('cp-data');
+    if (el && !el.value) el.value = cpHojeISO();
+    await cpCarregarHistorico();
+    await cpCarregarDia(cpDataSel());
+    cpPintarParametros();
+    cpRender();
+  } finally { _cpCarregando = false; }
+}
+
+async function cpTrocarData(){
+  var st = document.getElementById('cp-status'), lt = document.getElementById('cp-leitura');
+  if (st) st.innerHTML = '';
+  if (lt) lt.innerHTML = '';
+  await cpCarregarDia(cpDataSel());
+  cpPintarParametros();
+  cpRender();
+}
+
+// ── painel ────────────────────────────────────────────────────────
+
+// Barra: memorizado e emitido empilhados dentro do alvo, com 2px de
+// respiro entre eles e o rótulo sempre escrito — a cor nunca é a
+// única informação.
+function cpBarra(mem, emi, alvo, corFundo){
+  var t = Math.max(1, +alvo || 1);
+  var pm = Math.min(100, (+mem||0) / t * 100);
+  var pe = Math.min(100 - pm, (+emi||0) / t * 100);
+  var seg = function(largura, cor, titulo, ultimo){
+    if (largura <= 0) return '';
+    return '<div title="' + cpEsc(titulo) + '" style="width:' + largura.toFixed(2) + '%;background:' + cor
+         + ';height:100%' + (ultimo ? ';border-radius:0 4px 4px 0' : '') + '"></div>';
+  };
+  return '<div style="height:16px;border-radius:8px;background:' + (corFundo || 'var(--cin)')
+    + ';border:1px solid var(--brd);display:flex;gap:2px;overflow:hidden">'
+    + seg(pm, CP_COR_MEM, 'Memorizado: ' + cpNum(mem), pe <= 0)
+    + seg(pe, CP_COR_EMI, 'Emitido: ' + cpNum(emi), true)
+    + '</div>';
+}
+
+function cpLegenda(){
+  var p = function(cor, rot, n){
+    return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--tx2)">'
+      + '<span style="width:9px;height:9px;border-radius:2px;background:' + cor + ';display:inline-block"></span>'
+      + cpEsc(rot) + ' <strong style="color:var(--tx)">' + cpNum(n) + '</strong></span>';
+  };
+  var d = _cpDia || {};
+  return '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">'
+    + p(CP_COR_MEM, 'Memorizado', d.memorizado || 0)
+    + p(CP_COR_EMI, 'Emitido', d.emitido || 0) + '</div>';
+}
+
+function cpMedidor(rot, feito, alvo, sufixo){
+  var pct = cpPct(feito, alvo);
+  var falta = Math.max(0, (+alvo||0) - (+feito||0));
+  var d = _cpDia || {};
+  return '<div style="margin-bottom:1rem">'
+    + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;gap:10px;flex-wrap:wrap">'
+    +   '<span style="font-size:11.5px;font-weight:700;color:var(--tx)">' + cpEsc(rot) + '</span>'
+    +   '<span style="font-size:11.5px;color:var(--tx2)">' + cpNum(feito) + ' de ' + cpNum(alvo)
+    +     ' · <strong style="color:' + (pct >= 1 ? 'var(--vd)' : 'var(--az)') + '">' + cpPctTxt(pct) + '</strong></span>'
+    + '</div>'
+    + cpBarra(d.memorizado || 0, d.emitido || 0, alvo)
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:4px">'
+    +   (falta > 0 ? 'Faltam <strong style="color:var(--am)">' + cpNum(falta) + '</strong> ' + sufixo
+                   : '<strong style="color:var(--vd)">Alcançado.</strong>')
+    + '</div></div>';
+}
+
+function cpRender(){
+  var box = document.getElementById('cp-painel');
+  if (!box) return;
+  var d = _cpDia || cpDiaVazio(cpDataSel());
+  var sit = cpSituacao(d.data);
+  var feito = +d.total || 0, meta = +d.meta || 0, poss = +d.possibilidades || 0;
+  var faltaMeta = Math.max(0, meta - feito), faltaPoss = Math.max(0, poss - feito);
+  var pctMeta = cpPct(feito, meta), pctPoss = cpPct(feito, poss);
+
+  var chip = sit === 'andamento'
+    ? '<span style="font-size:10px;font-weight:700;color:var(--am);background:var(--amc);border:1px solid var(--am);border-radius:20px;padding:2px 9px">EM ANDAMENTO</span>'
+    : '<span style="font-size:10px;font-weight:700;color:var(--tx2);background:var(--cin);border:1px solid var(--brd);border-radius:20px;padding:2px 9px">FINALIZADO</span>';
+
+  var card = function(rot, val, sub, cls){
+    return '<div class="kc' + (cls ? ' ' + cls : '') + '">'
+      + '<div class="kc-l">' + cpEsc(rot) + '</div>'
+      + '<div class="kc-v">' + val + '</div>'
+      + (sub ? '<div class="kc-s">' + sub + '</div>' : '') + '</div>';
+  };
+
+  var h = '<div class="cd">'
+    + '<div class="cd-t" style="justify-content:space-between">'
+    +   '<span>🎯 ' + cpDataBR(d.data) + ' · onde a equipe está</span>' + chip
+    + '</div>';
+
+  if (!meta && !poss && !feito) {
+    h += '<div style="font-size:12px;color:var(--tx2)">Informe as possibilidades e a meta do dia e suba a medição — '
+       + 'os percentuais aparecem aqui.</div></div>';
+    box.innerHTML = h;
+    cpRenderEquipe(); cpRenderHistorico();
+    return;
+  }
+
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem;margin-bottom:1.1rem">'
+    + card('POSSIBILIDADES DE PEDIDO', cpNum(poss), 'tudo que dá para pedir hoje')
+    + card('META DA EQUIPE', cpNum(meta), cpPctTxt(cpPct(meta, poss)) + ' das possibilidades')
+    + card('FEITOS ATÉ AGORA', cpNum(feito),
+        cpNum(d.memorizado||0) + ' memorizados · ' + cpNum(d.emitido||0) + ' emitidos',
+        feito >= meta && meta ? 'ok' : '')
+    + card('FALTA PARA A META', cpNum(faltaMeta),
+        faltaMeta ? 'faltam ' + cpPctTxt(1 - pctMeta) + ' da meta' : 'meta batida',
+        faltaMeta ? 'warn' : 'ok')
+    + card('FALTA PARA AS POSSIBILIDADES', cpNum(faltaPoss),
+        faltaPoss ? 'faltam ' + cpPctTxt(1 - pctPoss) + ' do total' : 'tudo pedido')
+    + '</div>';
+
+  h += cpMedidor('Meta da equipe', feito, meta, 'para bater a meta');
+  h += cpMedidor('Possibilidades do dia', feito, poss, 'para fechar as possibilidades');
+  h += cpLegenda();
+
+  if (d.atualizadoEm) {
+    var q = new Date(d.atualizadoEm);
+    h += '<div style="font-size:10.5px;color:var(--tx2);margin-top:12px;border-top:1px solid var(--brd);padding-top:8px">'
+      + 'Última medição' + (d.arquivo ? ' (' + cpEsc(d.arquivo) + ')' : '') + ' em '
+      + q.toLocaleDateString('pt-BR') + ' às ' + q.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+      + (d.atualizadoPor ? ' por ' + cpEsc(d.atualizadoPor) : '') + '.</div>';
+  }
+  h += '</div>';
+  box.innerHTML = h;
+  cpRenderEquipe();
+  cpRenderHistorico();
+}
+
+function cpRenderEquipe(){
+  var box = document.getElementById('cp-equipe');
+  if (!box) return;
+  var d = _cpDia || {};
+  var lista = d.compradores || [];
+  if (!lista.length) { box.innerHTML = ''; return; }
+  var tot = +d.total || 0;
+  var maior = lista.reduce(function(m, c){ return Math.max(m, +c.total||0); }, 0) || 1;
+
+  var h = '<div class="cd"><div class="cd-t">🧑‍🤝‍🧑 Produção por comprador — ' + cpDataBR(d.data) + '</div>'
+    + '<div style="overflow:auto"><table>'
+    + '<thead><tr><th>Comprador</th><th style="text-align:right">Memorizado</th>'
+    + '<th style="text-align:right">Emitido</th><th style="text-align:right">Total</th>'
+    + '<th style="text-align:right">% do feito</th><th style="width:130px">Participação</th></tr></thead><tbody>';
+
+  lista.forEach(function(c){
+    var t = +c.total || 0;
+    h += '<tr>'
+      + '<td style="font-weight:600">' + cpEsc(c.nome) + '</td>'
+      + '<td style="text-align:right">' + cpNum(c.memorizado) + '</td>'
+      + '<td style="text-align:right">' + cpNum(c.emitido) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + cpNum(t) + '</td>'
+      + '<td style="text-align:right;color:var(--tx2)">' + cpPctTxt(cpPct(t, tot)) + '</td>'
+      + '<td>' + cpBarra(c.memorizado, c.emitido, maior) + '</td>'
+      + '</tr>';
+  });
+
+  h += '</tbody><tfoot><tr><td>Total da equipe</td>'
+    + '<td style="text-align:right">' + cpNum(d.memorizado) + '</td>'
+    + '<td style="text-align:right">' + cpNum(d.emitido) + '</td>'
+    + '<td style="text-align:right">' + cpNum(tot) + '</td>'
+    + '<td style="text-align:right">100,0%</td><td></td></tr></tfoot></table></div>'
+    + (d.outros ? '<div style="font-size:10.5px;color:var(--am);margin-top:8px">'
+        + cpNum(d.outros) + ' linha(s) do arquivo tinham outro status e não entraram na conta.</div>' : '')
+    + '</div>';
+  box.innerHTML = h;
+}
+
+function cpRenderHistorico(){
+  var box = document.getElementById('cp-historico');
+  if (!box) return;
+  if (!_cpHist || !_cpHist.length) { box.innerHTML = ''; return; }
+  var h = '<div class="cd"><div class="cd-t">📅 Histórico dos dias</div>'
+    + '<div style="overflow:auto;max-height:340px"><table>'
+    + '<thead><tr><th>Data</th><th>Situação</th><th style="text-align:right">Possibilidades</th>'
+    + '<th style="text-align:right">Meta</th><th style="text-align:right">Feitos</th>'
+    + '<th style="text-align:right">% da meta</th><th style="text-align:right">% das possibilidades</th></tr></thead><tbody>';
+  _cpHist.forEach(function(x){
+    var and = cpSituacao(x.data) === 'andamento';
+    var pm = cpPct(x.total, x.meta);
+    h += '<tr' + (x.data === (_cpDia && _cpDia.data) ? ' style="background:var(--azc)"' : '') + '>'
+      + '<td style="font-weight:600">' + cpDataBR(x.data) + '</td>'
+      + '<td style="color:' + (and ? 'var(--am)' : 'var(--tx2)') + ';font-weight:600">'
+      +   (and ? 'Em andamento' : 'Finalizado') + '</td>'
+      + '<td style="text-align:right">' + cpNum(x.possibilidades) + '</td>'
+      + '<td style="text-align:right">' + cpNum(x.meta) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + cpNum(x.total) + '</td>'
+      + '<td style="text-align:right;color:' + (pm >= 1 ? 'var(--vd)' : 'var(--tx)') + ';font-weight:600">'
+      +   cpPctTxt(pm) + '</td>'
+      + '<td style="text-align:right;color:var(--tx2)">' + cpPctTxt(cpPct(x.total, x.possibilidades)) + '</td>'
+      + '</tr>';
+  });
+  h += '</tbody></table></div></div>';
+  box.innerHTML = h;
+}
+
+// ── resumo para mandar para a equipe ──────────────────────────────
+function cpTextoResumo(){
+  var d = _cpDia || cpDiaVazio(cpDataSel());
+  var feito = +d.total || 0, meta = +d.meta || 0, poss = +d.possibilidades || 0;
+  var l = [];
+  l.push('CONTROLE DE PEDIDOS — ' + cpDataBR(d.data)
+       + (cpSituacao(d.data) === 'andamento' ? ' (parcial do dia)' : ' (fechado)'));
+  l.push('');
+  l.push('Possibilidades: ' + cpNum(poss));
+  l.push('Meta da equipe: ' + cpNum(meta));
+  l.push('Feitos: ' + cpNum(feito) + '  (' + cpNum(d.memorizado||0) + ' memorizados + ' + cpNum(d.emitido||0) + ' emitidos)');
+  l.push('Falta para a meta: ' + cpNum(Math.max(0, meta - feito)) + '  — ' + cpPctTxt(cpPct(feito, meta)) + ' da meta');
+  l.push('Falta para as possibilidades: ' + cpNum(Math.max(0, poss - feito)) + '  — ' + cpPctTxt(cpPct(feito, poss)) + ' do total');
+  if ((d.compradores || []).length) {
+    l.push('');
+    l.push('Por comprador:');
+    d.compradores.forEach(function(c){
+      l.push('  ' + c.nome + ': ' + cpNum(c.total) + '  (' + cpNum(c.memorizado) + ' mem. / ' + cpNum(c.emitido) + ' emit.)');
+    });
+  }
+  return l.join('\n');
+}
+
+function cpCopiarResumo(){
+  var txt = cpTextoResumo();
+  var st = document.getElementById('cp-status');
+  var ok = function(){ if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Resumo copiado — é só colar no grupo da equipe.</span>'; };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(ok, function(){ cpCopiaManual(txt); });
+      return;
+    }
+  } catch (e) {}
+  cpCopiaManual(txt);
+}
+
+function cpCopiaManual(txt){
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = txt;
+    ta.style.cssText = 'position:fixed;left:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    var st = document.getElementById('cp-status');
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Resumo copiado — é só colar no grupo da equipe.</span>';
+  } catch (e) {
+    var st2 = document.getElementById('cp-status');
+    if (st2) st2.innerHTML = '<span style="color:var(--am)">Não consegui copiar sozinho — o resumo saiu no console.</span>';
+    console.log(txt);
+  }
+}
+
 
 // ── METAS E GAP ──
 function admCarregarValores(){
