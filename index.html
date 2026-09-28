@@ -10514,6 +10514,7 @@ var CP_COL = 'controle_pedidos';
 var CP_COR_MEM = '#3266AD';   // memorizado
 var CP_COR_EMI = '#0E9E6A';   // emitido
 var _cpDia  = null;   // medição + parâmetros do dia selecionado
+var _cpFora = [];     // compradores fora da conta (ex.: atuando em outra equipe)
 var _cpHist = [];     // resumo dos últimos dias, mais novo primeiro
 var _cpCarregando = false;
 
@@ -10541,6 +10542,70 @@ function cpEsc(t){
   return String(t == null ? '' : t)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+// ── quem entra na conta ───────────────────────────────────────────
+function cpNormNome(n){
+  return String(n == null ? '' : n)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toUpperCase().replace(/\s+/g,' ').trim();
+}
+function cpEstaFora(nome){
+  var n = cpNormNome(nome);
+  return (_cpFora || []).some(function(x){ return cpNormNome(x) === n; });
+}
+
+// Soma só de quem está na equipe. A lista crua fica intacta.
+function cpTotais(lista){
+  var r = { memorizado:0, emitido:0, total:0, dentro:[], fora:[] };
+  (lista || []).forEach(function(c){
+    var o = { nome:c.nome, memorizado:+c.memorizado||0, emitido:+c.emitido||0, total:+c.total||0 };
+    if (cpEstaFora(o.nome)) { r.fora.push(o); return; }
+    r.dentro.push(o);
+    r.memorizado += o.memorizado; r.emitido += o.emitido; r.total += o.total;
+  });
+  return r;
+}
+
+async function cpTirarComprador(nome){
+  if (!nome) return;
+  if (!cpEstaFora(nome)) _cpFora.push(nome);
+  await cpAplicarFora();
+}
+async function cpVoltarComprador(nome){
+  var n = cpNormNome(nome);
+  _cpFora = (_cpFora || []).filter(function(x){ return cpNormNome(x) !== n; });
+  await cpAplicarFora();
+}
+
+// Tirar ou devolver alguém muda a conta de TODOS os dias — por isso
+// regrava o dia aberto e recarrega o histórico.
+async function cpAplicarFora(){
+  await cpSalvarFora();
+  if (_cpDia) {
+    var t = cpTotais(_cpDia.compradores);
+    _cpDia.memorizado = t.memorizado; _cpDia.emitido = t.emitido; _cpDia.total = t.total;
+  }
+  cpRender();
+  await cpSalvarDia();
+}
+
+async function cpSalvarFora(){
+  try {
+    var db = getDB(); if (!db) return false;
+    await db.collection('config').doc('controle_pedidos_fora').set({
+      nomes: _cpFora || [], atualizadoEm: new Date().toISOString(), atualizadoPor: cpQuem()
+    });
+    return true;
+  } catch (e) { console.warn('cpSalvarFora:', e); return false; }
+}
+
+async function cpCarregarFora(){
+  try {
+    var db = getDB(); if (!db) return;
+    var doc = await db.collection('config').doc('controle_pedidos_fora').get();
+    _cpFora = (doc && doc.exists && (doc.data() || {}).nomes) || [];
+  } catch (e) { console.warn('cpCarregarFora:', e); }
+}
+
 function cpQuem(){
   try { if (typeof colabLogado !== 'undefined' && colabLogado) return colabLogado; } catch (e) {}
   return 'ADM';
@@ -10713,10 +10778,11 @@ async function cpHandleUpload(file){
     }
 
     _cpDia = _cpDia && _cpDia.data === data ? _cpDia : cpDiaVazio(data);
-    _cpDia.compradores = med.compradores;
-    _cpDia.memorizado  = med.memorizado;
-    _cpDia.emitido     = med.emitido;
-    _cpDia.total       = med.total;
+    var tt = cpTotais(med.compradores);
+    _cpDia.compradores = med.compradores;   // a medição inteira, como veio
+    _cpDia.memorizado  = tt.memorizado;     // a conta, já sem quem está fora
+    _cpDia.emitido     = tt.emitido;
+    _cpDia.total       = tt.total;
     _cpDia.outros      = med.outros;
     _cpDia.arquivo     = file.name;
     _cpDia.atualizadoEm = new Date().toISOString();
@@ -10724,8 +10790,11 @@ async function cpHandleUpload(file){
     cpLerParametrosDaTela();
 
     if (st) st.innerHTML = '<span style="color:var(--vd)">✓ <strong>' + cpEsc(file.name) + '</strong> — '
-      + cpNum(med.total) + ' pedidos em ' + cpDataBR(data) + ', ' + med.compradores.length
-      + (med.compradores.length === 1 ? ' comprador' : ' compradores') + '</span>';
+      + cpNum(tt.total) + ' pedidos em ' + cpDataBR(data) + ', ' + tt.dentro.length
+      + (tt.dentro.length === 1 ? ' comprador' : ' compradores')
+      + (tt.fora.length ? ' · <span style="color:var(--am)">' + tt.fora.length
+          + ' fora da conta (' + cpEsc(tt.fora.map(function(x){ return x.nome; }).join(', ')) + ')</span>' : '')
+      + '</span>';
     if (lt) lt.innerHTML = cpTextoLeitura(med, data);
 
     cpRender();
@@ -10840,8 +10909,10 @@ async function cpCarregarHistorico(){
     var out = [];
     snap.forEach(function(doc){
       var d = doc.data() || {};
+      var t = cpTotais(d.compradores);   // reconta sem quem está fora
       out.push({ data:d.data || doc.id, possibilidades:+d.possibilidades||0, meta:+d.meta||0,
-                 memorizado:+d.memorizado||0, emitido:+d.emitido||0, total:+d.total||0,
+                 compradores:d.compradores||[],
+                 memorizado:t.memorizado, emitido:t.emitido, total:t.total,
                  atualizadoEm:d.atualizadoEm||'' });
     });
     out.sort(function(a,b){ return a.data < b.data ? 1 : (a.data > b.data ? -1 : 0); });
@@ -10855,6 +10926,7 @@ async function cpAbrir(){
   try {
     var el = document.getElementById('cp-data');
     if (el && !el.value) el.value = cpHojeISO();
+    await cpCarregarFora();
     await cpCarregarHistorico();
     await cpCarregarDia(cpDataSel());
     cpPintarParametros();
@@ -10892,16 +10964,19 @@ function cpBarra(mem, emi, alvo, corFundo){
     + '</div>';
 }
 
+function _cpMem(){ return cpTotais((_cpDia || {}).compradores).memorizado; }
+function _cpEmi(){ return cpTotais((_cpDia || {}).compradores).emitido; }
+
 function cpLegenda(){
   var p = function(cor, rot, n){
     return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--tx2)">'
       + '<span style="width:9px;height:9px;border-radius:2px;background:' + cor + ';display:inline-block"></span>'
       + cpEsc(rot) + ' <strong style="color:var(--tx)">' + cpNum(n) + '</strong></span>';
   };
-  var d = _cpDia || {};
+  var t = cpTotais((_cpDia || {}).compradores);
   return '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">'
-    + p(CP_COR_MEM, 'Memorizado', d.memorizado || 0)
-    + p(CP_COR_EMI, 'Emitido', d.emitido || 0) + '</div>';
+    + p(CP_COR_MEM, 'Memorizado', t.memorizado)
+    + p(CP_COR_EMI, 'Emitido', t.emitido) + '</div>';
 }
 
 function cpMedidor(rot, feito, alvo, sufixo){
@@ -10914,7 +10989,7 @@ function cpMedidor(rot, feito, alvo, sufixo){
     +   '<span style="font-size:11.5px;color:var(--tx2)">' + cpNum(feito) + ' de ' + cpNum(alvo)
     +     ' · <strong style="color:' + (pct >= 1 ? 'var(--vd)' : 'var(--az)') + '">' + cpPctTxt(pct) + '</strong></span>'
     + '</div>'
-    + cpBarra(d.memorizado || 0, d.emitido || 0, alvo)
+    + cpBarra(_cpMem(), _cpEmi(), alvo)
     + '<div style="font-size:10.5px;color:var(--tx2);margin-top:4px">'
     +   (falta > 0 ? 'Faltam <strong style="color:var(--am)">' + cpNum(falta) + '</strong> ' + sufixo
                    : '<strong style="color:var(--vd)">Alcançado.</strong>')
@@ -10926,7 +11001,8 @@ function cpRender(){
   if (!box) return;
   var d = _cpDia || cpDiaVazio(cpDataSel());
   var sit = cpSituacao(d.data);
-  var feito = +d.total || 0, meta = +d.meta || 0, poss = +d.possibilidades || 0;
+  var tt = cpTotais(d.compradores);
+  var feito = tt.total, meta = +d.meta || 0, poss = +d.possibilidades || 0;
   var faltaMeta = Math.max(0, meta - feito), faltaPoss = Math.max(0, poss - feito);
   var pctMeta = cpPct(feito, meta), pctPoss = cpPct(feito, poss);
 
@@ -10958,7 +11034,7 @@ function cpRender(){
     + card('POSSIBILIDADES DE PEDIDO', cpNum(poss), 'tudo que dá para pedir hoje')
     + card('META DA EQUIPE', cpNum(meta), cpPctTxt(cpPct(meta, poss)) + ' das possibilidades')
     + card('FEITOS ATÉ AGORA', cpNum(feito),
-        cpNum(d.memorizado||0) + ' memorizados · ' + cpNum(d.emitido||0) + ' emitidos',
+        cpNum(tt.memorizado) + ' memorizados · ' + cpNum(tt.emitido) + ' emitidos',
         feito >= meta && meta ? 'ok' : '')
     + card('FALTA PARA A META', cpNum(faltaMeta),
         faltaMeta ? 'faltam ' + cpPctTxt(1 - pctMeta) + ' da meta' : 'meta batida',
@@ -10989,34 +11065,69 @@ function cpRenderEquipe(){
   if (!box) return;
   var d = _cpDia || {};
   var lista = d.compradores || [];
-  if (!lista.length) { box.innerHTML = ''; return; }
-  var tot = +d.total || 0;
-  var maior = lista.reduce(function(m, c){ return Math.max(m, +c.total||0); }, 0) || 1;
-
-  var h = '<div class="cd"><div class="cd-t">🧑‍🤝‍🧑 Produção por comprador — ' + cpDataBR(d.data) + '</div>'
-    + '<div style="overflow:auto"><table>'
-    + '<thead><tr><th>Comprador</th><th style="text-align:right">Memorizado</th>'
-    + '<th style="text-align:right">Emitido</th><th style="text-align:right">Total</th>'
-    + '<th style="text-align:right">% do feito</th><th style="width:130px">Participação</th></tr></thead><tbody>';
-
-  lista.forEach(function(c){
-    var t = +c.total || 0;
-    h += '<tr>'
-      + '<td style="font-weight:600">' + cpEsc(c.nome) + '</td>'
-      + '<td style="text-align:right">' + cpNum(c.memorizado) + '</td>'
-      + '<td style="text-align:right">' + cpNum(c.emitido) + '</td>'
-      + '<td style="text-align:right;font-weight:700">' + cpNum(t) + '</td>'
-      + '<td style="text-align:right;color:var(--tx2)">' + cpPctTxt(cpPct(t, tot)) + '</td>'
-      + '<td>' + cpBarra(c.memorizado, c.emitido, maior) + '</td>'
-      + '</tr>';
+  // nomes que estão fora mas não apareceram na medição de hoje — ainda
+  // precisam de um jeito de voltar
+  var soltos = (_cpFora || []).filter(function(n){
+    return !lista.some(function(c){ return cpNormNome(c.nome) === cpNormNome(n); });
   });
+  if (!lista.length && !soltos.length) { box.innerHTML = ''; return; }
 
-  h += '</tbody><tfoot><tr><td>Total da equipe</td>'
-    + '<td style="text-align:right">' + cpNum(d.memorizado) + '</td>'
-    + '<td style="text-align:right">' + cpNum(d.emitido) + '</td>'
-    + '<td style="text-align:right">' + cpNum(tot) + '</td>'
-    + '<td style="text-align:right">100,0%</td><td></td></tr></tfoot></table></div>'
-    + (d.outros ? '<div style="font-size:10.5px;color:var(--am);margin-top:8px">'
+  var tt = cpTotais(lista);
+  var tot = tt.total;
+  var maior = tt.dentro.reduce(function(m, c){ return Math.max(m, c.total); }, 0) || 1;
+
+  var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between">'
+    + '<span>🧑‍🤝‍🧑 Produção por comprador — ' + cpDataBR(d.data) + '</span>'
+    + '<span style="font-size:10.5px;font-weight:500;color:var(--tx2)">Tirar alguém vale para todos os dias</span>'
+    + '</div>';
+
+  if (lista.length) {
+    h += '<div style="overflow:auto"><table>'
+      + '<thead><tr><th>Comprador</th><th style="text-align:right">Memorizado</th>'
+      + '<th style="text-align:right">Emitido</th><th style="text-align:right">Total</th>'
+      + '<th style="text-align:right">% do feito</th><th style="width:130px">Participação</th>'
+      + '<th style="text-align:center">Na conta</th></tr></thead><tbody>';
+
+    lista.forEach(function(c){
+      var t = +c.total || 0;
+      var fora = cpEstaFora(c.nome);
+      var nomeJs = "'" + String(c.nome).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
+      h += '<tr' + (fora ? ' style="opacity:.55;background:var(--cin)" title="Fora da conta — não soma"' : '') + '>'
+        + '<td style="font-weight:600' + (fora ? ';text-decoration:line-through' : '') + '">' + cpEsc(c.nome) + '</td>'
+        + '<td style="text-align:right">' + cpNum(c.memorizado) + '</td>'
+        + '<td style="text-align:right">' + cpNum(c.emitido) + '</td>'
+        + '<td style="text-align:right;font-weight:700">' + cpNum(t) + '</td>'
+        + '<td style="text-align:right;color:var(--tx2)">' + (fora ? '—' : cpPctTxt(cpPct(t, tot))) + '</td>'
+        + '<td>' + (fora ? '' : cpBarra(c.memorizado, c.emitido, maior)) + '</td>'
+        + '<td style="text-align:center">'
+        +   (fora
+              ? '<button class="btn btn-s" style="padding:3px 9px;font-size:10.5px" onclick="cpVoltarComprador(' + nomeJs + ')">↩ Voltar</button>'
+              : '<button class="btn btn-s" style="padding:3px 9px;font-size:10.5px;color:var(--vm)" onclick="cpTirarComprador(' + nomeJs + ')">✕ Tirar</button>')
+        + '</td></tr>';
+    });
+
+    h += '</tbody><tfoot><tr><td>Total da equipe</td>'
+      + '<td style="text-align:right">' + cpNum(tt.memorizado) + '</td>'
+      + '<td style="text-align:right">' + cpNum(tt.emitido) + '</td>'
+      + '<td style="text-align:right">' + cpNum(tot) + '</td>'
+      + '<td style="text-align:right">100,0%</td><td></td><td></td></tr></tfoot></table></div>';
+  }
+
+  var forinhas = tt.fora.concat(soltos.map(function(n){ return { nome:n }; }));
+  if (forinhas.length) {
+    h += '<div style="margin-top:10px;font-size:11px;color:var(--tx2)">Fora da conta: '
+      + forinhas.map(function(x){
+          var nomeJs = "'" + String(x.nome).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
+          return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--cin);border:1px solid var(--brd);'
+            + 'border-radius:20px;padding:2px 4px 2px 10px;margin:2px 4px 2px 0">' + cpEsc(x.nome)
+            + '<button class="btn btn-s" style="padding:1px 7px;font-size:10px" title="Voltar para a conta"'
+            + ' onclick="cpVoltarComprador(' + nomeJs + ')">↩</button></span>';
+        }).join('')
+      + '<div style="margin-top:4px">A produção deles continua gravada — só não soma. Devolvendo, os números voltam em todos os dias.</div>'
+      + '</div>';
+  }
+
+  h += (d.outros ? '<div style="font-size:10.5px;color:var(--am);margin-top:8px">'
         + cpNum(d.outros) + ' linha(s) do arquivo tinham outro status e não entraram na conta.</div>' : '')
     + '</div>';
   box.innerHTML = h;
@@ -11053,20 +11164,21 @@ function cpRenderHistorico(){
 // ── resumo para mandar para a equipe ──────────────────────────────
 function cpTextoResumo(){
   var d = _cpDia || cpDiaVazio(cpDataSel());
-  var feito = +d.total || 0, meta = +d.meta || 0, poss = +d.possibilidades || 0;
+  var tt = cpTotais(d.compradores);
+  var feito = tt.total, meta = +d.meta || 0, poss = +d.possibilidades || 0;
   var l = [];
   l.push('CONTROLE DE PEDIDOS — ' + cpDataBR(d.data)
        + (cpSituacao(d.data) === 'andamento' ? ' (parcial do dia)' : ' (fechado)'));
   l.push('');
   l.push('Possibilidades: ' + cpNum(poss));
   l.push('Meta da equipe: ' + cpNum(meta));
-  l.push('Feitos: ' + cpNum(feito) + '  (' + cpNum(d.memorizado||0) + ' memorizados + ' + cpNum(d.emitido||0) + ' emitidos)');
+  l.push('Feitos: ' + cpNum(feito) + '  (' + cpNum(tt.memorizado) + ' memorizados + ' + cpNum(tt.emitido) + ' emitidos)');
   l.push('Falta para a meta: ' + cpNum(Math.max(0, meta - feito)) + '  — ' + cpPctTxt(cpPct(feito, meta)) + ' da meta');
   l.push('Falta para as possibilidades: ' + cpNum(Math.max(0, poss - feito)) + '  — ' + cpPctTxt(cpPct(feito, poss)) + ' do total');
-  if ((d.compradores || []).length) {
+  if (tt.dentro.length) {
     l.push('');
     l.push('Por comprador:');
-    d.compradores.forEach(function(c){
+    tt.dentro.forEach(function(c){
       l.push('  ' + c.nome + ': ' + cpNum(c.total) + '  (' + cpNum(c.memorizado) + ' mem. / ' + cpNum(c.emitido) + ' emit.)');
     });
   }
