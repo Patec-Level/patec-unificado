@@ -38360,18 +38360,30 @@ function _dirCardHTML(d){
              : (dg < 0 ? ' Queda de ' + _dirItens(-dg) + ' vs o dia anterior.' : ' Alta de ' + _dirItens(dg) + ' vs o dia anterior.');
     }
     h += '<div style="font-size:12px;color:' + _DIR_C.tx + ';margin-bottom:8px">' + _dirEsc(frase) + '</div>';
-    h += '<table cellspacing="0" cellpadding="0" style="' + _DIR_TAB + '"><tr>'
-       + _dirKpi('PATEC Finalizado', r.l3, r.a3, '#3266AD')
-       + _dirKpi('Ag. PATEC Finalizar', r.l4, r.a4, '#3266AD')
-       + _dirKpi('100% Reprovado', r.l5, r.a5, _DIR_C.vd)
-       + _dirKpi('PATEC Cancelado', r.l6, r.a6, _DIR_C.vd)
-       + _dirKpi('Total PATEC', r.totPatec, r.totPatecAnt, _DIR_C.azm)
-       + _dirKpi('Abrir ID Não', r.l7, r.a7, _DIR_C.am)
-       + _dirKpi('Abrir PATEC Obrig.', r.l8, r.a8, _DIR_C.am)
-       + _dirKpi('Total Abrir PATEC', r.totAbrir, r.totAbrirAnt, _DIR_C.am)
-       + _dirCel('<div style="font-size:9.5px;font-weight:700;color:' + _DIR_C.tx2 + ';margin-bottom:3px">Total Geral</div>'
-           + '<div style="font-size:24px;font-weight:800;color:' + _DIR_C.az + ';line-height:1">' + r.totGeral + '</div>'
-           + _dirVar(r.totGeral, r.totGeralAnt), _DIR_C.azm, _DIR_C.azc)
+    // Mesmo desenho do Resumo do dia: uma linha para o PATEC, outra para
+    // o Abrir PATEC, e o Total Geral num cartão alto à direita, cobrindo as
+    // duas. Tabela com rowspan porque este bloco também vai por e-mail.
+    var _vazia = '<td style="border:none;background:none;padding:0"></td>';
+    var _totalGeral = '<td rowspan="2" style="background:' + _DIR_C.azc + ';border:1px solid ' + _DIR_C.azm
+      + ';border-radius:8px;padding:9px 6px;text-align:center;vertical-align:middle">'
+      + '<div style="font-size:9.5px;font-weight:700;color:' + _DIR_C.tx2 + ';margin-bottom:3px">Total Geral</div>'
+      + '<div style="font-size:28px;font-weight:800;color:' + _DIR_C.az + ';line-height:1">' + r.totGeral + '</div>'
+      + _dirVar(r.totGeral, r.totGeralAnt) + '</td>';
+
+    h += '<table cellspacing="0" cellpadding="0" style="' + _DIR_TAB + '">'
+       + '<tr>'
+       +   _dirKpi('PATEC Finalizado', r.l3, r.a3, '#3266AD')
+       +   _dirKpi('Ag. PATEC Finalizar', r.l4, r.a4, '#3266AD')
+       +   _dirKpi('100% Reprovado', r.l5, r.a5, _DIR_C.vd)
+       +   _dirKpi('PATEC Cancelado', r.l6, r.a6, _DIR_C.vd)
+       +   _dirKpi('Total PATEC', r.totPatec, r.totPatecAnt, _DIR_C.azm)
+       +   _totalGeral
+       + '</tr>'
+       + '<tr>'
+       +   _dirKpi('Abrir ID Não', r.l7, r.a7, _DIR_C.am)
+       +   _dirKpi('Abrir PATEC Obrig.', r.l8, r.a8, _DIR_C.am)
+       +   _dirKpi('Total Abrir PATEC', r.totAbrir, r.totAbrirAnt, _DIR_C.am)
+       +   _vazia + _vazia
        + '</tr></table>';
   }
 
