@@ -19093,14 +19093,83 @@ function _govPcLista(qual){
     if (qual === 'cancel' && typeof pcDadosCancelado === 'function') return semConcluido(pcDadosCancelado());
     if (qual === 'pid'    && typeof pcDadosPid       === 'function') return semConcluido(pcDadosPid());
     if (qual === 'fluxo') {
+      // pcGetFluxo é EXATAMENTE a mesma leitura da aba Tirar do Fluxo:
+      // coluna TIRAR = LIBERAR, sem repetir a chave RC|SEQ|OP|Item OP.
+      // A única diferença do card é tirar o que já foi concluído — e a
+      // conclusão é procurada pela mesma chave que a aba usa (RC|SEQ|OP),
+      // não pelo Radar: o item do backlog pode nem estar no Radar do dia.
       var l = [];
       if (typeof pcGetFluxo === 'function') l = pcGetFluxo();
       else if (typeof _dirTirarFluxo === 'function') l = _dirTirarFluxo();
-      var idx = _govRadarIdx();
-      return l.filter(function(x){ return !_govConcluidoFora(idx, x.rc, x.seq || x.item_rc || x.item); });
+      return l.filter(function(x){
+        var ch = [x.rc, x.seq, x.num_oport].map(function(v){ return String(v || '').trim(); }).join('|');
+        var m = {};
+        try { m = _govDados[ch] || {}; } catch (e) {}
+        return !m.finalizado;
+      });
     }
   } catch (e) {}
   return [];
+}
+
+// ── Por que uma RC não está no card 100% Reprovado? ───────────────
+// O card lê o Radar (coluna STATUS MAPA). O número do Panorama do
+// Direcionamento vem do Resumo do dia, que é outra base — por isso os
+// dois podem não bater. Esta função diz, RC por RC, o motivo.
+// No console:  govConferirReprovado('36832792 36757540 36568111')
+// com item:    govConferirReprovado([['36832792','20'], ['36757540','10']])
+var _GOV_REPROVADO_STATUS = 'PATEC Finalizado sem fornecedores aprovados';
+
+function govConferirReprovado(lista){
+  var itens = [];
+  if (typeof lista === 'string') {
+    lista.split(/[\s,;]+/).forEach(function(x){ if (x) itens.push([x, '']); });
+  } else {
+    (lista || []).forEach(function(x){
+      itens.push(Array.isArray(x) ? [String(x[0] || ''), String(x[1] || '')] : [String(x || ''), '']);
+    });
+  }
+
+  var plano = [];
+  itens.forEach(function(par){
+    var rc = String(par[0]).trim(), item = String(par[1]).trim();
+    var linhas = (typeof _radarDados !== 'undefined' ? (_radarDados || []) : []).filter(function(r){
+      if (String(r.rc || '').trim() !== rc) return false;
+      return !item || String(r.seq || '').trim() === item;
+    });
+
+    if (!linhas.length) {
+      var soltos = (typeof _radarDados !== 'undefined' ? (_radarDados || []) : [])
+        .filter(function(r){ return String(r.rc || '').trim() === rc; });
+      plano.push({ rc:rc, item:(item || '—'),
+        situacao: soltos.length ? 'item não existe nesta RC no Radar' : 'não está no Radar',
+        statusMapa: '—',
+        detalhe: soltos.length ? ('itens desta RC no Radar: ' + soltos.map(function(r){ return r.seq; }).join(', ')) : 'o Radar do dia não trouxe esta RC' });
+      return;
+    }
+
+    linhas.forEach(function(r){
+      var st = String(r.analista_auto || '').trim();
+      var m = {};
+      try { m = _govDados[govChave(r)] || {}; } catch (e) {}
+      var sit;
+      if (st !== _GOV_REPROVADO_STATUS) sit = 'STATUS MAPA não é 100% Reprovado';
+      else if (m.finalizado)            sit = 'concluído — está na aba Concluídos';
+      else                              sit = 'está no card';
+      plano.push({ rc:rc, item:String(r.seq || '—'), situacao:sit,
+        statusMapa: st || '(vazio)',
+        detalhe: m.finalizado ? ('finalizado em ' + m.finalizado)
+               : (m.status ? ('tratamento: ' + m.status) : '') });
+    });
+  });
+
+  var resumo = {};
+  plano.forEach(function(x){ resumo[x.situacao] = (resumo[x.situacao] || 0) + 1; });
+  try { console.table(plano); } catch (e) { console.log(plano); }
+  console.log('Resumo:', resumo);
+  console.log('Lembre: o "100% Reprovado" do Panorama do Direcionamento vem do Resumo do dia; '
+    + 'este card vem do Radar (STATUS MAPA). São bases diferentes.');
+  return { linhas: plano, resumo: resumo };
 }
 
 function _govPcQtd(){
@@ -30447,14 +30516,14 @@ function acaoSelecionarConclusao(btn, conclusao){
   // Centro é obrigatório para TODA conclusão — sempre visível
   const _centroBoxC = document.getElementById('acao-centro-box');
   if(_centroBoxC) _centroBoxC.style.display = 'block';
-  // Mostrar campos de Pedido apenas se Pedido selecionado
+  // "Dados do Pedido" não é mais pedido na conclusão — o bloco continua no
+  // arquivo, só não aparece. Como a validação e a gravação olham se ele está
+  // visível, ficando escondido ele deixa de ser obrigatório sozinho.
   const _pedidoBox = document.getElementById('acao-pedido-box');
-  if(_pedidoBox) _pedidoBox.style.display = conclusao === 'Pedido' ? 'block' : 'none';
-  if(conclusao !== 'Pedido'){
-    ['acao-pedido-negociacao','acao-pedido-fornecedor','acao-pedido-id-sap','acao-pedido-nm','acao-pedido-comentario'].forEach(id=>{
-      const el = document.getElementById(id); if(el) el.value = '';
-    });
-  }
+  if(_pedidoBox) _pedidoBox.style.display = 'none';
+  ['acao-pedido-negociacao','acao-pedido-fornecedor','acao-pedido-id-sap','acao-pedido-nm','acao-pedido-comentario'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
   // Auto-preencher Centro a partir da coluna CENTRO do Radar — para QUALQUER conclusão
   {
     const _dcAuto = document.getElementById('acao-dev-centro');
