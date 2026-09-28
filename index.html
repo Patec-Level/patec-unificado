@@ -11081,28 +11081,27 @@ function cpRenderEquipe(){
     + '<span style="font-size:10.5px;font-weight:500;color:var(--tx2)">Tirar alguém vale para todos os dias</span>'
     + '</div>';
 
-  if (lista.length) {
+  if (tt.dentro.length) {
     h += '<div style="overflow:auto"><table>'
       + '<thead><tr><th>Comprador</th><th style="text-align:right">Memorizado</th>'
       + '<th style="text-align:right">Emitido</th><th style="text-align:right">Total</th>'
       + '<th style="text-align:right">% do feito</th><th style="width:130px">Participação</th>'
       + '<th style="text-align:center">Na conta</th></tr></thead><tbody>';
 
-    lista.forEach(function(c){
+    // só quem está na conta: quem foi tirado sai da lista e fica na
+    // tarja de baixo, de onde pode voltar
+    tt.dentro.forEach(function(c){
       var t = +c.total || 0;
-      var fora = cpEstaFora(c.nome);
       var nomeJs = "'" + String(c.nome).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'";
-      h += '<tr' + (fora ? ' style="opacity:.55;background:var(--cin)" title="Fora da conta — não soma"' : '') + '>'
-        + '<td style="font-weight:600' + (fora ? ';text-decoration:line-through' : '') + '">' + cpEsc(c.nome) + '</td>'
+      h += '<tr>'
+        + '<td style="font-weight:600">' + cpEsc(c.nome) + '</td>'
         + '<td style="text-align:right">' + cpNum(c.memorizado) + '</td>'
         + '<td style="text-align:right">' + cpNum(c.emitido) + '</td>'
         + '<td style="text-align:right;font-weight:700">' + cpNum(t) + '</td>'
-        + '<td style="text-align:right;color:var(--tx2)">' + (fora ? '—' : cpPctTxt(cpPct(t, tot))) + '</td>'
-        + '<td>' + (fora ? '' : cpBarra(c.memorizado, c.emitido, maior)) + '</td>'
+        + '<td style="text-align:right;color:var(--tx2)">' + cpPctTxt(cpPct(t, tot)) + '</td>'
+        + '<td>' + cpBarra(c.memorizado, c.emitido, maior) + '</td>'
         + '<td style="text-align:center">'
-        +   (fora
-              ? '<button class="btn btn-s" style="padding:3px 9px;font-size:10.5px" onclick="cpVoltarComprador(' + nomeJs + ')">↩ Voltar</button>'
-              : '<button class="btn btn-s" style="padding:3px 9px;font-size:10.5px;color:var(--vm)" onclick="cpTirarComprador(' + nomeJs + ')">✕ Tirar</button>')
+        +   '<button class="btn btn-s" style="padding:3px 9px;font-size:10.5px;color:var(--vm)" onclick="cpTirarComprador(' + nomeJs + ')">✕ Tirar</button>'
         + '</td></tr>';
     });
 
