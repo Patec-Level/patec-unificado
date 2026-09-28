@@ -1318,6 +1318,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
         <div id="cp-painel"></div>
         <div id="cp-equipe"></div>
+        <div id="cp-lista-mem"></div>
         <div id="cp-historico"></div>
       </div>
 
@@ -10668,7 +10669,8 @@ function _cpAchaCol(cabs, nomes){
 // cabeçalho) e devolve a medição agregada por comprador.
 function cpLerMedicao(linhas, dataAlvo){
   var r = { compradores:[], memorizado:0, emitido:0, outros:0, total:0,
-            lidas:0, foraDaData:0, eliminadas:0, formato:'', colunas:{}, aviso:'' };
+            lidas:0, foraDaData:0, eliminadas:0, formato:'', colunas:{}, aviso:'',
+            itensMem:[] };
   if (!linhas || !linhas.length) { r.aviso = 'Arquivo vazio.'; return r; }
 
   // acha a linha de cabeçalho — costuma ser a 1a, mas o arquivo pode
@@ -10690,7 +10692,10 @@ function cpLerMedicao(linhas, dataAlvo){
   var iSt   = _cpAchaCol(cabs, ['STATUS_PROCESSO','STATUS','SITUACAO','STATUS_DO_PROCESSO']);
   var iDt   = _cpAchaCol(cabs, ['CRIACAO_PEDIDO','DATA_CRIACAO','DT_CRIACAO','CRIACAO','DATA','DATA_DO_PEDIDO']);
   var iEl   = _cpAchaCol(cabs, ['CODIGO_ELIMINACAO_ITEM_PEDIDO','CODIGO_ELIMINACAO','COD_ELIMINACAO','ELIMINACAO','ELIMINADO']);
-  r.colunas = { comprador:iQuem, status:iSt, data:iDt, eliminacao:iEl, memorizado:iMem, emitido:iEmi };
+  var iCh   = _cpAchaCol(cabs, ['CHAVE','CHAVE_PEDIDO']);
+  var iPd   = _cpAchaCol(cabs, ['PEDIDO','NUMERO_PEDIDO','NUM_PEDIDO']);
+  r.colunas = { comprador:iQuem, status:iSt, data:iDt, eliminacao:iEl,
+                memorizado:iMem, emitido:iEmi, chave:iCh, pedido:iPd };
 
   var mapa = {};
   var pega = function(nome){
@@ -10721,6 +10726,7 @@ function cpLerMedicao(linhas, dataAlvo){
       return r;
     }
     r.formato = 'cru';
+    var vistosMem = {};
     for (var b = iCab + 1; b < linhas.length; b++) {
       var lb = linhas[b] || [];
       var nomeB = String(lb[iQuem] == null ? '' : lb[iQuem]).trim();
@@ -10733,7 +10739,18 @@ function cpLerMedicao(linhas, dataAlvo){
       r.lidas++;
       var st = cpStatusNome(lb[iSt]);
       var oB = pega(nomeB);
-      if (st === 'memorizado') { oB.memorizado++; r.memorizado++; }
+      if (st === 'memorizado') {
+        oB.memorizado++; r.memorizado++;
+        // a lista que a equipe recebe: chave + pedido, sem repetir
+        if (iCh !== -1 || iPd !== -1) {
+          var ch = iCh === -1 ? '' : String(lb[iCh] == null ? '' : lb[iCh]).trim();
+          var pd = iPd === -1 ? '' : String(lb[iPd] == null ? '' : lb[iPd]).trim();
+          if (ch || pd) {
+            var k = ch + '|' + pd;
+            if (!vistosMem[k]) { vistosMem[k] = 1; r.itensMem.push({ nome:nomeB, chave:ch, pedido:pd }); }
+          }
+        }
+      }
       else if (st === 'emitido') { oB.emitido++; r.emitido++; }
       else { r.outros++; continue; }
       oB.total++;
@@ -10780,6 +10797,7 @@ async function cpHandleUpload(file){
     _cpDia = _cpDia && _cpDia.data === data ? _cpDia : cpDiaVazio(data);
     var tt = cpTotais(med.compradores);
     _cpDia.compradores = med.compradores;   // a medição inteira, como veio
+    _cpDia.itensMem    = med.itensMem || [];
     _cpDia.memorizado  = tt.memorizado;     // a conta, já sem quem está fora
     _cpDia.emitido     = tt.emitido;
     _cpDia.total       = tt.total;
@@ -10823,7 +10841,7 @@ function cpDiaVazio(data){
   return { data:data,
            possibilidades: ult ? (+ult.possibilidades || 0) : 0,
            meta:           ult ? (+ult.meta || 0) : 0,
-           compradores:[], memorizado:0, emitido:0, total:0, outros:0,
+           compradores:[], itensMem:[], memorizado:0, emitido:0, total:0, outros:0,
            arquivo:'', atualizadoEm:'', atualizadoPor:'' };
 }
 
@@ -10866,6 +10884,9 @@ async function cpSalvarDia(){
       compradores: (d.compradores || []).map(function(c){
         return { nome:c.nome, memorizado:+c.memorizado||0, emitido:+c.emitido||0, total:+c.total||0 };
       }),
+      itensMem: (d.itensMem || []).slice(0, 5000).map(function(i){
+        return { nome:String(i.nome||''), chave:String(i.chave||''), pedido:String(i.pedido||'') };
+      }),
       memorizado: +d.memorizado || 0,
       emitido: +d.emitido || 0,
       total: +d.total || 0,
@@ -10888,7 +10909,8 @@ async function cpCarregarDia(data){
       var d = doc.data() || {};
       _cpDia = { data:data,
                  possibilidades:+d.possibilidades||0, meta:+d.meta||0,
-                 compradores:d.compradores||[], memorizado:+d.memorizado||0,
+                 compradores:d.compradores||[], itensMem:d.itensMem||[],
+                 memorizado:+d.memorizado||0,
                  emitido:+d.emitido||0, total:+d.total||0, outros:+d.outros||0,
                  arquivo:d.arquivo||'', atualizadoEm:d.atualizadoEm||'', atualizadoPor:d.atualizadoPor||'' };
     } else {
@@ -11057,6 +11079,7 @@ function cpRender(){
   h += '</div>';
   box.innerHTML = h;
   cpRenderEquipe();
+  cpRenderListaMem();
   cpRenderHistorico();
 }
 
@@ -11110,6 +11133,16 @@ function cpRenderEquipe(){
       + '<td style="text-align:right">' + cpNum(tt.emitido) + '</td>'
       + '<td style="text-align:right">' + cpNum(tot) + '</td>'
       + '<td style="text-align:right">100,0%</td><td></td><td></td></tr></tfoot></table></div>';
+
+    var nMem = cpItensMem().length;
+    h += '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;flex-wrap:wrap">'
+      + '<button class="btn btn-p" onclick="cpAbrirListaMem()"' + (nMem ? '' : ' disabled style="opacity:.5"')
+      +   '>📋 Lista dos memorizados' + (nMem ? ' (' + cpNum(nMem) + ')' : '') + '</button>'
+      + '</div>';
+    if (!nMem && (tt.memorizado > 0)) {
+      h += '<div style="font-size:10.5px;color:var(--am);text-align:right;margin-top:4px">'
+        + 'Para sair a lista, a medição precisa trazer as colunas CHAVE e PEDIDO.</div>';
+    }
   }
 
   var forinhas = tt.fora.concat(soltos.map(function(n){ return { nome:n }; }));
@@ -11160,6 +11193,104 @@ function cpRenderHistorico(){
   box.innerHTML = h;
 }
 
+// ── Lista dos memorizados — o que a equipe precisa liberar ────────
+// Sai um par CHAVE + PEDIDO por linha (colunas C e D da medição),
+// já sem os compradores que estão fora da conta.
+var _cpListaAberta = false;
+
+function cpItensMem(){
+  var d = _cpDia || {};
+  return (d.itensMem || []).filter(function(i){ return !cpEstaFora(i.nome); });
+}
+
+function cpAbrirListaMem(){
+  _cpListaAberta = true;
+  cpRenderListaMem();
+  var el = document.getElementById('cp-lista-mem');
+  if (el && el.scrollIntoView) { try { el.scrollIntoView({ behavior:'smooth', block:'nearest' }); } catch (e) {} }
+}
+function cpFecharListaMem(){
+  _cpListaAberta = false;
+  cpRenderListaMem();
+}
+
+function cpRenderListaMem(){
+  var box = document.getElementById('cp-lista-mem');
+  if (!box) return;
+  if (!_cpListaAberta) { box.innerHTML = ''; return; }
+  var d = _cpDia || {};
+  var itens = cpItensMem();
+
+  var h = '<div class="cd" style="border-top:3px solid ' + CP_COR_MEM + '">'
+    + '<div class="cd-t" style="justify-content:space-between">'
+    +   '<span>📋 Memorizados de ' + cpDataBR(d.data) + ' — ' + cpNum(itens.length)
+    +     (itens.length === 1 ? ' pedido' : ' pedidos') + ' para liberar</span>'
+    +   '<span style="display:flex;gap:8px">'
+    +     '<button class="btn btn-s" onclick="cpCopiarListaMem()">📋 Copiar</button>'
+    +     '<button class="btn btn-s" onclick="cpBaixarListaMem()">⬇ Baixar Excel</button>'
+    +     '<button class="btn btn-s" onclick="cpFecharListaMem()">✕ Fechar</button>'
+    +   '</span>'
+    + '</div>';
+
+  if (!itens.length) {
+    h += '<div style="font-size:12px;color:var(--tx2)">Nenhum pedido memorizado nesta medição.</div></div>';
+    box.innerHTML = h;
+    return;
+  }
+
+  h += '<div style="overflow:auto;max-height:420px"><table>'
+    + '<thead><tr><th>#</th><th>Comprador</th><th>Chave</th><th>Pedido</th></tr></thead><tbody>';
+  itens.forEach(function(i, k){
+    h += '<tr><td style="color:var(--tx2)">' + (k+1) + '</td>'
+      + '<td>' + cpEsc(i.nome) + '</td>'
+      + '<td style="font-weight:600">' + cpEsc(i.chave) + '</td>'
+      + '<td style="font-weight:700;color:var(--az)">' + cpEsc(i.pedido) + '</td></tr>';
+  });
+  h += '</tbody></table></div></div>';
+  box.innerHTML = h;
+}
+
+function cpTextoListaMem(){
+  var d = _cpDia || {};
+  var itens = cpItensMem();
+  var l = [];
+  l.push('PEDIDOS MEMORIZADOS — ' + cpDataBR(d.data) + ' (' + itens.length
+       + (itens.length === 1 ? ' pedido' : ' pedidos') + ')');
+  var porQuem = {};
+  itens.forEach(function(i){ (porQuem[i.nome] = porQuem[i.nome] || []).push(i); });
+  Object.keys(porQuem).sort().forEach(function(nome){
+    l.push('');
+    l.push(nome + ' (' + porQuem[nome].length + '):');
+    porQuem[nome].forEach(function(i){
+      l.push('  ' + (i.chave ? i.chave + ' · ' : '') + i.pedido);
+    });
+  });
+  return l.join('\n');
+}
+
+function cpCopiarListaMem(){
+  cpCopiaTexto(cpTextoListaMem(), 'Lista dos memorizados copiada — é só colar para a equipe.');
+}
+
+function cpBaixarListaMem(){
+  try {
+    var d = _cpDia || {};
+    var itens = cpItensMem();
+    if (!itens.length) return;
+    var aoa = [['Comprador','Chave','Pedido']];
+    itens.forEach(function(i){ aoa.push([i.nome, i.chave, i.pedido]); });
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch:38 }, { wch:12 }, { wch:16 }];
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Memorizados');
+    XLSX.writeFile(wb, 'Memorizados_' + String(d.data || '').replace(/-/g,'') + '.xlsx');
+  } catch (e) {
+    var st = document.getElementById('cp-status');
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Não consegui gerar o Excel: ' + cpEsc(e.message) + '</span>';
+  }
+}
+
+
 // ── resumo para mandar para a equipe ──────────────────────────────
 function cpTextoResumo(){
   var d = _cpDia || cpDiaVazio(cpDataSel());
@@ -11185,19 +11316,23 @@ function cpTextoResumo(){
 }
 
 function cpCopiarResumo(){
-  var txt = cpTextoResumo();
+  cpCopiaTexto(cpTextoResumo(), 'Resumo copiado — é só colar no grupo da equipe.');
+}
+
+function cpCopiaTexto(txt, aviso){
   var st = document.getElementById('cp-status');
-  var ok = function(){ if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Resumo copiado — é só colar no grupo da equipe.</span>'; };
+  var ok = function(){ if (st) st.innerHTML = '<span style="color:var(--vd)">✓ ' + cpEsc(aviso) + '</span>'; };
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(txt).then(ok, function(){ cpCopiaManual(txt); });
+      navigator.clipboard.writeText(txt).then(ok, function(){ cpCopiaManual(txt, aviso); });
       return;
     }
   } catch (e) {}
-  cpCopiaManual(txt);
+  cpCopiaManual(txt, aviso);
 }
 
-function cpCopiaManual(txt){
+function cpCopiaManual(txt, aviso){
+  var st = document.getElementById('cp-status');
   try {
     var ta = document.createElement('textarea');
     ta.value = txt;
@@ -11206,11 +11341,9 @@ function cpCopiaManual(txt){
     ta.select();
     document.execCommand('copy');
     ta.remove();
-    var st = document.getElementById('cp-status');
-    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Resumo copiado — é só colar no grupo da equipe.</span>';
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ ' + cpEsc(aviso || 'Copiado.') + '</span>';
   } catch (e) {
-    var st2 = document.getElementById('cp-status');
-    if (st2) st2.innerHTML = '<span style="color:var(--am)">Não consegui copiar sozinho — o resumo saiu no console.</span>';
+    if (st) st.innerHTML = '<span style="color:var(--am)">Não consegui copiar sozinho — o texto saiu no console.</span>';
     console.log(txt);
   }
 }
