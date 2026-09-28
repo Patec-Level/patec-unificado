@@ -19081,9 +19081,13 @@ function _govConcluidoFora(idx, rc, itemRc){
   return r ? _govEstaConcluido(r) : false;
 }
 
-function _govPcLista(qual){
+// comConcluidos = true traz também o que já foi concluído. É o que a
+// LISTA usa; a CONTAGEM do card continua só com o que está em aberto.
+function _govPcLista(qual, comConcluidos){
   try {
-    var semConcluido = function(l){ return l.filter(function(r){ return !_govEstaConcluido(r); }); };
+    var semConcluido = function(l){
+      return comConcluidos ? l : l.filter(function(r){ return !_govEstaConcluido(r); });
+    };
     if (qual === 'venc' && typeof pcDadosBase === 'function') {
       return semConcluido(pcDadosBase().filter(function(r){
         return String(r.validade || '').toLowerCase().indexOf('vencid') !== -1;
@@ -19101,6 +19105,7 @@ function _govPcLista(qual){
       var l = [];
       if (typeof pcGetFluxo === 'function') l = pcGetFluxo();
       else if (typeof _dirTirarFluxo === 'function') l = _dirTirarFluxo();
+      if (comConcluidos) return l;
       return l.filter(function(x){
         var ch = [x.rc, x.seq, x.num_oport].map(function(v){ return String(v || '').trim(); }).join('|');
         var m = {};
@@ -19187,12 +19192,12 @@ function _govPcQtd(){
 // direto). Possíveis MDG = só a Regra 3, que pede conferência no SAP e
 // costuma virar cadastro no MDG.
 // Os itens do Analista Pedido, separados pelo mesmo critério dos cards
-function _govAaLista(qual){
+function _govAaLista(qual, comConcluidos){
   try {
     var lista = (typeof _aaPub !== 'undefined' && _aaPub) ? _aaPub : [];
     var idx = _govRadarIdx();
-    // item concluído não entra: já foi para a aba Concluídos
-    lista = lista.filter(function(a){ return !_govConcluidoFora(idx, a.rc, a.item); });
+    // a contagem do card não conta concluído; a lista mostra tudo
+    if (!comConcluidos) lista = lista.filter(function(a){ return !_govConcluidoFora(idx, a.rc, a.item); });
     var ehR3 = function(a){ return String(a.regra || '').toLowerCase().indexOf('regra 3') !== -1; };
     return (qual === 'mdg') ? lista.filter(ehR3) : lista.filter(function(a){ return !ehR3(a); });
   } catch (e) { return []; }
@@ -19375,7 +19380,8 @@ function _govDetLinha(r, extra){
     oport:       r.num_oport || '—',
     itemOp:      r.item_op || r.item_rc || '—',
     trat:        trat || '—',
-    status:      st || '—'
+    status:      st || '—',
+    concluidoEm: m.finalizado ? String(m.finalizado).split('-').reverse().join('/') : ''
   };
   if (extra) Object.keys(extra).forEach(function(k){ if (extra[k] != null && extra[k] !== '') o[k] = extra[k]; });
   return o;
@@ -19383,13 +19389,28 @@ function _govDetLinha(r, extra){
 
 // Linha vinda de outra base: procura o item no Radar para completar as
 // colunas; o que não achar fica com o que veio da própria base.
-function _govDetLinhaFora(idx, rc, itemRc, campos){
+function _govDetLinhaFora(idx, rc, itemRc, campos, chaveGov){
   rc = String(rc || '').trim();
   itemRc = String(itemRc || '').trim();
   var r = idx.byRcSeq[rc + '|' + itemRc] || idx.byRc[rc];
   if (r) return _govDetLinha(r, { rc:rc, itemRc:itemRc || undefined });
+  // fora do Radar: pelo menos o que a equipe lançou, achado pela chave direta
+  if (chaveGov) {
+    var m = {};
+    try { m = _govDados[chaveGov] || {}; } catch (e) {}
+    if (m.status || m.finalizado) {
+      var trat = (typeof govTratCanonico === 'function') ? govTratCanonico(m.status || '') : (m.status || '');
+      var st = '';
+      try { st = govCalcStatus(govCalcPrazo(trat, m.envio || ''), m.finalizado || ''); } catch (e) {}
+      var base = { analista:'—', statusPatec:'—', fila:'—', sla:'—', rc:rc || '—',
+                   itemRc:itemRc || '—', oport:'—', itemOp:'—', trat:trat || '—', status:st || '—',
+                   concluidoEm: m.finalizado ? String(m.finalizado).split('-').reverse().join('/') : '' };
+      if (campos) Object.keys(campos).forEach(function(k){ if (campos[k]) base[k] = campos[k]; });
+      return base;
+    }
+  }
   var o = { analista:'—', statusPatec:'—', fila:'—', sla:'—', rc:rc || '—',
-            itemRc:itemRc || '—', oport:'—', itemOp:'—', trat:'—', status:'—' };
+            itemRc:itemRc || '—', oport:'—', itemOp:'—', trat:'—', status:'—', concluidoEm:'' };
   if (campos) Object.keys(campos).forEach(function(k){ if (campos[k]) o[k] = campos[k]; });
   return o;
 }
@@ -19399,40 +19420,47 @@ function _govDetDefs(){
     venc: {
       t:'⏰ Vencidos', aba:'vencido',
       sub:'Itens com a validade da proposta vencida, em PATEC Finalizado — a mesma conta da aba Vencido da Planilha Crítica.',
-      lista:function(){ return _govPcLista('venc').map(function(r){ return _govDetLinha(r); }); }
+      extraCols:[{ t:'Concluído em', k:'concluidoEm', st:'color:var(--az);font-weight:600' }],
+      lista:function(){ return _govPcLista('venc', true).map(function(r){ return _govDetLinha(r); }); }
     },
     reprov: {
       t:'❌ 100% Reprovado', aba:'reprovado',
       sub:'STATUS MAPA = PATEC Finalizado sem fornecedores aprovados.',
-      lista:function(){ return _govPcLista('reprov').map(function(r){ return _govDetLinha(r); }); }
+      extraCols:[{ t:'Concluído em', k:'concluidoEm', st:'color:var(--az);font-weight:600' }],
+      lista:function(){ return _govPcLista('reprov', true).map(function(r){ return _govDetLinha(r); }); }
     },
     fluxo: {
       t:'🗑 Tirar do Fluxo', aba:'fluxo',
       sub:'Itens marcados como LIBERAR na coluna Tirar do Fluxo do backlog. Cada item aparece uma vez.',
+      extraCols:[{ t:'Concluído em', k:'concluidoEm', st:'color:var(--az);font-weight:600' }],
       lista:function(){
         var idx = _govRadarIdx();
-        return _govPcLista('fluxo').map(function(x){
+        return _govPcLista('fluxo', true).map(function(x){
+          var ch = [x.rc, x.seq, x.num_oport].map(function(v){ return String(v || '').trim(); }).join('|');
           return _govDetLinhaFora(idx, x.rc, x.seq || x.item_rc,
-            { analista:x.analista, fila:x.fila, oport:x.num_oport, itemOp:x.item_rc });
+            { analista:x.analista, fila:x.fila, oport:x.num_oport, itemOp:x.item_rc }, ch);
         });
       }
     },
     cancel: {
       t:'🚫 Cancelado', aba:'cancelado',
       sub:'STATUS MAPA = Analisar PATEC Cancelado.',
-      lista:function(){ return _govPcLista('cancel').map(function(r){ return _govDetLinha(r); }); }
+      extraCols:[{ t:'Concluído em', k:'concluidoEm', st:'color:var(--az);font-weight:600' }],
+      lista:function(){ return _govPcLista('cancel', true).map(function(r){ return _govDetLinha(r); }); }
     },
     pid: {
       t:'📌 PID', aba:'pid',
       sub:'Itens com PID preenchido no Radar, em PATEC Finalizado ou Em Andamento.',
-      lista:function(){ return _govPcLista('pid').map(function(r){ return _govDetLinha(r); }); }
+      extraCols:[{ t:'Concluído em', k:'concluidoEm', st:'color:var(--az);font-weight:600' }],
+      lista:function(){ return _govPcLista('pid', true).map(function(r){ return _govDetLinha(r); }); }
     },
     aptos: {
       t:'📦 Aptos a pedido', aba:'aa',
       sub:'Analista Pedido — todas as regras menos a 3. São os itens que podem virar pedido direto.',
+      extraCols:[{ t:'Concluído em', k:'concluidoEm', st:'color:var(--az);font-weight:600' }],
       lista:function(){
         var idx = _govRadarIdx();
-        return _govAaLista('aptos').map(function(a){
+        return _govAaLista('aptos', true).map(function(a){
           return _govDetLinhaFora(idx, a.rc, a.item,
             { analista:a.analista, oport:a.oport, itemOp:a.itemop });
         });
@@ -19442,9 +19470,10 @@ function _govDetDefs(){
     mdg: {
       t:'🧩 Possíveis MDG', aba:'aa',
       sub:'Analista Pedido — só a Regra 3 (NM Filho). Pede conferência no SAP antes e costuma virar cadastro no MDG.',
+      extraCols:[{ t:'Concluído em', k:'concluidoEm', st:'color:var(--az);font-weight:600' }],
       lista:function(){
         var idx = _govRadarIdx();
-        return _govAaLista('mdg').map(function(a){
+        return _govAaLista('mdg', true).map(function(a){
           return _govDetLinhaFora(idx, a.rc, a.item,
             { analista:a.analista, oport:a.oport, itemOp:a.itemop });
         });
@@ -19483,6 +19512,8 @@ function _govPainelDetalheHTML(){
 
   var linhas = [];
   try { linhas = d.lista() || []; } catch (e) { linhas = []; }
+  // quantos da lista já estão concluídos — o card conta só o resto
+  var nConc = linhas.filter(function(x){ return !!x.concluidoEm; }).length;
 
   var cab = cols.map(function(c){
     return '<th style="text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px;'
@@ -19492,10 +19523,12 @@ function _govPainelDetalheHTML(){
 
   var corpo = linhas.length
     ? linhas.map(function(x){
-        return '<tr>' + cols.map(function(c){
-          var st = (typeof c.st === 'function') ? c.st(x) : (c.st || '');
-          return '<td style="font-size:11px;padding:4px 8px;' + st + '">' + esc(x[c.k]) + '</td>';
-        }).join('') + '</tr>';
+        var fim = !!x.concluidoEm;
+        return '<tr' + (fim ? ' style="opacity:.62;background:var(--cin)" title="Já concluído — não entra na conta do card"' : '') + '>'
+          + cols.map(function(c){
+              var st = (typeof c.st === 'function') ? c.st(x) : (c.st || '');
+              return '<td style="font-size:11px;padding:4px 8px;' + st + '">' + esc(x[c.k]) + '</td>';
+            }).join('') + '</tr>';
       }).join('')
     : '<tr><td colspan="' + cols.length + '" style="padding:12px;text-align:center;color:var(--tx2);font-size:11.5px">'
       + esc(d.vazio || 'Nada para listar.') + '</td></tr>';
@@ -19510,7 +19543,10 @@ function _govPainelDetalheHTML(){
     + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
     +   '<span style="font-size:12px;font-weight:800;color:var(--az)">' + esc(d.t) + '</span>'
     +   '<span style="font-size:11px;color:var(--tx2)">' + linhas.length
-    +   (linhas.length === 1 ? ' item' : ' itens') + '</span>'
+    +   (linhas.length === 1 ? ' item' : ' itens')
+    +   (nConc ? ' · <strong>' + (linhas.length - nConc) + '</strong> em aberto (o número do card) · '
+                 + nConc + ' já concluído' + (nConc === 1 ? '' : 's') : '')
+    +   '</span>'
     +   '<button class="btn btn-s" style="font-size:10px;padding:1px 8px" onclick="' + atalho + '" '
     +   'title="Sair daqui e abrir a tela cheia">abrir a tela</button>'
     +   '<button class="btn btn-s" style="font-size:10px;padding:1px 8px;margin-left:auto" onclick="govPainelDetalhe(\'\')">✕ fechar</button>'
