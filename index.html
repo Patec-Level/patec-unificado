@@ -29811,10 +29811,10 @@ function _isAdmFast(){
 // estado caso a tela já esteja visível antes da permissão real chegar.
 function _atualizarLockCardsModulo(){
   const permitidos = _modulosPermitidos();
-  const cardAdlv = document.getElementById('modulo-card-adlv');
-  const cardFast = document.getElementById('modulo-card-fast');
-  if(cardAdlv) cardAdlv.classList.toggle('bloqueado', !permitidos.includes('adlv'));
-  if(cardFast) cardFast.classList.toggle('bloqueado', !permitidos.includes('fast'));
+  ['adlv','fast','pedidos'].forEach(function(m){
+    const card = document.getElementById('modulo-card-' + m);
+    if(card) card.classList.toggle('bloqueado', !permitidos.includes(m));
+  });
   const instrucao = document.querySelector('#patec-modulo-overlay .modulo-instrucao');
   if(instrucao){
     instrucao.textContent = window._perfilCarregadoCompleto
