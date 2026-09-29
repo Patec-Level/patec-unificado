@@ -1494,8 +1494,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <button class="btn btn-p" onclick="mdDistribuir()">⚖ Distribuir entre a equipe</button>
             </div>
             <div style="font-size:10.5px;color:var(--tx2);margin-top:6px;line-height:1.6">
-              Cada item só vai para quem atua naquela atividade · SLA maior primeiro ·
-              a mesma oportunidade nunca é dividida dentro da mesma atividade ·
+              A mesma oportunidade fica sempre com o mesmo comprador, nunca é dividida ·
+              cada item vai para quem atua naquela atividade · SLA maior primeiro ·
               em Emitir Pedido, os itens <strong>L</strong> e <strong>Q</strong> são repartidos por igual ·
               o que não couber nas cotas fica na fila.
             </div>
@@ -12445,19 +12445,31 @@ async function mdSalvarEquipe(){
 
 // ── o cálculo ─────────────────────────────────────────────────────
 
-// Blocos: dentro da MESMA atividade a oportunidade não se divide.
-// Entre atividades diferentes ela pode, porque é outro trabalho.
+// Blocos: a mesma OPORTUNIDADE anda sempre junta, seja qual for o
+// status dos itens dela. Nunca vai para dois compradores.
 function mdBlocos(itens){
   var mapa = {};
   (itens || []).forEach(function(it, i){
-    var k = it.statusChave + '#' + (it.op || ('~' + i));
-    if (!mapa[k]) mapa[k] = { id:k, statusChave:it.statusChave, itens:[], slaMax:0, tipo:'' };
+    var k = it.op ? ('OP:' + it.op) : ('RC:' + (it.rc || ('~' + i)));
+    if (!mapa[k]) {
+      mapa[k] = { id:k, itens:[], slaMax:0, porStatus:{}, statuses:[], tipoEmitir:'' };
+      MD_STATUS.forEach(function(x){ mapa[k].porStatus[x.chave] = 0; });
+    }
     var b = mapa[k];
     b.itens.push(it);
+    b.porStatus[it.statusChave] = (b.porStatus[it.statusChave] || 0) + 1;
     if (it.sla > b.slaMax) b.slaMax = it.sla;
-    if (!b.tipo && it.tipo) b.tipo = it.tipo;
+    if (it.statusChave === 'emitir' && !b.tipoEmitir && (it.tipo === 'L' || it.tipo === 'Q')) {
+      b.tipoEmitir = it.tipo;
+    }
   });
-  var out = Object.keys(mapa).map(function(k){ var b = mapa[k]; b.n = b.itens.length; return b; });
+  var out = Object.keys(mapa).map(function(k){
+    var b = mapa[k];
+    b.n = b.itens.length;
+    b.statuses = MD_STATUS.map(function(x){ return x.chave; })
+      .filter(function(ch){ return b.porStatus[ch] > 0; });
+    return b;
+  });
   // SLA maior primeiro; empate: bloco maior e depois a RC, para a
   // ordem não mudar de uma rodada para outra
   out.sort(function(a, b){
@@ -12473,41 +12485,51 @@ function mdCalcular(itens, pessoas, atividades, cotaDia, cotaSemana, dias){
   var cota   = Math.max(1, Math.round(+cotaDia || 1));
   var semana = Math.max(cota, Math.round(+cotaSemana || (cota * nDias)));
   var res = { pessoas:{}, fila:[], semAtividade:[], dias:nDias, cotaDia:cota, cotaSemana:semana,
-              total:(itens || []).length, diasAcima:[], estourou:[] };
+              total:(itens || []).length, diasAcima:[], estourou:[], foraAtividade:[] };
   (pessoas || []).forEach(function(n){
     res.pessoas[n] = { nome:n, itens:[], blocos:[], n:0, porDia:new Array(nDias).fill(0),
-                       porStatus:{}, tipo:{ L:0, Q:0 }, tipoEmitir:{ L:0, Q:0 } };
+                       porStatus:{}, tipo:{ L:0, Q:0 }, tipoEmitir:{ L:0, Q:0 }, fora:0 };
     MD_STATUS.forEach(function(x){ res.pessoas[n].porStatus[x.chave] = 0; });
   });
   if (!pessoas || !pessoas.length) {
     res.fila = (itens || []).slice(); res.lista = []; res.distribuidos = 0; return res;
   }
 
-  var podem = function(ch){
-    return pessoas.filter(function(n){ return (atividades[n] || []).indexOf(ch) !== -1; });
+  // quantos itens do bloco esse comprador realmente faz
+  var cobre = function(nome, b){
+    var at = atividades[nome] || [], c = 0;
+    at.forEach(function(ch){ c += (b.porStatus[ch] || 0); });
+    return c;
   };
 
   mdBlocos(itens).forEach(function(b){
-    var cand = podem(b.statusChave).filter(function(n){ return res.pessoas[n].n < semana; });
-    if (!podem(b.statusChave).length) {
-      b.itens.forEach(function(it){ it.pessoa = ''; it.dia = 0; res.semAtividade.push(it); });
+    var quemFaz = pessoas.filter(function(n){ return cobre(n, b) > 0; });
+    if (!quemFaz.length) {
+      // ninguém na equipe atua em nenhum status desta oportunidade
+      b.itens.forEach(function(it){ it.pessoa = ''; it.dia = 0; it.foraAtividade = false;
+                                    res.semAtividade.push(it); });
       return;
     }
+    var cand = quemFaz.filter(function(n){ return res.pessoas[n].n < semana; });
     if (!cand.length) {
-      b.itens.forEach(function(it){ it.pessoa = ''; it.dia = 0; res.fila.push(it); });
+      b.itens.forEach(function(it){ it.pessoa = ''; it.dia = 0; it.foraAtividade = false;
+                                    res.fila.push(it); });
       return;
     }
-    // Em Emitir Pedido, L e Q são repartidos por igual: entre quem
-    // pode, vai para quem tem menos itens daquele tipo.
+    // A oportunidade não se divide: ela vai inteira para quem cobre o
+    // maior número de itens dela. Quem cobre tudo vem primeiro; se
+    // sobrar item de uma atividade que não é dele, o item vai marcado.
     var melhor = null;
     cand.forEach(function(n){
       var p = res.pessoas[n];
       if (!melhor) { melhor = n; return; }
       var m = res.pessoas[melhor];
-      // a conta de L e Q é só a de Emitir Pedido: é lá que vale a regra
-      if (b.statusChave === 'emitir' && (b.tipo === 'L' || b.tipo === 'Q')) {
-        if (p.tipoEmitir[b.tipo] !== m.tipoEmitir[b.tipo]) {
-          if (p.tipoEmitir[b.tipo] < m.tipoEmitir[b.tipo]) melhor = n;
+      var cn = cobre(n, b), cm = cobre(melhor, b);
+      if (cn !== cm) { if (cn > cm) melhor = n; return; }
+      // entre iguais, Emitir Pedido reparte L e Q por igual
+      if (b.tipoEmitir && b.porStatus.emitir) {
+        if (p.tipoEmitir[b.tipoEmitir] !== m.tipoEmitir[b.tipoEmitir]) {
+          if (p.tipoEmitir[b.tipoEmitir] < m.tipoEmitir[b.tipoEmitir]) melhor = n;
           return;
         }
         if (p.porStatus.emitir !== m.porStatus.emitir) {
@@ -12517,15 +12539,23 @@ function mdCalcular(itens, pessoas, atividades, cotaDia, cotaSemana, dias){
       }
       if (p.n < m.n) melhor = n;
     });
+
     var pm = res.pessoas[melhor];
+    var at = atividades[melhor] || [];
     pm.blocos.push(b);
     b.itens.forEach(function(it){
       it.pessoa = melhor;
+      it.foraAtividade = at.indexOf(it.statusChave) === -1;
       pm.itens.push(it); pm.n++;
       pm.porStatus[it.statusChave] = (pm.porStatus[it.statusChave] || 0) + 1;
       if (it.tipo === 'L' || it.tipo === 'Q') {
         pm.tipo[it.tipo]++;
         if (it.statusChave === 'emitir') pm.tipoEmitir[it.tipo]++;
+      }
+      if (it.foraAtividade) {
+        pm.fora++;
+        res.foraAtividade.push({ nome:melhor, rc:it.rc, seq:it.seq, op:it.op,
+                                 status:mdStatusNome(it.statusChave) });
       }
     });
     if (b.n > cota) res.estourou.push({ nome:melhor, rc:b.itens[0].rc, n:b.n });
@@ -12660,11 +12690,19 @@ function mdRenderPainel(){
     + card('SEM NINGUÉM NA ATIVIDADE', cpNum(r.semAtividade.length),
         r.semAtividade.length ? 'marque a atividade de alguém' : 'tudo coberto',
         r.semAtividade.length ? 'bad' : 'ok')
+    + card('FORA DA ATIVIDADE', cpNum((r.foraAtividade || []).length),
+        (r.foraAtividade || []).length ? 'a oportunidade não se divide' : 'ninguém pegou item de fora',
+        (r.foraAtividade || []).length ? 'warn' : 'ok')
     + '</div>';
   if (r.diasAcima.length) {
     h += '<div style="font-size:11px;color:var(--am);margin-top:10px">'
       + r.diasAcima.length + ' dia(s) ficaram acima da cota de ' + cpNum(d.cotaDia)
       + ' — a oportunidade não pode ser dividida.</div>';
+  }
+  if ((r.foraAtividade || []).length) {
+    h += '<div style="font-size:11px;color:var(--am);margin-top:6px">'
+      + cpNum(r.foraAtividade.length) + ' item(ns) foram para um comprador que não atua naquela atividade, '
+      + 'porque a oportunidade inteira tem de ficar com a mesma pessoa. Eles vão marcados na lista.</div>';
   }
   h += '</div>';
   box.innerHTML = h;
@@ -12688,6 +12726,7 @@ function mdRenderEquipe(){
   MD_STATUS.forEach(function(x){ h += '<th style="text-align:right">' + cpEsc(x.nome.split(',')[0]) + '</th>'; });
   h += '<th style="text-align:right" title="Itens L em Emitir Pedido">L emissão</th>'
     + '<th style="text-align:right" title="Itens Q em Emitir Pedido">Q emissão</th>'
+    + '<th style="text-align:right" title="Itens de atividade que não é dele, que vieram junto com a oportunidade">Fora</th>'
     + '<th style="width:120px">Carga</th></tr></thead><tbody>';
   r.lista.forEach(function(p){
     var ats = (d.atividades[p.nome] || []).map(function(c){ return mdStatusNome(c).split(',')[0]; });
@@ -12706,10 +12745,12 @@ function mdRenderEquipe(){
     var te = p.tipoEmitir || p.tipo || { L:0, Q:0 };
     h += '<td style="text-align:right">' + cpNum(te.L) + '</td>'
       + '<td style="text-align:right">' + cpNum(te.Q) + '</td>'
+      + '<td style="text-align:right;color:' + ((p.fora || 0) ? 'var(--am);font-weight:700' : 'var(--tx2)') + '">'
+      +   cpNum(p.fora || 0) + '</td>'
       + '<td>' + cpBarraSimples(p.n, alvo) + '</td></tr>';
   });
   h += '</tbody><tfoot><tr><td colspan="2">Total</td><td style="text-align:right">' + cpNum(r.distribuidos) + '</td>'
-    + '<td colspan="' + (nDias + MD_STATUS.length + 3) + '"></td></tr></tfoot></table></div></div>';
+    + '<td colspan="' + (nDias + MD_STATUS.length + 4) + '"></td></tr></tfoot></table></div></div>';
   box.innerHTML = h;
 }
 
@@ -12720,6 +12761,7 @@ function mdSinais(i){
   if (i.slaAlto) t.push('<span title="SLA acima de ' + MD_SLA_ALERTA + ' dias" style="background:var(--amc);color:var(--am);border:1px solid var(--am);border-radius:4px;padding:1px 5px;font-size:9.5px;font-weight:700">SLA ' + i.sla + '</span>');
   if (i.dpv) t.push('<span title="Material + centro somam ' + mdDinheiro(i.dpvValor) + ' em ' + i.dpvItens + ' item(ns) — acima do limite DPV" style="background:var(--vmc);color:var(--vm);border:1px solid var(--vm);border-radius:4px;padding:1px 5px;font-size:9.5px;font-weight:700">DPV</span>');
   if (i.prazo === 'Proposta vencida') t.push('<span style="background:var(--vmc);color:var(--vm);border:1px solid var(--vm);border-radius:4px;padding:1px 5px;font-size:9.5px;font-weight:700">VENCIDA</span>');
+  if (i.foraAtividade) t.push('<span title="Veio junto com a oportunidade, mas não é da atividade deste comprador" style="background:var(--amc);color:var(--am);border:1px dashed var(--am);border-radius:4px;padding:1px 5px;font-size:9.5px;font-weight:700">FORA DA ATIVIDADE</span>');
   return t.join(' ');
 }
 
@@ -12787,6 +12829,7 @@ function mdTexto(){
         if (i.slaAlto) s.push('SLA ' + i.sla);
         if (i.dpv) s.push('ACIMA DO LIMITE DPV');
         if (i.prazo === 'Proposta vencida') s.push('PROPOSTA VENCIDA');
+        if (i.foraAtividade) s.push('FORA DA SUA ATIVIDADE — veio junto com a oportunidade');
         l.push('    [' + mdStatusNome(i.statusChave) + '] RC ' + i.rc + '/' + i.seq
              + (i.op ? ' · Oport. ' + i.op : '') + (i.tipo ? ' · ' + i.tipo : '')
              + (s.length ? ' · ' + s.join(' · ') : ''));
@@ -12811,12 +12854,12 @@ function mdBaixarExcel(){
     var cab = ['Comprador','Dia','Atividade','RC','Item','Oportunidade','Item Oport.','SLA','SLA alto',
                'Tipo família','Segmento','Família','Prazo','Dias do encerramento','Fluxo','N. acompanhamento',
                'NM material','Centro','Valor pedido','Acima do limite DPV','Valor do grupo DPV',
-               'Fornecedor','Texto breve'];
+               'Fora da atividade','Fornecedor','Texto breve'];
     var linha = function(quem, i){
       return [quem, i.dia ? 'Dia ' + i.dia : '', mdStatusNome(i.statusChave), i.rc, i.seq, i.op, i.itemOp,
               i.sla, i.slaAlto ? 'SIM' : '', i.tipo, i.seg, i.familia, i.prazo,
               i.prazoDias == null ? '' : i.prazoDias, i.fluxo, i.acomp, i.nm, i.centro, i.valor,
-              i.dpv ? 'SIM' : '', i.dpv ? i.dpvValor : '', i.forn, i.texto];
+              i.dpv ? 'SIM' : '', i.dpv ? i.dpvValor : '', i.foraAtividade ? 'SIM' : '', i.forn, i.texto];
     };
     var aoa = [cab];
     d.res.lista.forEach(function(p){ p.itens.forEach(function(i){ aoa.push(linha(p.nome, i)); }); });
@@ -12867,7 +12910,7 @@ async function mdSalvarDia(){
     var enxuto = function(i){
       return { rc:i.rc, seq:i.seq, op:i.op, sla:i.sla, tipo:i.tipo, seg:i.seg,
                statusChave:i.statusChave, dia:+i.dia || 0, fluxo:i.fluxo, prazo:i.prazo,
-               dpv:!!i.dpv, valor:i.valor };
+               dpv:!!i.dpv, valor:i.valor, foraAtividade:!!i.foraAtividade };
     };
     await db.collection(MD_COL).doc(d.data).set({
       data:d.data, arquivo:d.arquivo || '', pessoas:d.pessoas || [], atividades:d.atividades || {},
@@ -12875,11 +12918,12 @@ async function mdSalvarDia(){
       porStatus:d.porStatus || {}, totalMapa:+d.totalMapa || 0,
       distribuicao: d.res.lista.map(function(p){
         return { nome:p.nome, n:p.n, porDia:p.porDia || [], porStatus:p.porStatus || {},
-                 tipo:p.tipo || {}, tipoEmitir:p.tipoEmitir || {},
+                 tipo:p.tipo || {}, tipoEmitir:p.tipoEmitir || {}, fora:+p.fora || 0,
                  itens:p.itens.slice(0, 4000).map(enxuto) };
       }),
       fila: d.res.fila.slice(0, 4000).map(enxuto),
       semAtividade: d.res.semAtividade.slice(0, 2000).map(enxuto),
+      foraAtividade: (d.res.foraAtividade || []).slice(0, 2000),
       geradoEm:d.geradoEm, geradoPor:d.geradoPor
     });
     return true;
@@ -12894,7 +12938,8 @@ async function mdCarregarDia(data){
     var d = doc.data() || {};
     var lista = (d.distribuicao || []).map(function(p){
       return { nome:p.nome, n:+p.n||0, porDia:p.porDia||[], porStatus:p.porStatus||{},
-               tipo:p.tipo||{L:0,Q:0}, tipoEmitir:p.tipoEmitir||{L:0,Q:0}, itens:p.itens||[] };
+               tipo:p.tipo||{L:0,Q:0}, tipoEmitir:p.tipoEmitir||{L:0,Q:0}, fora:+p.fora||0,
+               itens:p.itens||[] };
     });
     var pessoas = {};
     lista.forEach(function(p){ pessoas[p.nome] = p; });
@@ -12904,7 +12949,7 @@ async function mdCarregarDia(data){
       dias:+d.dias || 5, porStatus:d.porStatus || {}, totalMapa:+d.totalMapa || 0,
       res: { lista:lista, pessoas:pessoas, fila:d.fila || [], semAtividade:d.semAtividade || [],
              dias:+d.dias || 5, cotaDia:+d.cotaDia || 0, cotaSemana:+d.cotaSemana || 0,
-             diasAcima:[], estourou:[],
+             diasAcima:[], estourou:[], foraAtividade:d.foraAtividade || [],
              distribuidos: lista.reduce(function(m, p){ return m + p.n; }, 0) },
       geradoEm:d.geradoEm || '', geradoPor:d.geradoPor || ''
     };
