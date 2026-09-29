@@ -611,10 +611,21 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div class="desc">Novo módulo</div>
         <div class="lock-tag">🔒 Sem acesso</div>
       </div>
+      <div class="modulo-card" id="modulo-card-pedidos" onclick="selecionarModulo('pedidos')">
+        <div class="ico">📦</div>
+        <div class="nome">PEDIDOS</div>
+        <div class="desc">Base própria</div>
+        <div class="lock-tag">🔒 Sem acesso</div>
+      </div>
     </div>
   </div>
 </div>
 <!-- ══ fim SELEÇÃO DE MÓDULO ══ -->
+
+<div class="page" id="p-pedidos">
+  <div id="pedidos-aviso-config"></div>
+  <div id="pedidos-conteudo"></div>
+</div>
 
 <button id="hbg" onclick="document.getElementById('sb').classList.toggle('mob-open')">☰</button>
 <nav id="sb">
@@ -1174,6 +1185,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <div id="usr-novo-modulos" style="display:flex;flex-wrap:wrap;gap:6px">
                 <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd)"><input type="checkbox" id="usr-novo-mod-adlv" value="adlv"> 🏢 ADLV</label>
                 <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd)"><input type="checkbox" id="usr-novo-mod-fast" value="fast"> ⚡ FAST</label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd)"><input type="checkbox" id="usr-novo-mod-pedidos" value="pedidos"> 📦 PEDIDOS</label>
               </div>
               <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;background:var(--amc);padding:6px 10px;border-radius:6px;border:1px solid var(--am);margin-top:6px;width:fit-content">
                 <input type="checkbox" id="usr-novo-admfast" onchange="usrToggleAdmFastNovo()"> 🛠️ Admin do FAST (acesso total ao ADM do FAST, exceto Usuários — não dá acesso ao ADLV)
@@ -6733,7 +6745,31 @@ const FIREBASE_CONFIG_FAST = {
   appId: "1:535679472240:web:396f65269e2d8ab0005ab5"
 };
 
-// Módulo ativo nesta sessão: 'adlv' ou 'fast'.
+// ── MÓDULO PEDIDOS — Firebase próprio ──────────────────────────────
+// Base separada de propósito: o Controle de Pedidos grava uma medição
+// por dia e as distribuições da semana, e isso não pode pesar no
+// Firebase do ADLV.
+//
+//   COLE AQUI AS 6 CHAVES DO PROJETO NOVO DO FIREBASE.
+//   Enquanto estiverem em branco, o módulo aparece na tela de escolha
+//   mas avisa que ainda não foi configurado, em vez de tentar conectar.
+const FIREBASE_CONFIG_PEDIDOS = {
+  apiKey: "AIzaSyAlmyxmZtSy37Tdxw-mV14LPzx1O9OAt-A",
+  authDomain: "patec-pedidos.firebaseapp.com",
+  projectId: "patec-pedidos",
+  storageBucket: "patec-pedidos.firebasestorage.app",
+  messagingSenderId: "849357536980",
+  appId: "1:849357536980:web:811dc31ee6db573eba0541"
+};
+
+function _pedidosConfigPronta(){
+  try {
+    return !!(FIREBASE_CONFIG_PEDIDOS.apiKey && FIREBASE_CONFIG_PEDIDOS.projectId
+           && FIREBASE_CONFIG_PEDIDOS.appId);
+  } catch (e) { return false; }
+}
+
+// Módulo ativo nesta sessão: 'adlv', 'fast' ou 'pedidos'.
 // CORREÇÃO BUG (20/06): antes começava lendo o último módulo escolhido do
 // localStorage — mas como a tela de seleção SEMPRE aparece de novo a cada
 // login (nunca pula), esse valor "grudado" de uma sessão anterior só servia
@@ -6757,18 +6793,23 @@ let _moduloAtivo = null;
 // Isola cada chave de cache/config por módulo ativo (sufixo _adlv/_fast),
 // pra ADLV e FAST nunca lerem/escreverem o cache um do outro.
 function _lsMod(base){
-  return base + '__' + (_moduloAtivo === 'fast' ? 'fast' : 'adlv');
+  var m = (_moduloAtivo === 'fast' || _moduloAtivo === 'pedidos') ? _moduloAtivo : 'adlv';
+  return base + '__' + m;
 }
 
 function getFirebaseConfigAtivo(){
-  return _moduloAtivo === 'fast' ? FIREBASE_CONFIG_FAST : FIREBASE_CONFIG_ADLV;
+  if (_moduloAtivo === 'fast') return FIREBASE_CONFIG_FAST;
+  if (_moduloAtivo === 'pedidos') return FIREBASE_CONFIG_PEDIDOS;
+  return FIREBASE_CONFIG_ADLV;
 }
 
 // Nome do "app" Firebase nomeado — necessário para o SDK compat conseguir
 // manter DUAS conexões Firebase diferentes vivas ao mesmo tempo no navegador
 // (uma para ADLV, outra para FAST), sem uma sobrescrever a outra.
 function getFirebaseAppName(){
-  return _moduloAtivo === 'fast' ? 'fastApp' : 'adlvApp';
+  if (_moduloAtivo === 'fast') return 'fastApp';
+  if (_moduloAtivo === 'pedidos') return 'pedidosApp';
+  return 'adlvApp';
 }
 
 // CORREÇÃO BUG CRÍTICO (19/06): com módulos ADLV/FAST, o Firestore usa apps
@@ -6869,7 +6910,7 @@ async function loadFirebaseSDK(){
 let _dbPorModulo = { adlv: null, fast: null };
 
 function getDB(){
-  const mod = _moduloAtivo === 'fast' ? 'fast' : 'adlv';
+  const mod = (_moduloAtivo === 'fast' || _moduloAtivo === 'pedidos') ? _moduloAtivo : 'adlv';
   return getDBModulo(mod);
 }
 
@@ -6892,7 +6933,15 @@ function getDBModulo(mod){
     // Solução: para 'adlv', reaproveitar o app '[DEFAULT]' (já autenticado
     // pelo login). Só 'fast' (projeto Firebase diferente, patec-fast)
     // continua precisando de um app nomeado separado.
-    if(mod === 'fast'){
+    if(mod === 'pedidos'){
+      // Projeto separado, como o FAST: app nomeado próprio.
+      if(!_pedidosConfigPronta()){
+        console.warn('Módulo Pedidos sem Firebase configurado — cole as chaves em FIREBASE_CONFIG_PEDIDOS.');
+        return null;
+      }
+      const existentePed = firebase.apps.find(a => a.name === 'pedidosApp');
+      appInstance = existentePed || firebase.initializeApp(FIREBASE_CONFIG_PEDIDOS, 'pedidosApp');
+    } else if(mod === 'fast'){
       const config = FIREBASE_CONFIG_FAST;
       const existente = firebase.apps.find(a => a.name === 'fastApp');
       appInstance = existente || firebase.initializeApp(config, 'fastApp');
@@ -6904,11 +6953,12 @@ function getDBModulo(mod){
     if(typeof firebase.firestore !== 'function') return null;
     const dbInstance = appInstance.firestore();
     _dbPorModulo[mod] = dbInstance;
-    if(mod === (_moduloAtivo === 'fast' ? 'fast' : 'adlv')){
+    if(mod === ((_moduloAtivo === 'fast' || _moduloAtivo === 'pedidos') ? _moduloAtivo : 'adlv')){
       _db = dbInstance;
       window._db = dbInstance;
     }
-    const projectId = mod === 'fast' ? FIREBASE_CONFIG_FAST.projectId : FIREBASE_CONFIG_ADLV.projectId;
+    const projectId = mod === 'fast' ? FIREBASE_CONFIG_FAST.projectId
+                    : (mod === 'pedidos' ? FIREBASE_CONFIG_PEDIDOS.projectId : FIREBASE_CONFIG_ADLV.projectId);
     console.log('✓ Firebase conectado [' + mod.toUpperCase() + ']:', projectId);
   } catch(e){ console.error('Firebase erro:',e.message); }
   return _dbPorModulo[mod];
@@ -29669,6 +29719,8 @@ const PERMS_SIDEBAR = {
   'analista-auto':  { icon:'🤖', label:'Analista Automático',      mod:'EXECUÇÃO', hiddenFast:true },
   'consulta-q18':   { icon:'🚫', label:'Consulta Q18',             mod:'EXECUÇÃO', hiddenFast:true },
   'pr-bancoferias': { icon:'🗓', label:'Gestão de Jornada',        mod:'EXECUÇÃO' },
+  // Só existe dentro do módulo Pedidos, que tem Firebase próprio
+  'pedidos':        { icon:'📦', label:'Controle de Pedidos',      mod:'EXECUÇÃO', soPedidos:true },
 };
 
 // Variáveis globais de auth
@@ -29727,7 +29779,7 @@ function _gateModuloELogin(){
 function _modulosPermitidos(){
   const emailsAdm = ['andre.mazzali@levelgroup.com.br','andreluisj4@gmail.com'];
   const email = (_authPerfil?.email || _authUser?.email || window._authUser?.email || '').toLowerCase().trim();
-  if(emailsAdm.includes(email)) return ['adlv','fast'];
+  if(emailsAdm.includes(email)) return ['adlv','fast','pedidos'];
   if(!window._perfilCarregadoCompleto) return []; // ainda confirmando — nada liberado por enquanto
   const m = _authPerfil?.modulos || window._authPerfil?.modulos;
   if(Array.isArray(m) && m.length) return m;
@@ -29789,6 +29841,35 @@ function mostrarSeletorModulo(){
 // ainda não existe lá), cria a conta automaticamente com a MESMA senha que
 // ela acabou de usar pra logar — assim ninguém (nem o André) precisa de uma
 // senha separada só pro FAST, e não existe passo manual de "criar acesso".
+// Mesma lógica do FAST, valendo para qualquer módulo com projeto
+// próprio: tenta entrar; se não der, cria a conta no projeto do módulo
+// com o mesmo e-mail e senha do login.
+async function _autenticarModulo(mod, senhaOverride){
+  const email = _authUser?.email || window._authUser?.email;
+  const senha = senhaOverride || window._loginSenhaTemp;
+  if(!email || !senha) return { ok:false, motivo:'sem_senha' };
+  const cfg = mod === 'pedidos' ? FIREBASE_CONFIG_PEDIDOS : FIREBASE_CONFIG_FAST;
+  const appNome = mod === 'pedidos' ? 'pedidosApp' : 'fastApp';
+  try{
+    await loadFirebaseSDK();
+    const app = firebase.apps.find(a => a.name === appNome) || firebase.initializeApp(cfg, appNome);
+    try{
+      await app.auth().signInWithEmailAndPassword(email, senha);
+    } catch(eLogin){
+      try{
+        await app.auth().createUserWithEmailAndPassword(email, senha);
+      } catch(eCreate){
+        if(eCreate.code === 'auth/email-already-in-use') throw eLogin;
+        throw eCreate;
+      }
+    }
+    window._loginSenhaTemp = null;
+    return { ok:true };
+  } catch(e){
+    return { ok:false, motivo:e.code || e.message };
+  }
+}
+
 async function _autenticarFast(senhaOverride){
   const email = _authUser?.email || window._authUser?.email;
   const senha = senhaOverride || window._loginSenhaTemp;
@@ -29857,6 +29938,24 @@ async function selecionarModulo(mod){
     alert('Você não tem acesso a este módulo. Fale com o administrador para liberar.');
     return;
   }
+  if(mod === 'pedidos'){
+    if(!_pedidosConfigPronta()){
+      alert('O módulo Pedidos ainda não tem o Firebase configurado.\n\n'
+        + 'Falta colar as 6 chaves do projeto novo em FIREBASE_CONFIG_PEDIDOS, '
+        + 'no início do arquivo. Enquanto isso, ele não conecta em base nenhuma.');
+      return;
+    }
+    let rp = await _autenticarModulo('pedidos');
+    if(!rp.ok){
+      const senhaConfirm = await _pedirSenhaModal('Confirme sua senha para acessar o módulo Pedidos:');
+      if(!senhaConfirm) return;
+      rp = await _autenticarModulo('pedidos', senhaConfirm);
+      if(!rp.ok){
+        alert('Não foi possível autenticar no módulo Pedidos (' + (rp.motivo||'erro desconhecido') + ').');
+        return;
+      }
+    }
+  }
   if(mod === 'fast'){
     let r = await _autenticarFast();
     if(!r.ok){
@@ -29869,7 +29968,7 @@ async function selecionarModulo(mod){
       }
     }
   }
-  _moduloAtivo = (mod === 'fast') ? 'fast' : 'adlv';
+  _moduloAtivo = (mod === 'fast' || mod === 'pedidos') ? mod : 'adlv';
   localStorage.setItem('patec_modulo_ativo', _moduloAtivo);
   if(typeof _atualizarColabsPorModulo === 'function') _atualizarColabsPorModulo();
   document.getElementById('patec-modulo-overlay').style.display = 'none';
@@ -29882,16 +29981,97 @@ async function selecionarModulo(mod){
 // (sessão do Firebase Auth persiste), e a tela de seleção de módulo aparece
 // de novo automaticamente (ela sempre aparece após o login).
 function trocarModulo(){
-  if(!confirm('Trocar de projeto (ADLV ⇄ FAST)? A página será recarregada.')) return;
+  if(!confirm('Trocar de projeto? A página será recarregada.')) return;
   localStorage.removeItem('patec_modulo_ativo');
   location.reload();
 }
 
+
+
+// Cartão de conexão do módulo: diz em qual projeto ele está gravando e
+// deixa conferir na hora se as chaves do Firebase estão certas.
+function pedidosPintarConexao(){
+  var av = document.getElementById('pedidos-aviso-config');
+  if (!av) return;
+  if (!_pedidosConfigPronta()) {
+    av.innerHTML = '<div class="cd" style="border-top:3px solid var(--am);background:var(--amc)">'
+      + '<div class="cd-t" style="color:var(--am)">⚠ Firebase do módulo ainda não configurado</div>'
+      + '<div style="font-size:12px;color:var(--tx)">As telas funcionam, mas nada é gravado nem lido: '
+      + 'falta colar as 6 chaves do projeto novo em <strong>FIREBASE_CONFIG_PEDIDOS</strong>.</div></div>';
+    return;
+  }
+  av.innerHTML = '<div class="cd" style="border-top:3px solid var(--vd)">'
+    + '<div class="cd-t" style="justify-content:space-between">'
+    +   '<span>🔌 Base do módulo: <strong>' + cpEsc(FIREBASE_CONFIG_PEDIDOS.projectId) + '</strong></span>'
+    +   '<button class="btn btn-s" onclick="pedidosTestarConexao()">Testar conexão</button>'
+    + '</div>'
+    + '<div id="pedidos-teste-res" style="font-size:12px;color:var(--tx2)">'
+    +   'Separada do ADLV e do FAST — nada daqui vai para a base deles.</div></div>';
+}
+
+// Grava e relê um documento de teste. É o jeito mais direto de saber se
+// as chaves, o Firestore e a autenticação estão todos de pé.
+async function pedidosTestarConexao(){
+  var el = document.getElementById('pedidos-teste-res');
+  var diz = function(cor, txt){ if (el) el.innerHTML = '<span style="color:' + cor + '">' + txt + '</span>'; };
+  diz('var(--tx2)', '⏳ Testando...');
+  try {
+    if (!_pedidosConfigPronta()) { diz('var(--am)', 'Faltam as chaves do Firebase.'); return; }
+    var db = getDB();
+    if (!db) { diz('var(--vm)', '✗ Não consegui abrir a conexão. Confira as chaves.'); return; }
+    var ref = db.collection('config').doc('_teste_conexao');
+    var carimbo = new Date().toISOString();
+    await ref.set({ quando: carimbo, quem: cpQuem() });
+    var doc = await ref.get();
+    var voltou = doc && doc.exists && (doc.data() || {}).quando === carimbo;
+    if (voltou) {
+      diz('var(--vd)', '✓ Conectado em <strong>' + cpEsc(FIREBASE_CONFIG_PEDIDOS.projectId)
+        + '</strong> — gravou e leu de volta. Está tudo certo.');
+    } else {
+      diz('var(--am)', 'Gravou, mas não consegui reler. Confira as regras do Firestore.');
+    }
+  } catch (e) {
+    var m = String(e && (e.message || e.code) || e);
+    var dica = '';
+    if (/api-key|API key/i.test(m)) dica = ' — a <strong>apiKey</strong> está errada; confira caractere por caractere.';
+    else if (/permission|insufficient/i.test(m)) dica = ' — faltam as regras do Firestore (o allow read, write).';
+    else if (/not.*enabled|configuration-not-found/i.test(m)) dica = ' — falta ativar o E-mail/senha no Authentication.';
+    diz('var(--vm)', '✗ ' + cpEsc(m) + dica);
+  }
+}
+
+// ── MÓDULO PEDIDOS ────────────────────────────────────────────────
+// O tópico Controle de Pedidos (Pedidos, Abertura de PATEC e
+// Distribuição do MAPA) sai do ADM e passa a ser a tela do módulo.
+// O bloco de HTML é o MESMO — ele é movido para a página do módulo,
+// então não existe cópia para desencontrar.
+function pedidosMontarModulo(){
+  try {
+    var bloco = document.getElementById('adm-controle-pedidos');
+    var destino = document.getElementById('pedidos-conteudo');
+    var botaoAdm = document.querySelector('#adm-tabs .stab[onclick*="controle-pedidos"]');
+
+    if (_moduloAtivo === 'pedidos') {
+      if (bloco && destino && bloco.parentNode !== destino) destino.appendChild(bloco);
+      if (bloco) { bloco.classList.remove('adm-tab'); bloco.style.display = 'block'; }
+      if (botaoAdm) botaoAdm.style.display = 'none';
+      pedidosPintarConexao();
+      try { if (typeof cpSubTab === 'function') cpSubTab('pedidos', null); } catch (e) {}
+    } else {
+      // De volta ao ADLV/FAST: o bloco volta para o ADM, mas o botão
+      // fica escondido — o tópico agora mora no módulo Pedidos.
+      if (botaoAdm) botaoAdm.style.display = 'none';
+      if (bloco) bloco.classList.add('adm-tab');
+    }
+  } catch (e) { console.warn('pedidosMontarModulo:', e); }
+}
+
 // Monta o app (sidebar, badge, listeners, carregamento de dados) — só roda
-// depois que o módulo (ADLV/FAST) já está definido.
+// depois que o módulo já está definido.
 function _entrarNoApp(){
   document.getElementById('patec-login-overlay').style.display = 'none';
   document.getElementById('patec-modulo-overlay').style.display = 'none';
+  pedidosMontarModulo();
   authMontarSidebar();
 
   // Badge
@@ -30222,6 +30402,10 @@ function authMontarSidebar(emailParam){
   // (perfis antigos não têm 'reuniao' na lista de permissões salva).
   const PAGINAS_FAST_ONLY = ['reuniao'];
   Object.entries(PERMS_SIDEBAR).forEach(([key, cfg]) => {
+    // No módulo Pedidos só existe o Controle de Pedidos; nos outros
+    // módulos ele não aparece (a base dele é outra).
+    if(_moduloAtivo === 'pedidos' && !cfg.soPedidos) return;
+    if(_moduloAtivo !== 'pedidos' && cfg.soPedidos) return;
     if(_moduloAtivo === 'fast' && PAGINAS_ADLV_ONLY.includes(key)) return;
     if(_moduloAtivo !== 'fast' && PAGINAS_FAST_ONLY.includes(key)) return;
     if(cfg.hidden) return; // item oculto do menu (integrado em outra página)
@@ -30243,8 +30427,9 @@ function authMontarSidebar(emailParam){
     });
   });
 
-  // ADM aparece para ADM geral e para Admin do FAST
-  if(podeVerTudo){
+  // ADM aparece para ADM geral e para Admin do FAST — mas não no módulo
+  // Pedidos: as telas de lá são do ADLV/FAST e leriam a base errada.
+  if(podeVerTudo && _moduloAtivo !== 'pedidos'){
     html += `<div class="sb-sec" style="padding:.7rem 1rem .2rem;font-size:9px;font-weight:600;color:rgba(255,255,255,.28);letter-spacing:1.2px;text-transform:uppercase;flex-shrink:0">ADM</div>`;
     html += `<div class="sb-it" onclick="go('adm',this)">🔐 Administração</div>`;
   }
@@ -30778,6 +30963,9 @@ function usrEditarPerms(uid, nome, permsAtual, modulosAtual, perfilAtual, colabN
         </label>
         <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:var(--cin);padding:6px 12px;border-radius:6px;border:1px solid var(--brd)">
           <input type="checkbox" id="usr-perms-mod-fast" value="fast" onchange="usrAtualizarSenhaFastVisivel()" ${modulosAtual.includes('fast')?'checked':''} ${isAdmFastAtual?'disabled':''}> ⚡ FAST
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="usr-perms-mod-pedidos" value="pedidos" ${modulosAtual.includes('pedidos')?'checked':''} ${isAdmFastAtual?'disabled':''}> 📦 PEDIDOS
         </label>
       </div>
       <div id="usr-perms-senha-fast-box" style="display:none;margin-bottom:8px;background:var(--amc);border:1px solid var(--am);border-radius:8px;padding:8px 10px">
