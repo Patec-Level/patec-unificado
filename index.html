@@ -1278,6 +1278,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <!-- ── CONTROLE DE PEDIDOS — meta da equipe x possibilidades ── -->
       <div id="adm-controle-pedidos" class="adm-tab" style="display:none">
 
+        <div class="stabs" style="margin-bottom:1rem">
+          <button class="stab active" id="cp-sub-btn-pedidos" onclick="cpSubTab('pedidos',this)">📦 Controle de Pedidos</button>
+          <button class="stab" id="cp-sub-btn-abertura" onclick="cpSubTab('abertura',this)">📂 Abertura de PATEC</button>
+        </div>
+
+        <div id="cp-sub-pedidos">
+
         <div class="cd" style="border-top:3px solid var(--azm)">
           <div class="cd-t">📦 Controle de Pedidos — medição do dia</div>
 
@@ -1320,6 +1327,100 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div id="cp-equipe"></div>
         <div id="cp-lista-mem"></div>
         <div id="cp-historico"></div>
+
+        </div><!-- /cp-sub-pedidos -->
+
+        <!-- ── ABERTURA DE PATEC ── -->
+        <div id="cp-sub-abertura" style="display:none">
+
+          <div class="cd" style="border-top:3px solid var(--azm)">
+            <div class="cd-t">👥 Equipe e cota da abertura</div>
+            <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
+              <div>
+                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">DATA</label>
+                <input type="date" id="ap-data" onchange="apTrocarData()"
+                  style="font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;color:var(--az);font-weight:600">
+              </div>
+              <div>
+                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">QUANTAS PESSOAS</label>
+                <input type="number" id="ap-qtd-pessoas" min="1" step="1" placeholder="5"
+                  style="width:110px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
+              </div>
+              <div>
+                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">ITENS POR PESSOA / DIA</label>
+                <input type="number" id="ap-cota-dia" min="1" step="1" placeholder="30"
+                  style="width:130px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
+              </div>
+              <div>
+                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">ITENS POR PESSOA / SEMANA</label>
+                <input type="number" id="ap-cota-semana" min="1" step="1" placeholder="150"
+                  style="width:150px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
+              </div>
+              <div>
+                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">DIAS ÚTEIS</label>
+                <input type="number" id="ap-dias" min="1" max="7" step="1" placeholder="5"
+                  style="width:100px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
+              </div>
+              <div style="flex:1;min-width:260px">
+                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">NOMES DAS PESSOAS (um por linha)</label>
+                <textarea id="ap-nomes" rows="4" placeholder="Lory&#10;Ludy&#10;Wanessa"
+                  style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px;font-family:inherit;resize:vertical"></textarea>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:.8rem;flex-wrap:wrap;align-items:center">
+              <button class="btn btn-p" onclick="apSalvarEquipe()">💾 Salvar equipe e cota</button>
+              <span id="ap-equipe-aviso" style="font-size:11.5px"></span>
+            </div>
+          </div>
+
+          <div class="cd">
+            <div class="cd-t">📂 Planilha de abertura</div>
+            <div style="border:2px dashed var(--brd);border-radius:10px;padding:1.3rem;text-align:center;cursor:pointer;background:var(--cin)"
+              onclick="document.getElementById('ap-file-input').click()"
+              ondragover="event.preventDefault()" ondrop="apHandleDrop(event)">
+              <div style="font-size:24px;margin-bottom:.3rem">📄</div>
+              <div style="font-size:13px;font-weight:600">Arraste aqui a planilha de abertura</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:4px">
+                RC · SEQ · NUMERO_OPORTUNIDADE · SLA_DIAS · PID
+              </div>
+              <input type="file" id="ap-file-input" accept=".xlsx,.xls,.csv" style="display:none"
+                onchange="apHandleUpload(this.files[0]); this.value='';">
+            </div>
+            <div id="ap-status" style="margin-top:.7rem;font-size:12px"></div>
+            <div style="display:flex;gap:8px;margin-top:.8rem;flex-wrap:wrap">
+              <button class="btn btn-p" onclick="apDistribuir()">⚖ Distribuir entre a equipe</button>
+              <button class="btn btn-s" onclick="apRefazerTudo()" title="Ignora as atribuições anteriores e sorteia tudo de novo">♻ Refazer do zero</button>
+            </div>
+            <div style="font-size:10.5px;color:var(--tx2);margin-top:6px;line-height:1.6">
+              A distribuição é da <strong>semana inteira, separada por dia</strong>.
+              PID primeiro · SLA maior primeiro · a mesma oportunidade (e a mesma RC) sempre com a
+              mesma pessoa e no mesmo dia, mesmo que passe da cota do dia ·
+              quem já recebeu uma RC continua com ela ·
+              o que não couber nas cotas fica na fila, sem ser enviado.
+            </div>
+          </div>
+
+          <div id="ap-painel"></div>
+          <div id="ap-equipe"></div>
+          <div id="ap-lista"></div>
+
+          <div class="cd">
+            <div class="cd-t">📏 Medição da abertura</div>
+            <div style="font-size:11.5px;color:var(--tx2);margin-bottom:.7rem">
+              Suba a mesma extração, atualizada. O que sumiu da lista foi aberto.
+            </div>
+            <div style="border:2px dashed var(--brd);border-radius:10px;padding:1.1rem;text-align:center;cursor:pointer;background:var(--cin)"
+              onclick="document.getElementById('ap-med-input').click()"
+              ondragover="event.preventDefault()" ondrop="apMedDrop(event)">
+              <div style="font-size:13px;font-weight:600">Arraste aqui a extração atualizada</div>
+              <input type="file" id="ap-med-input" accept=".xlsx,.xls,.csv" style="display:none"
+                onchange="apMedirUpload(this.files[0]); this.value='';">
+            </div>
+            <div id="ap-med-status" style="margin-top:.7rem;font-size:12px"></div>
+          </div>
+
+          <div id="ap-medicao"></div>
+        </div><!-- /cp-sub-abertura -->
       </div>
 
       <!-- ── GESTÃO DE CICLOS ── -->
@@ -11192,6 +11293,801 @@ function cpRenderHistorico(){
   h += '</tbody></table></div></div>';
   box.innerHTML = h;
 }
+
+// ══════════════════════════════════════════════════════════════════
+// ABERTURA DE PATEC — distribuição da carteira entre a equipe
+//
+// O André sobe a planilha de abertura e a tela reparte entre as
+// pessoas, respeitando três regras, nesta ordem:
+//   1. PID primeiro;
+//   2. SLA maior primeiro;
+//   3. a mesma oportunidade sempre com a mesma pessoa.
+// Uma RC nunca se divide entre duas pessoas, e quem já recebeu uma
+// RC num dia anterior continua com ela.
+//
+// A distribuição é do DIA: cada pessoa recebe até a cota diária. O
+// que não coube fica na fila para o dia seguinte.
+// ══════════════════════════════════════════════════════════════════
+
+var AP_COL = 'abertura_patec';
+var _apCfg  = { pessoas:[], qtdPessoas:0, cotaDia:0, cotaSemana:0, dias:5 };
+var _apHist = {};    // 'RC|SEQ' -> nome de quem já ficou com o item
+var _apBase = null;  // planilha lida agora
+var _apDist = null;  // distribuição do dia
+var _apMed  = null;  // medição do dia
+
+function apSubAtiva(){
+  var el = document.getElementById('cp-sub-abertura');
+  return el && el.style.display !== 'none';
+}
+function cpSubTab(qual, btn){
+  var ped = document.getElementById('cp-sub-pedidos');
+  var abe = document.getElementById('cp-sub-abertura');
+  if (ped) ped.style.display = (qual === 'pedidos') ? 'block' : 'none';
+  if (abe) abe.style.display = (qual === 'abertura') ? 'block' : 'none';
+  ['cp-sub-btn-pedidos','cp-sub-btn-abertura'].forEach(function(id){
+    var b = document.getElementById(id); if (b) b.classList.remove('active');
+  });
+  if (btn) btn.classList.add('active');
+  else {
+    var b2 = document.getElementById('cp-sub-btn-' + qual);
+    if (b2) b2.classList.add('active');
+  }
+  if (qual === 'abertura') apAbrir();
+}
+
+function apDataSel(){
+  var el = document.getElementById('ap-data');
+  return (el && el.value) || cpHojeISO();
+}
+
+// ── leitura da planilha ───────────────────────────────────────────
+function apLerPlanilha(linhas){
+  var r = { itens:[], lidas:0, aviso:'', colunas:{} };
+  if (!linhas || !linhas.length) { r.aviso = 'Arquivo vazio.'; return r; }
+
+  var iCab = -1, cabs = [];
+  for (var k = 0; k < Math.min(linhas.length, 12); k++) {
+    var c = (linhas[k] || []).map(cpNormCab);
+    if (_cpAchaCol(c, ['RC','REQUISICAO','NUMERO_RC','NUM_RC']) !== -1) { iCab = k; cabs = c; break; }
+  }
+  if (iCab === -1) { r.aviso = 'Não achei a coluna RC na planilha.'; return r; }
+
+  var iRc  = _cpAchaCol(cabs, ['RC','REQUISICAO','NUMERO_RC','NUM_RC']);
+  var iSeq = _cpAchaCol(cabs, ['SEQ','ITEM_RC','LINHAREQUISICAO','ITEM_DA_RC','ITEM']);
+  var iOp  = _cpAchaCol(cabs, ['NUMERO_OPORTUNIDADE','OPORTUNIDADE','NUM_OPORT','NUMERO_OPORT']);
+  var iIop = _cpAchaCol(cabs, ['ITEM_OPORTUNIDADE','ITEM_OP']);
+  var iSla = _cpAchaCol(cabs, ['SLA_DIAS','SLA','SLA_DIA']);
+  var iPid = _cpAchaCol(cabs, ['PID']);
+  var iAn  = _cpAchaCol(cabs, ['ANALISTA_AUTOMATICO','ANALISTA','ANALISTA_AUTO']);
+  var iCen = _cpAchaCol(cabs, ['CENTRO']);
+  var iPro = _cpAchaCol(cabs, ['NUMERO_PROPOSTAS_VALIDAS','PROPOSTAS_VALIDAS','PROPOSTAS']);
+  r.colunas = { rc:iRc, seq:iSeq, op:iOp, sla:iSla, pid:iPid };
+
+  var txt = function(l, j){ return j === -1 ? '' : String(l[j] == null ? '' : l[j]).trim(); };
+  var vistos = {};
+  for (var i = iCab + 1; i < linhas.length; i++) {
+    var l = linhas[i] || [];
+    var rc = txt(l, iRc);
+    if (!rc) continue;
+    r.lidas++;
+    var seq = txt(l, iSeq);
+    var ch = rc + '|' + seq;
+    if (vistos[ch]) continue;      // a mesma RC+item não entra duas vezes
+    vistos[ch] = 1;
+    var sla = parseFloat(String(txt(l, iSla)).replace(',', '.'));
+    r.itens.push({
+      chave: ch, rc: rc, seq: seq,
+      op: txt(l, iOp), itemOp: txt(l, iIop),
+      sla: isFinite(sla) ? sla : 0,
+      pid: apEhPid(txt(l, iPid)),
+      analista: txt(l, iAn), centro: txt(l, iCen), propostas: txt(l, iPro)
+    });
+  }
+  if (!r.itens.length) r.aviso = 'Nenhuma RC encontrada na planilha.';
+  return r;
+}
+
+// "PID" conta; "#N/A", vazio e afins não.
+function apEhPid(v){
+  var t = cpNormCab(v);
+  if (!t || t === 'N_A' || t === 'NA' || t === 'NAO' || t === 'FALSE' || t === '0') return false;
+  return t.indexOf('PID') !== -1;
+}
+
+// ── blocos: o que não pode ser separado ───────────────────────────
+// Regra 3 junta oportunidades iguais; e uma RC nunca se divide. As
+// duas coisas se encadeiam (uma RC pode aparecer em duas
+// oportunidades), então o bloco é o grupo ligado por RC ou por
+// oportunidade.
+function apBlocos(itens){
+  var pai = {};
+  var acha = function(x){ while (pai[x] !== x) { pai[x] = pai[pai[x]]; x = pai[x]; } return x; };
+  var junta = function(a, b){
+    if (!(a in pai)) pai[a] = a;
+    if (!(b in pai)) pai[b] = b;
+    var ra = acha(a), rb = acha(b);
+    if (ra !== rb) pai[ra] = rb;
+  };
+  (itens || []).forEach(function(it){
+    var kr = 'RC:' + it.rc;
+    junta(kr, kr);
+    if (it.op) junta(kr, 'OP:' + it.op);
+  });
+
+  var mapa = {};
+  (itens || []).forEach(function(it){
+    var g = acha('RC:' + it.rc);
+    if (!mapa[g]) mapa[g] = { id:g, itens:[], pid:false, slaMax:0, rcs:{}, ops:{} };
+    var b = mapa[g];
+    b.itens.push(it);
+    if (it.pid) b.pid = true;
+    if (it.sla > b.slaMax) b.slaMax = it.sla;
+    b.rcs[it.rc] = 1;
+    if (it.op) b.ops[it.op] = 1;
+  });
+
+  var out = Object.keys(mapa).map(function(k){
+    var b = mapa[k];
+    b.n = b.itens.length;
+    b.nRc = Object.keys(b.rcs).length;
+    b.nOp = Object.keys(b.ops).length;
+    return b;
+  });
+  // Regra 1 (PID) antes da regra 2 (SLA). Empate: bloco maior primeiro
+  // e depois a RC, só para a ordem não mudar de uma rodada para outra.
+  out.sort(function(a, b){
+    if (a.pid !== b.pid) return a.pid ? -1 : 1;
+    if (b.slaMax !== a.slaMax) return b.slaMax - a.slaMax;
+    if (b.n !== a.n) return b.n - a.n;
+    return String(a.itens[0].rc).localeCompare(String(b.itens[0].rc));
+  });
+  return out;
+}
+
+// ── a distribuição ────────────────────────────────────────────────
+// manterHistorico = true respeita quem já ficou com a RC antes.
+// Distribui a SEMANA inteira, dia a dia.
+//
+//   Regra 1 — PID primeiro.
+//   Regra 2 — dentro disso, SLA maior primeiro.
+//   Regra 3 — a mesma oportunidade (e a mesma RC) sempre com a mesma
+//             pessoa e no mesmo dia. O bloco nunca é partido: se não
+//             couber na cota do dia, passa da cota em vez de quebrar.
+//
+// Quem já tinha a RC numa rodada anterior continua com ela. A cota da
+// semana é o limite: o que não couber fica na fila, sem ser enviado.
+function apCalcular(itens, pessoas, cotaDia, cotaSemana, dias, historico){
+  var nDias  = Math.max(1, Math.min(7, Math.round(+dias || 5)));
+  var cota   = Math.max(1, Math.round(+cotaDia || 1));
+  var semana = Math.max(cota, Math.round(+cotaSemana || (cota * nDias)));
+  var res = { pessoas:{}, fila:[], mantidos:0, novos:0, estourou:[],
+              total:(itens || []).length, dias:nDias, cotaDia:cota, cotaSemana:semana };
+  (pessoas || []).forEach(function(n){
+    res.pessoas[n] = { nome:n, itens:[], blocos:[], n:0, pid:0, porDia:new Array(nDias).fill(0) };
+  });
+  if (!pessoas || !pessoas.length) {
+    res.fila = (itens || []).slice(); res.lista = []; res.distribuidos = 0; return res;
+  }
+
+  var hist = historico || {};
+  var blocos = apBlocos(itens);
+  var idx = {};
+  pessoas.forEach(function(n){ idx[cpNormNome(n)] = n; });
+
+  var poe = function(nome, bloco){
+    var p = res.pessoas[nome];
+    p.blocos.push(bloco);
+    bloco.itens.forEach(function(it){
+      it.pessoa = nome;
+      p.itens.push(it); p.n++;
+      if (it.pid) p.pid++;
+    });
+  };
+
+  // ── 1) o que já era de alguém volta para a mesma pessoa ─────────
+  var pendentes = [];
+  blocos.forEach(function(b){
+    var dono = null;
+    for (var i = 0; i < b.itens.length && !dono; i++) {
+      var h = hist[b.itens[i].chave];
+      if (h && idx[cpNormNome(h)]) dono = idx[cpNormNome(h)];
+    }
+    if (dono) { poe(dono, b); res.mantidos += b.n; }
+    else pendentes.push(b);
+  });
+
+  // ── 2) o resto entra na ordem das regras, sempre em quem está
+  //       mais leve. A cota da semana é o limite: quando todo mundo
+  //       fecha a semana, o que sobra vai para a fila.
+  pendentes.forEach(function(b){
+    var melhor = null;
+    pessoas.forEach(function(n){
+      var pp = res.pessoas[n];
+      if (pp.n >= semana) return;
+      if (!melhor || pp.n < res.pessoas[melhor].n) melhor = n;
+    });
+    if (!melhor) {
+      b.itens.forEach(function(it){ it.pessoa = ''; it.dia = 0; res.fila.push(it); });
+      return;
+    }
+    poe(melhor, b);
+    res.novos += b.n;
+  });
+
+  // ── 3) os blocos de cada pessoa caem nos dias, na ordem de
+  //       prioridade: o mais urgente no começo da semana. O alvo do
+  //       dia é o que a pessoa recebeu dividido pelos dias, para
+  //       nenhum dia ficar vazio; um bloco nunca é partido, então o
+  //       dia pode passar do alvo.
+  pessoas.forEach(function(n){
+    var p = res.pessoas[n];
+    p.porDia = new Array(nDias).fill(0);
+    if (!p.blocos.length) return;
+    var alvo = Math.max(1, Math.ceil(p.n / nDias));
+    p.blocos.forEach(function(b){
+      // o primeiro dia em que o bloco ainda cabe; se não couber em
+      // nenhum, o dia mais vazio — o bloco nunca é partido
+      var d = -1, i;
+      for (i = 0; i < nDias; i++) if (p.porDia[i] + b.n <= alvo) { d = i; break; }
+      if (d === -1) { d = 0; for (i = 1; i < nDias; i++) if (p.porDia[i] < p.porDia[d]) d = i; }
+      b.itens.forEach(function(it){ it.dia = d + 1; });
+      p.porDia[d] += b.n;
+      if (b.n > cota) res.estourou.push({ nome:n, dia:d + 1, rc:b.itens[0].rc, n:b.n });
+    });
+  });
+
+  // dias que ficaram acima da cota — ou porque a oportunidade não pode
+  // ser partida, ou porque a pessoa recebeu mais do que cota x dias
+  res.diasAcima = [];
+  pessoas.forEach(function(n){
+    var p = res.pessoas[n];
+    p.porDia.forEach(function(v, k){
+      if (v > cota) res.diasAcima.push({ nome:n, dia:k + 1, n:v });
+    });
+  });
+
+  Object.keys(res.pessoas).forEach(function(n){
+    res.pessoas[n].itens.sort(function(a, c){
+      if (a.dia !== c.dia) return (a.dia || 99) - (c.dia || 99);
+      if (a.pid !== c.pid) return a.pid ? -1 : 1;
+      if (c.sla !== a.sla) return c.sla - a.sla;
+      return String(a.rc).localeCompare(String(c.rc)) || String(a.seq).localeCompare(String(c.seq));
+    });
+  });
+  res.lista = pessoas.map(function(n){ return res.pessoas[n]; });
+  res.distribuidos = res.lista.reduce(function(m, p){ return m + p.n; }, 0);
+  return res;
+}
+
+// ── ações da tela ─────────────────────────────────────────────────
+function apPessoasDaTela(){
+  var el = document.getElementById('ap-nomes');
+  var txt = el ? el.value : '';
+  return String(txt || '').split(/[\n;,]+/)
+    .map(function(x){ return x.trim(); })
+    .filter(function(x){ return !!x; });
+}
+
+function apSalvarEquipe(){
+  var nomes = apPessoasDaTela();
+  var qtd = Math.max(0, Math.round(+(document.getElementById('ap-qtd-pessoas') || {}).value || 0));
+  _apCfg = {
+    pessoas: nomes,
+    qtdPessoas: qtd || nomes.length,
+    cotaDia: Math.max(0, Math.round(+(document.getElementById('ap-cota-dia') || {}).value || 0)),
+    cotaSemana: Math.max(0, Math.round(+(document.getElementById('ap-cota-semana') || {}).value || 0)),
+    dias: Math.max(1, Math.min(7, Math.round(+(document.getElementById('ap-dias') || {}).value || 5)))
+  };
+  var av = document.getElementById('ap-equipe-aviso');
+  var msg = '';
+  if (!nomes.length) msg = '<span style="color:var(--vm)">Informe ao menos um nome.</span>';
+  else if (qtd && qtd !== nomes.length)
+    msg = '<span style="color:var(--am)">Você informou ' + qtd + ' pessoa(s) e escreveu ' + nomes.length
+        + ' nome(s) — vou usar os ' + nomes.length + ' nomes.</span>';
+  else msg = '<span style="color:var(--vd)">✓ Equipe salva: ' + nomes.length + ' pessoa(s).</span>';
+  if (av) av.innerHTML = msg;
+  apSalvarCfg();
+  apRender();
+}
+
+function apHandleDrop(e){
+  e.preventDefault();
+  var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) apHandleUpload(f);
+}
+
+async function apLerArquivo(file){
+  var buf = await file.arrayBuffer();
+  var wb = XLSX.read(buf, { type:'array', cellDates:true });
+  var ws = wb.Sheets[wb.SheetNames[0]];
+  return apLerPlanilha(XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:true }));
+}
+
+async function apHandleUpload(file){
+  if (!file) return;
+  var st = document.getElementById('ap-status');
+  if (st) st.innerHTML = '⏳ Lendo a planilha...';
+  try {
+    var lida = await apLerArquivo(file);
+    if (lida.aviso && !lida.itens.length) {
+      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ ' + cpEsc(lida.aviso) + '</span>';
+      return;
+    }
+    _apBase = { itens: lida.itens, arquivo: file.name, lidas: lida.lidas };
+    var nPid = lida.itens.filter(function(i){ return i.pid; }).length;
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ <strong>' + cpEsc(file.name) + '</strong> — '
+      + cpNum(lida.itens.length) + ' itens · ' + cpNum(nPid) + ' com PID · '
+      + cpNum(apContaOps(lida.itens)) + ' oportunidades. Agora clique em Distribuir.</span>';
+    apRender();
+  } catch (e) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Erro ao ler: ' + cpEsc(e.message) + '</span>';
+  }
+}
+
+function apContaOps(itens){
+  var v = {};
+  (itens || []).forEach(function(i){ if (i.op) v[i.op] = 1; });
+  return Object.keys(v).length;
+}
+
+async function apDistribuir(manter){
+  var st = document.getElementById('ap-status');
+  if (!_apBase || !_apBase.itens.length) {
+    if (st) st.innerHTML = '<span style="color:var(--am)">Suba a planilha de abertura antes de distribuir.</span>';
+    return;
+  }
+  if (!_apCfg.pessoas.length) {
+    _apCfg.pessoas = apPessoasDaTela();
+    _apCfg.cotaDia = Math.max(0, Math.round(+(document.getElementById('ap-cota-dia') || {}).value || 0));
+    _apCfg.cotaSemana = Math.max(0, Math.round(+(document.getElementById('ap-cota-semana') || {}).value || 0));
+    _apCfg.dias = Math.max(1, Math.min(7, Math.round(+(document.getElementById('ap-dias') || {}).value || 5)));
+  }
+  if (!_apCfg.pessoas.length) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">Informe os nomes das pessoas antes de distribuir.</span>';
+    return;
+  }
+  if (!_apCfg.cotaDia) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">Informe quantos itens cada pessoa faz por dia.</span>';
+    return;
+  }
+
+  var hist = (manter === false) ? {} : _apHist;
+  var res = apCalcular(_apBase.itens, _apCfg.pessoas, _apCfg.cotaDia,
+                       _apCfg.cotaSemana, _apCfg.dias, hist);
+  _apDist = {
+    data: apDataSel(), arquivo: _apBase.arquivo,
+    pessoas: _apCfg.pessoas.slice(), cotaDia: _apCfg.cotaDia, cotaSemana: _apCfg.cotaSemana,
+    dias: res.dias,
+    res: res, totalArquivo: _apBase.itens.length,
+    geradoEm: new Date().toISOString(), geradoPor: cpQuem()
+  };
+  _apMed = null;
+  // quem ficou com o quê passa a valer para as próximas rodadas
+  if (manter === false) _apHist = {};
+  res.lista.forEach(function(p){
+    p.itens.forEach(function(it){ _apHist[it.chave] = p.nome; });
+  });
+  apRender();
+  await apSalvarDia();
+  if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Distribuição feita: ' + cpNum(res.distribuidos)
+    + ' itens entre ' + res.lista.length + ' pessoa(s) · ' + cpNum(res.fila.length) + ' na fila.</span>';
+}
+
+function apRefazerTudo(){
+  if (!confirm('Refazer a distribuição do zero? Quem já tinha uma RC pode trocar de pessoa.')) return;
+  apDistribuir(false);
+}
+
+// ── medição ───────────────────────────────────────────────────────
+function apMedDrop(e){
+  e.preventDefault();
+  var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) apMedirUpload(f);
+}
+
+async function apMedirUpload(file){
+  if (!file) return;
+  var st = document.getElementById('ap-med-status');
+  if (!_apDist) {
+    if (st) st.innerHTML = '<span style="color:var(--am)">Faça a distribuição antes de medir.</span>';
+    return;
+  }
+  if (st) st.innerHTML = '⏳ Conferindo...';
+  try {
+    var lida = await apLerArquivo(file);
+    if (!lida.itens.length) {
+      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ ' + cpEsc(lida.aviso || 'Planilha vazia.') + '</span>';
+      return;
+    }
+    var aberto = {};
+    lida.itens.forEach(function(i){ aberto[i.chave] = 1; });   // ainda na carteira = não foi aberto
+    var med = { arquivo:file.name, quando:new Date().toISOString(), pessoas:[], feito:0, falta:0 };
+    _apDist.res.lista.forEach(function(p){
+      var feitos = [], faltam = [];
+      p.itens.forEach(function(it){ (aberto[it.chave] ? faltam : feitos).push(it); });
+      med.pessoas.push({ nome:p.nome, distribuido:p.n, feito:feitos.length, falta:faltam.length,
+                         pidFalta:faltam.filter(function(x){ return x.pid; }).length });
+      med.feito += feitos.length; med.falta += faltam.length;
+    });
+    _apMed = med;
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ <strong>' + cpEsc(file.name) + '</strong> — '
+      + cpNum(med.feito) + ' aberto(s) do que foi distribuído, ' + cpNum(med.falta) + ' em aberto.</span>';
+    apRender();
+    await apSalvarDia();
+  } catch (e) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Erro ao ler: ' + cpEsc(e.message) + '</span>';
+  }
+}
+
+// ── telas ─────────────────────────────────────────────────────────
+function apRender(){
+  apRenderPainel();
+  apRenderEquipe();
+  apRenderLista();
+  apRenderMedicao();
+}
+
+function apRenderPainel(){
+  var box = document.getElementById('ap-painel');
+  if (!box) return;
+  if (!_apDist) { box.innerHTML = ''; return; }
+  var d = _apDist, r = d.res;
+  var nPid = r.lista.reduce(function(m, p){ return m + p.pid; }, 0);
+  var card = function(rot, val, sub, cls){
+    return '<div class="kc' + (cls ? ' ' + cls : '') + '"><div class="kc-l">' + cpEsc(rot) + '</div>'
+      + '<div class="kc-v">' + val + '</div>'
+      + (sub ? '<div class="kc-s">' + sub + '</div>' : '') + '</div>';
+  };
+  var nDias = +d.dias || +r.dias || 5;
+  var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between">'
+    + '<span>⚖ Distribuição da semana de ' + cpDataBR(d.data) + '</span>'
+    + '<span style="font-size:10.5px;font-weight:500;color:var(--tx2)">' + cpEsc(d.arquivo || '') + '</span></div>'
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem">'
+    + card('ITENS NA PLANILHA', cpNum(d.totalArquivo), cpNum(apContaOps(_apBase ? _apBase.itens : [])) + ' oportunidades')
+    + card('DISTRIBUÍDOS NA SEMANA', cpNum(r.distribuidos),
+        r.lista.length + ' pessoa(s) · ' + cpNum(d.cotaDia) + '/dia em ' + nDias + ' dias')
+    + card('COM PID', cpNum(nPid), 'entram primeiro', nPid ? 'warn' : '')
+    + card('MANTIDOS COM QUEM JÁ TINHA', cpNum(r.mantidos), 'RCs de rodadas anteriores')
+    + card('NA FILA', cpNum(r.fila.length), 'fora do envio desta semana')
+    + '</div>';
+  var acima = r.diasAcima || [];
+  if (acima.length || (r.estourou || []).length) {
+    var msg = [];
+    if ((r.estourou || []).length) {
+      msg.push((r.estourou.length === 1 ? 'Uma oportunidade é' : r.estourou.length + ' oportunidades são')
+        + ' maior que a cota do dia e foi mantida inteira (a maior tem '
+        + cpNum(r.estourou.reduce(function(m, x){ return Math.max(m, x.n); }, 0)) + ' itens).');
+    }
+    if (acima.length) {
+      msg.push(acima.length + ' dia(s) ficaram acima da cota de ' + cpNum(d.cotaDia)
+        + ' — o maior com ' + cpNum(acima.reduce(function(m, x){ return Math.max(m, x.n); }, 0)) + ' itens.');
+    }
+    h += '<div style="font-size:11px;color:var(--am);margin-top:10px">' + msg.join(' ') + '</div>';
+  }
+  h += '</div>';
+  box.innerHTML = h;
+}
+
+function apRenderEquipe(){
+  var box = document.getElementById('ap-equipe');
+  if (!box) return;
+  if (!_apDist) { box.innerHTML = ''; return; }
+  var d = _apDist, r = d.res;
+  var nDias = +d.dias || +r.dias || 5;
+  var alvoSemana = +d.cotaSemana || (+d.cotaDia || 0) * nDias || 1;
+  var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between">'
+    + '<span>🧑‍🤝‍🧑 Quanto ficou para cada um na semana</span>'
+    + '<span style="display:flex;gap:8px">'
+    +   '<button class="btn btn-s" onclick="apCopiar()">📋 Copiar</button>'
+    +   '<button class="btn btn-s" onclick="apBaixarExcel()">⬇ Baixar Excel</button>'
+    + '</span></div>'
+    + '<div style="overflow:auto"><table><thead><tr><th>Pessoa</th>'
+    + '<th style="text-align:right">Semana</th>';
+  for (var dd = 1; dd <= nDias; dd++) h += '<th style="text-align:right">Dia ' + dd + '</th>';
+  h += '<th style="text-align:right">RCs</th>'
+    + '<th style="text-align:right">Oport.</th><th style="text-align:right">PID</th>'
+    + '<th style="text-align:right">Maior SLA</th><th style="text-align:right">% da cota da semana</th>'
+    + '<th style="width:130px">Carga</th></tr></thead><tbody>';
+  var somaDia = new Array(nDias).fill(0);
+  r.lista.forEach(function(p){
+    var rcs = {}, ops = {}, slaMax = 0;
+    var porDia = (p.porDia && p.porDia.length) ? p.porDia.slice() : new Array(nDias).fill(0);
+    if (!(p.porDia && p.porDia.length)) {
+      p.itens.forEach(function(i){ if (i.dia >= 1 && i.dia <= nDias) porDia[i.dia - 1]++; });
+    }
+    p.itens.forEach(function(i){ rcs[i.rc] = 1; if (i.op) ops[i.op] = 1; if (i.sla > slaMax) slaMax = i.sla; });
+    var pct = cpPct(p.n, alvoSemana);
+    h += '<tr><td style="font-weight:600">' + cpEsc(p.nome) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + cpNum(p.n) + '</td>';
+    for (var k = 0; k < nDias; k++) {
+      var v = porDia[k] || 0;
+      somaDia[k] += v;
+      var acima = d.cotaDia && v > d.cotaDia;
+      h += '<td style="text-align:right;color:' + (acima ? 'var(--am);font-weight:700' : 'var(--tx)') + '"'
+         + (acima ? ' title="Acima da cota do dia — oportunidade que não pode ser dividida"' : '')
+         + '>' + cpNum(v) + '</td>';
+    }
+    h += '<td style="text-align:right">' + cpNum(Object.keys(rcs).length) + '</td>'
+      + '<td style="text-align:right">' + cpNum(Object.keys(ops).length) + '</td>'
+      + '<td style="text-align:right;color:' + (p.pid ? 'var(--am)' : 'var(--tx2)') + '">' + cpNum(p.pid) + '</td>'
+      + '<td style="text-align:right">' + cpNum(slaMax) + '</td>'
+      + '<td style="text-align:right;color:var(--tx2)">' + cpPctTxt(pct) + '</td>'
+      + '<td>' + cpBarraSimples(p.n, alvoSemana) + '</td></tr>';
+  });
+  h += '</tbody><tfoot><tr><td>Total</td><td style="text-align:right">' + cpNum(r.distribuidos) + '</td>';
+  for (var z = 0; z < nDias; z++) h += '<td style="text-align:right">' + cpNum(somaDia[z]) + '</td>';
+  h += '<td colspan="5"></td></tr></tfoot></table></div></div>';
+  box.innerHTML = h;
+}
+
+function cpBarraSimples(v, alvo){
+  var pct = Math.min(100, (+v || 0) / Math.max(1, +alvo || 1) * 100);
+  return '<div style="height:14px;border-radius:7px;background:var(--cin);border:1px solid var(--brd);overflow:hidden">'
+    + '<div style="width:' + pct.toFixed(2) + '%;height:100%;background:' + CP_COR_MEM + ';border-radius:0 4px 4px 0"></div></div>';
+}
+
+function apRenderLista(){
+  var box = document.getElementById('ap-lista');
+  if (!box) return;
+  if (!_apDist) { box.innerHTML = ''; return; }
+  var r = _apDist.res;
+  var h = '<div class="cd"><div class="cd-t">📄 Lista por pessoa e por dia</div>'
+    + '<div style="overflow:auto;max-height:460px"><table>'
+    + '<thead><tr><th>Pessoa</th><th style="text-align:center">Dia</th><th>RC</th><th>Item</th>'
+    + '<th>Oportunidade</th>'
+    + '<th style="text-align:right">SLA</th><th style="text-align:center">PID</th>'
+    + '<th>Analista automático</th></tr></thead><tbody>';
+  r.lista.forEach(function(p){
+    p.itens.forEach(function(i){
+      h += '<tr' + (i.pid ? ' style="background:var(--amc)"' : '') + '>'
+        + '<td style="font-weight:600">' + cpEsc(p.nome) + '</td>'
+        + '<td style="text-align:center;font-weight:700;color:var(--azm)">' + (i.dia ? 'D' + i.dia : '—') + '</td>'
+        + '<td style="font-weight:700;color:var(--az)">' + cpEsc(i.rc) + '</td>'
+        + '<td>' + cpEsc(i.seq) + '</td>'
+        + '<td>' + cpEsc(i.op) + '</td>'
+        + '<td style="text-align:right;font-weight:600">' + cpNum(i.sla) + '</td>'
+        + '<td style="text-align:center">' + (i.pid ? '<strong style="color:var(--am)">PID</strong>' : '') + '</td>'
+        + '<td style="font-size:10.5px;color:var(--tx2)">' + cpEsc(i.analista) + '</td></tr>';
+    });
+  });
+  h += '</tbody></table></div></div>';
+  box.innerHTML = h;
+}
+
+function apRenderMedicao(){
+  var box = document.getElementById('ap-medicao');
+  if (!box) return;
+  if (!_apMed || !_apDist) { box.innerHTML = ''; return; }
+  var m = _apMed, d = _apDist;
+  var pctGeral = cpPct(m.feito, m.feito + m.falta);
+  var h = '<div class="cd" style="border-top:3px solid var(--vd)">'
+    + '<div class="cd-t" style="justify-content:space-between">'
+    +   '<span>📏 O que a equipe abriu — ' + cpDataBR(d.data) + '</span>'
+    +   '<span style="font-size:10.5px;font-weight:500;color:var(--tx2)">' + cpEsc(m.arquivo) + '</span></div>'
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem;margin-bottom:1rem">'
+    +   '<div class="kc ok"><div class="kc-l">ABERTOS</div><div class="kc-v">' + cpNum(m.feito) + '</div>'
+    +     '<div class="kc-s">' + cpPctTxt(pctGeral) + ' do distribuído</div></div>'
+    +   '<div class="kc warn"><div class="kc-l">AINDA EM ABERTO</div><div class="kc-v">' + cpNum(m.falta) + '</div>'
+    +     '<div class="kc-s">de ' + cpNum(m.feito + m.falta) + ' distribuídos</div></div>'
+    + '</div>'
+    + '<div style="overflow:auto"><table><thead><tr><th>Pessoa</th>'
+    + '<th style="text-align:right">Distribuído</th><th style="text-align:right">Abriu</th>'
+    + '<th style="text-align:right">Falta</th><th style="text-align:right">PID em aberto</th>'
+    + '<th style="text-align:right">% do que recebeu</th><th style="width:130px">Andamento</th></tr></thead><tbody>';
+  m.pessoas.forEach(function(p){
+    var pct = cpPct(p.feito, p.distribuido);
+    h += '<tr><td style="font-weight:600">' + cpEsc(p.nome) + '</td>'
+      + '<td style="text-align:right">' + cpNum(p.distribuido) + '</td>'
+      + '<td style="text-align:right;font-weight:700;color:var(--vd)">' + cpNum(p.feito) + '</td>'
+      + '<td style="text-align:right;color:' + (p.falta ? 'var(--am)' : 'var(--tx2)') + '">' + cpNum(p.falta) + '</td>'
+      + '<td style="text-align:right;color:' + (p.pidFalta ? 'var(--vm)' : 'var(--tx2)') + '">' + cpNum(p.pidFalta) + '</td>'
+      + '<td style="text-align:right;font-weight:600;color:' + (pct >= 1 ? 'var(--vd)' : 'var(--tx)') + '">'
+      +   cpPctTxt(pct) + '</td>'
+      + '<td>' + cpBarraSimples(p.feito, p.distribuido) + '</td></tr>';
+  });
+  h += '</tbody><tfoot><tr><td>Total</td><td style="text-align:right">' + cpNum(m.feito + m.falta) + '</td>'
+    + '<td style="text-align:right">' + cpNum(m.feito) + '</td>'
+    + '<td style="text-align:right">' + cpNum(m.falta) + '</td><td colspan="3"></td></tr></tfoot></table></div></div>';
+  box.innerHTML = h;
+}
+
+// ── mandar para a equipe ──────────────────────────────────────────
+function apTexto(){
+  if (!_apDist) return '';
+  var d = _apDist, l = [];
+  var nDias = +d.dias || +d.res.dias || 5;
+  l.push('ABERTURA DE PATEC — semana de ' + cpDataBR(d.data));
+  l.push('Cota: ' + cpNum(d.cotaDia) + ' itens por pessoa por dia'
+       + (d.cotaSemana ? ' · ' + cpNum(d.cotaSemana) + ' na semana' : '')
+       + ' · ' + nDias + ' dias');
+  d.res.lista.forEach(function(p){
+    l.push('');
+    l.push('══ ' + p.nome + ' — ' + cpNum(p.n) + ' itens na semana'
+         + (p.pid ? ' (' + p.pid + ' PID)' : ''));
+    for (var dd = 1; dd <= nDias; dd++) {
+      var doDia = p.itens.filter(function(i){ return (+i.dia || 0) === dd; });
+      if (!doDia.length) continue;
+      l.push('');
+      l.push('  Dia ' + dd + ' — ' + cpNum(doDia.length) + ' itens:');
+      doDia.forEach(function(i){
+        l.push('    RC ' + i.rc + '/' + i.seq + (i.op ? ' · Oport. ' + i.op : '')
+             + ' · SLA ' + i.sla + (i.pid ? ' · PID' : ''));
+      });
+    }
+  });
+  if (d.res.fila.length) {
+    l.push('');
+    l.push('Na fila, fora desta semana: ' + cpNum(d.res.fila.length) + ' itens.');
+  }
+  return l.join('\n');
+}
+
+function apCopiar(){
+  var st = document.getElementById('ap-status');
+  var txt = apTexto();
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(function(){
+        if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Distribuição copiada — é só mandar para a equipe.</span>';
+      }, function(){ console.log(txt); });
+      return;
+    }
+  } catch (e) {}
+  console.log(txt);
+  if (st) st.innerHTML = '<span style="color:var(--am)">A distribuição saiu no console.</span>';
+}
+
+function apBaixarExcel(){
+  if (!_apDist) return;
+  try {
+    var d = _apDist;
+    var aoa = [['Responsável','Dia','RC','Item','Oportunidade','Item Oport.','SLA','PID','Centro','Propostas','Analista automático']];
+    d.res.lista.forEach(function(p){
+      p.itens.forEach(function(i){
+        aoa.push([p.nome, i.dia ? 'Dia ' + i.dia : '', i.rc, i.seq, i.op, i.itemOp, i.sla,
+                  i.pid ? 'PID' : '', i.centro, i.propostas, i.analista]);
+      });
+    });
+    d.res.fila.forEach(function(i){
+      aoa.push(['(fila)', '', i.rc, i.seq, i.op, i.itemOp, i.sla, i.pid ? 'PID' : '',
+                i.centro, i.propostas, i.analista]);
+    });
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch:22 },{ wch:7 },{ wch:12 },{ wch:8 },{ wch:14 },{ wch:11 },{ wch:8 },{ wch:7 },
+                   { wch:9 },{ wch:10 },{ wch:34 }];
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Distribuicao');
+    XLSX.writeFile(wb, 'Abertura_PATEC_' + String(d.data || '').replace(/-/g,'') + '.xlsx');
+  } catch (e) {
+    var st = document.getElementById('ap-status');
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Não consegui gerar o Excel: ' + cpEsc(e.message) + '</span>';
+  }
+}
+
+// ── persistência ──────────────────────────────────────────────────
+async function apSalvarCfg(){
+  try {
+    var db = getDB(); if (!db) return false;
+    await db.collection('config').doc('abertura_patec_cfg').set({
+      pessoas:_apCfg.pessoas || [], qtdPessoas:+_apCfg.qtdPessoas || 0,
+      cotaDia:+_apCfg.cotaDia || 0, cotaSemana:+_apCfg.cotaSemana || 0, dias:+_apCfg.dias || 5,
+      atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem()
+    });
+    return true;
+  } catch (e) { console.warn('apSalvarCfg:', e); return false; }
+}
+
+async function apCarregarCfg(){
+  try {
+    var db = getDB(); if (!db) return;
+    var doc = await db.collection('config').doc('abertura_patec_cfg').get();
+    if (doc && doc.exists) {
+      var d = doc.data() || {};
+      _apCfg = { pessoas:d.pessoas||[], qtdPessoas:+d.qtdPessoas||0,
+                 cotaDia:+d.cotaDia||0, cotaSemana:+d.cotaSemana||0, dias:+d.dias||5 };
+    }
+    var h = await db.collection('config').doc('abertura_patec_hist').get();
+    _apHist = (h && h.exists && (h.data() || {}).mapa) || {};
+  } catch (e) { console.warn('apCarregarCfg:', e); }
+}
+
+async function apSalvarDia(){
+  if (!_apDist) return false;
+  try {
+    var db = getDB(); if (!db) return false;
+    var d = _apDist;
+    await db.collection(AP_COL).doc(d.data).set({
+      data: d.data, arquivo: d.arquivo || '',
+      pessoas: d.pessoas || [], cotaDia: +d.cotaDia || 0, cotaSemana: +d.cotaSemana || 0,
+      dias: +d.dias || 5,
+      totalArquivo: +d.totalArquivo || 0,
+      distribuicao: d.res.lista.map(function(p){
+        return { nome:p.nome, n:p.n, pid:p.pid, porDia:p.porDia || [],
+                 itens: p.itens.slice(0, 4000).map(function(i){
+                   return { rc:i.rc, seq:i.seq, op:i.op, itemOp:i.itemOp, sla:i.sla,
+                            pid:!!i.pid, centro:i.centro, propostas:i.propostas,
+                            analista:i.analista, dia:+i.dia || 0 };
+                 }) };
+      }),
+      fila: d.res.fila.slice(0, 4000).map(function(i){
+        return { rc:i.rc, seq:i.seq, op:i.op, sla:i.sla, pid:!!i.pid };
+      }),
+      medicao: _apMed || null,
+      geradoEm: d.geradoEm, geradoPor: d.geradoPor
+    });
+    // o histórico de quem ficou com o quê é o que segura a regra de
+    // não trocar a RC de dono no dia seguinte
+    var chaves = Object.keys(_apHist);
+    if (chaves.length > 20000) {
+      var corte = {};
+      chaves.slice(-20000).forEach(function(k){ corte[k] = _apHist[k]; });
+      _apHist = corte;
+    }
+    await db.collection('config').doc('abertura_patec_hist').set({
+      mapa: _apHist, atualizadoEm: new Date().toISOString()
+    });
+    return true;
+  } catch (e) { console.warn('apSalvarDia:', e); return false; }
+}
+
+async function apCarregarDia(data){
+  try {
+    var db = getDB(); if (!db) return;
+    var doc = await db.collection(AP_COL).doc(data).get();
+    if (!doc || !doc.exists) { _apDist = null; _apMed = null; return; }
+    var d = doc.data() || {};
+    var lista = (d.distribuicao || []).map(function(p){
+      return { nome:p.nome, n:+p.n||0, pid:+p.pid||0, porDia:p.porDia||[],
+               itens:(p.itens||[]).map(function(i){
+                 i.chave = String(i.rc) + '|' + String(i.seq);
+                 i.dia = +i.dia || 0;
+                 return i;
+               }) };
+    });
+    var pessoas = {};
+    lista.forEach(function(p){ pessoas[p.nome] = p; });
+    _apDist = {
+      data: d.data || data, arquivo: d.arquivo || '',
+      pessoas: d.pessoas || [], cotaDia: +d.cotaDia || 0, cotaSemana: +d.cotaSemana || 0,
+      dias: +d.dias || 5,
+      totalArquivo: +d.totalArquivo || 0,
+      res: { lista:lista, pessoas:pessoas, fila:d.fila || [],
+             dias: +d.dias || 5, cotaDia: +d.cotaDia || 0, cotaSemana: +d.cotaSemana || 0,
+             distribuidos: lista.reduce(function(m, p){ return m + p.n; }, 0),
+             mantidos: 0, novos: 0, estourou: [] },
+      geradoEm: d.geradoEm || '', geradoPor: d.geradoPor || ''
+    };
+    _apMed = d.medicao || null;
+  } catch (e) { console.warn('apCarregarDia:', e); _apDist = null; }
+}
+
+async function apAbrir(){
+  var el = document.getElementById('ap-data');
+  if (el && !el.value) el.value = cpHojeISO();
+  await apCarregarCfg();
+  apPintarCfg();
+  await apCarregarDia(apDataSel());
+  apRender();
+}
+
+async function apTrocarData(){
+  var st = document.getElementById('ap-med-status');
+  if (st) st.innerHTML = '';
+  await apCarregarDia(apDataSel());
+  apRender();
+}
+
+function apPintarCfg(){
+  var põe = function(id, v){ var e = document.getElementById(id); if (e) e.value = v || ''; };
+  põe('ap-qtd-pessoas', _apCfg.qtdPessoas || (_apCfg.pessoas || []).length || '');
+  põe('ap-cota-dia', _apCfg.cotaDia || '');
+  põe('ap-cota-semana', _apCfg.cotaSemana || '');
+  põe('ap-dias', _apCfg.dias || 5);
+  var t = document.getElementById('ap-nomes');
+  if (t && !t.value) t.value = (_apCfg.pessoas || []).join('\n');
+}
+
 
 // ── Lista dos memorizados — o que a equipe precisa liberar ────────
 // Sai um par CHAVE + PEDIDO por linha (colunas C e D da medição),
