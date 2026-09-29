@@ -11033,6 +11033,14 @@ async function cpHandleUpload(file){
     var tt = cpTotais(med.compradores);
     _cpDia.compradores = med.compradores;   // a medição inteira, como veio
     _cpDia.itensMem    = med.itensMem || [];
+    _cpDia.colunasLista = (function(){
+      var c = med.colunas || {}, faltam = [];
+      if (c.chave  === -1 || c.chave  === undefined) faltam.push('CHAVE');
+      if (c.pedido === -1 || c.pedido === undefined) faltam.push('PEDIDO');
+      if (c.rc     === -1 || c.rc     === undefined) faltam.push('REQUISICAO (RC)');
+      if (c.item   === -1 || c.item   === undefined) faltam.push('LINHAREQUISICAO (item)');
+      return faltam;
+    })();
     _cpDia.memorizado  = tt.memorizado;     // a conta, já sem quem está fora
     _cpDia.emitido     = tt.emitido;
     _cpDia.total       = tt.total;
@@ -11051,7 +11059,12 @@ async function cpHandleUpload(file){
     if (lt) lt.innerHTML = cpTextoLeitura(med, data);
 
     cpRender();
-    await cpSalvarDia();
+    var gravou = await cpSalvarDia();
+    if (!gravou && st) {
+      st.innerHTML += '<div style="color:var(--vm);margin-top:4px">✗ A medição está na tela, mas '
+        + '<strong>não foi gravada</strong>: ' + cpEsc((_cpUltimaGravacao || {}).motivo || 'erro desconhecido')
+        + '. Ela some se você recarregar a página.</div>';
+    }
   } catch (e2) {
     if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Erro ao ler: ' + cpEsc(e2.message) + '</span>';
   }
@@ -11104,13 +11117,26 @@ async function cpSalvarParametros(){
   var st = document.getElementById('cp-status');
   if (st) st.innerHTML = ok
     ? '<span style="color:var(--vd)">✓ Números de ' + cpDataBR(data) + ' salvos.</span>'
-    : '<span style="color:var(--am)">Números aplicados na tela, mas não consegui gravar no Firebase.</span>';
+    : '<span style="color:var(--vm)">✗ Números aplicados na tela, mas não gravados: '
+      + cpEsc((_cpUltimaGravacao || {}).motivo || 'erro desconhecido') + '</span>';
+}
+
+// Guarda o resultado da última gravação para a tela poder mostrar.
+var _cpUltimaGravacao = null;
+
+function _cpGravou(ok, motivo){
+  _cpUltimaGravacao = { ok:ok, motivo:motivo || '', quando:new Date().toISOString() };
+  try { if (typeof pedidosPintarUltimaGravacao === 'function') pedidosPintarUltimaGravacao(); } catch (e) {}
+  return ok;
 }
 
 async function cpSalvarDia(){
   if (!_cpDia) return false;
   try {
-    var db = getDB(); if (!db) return false;
+    var db = getDB();
+    if (!db) return _cpGravou(false, _pedidosConfigPronta()
+      ? 'não consegui abrir a conexão com o Firebase'
+      : 'o Firebase deste módulo ainda não está configurado');
     var d = _cpDia;
     await db.collection(CP_COL).doc(d.data).set({
       data: d.data,
@@ -11133,8 +11159,11 @@ async function cpSalvarDia(){
     });
     await cpCarregarHistorico();
     cpRenderHistorico();   // o histórico na tela acompanha a gravação
-    return true;
-  } catch (e) { console.warn('cpSalvarDia:', e); return false; }
+    return _cpGravou(true);
+  } catch (e) {
+    console.warn('cpSalvarDia:', e);
+    return _cpGravou(false, String(e && (e.message || e.code) || e));
+  }
 }
 
 async function cpCarregarDia(data){
@@ -11376,8 +11405,12 @@ function cpRenderEquipe(){
       +   '>📋 Lista dos memorizados' + (nMem ? ' (' + cpNum(nMem) + ')' : '') + '</button>'
       + '</div>';
     if (!nMem && (tt.memorizado > 0)) {
+      var faltam = (d.colunasLista || []);
       h += '<div style="font-size:10.5px;color:var(--am);text-align:right;margin-top:4px">'
-        + 'Para sair a lista, a medição precisa trazer as colunas CHAVE e PEDIDO.</div>';
+        + (faltam.length
+            ? 'A lista não sai porque a medição veio sem: <strong>' + cpEsc(faltam.join(', ')) + '</strong>.'
+            : 'A lista não sai: a medição não trouxe chave, pedido nem RC dos itens memorizados.')
+        + '</div>';
     }
   }
 
@@ -11467,8 +11500,12 @@ function cpSubTab(qual, btn){
     var b2 = document.getElementById('cp-sub-btn-' + qual);
     if (b2) b2.classList.add('active');
   }
+  // Cada sub-aba carrega a própria base ao abrir. A de Pedidos ficava de
+  // fora: dentro do ADM quem carregava era o setAdmTab, e no módulo novo
+  // não havia ninguém — por isso o dia e o histórico vinham vazios.
+  if (qual === 'pedidos')  cpAbrir();
   if (qual === 'abertura') apAbrir();
-  if (qual === 'mapa') mdAbrir();
+  if (qual === 'mapa')     mdAbrir();
 }
 
 function apDataSel(){
@@ -30006,7 +30043,23 @@ function pedidosPintarConexao(){
     +   '<button class="btn btn-s" onclick="pedidosTestarConexao()">Testar conexão</button>'
     + '</div>'
     + '<div id="pedidos-teste-res" style="font-size:12px;color:var(--tx2)">'
-    +   'Separada do ADLV e do FAST — nada daqui vai para a base deles.</div></div>';
+    +   'Separada do ADLV e do FAST — nada daqui vai para a base deles.</div>'
+    + '<div id="pedidos-ultima-gravacao" style="font-size:11.5px;margin-top:6px"></div></div>';
+  pedidosPintarUltimaGravacao();
+}
+
+// Deixa à vista se a última gravação foi para o Firebase ou não — era o
+// tipo de falha que passava batida, porque a tela continuava certa.
+function pedidosPintarUltimaGravacao(){
+  var el = document.getElementById('pedidos-ultima-gravacao');
+  if (!el) return;
+  var g = _cpUltimaGravacao;
+  if (!g) { el.innerHTML = ''; return; }
+  var h = new Date(g.quando).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+  el.innerHTML = g.ok
+    ? '<span style="color:var(--vd)">✓ Última gravação às ' + h + ' — foi para o Firebase.</span>'
+    : '<span style="color:var(--vm)">✗ Última gravação às ' + h + ' <strong>falhou</strong>: '
+      + cpEsc(g.motivo) + '</span>';
 }
 
 // Grava e relê um documento de teste. É o jeito mais direto de saber se
