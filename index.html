@@ -622,11 +622,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 </div>
 <!-- ══ fim SELEÇÃO DE MÓDULO ══ -->
 
-<div class="page" id="p-pedidos">
-  <div id="pedidos-aviso-config"></div>
-  <div id="pedidos-conteudo"></div>
-</div>
-
 <button id="hbg" onclick="document.getElementById('sb').classList.toggle('mob-open')">☰</button>
 <nav id="sb">
   <div class="sb-logo"><h1>PATEC</h1><p>Sistema de Gestão de Compras</p></div>
@@ -711,6 +706,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 </div>
 <div class="ct">
 
+    <!-- ══════════════════ MÓDULO PEDIDOS ══════════════════ -->
+    <div class="page" id="p-pedidos">
+      <div id="pedidos-aviso-config"></div>
+      <div id="pedidos-conteudo"></div>
+    </div>
 
     <!-- ══════════════════ VISÃO GERAL ══════════════════ -->
     
@@ -30088,7 +30088,8 @@ function _entrarNoApp(){
   const modBadge = document.getElementById('topbar-modulo-badge');
   if(modBadge){
     modBadge.style.display = 'inline-block';
-    modBadge.textContent = (_moduloAtivo === 'fast' ? '⚡ FAST' : '🏢 ADLV');
+    modBadge.textContent = _moduloAtivo === 'fast' ? '⚡ FAST'
+                         : (_moduloAtivo === 'pedidos' ? '📦 PEDIDOS' : '🏢 ADLV');
   }
 
   // Testar E-mails, Apresentação, Apresentação 1, XGL (Governança), Tirar do
@@ -30111,14 +30112,16 @@ function _entrarNoApp(){
   rtIniciarListener();
 
   // A tela inicial era Indicadores de Mercado, que foi para o ADM. Agora o
-  // app abre no Direcionamento da Equipe, o primeiro item do menu.
+  // app abre no Direcionamento da Equipe, o primeiro item do menu — e no
+  // módulo Pedidos, na única tela que ele tem.
   setTimeout(function(){
     try {
       if(document.getElementById('p-adm') && document.getElementById('p-adm').classList.contains('active')) return;
+      var alvo = (_moduloAtivo === 'pedidos') ? 'pedidos' : 'direcionamento';
       var it = [].slice.call(document.querySelectorAll('#sb .sb-it')).filter(function(x){
-        return /go\('direcionamento'/.test(x.getAttribute('onclick') || '');
+        return new RegExp("go\\('" + alvo + "'").test(x.getAttribute('onclick') || '');
       })[0];
-      go('direcionamento', it || null);
+      go(alvo, it || null);
     } catch(e){ console.warn('tela inicial:', e); }
   }, 250);
 
