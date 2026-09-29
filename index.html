@@ -30025,6 +30025,71 @@ function trocarModulo(){
 
 
 
+
+// ── Trazer o que já existe no ADLV ────────────────────────────────
+// O módulo nasceu vazio, mas o que foi lançado antes continua guardado
+// na base do ADLV. Este botão copia esses dias para cá, sem apagar
+// nada de lá e sem sobrescrever o que já existe aqui.
+var PEDIDOS_COLECOES = ['controle_pedidos', 'abertura_patec', 'distribuicao_mapa'];
+var PEDIDOS_CONFIGS  = ['controle_pedidos_fora', 'abertura_patec_cfg',
+                        'abertura_patec_hist', 'distribuicao_mapa_cfg'];
+
+async function pedidosImportarDoAdlv(){
+  var el = document.getElementById('pedidos-teste-res');
+  var diz = function(cor, txt){ if (el) el.innerHTML = '<span style="color:' + cor + '">' + txt + '</span>'; };
+  if (_moduloAtivo !== 'pedidos') { diz('var(--am)', 'Só funciona dentro do módulo Pedidos.'); return; }
+  if (!confirm('Trazer da base do ADLV os dias que você já tinha lançado?\n\n'
+      + 'Nada é apagado do ADLV, e o que já existe aqui não é sobrescrito.')) return;
+  diz('var(--tx2)', '⏳ Trazendo...');
+  try {
+    var origem = getDBModulo('adlv');
+    var destino = getDB();
+    if (!origem)  { diz('var(--vm)', '✗ Não consegui abrir a base do ADLV.'); return; }
+    if (!destino) { diz('var(--vm)', '✗ Não consegui abrir a base deste módulo.'); return; }
+
+    var copiados = 0, jaTinha = 0, detalhe = [];
+    for (var i = 0; i < PEDIDOS_COLECOES.length; i++) {
+      var col = PEDIDOS_COLECOES[i];
+      var snap = await origem.collection(col).get();
+      var docs = [];
+      snap.forEach(function(d){ docs.push({ id:d.id, dados:d.data() }); });
+      var nCol = 0;
+      for (var j = 0; j < docs.length; j++) {
+        var alvo = destino.collection(col).doc(docs[j].id);
+        var existe = await alvo.get();
+        if (existe && existe.exists) { jaTinha++; continue; }
+        await alvo.set(docs[j].dados);
+        copiados++; nCol++;
+      }
+      if (nCol) detalhe.push(nCol + ' de ' + col.replace(/_/g, ' '));
+    }
+    for (var k = 0; k < PEDIDOS_CONFIGS.length; k++) {
+      var cid = PEDIDOS_CONFIGS[k];
+      var dc = await origem.collection('config').doc(cid).get();
+      if (!dc || !dc.exists) continue;
+      var alvoC = destino.collection('config').doc(cid);
+      var exC = await alvoC.get();
+      if (exC && exC.exists) { jaTinha++; continue; }
+      await alvoC.set(dc.data());
+      copiados++;
+    }
+
+    if (!copiados) {
+      diz('var(--am)', 'Nada novo para trazer'
+        + (jaTinha ? ' — os ' + jaTinha + ' registros do ADLV já estão aqui.' : '.'));
+    } else {
+      diz('var(--vd)', '✓ ' + copiados + ' registro(s) trazidos'
+        + (detalhe.length ? ' (' + cpEsc(detalhe.join(', ')) + ')' : '')
+        + (jaTinha ? ' · ' + jaTinha + ' já existiam aqui e foram mantidos' : '') + '.');
+    }
+    try { await cpAbrir(); } catch (e) {}
+  } catch (e) {
+    var m = String(e && (e.message || e.code) || e);
+    diz('var(--vm)', '✗ ' + cpEsc(m)
+      + (/permission/i.test(m) ? ' — sem permissão para ler o ADLV ou gravar aqui.' : ''));
+  }
+}
+
 // Cartão de conexão do módulo: diz em qual projeto ele está gravando e
 // deixa conferir na hora se as chaves do Firebase estão certas.
 function pedidosPintarConexao(){
@@ -30040,6 +30105,8 @@ function pedidosPintarConexao(){
   av.innerHTML = '<div class="cd" style="border-top:3px solid var(--vd)">'
     + '<div class="cd-t" style="justify-content:space-between">'
     +   '<span>🔌 Base do módulo: <strong>' + cpEsc(FIREBASE_CONFIG_PEDIDOS.projectId) + '</strong></span>'
+    +   '<button class="btn btn-s" onclick="pedidosImportarDoAdlv()" '
+    +     'title="Copia para cá os dias que você já tinha lançado no ADLV">⬇ Trazer do ADLV</button>'
     +   '<button class="btn btn-s" onclick="pedidosTestarConexao()">Testar conexão</button>'
     + '</div>'
     + '<div id="pedidos-teste-res" style="font-size:12px;color:var(--tx2)">'
