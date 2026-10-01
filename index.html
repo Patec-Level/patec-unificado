@@ -12311,6 +12311,43 @@ var STB_COL = 'status_b';
 var STB_GRUPO = 'L19';
 var STB_TITULO = 'Linha duplicada';
 var _stbDia = null;   // { data, arquivo, itens:[], lidas, atualizadoEm, atualizadoPor }
+var _stbFiltroNome = '';   // '' = todos · '__sem__' = sem nome · ou o nome
+var _stbBusca = '';        // texto livre: RC, nome ou comentário
+
+// Os itens que a tela está mostrando agora, com o índice original —
+// é por eles que o "marcar todos" e a exportação trabalham.
+function stbVisiveis(){
+  var d = _stbDia || {};
+  var busca = cpNormCab(_stbBusca || '');
+  var out = [];
+  (d.itens || []).forEach(function(i, k){
+    var nome = String(i.nome || '').trim();
+    if (_stbFiltroNome === '__sem__' && nome) return;
+    if (_stbFiltroNome && _stbFiltroNome !== '__sem__' && cpNormNome(nome) !== cpNormNome(_stbFiltroNome)) return;
+    if (busca) {
+      var alvo = cpNormCab([i.rc, i.seq, i.nome, i.comentario, i.acomp].join(' '));
+      if (alvo.indexOf(busca) === -1) return;
+    }
+    out.push({ i:i, k:k });
+  });
+  return out;
+}
+
+function stbNomes(){
+  var vistos = {}, out = [];
+  ((_stbDia || {}).itens || []).forEach(function(i){
+    var n = String(i.nome || '').trim();
+    if (!n) return;
+    var c = cpNormNome(n);
+    if (vistos[c]) return;
+    vistos[c] = 1; out.push(n);
+  });
+  return out.sort(function(a, b){ return a.localeCompare(b); });
+}
+
+function stbFiltrar(valor){ _stbFiltroNome = valor || ''; stbRender(); }
+function stbBuscar(valor){ _stbBusca = String(valor || '').trim(); stbRenderLista(); }
+function stbLimparFiltro(){ _stbFiltroNome = ''; _stbBusca = ''; stbRender(); }
 
 function stbTextoDe(item, novoItem){
   return 'Item ' + (item || '') + ' duplicado e concluído devido cancelamento do pedido de compras '
@@ -12377,6 +12414,7 @@ function stbLerBU(linhas){
       rc: stbInt(l[col.rc]), seq: seq,
       novoItem: seq ? String(Number(seq) + 10) : '',   // sugestão: o próximo item
       acomp: pega(l, col.acomp) || '.',
+      nome: '',                // quem vai tratar — só do dash
       comentario: '',          // só do dash — nunca vai para o script
       marcado: false,
       textoBreve: pega(l, col.texto),
@@ -12424,7 +12462,8 @@ async function stbUpload(file){
       i.novoItem   = a.novoItem || i.novoItem;
       i.acomp      = a.acomp || i.acomp;
       i.comentario = a.comentario || '';
-      if (a.comentario || a.marcado) reaproveitados++;
+      i.nome       = a.nome || '';
+      if (a.comentario || a.nome || a.marcado) reaproveitados++;
     });
     r.reaproveitados = reaproveitados;
 
@@ -12474,8 +12513,10 @@ function stbRenderResumo(){
     + card('MARCADOS COMO LINHA DUPLICADA', cpNum(marcados),
         marcados ? 'vão para o arquivo do script' : 'marque os que já duplicou',
         marcados ? 'ok' : '')
+    + card('COM NOME', cpNum((d.itens || []).filter(function(i){ return (i.nome || '').trim(); }).length),
+        stbNomes().length + ' pessoa(s) na lista')
     + card('COM COMENTÁRIO', cpNum((d.itens || []).filter(function(i){ return (i.comentario || '').trim(); }).length),
-        'alguém está tratando')
+        'anotação de acompanhamento')
     + card('LINHAS LIDAS DA BU', cpNum(d.lidas || 0),
         cpNum(d.emTratativa || 0) + ' em tratativa · ' + cpNum(d.statusB || 0) + ' status B')
     + '</div>';
@@ -12488,14 +12529,47 @@ function stbRenderLista(){
   var d = _stbDia;
   var marcados = d.itens.filter(function(i){ return i.marcado; }).length;
 
+  var vis = stbVisiveis();
+  var nomes = stbNomes();
+  var filtrando = !!(_stbFiltroNome || _stbBusca);
+
   var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between">'
-    + '<span>🧾 Linhas para o script — ' + cpDataBR(d.data) + '</span>'
+    + '<span>🧾 Linhas para o script — ' + cpDataBR(d.data)
+    +   (filtrando ? ' <span style="font-weight:500;color:var(--tx2)">· mostrando '
+          + cpNum(vis.length) + ' de ' + cpNum(d.itens.length) + '</span>' : '') + '</span>'
     + '<span style="display:flex;gap:8px;align-items:center">'
-    +   '<button class="btn btn-s" onclick="stbMarcarTodos(true)">Marcar todos</button>'
+    +   '<button class="btn btn-s" onclick="stbMarcarTodos(true)">Marcar'
+    +     (filtrando ? ' os ' + cpNum(vis.length) + ' da tela' : ' todos') + '</button>'
     +   '<button class="btn btn-s" onclick="stbMarcarTodos(false)">Desmarcar</button>'
     +   '<button class="btn btn-p" onclick="stbExportar()">⬇ Exportar para o script ('
     +     cpNum(marcados) + ')</button>'
     + '</span></div>'
+
+    + '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:.8rem">'
+    +   '<div><label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:3px">'
+    +     'FILTRAR POR NOME</label>'
+    +     '<select onchange="stbFiltrar(this.value)" style="font-size:12.5px;padding:5px 9px;'
+    +       'border:1.5px solid ' + (_stbFiltroNome ? 'var(--azm)' : 'var(--brd)') + ';border-radius:6px;min-width:190px;'
+    +       'font-weight:' + (_stbFiltroNome ? '700' : '400') + '">'
+    +       '<option value=""' + (_stbFiltroNome === '' ? ' selected' : '') + '>Todos ('
+    +         cpNum(d.itens.length) + ')</option>'
+    +       nomes.map(function(n){
+             var q = d.itens.filter(function(x){ return cpNormNome(x.nome || '') === cpNormNome(n); }).length;
+             return '<option value="' + cpEsc(n) + '"' + (cpNormNome(_stbFiltroNome) === cpNormNome(n) ? ' selected' : '')
+                  + '>' + cpEsc(n) + ' (' + q + ')</option>';
+           }).join('')
+    +       '<option value="__sem__"' + (_stbFiltroNome === '__sem__' ? ' selected' : '') + '>— sem nome ('
+    +         cpNum(d.itens.filter(function(x){ return !String(x.nome || '').trim(); }).length) + ')</option>'
+    +     '</select></div>'
+    +   '<div><label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:3px">'
+    +     'BUSCAR</label>'
+    +     '<input type="text" id="stb-busca" value="' + cpEsc(_stbBusca) + '" placeholder="RC, nome, comentário"'
+    +       ' oninput="stbBuscar(this.value)" style="width:200px;font-size:12.5px;padding:5px 9px;'
+    +       'border:1.5px solid var(--brd);border-radius:6px"></div>'
+    +   (filtrando ? '<button class="btn btn-s" onclick="stbLimparFiltro()">✕ Limpar filtro</button>' : '')
+    +   '<div style="font-size:10.5px;color:var(--tx2);flex:1;min-width:200px">'
+    +     'Filtre por nome, marque os da tela e exporte — sai um arquivo só com os itens daquela pessoa.</div>'
+    + '</div>'
 
     + '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:.9rem;'
     +   'background:var(--cin);border:1px solid var(--brd);border-radius:8px;padding:9px 11px">'
@@ -12512,17 +12586,23 @@ function stbRenderLista(){
     + '<div style="overflow:auto;max-height:560px"><table>'
     + '<thead><tr><th style="text-align:center">Linha duplicada</th><th>RC</th><th>Item</th>'
     + '<th>Grupo Comprador</th>'
+    + '<th title="Quem vai tratar — só aparece aqui no painel">Nome</th>'
     + '<th title="Só aparece aqui no painel — não entra no arquivo do script">Comentário</th>'
     + '<th>Nº Acompanhamento</th><th>Novo item</th><th>Texto</th></tr></thead><tbody>';
 
-  d.itens.forEach(function(i, k){
+  vis.forEach(function(v){
+    var i = v.i, k = v.k;
     h += '<tr' + (i.marcado ? ' style="background:var(--vdc)"' : '') + '>'
       + '<td style="text-align:center"><input type="checkbox" onchange="stbMarcar(' + k + ', this.checked)"'
       +   (i.marcado ? ' checked' : '') + ' style="width:16px;height:16px;cursor:pointer"></td>'
       + '<td style="font-weight:700;color:var(--az)">' + cpEsc(i.rc) + '</td>'
       + '<td style="font-weight:600">' + cpEsc(i.seq) + '</td>'
       + '<td style="color:var(--tx2)">' + STB_GRUPO + '</td>'
-      + '<td><input type="text" value="' + cpEsc(i.comentario || '') + '" placeholder="quem está tratando"'
+      + '<td><input type="text" value="' + cpEsc(i.nome || '') + '" placeholder="nome"'
+      +   ' onchange="stbCampo(' + k + ', \'nome\', this.value)" list="stb-nomes"'
+      +   ' style="width:130px;font-size:11.5px;padding:3px 6px;border:1px solid var(--brd);border-radius:5px;'
+      +   'font-weight:600;background:' + ((i.nome || '') ? 'var(--azc)' : '#fff') + '"></td>'
+      + '<td><input type="text" value="' + cpEsc(i.comentario || '') + '" placeholder="o que falta"'
       +   ' onchange="stbCampo(' + k + ', \'comentario\', this.value)"'
       +   ' style="width:160px;font-size:11.5px;padding:3px 6px;border:1px solid var(--brd);border-radius:5px;'
       +   'background:' + ((i.comentario || '') ? 'var(--amc)' : '#fff') + '"></td>'
@@ -12536,10 +12616,13 @@ function stbRenderLista(){
   });
 
   h += '</tbody></table></div>'
+    + '<datalist id="stb-nomes">' + nomes.map(function(n){ return '<option value="' + cpEsc(n) + '">'; }).join('') + '</datalist>'
+    + (vis.length ? '' : '<div style="font-size:12px;color:var(--tx2);padding:14px 2px">'
+        + 'Nenhum item com esse filtro.</div>')
     + '<div style="font-size:10.5px;color:var(--tx2);margin-top:8px">'
     + 'O arquivo sai no mesmo formato do script de RPA: cabeçalho na linha 7 e as colunas '
     + '<strong>RC · Item · Grupo Comprador · Número de Acompanhamento · Título · Texto</strong>. '
-    + 'O <strong>comentário fica só aqui</strong> — não entra no arquivo.</div>'
+    + 'O <strong>nome e o comentário ficam só aqui</strong> — não entram no arquivo.</div>'
     + '</div>';
   box.innerHTML = h;
 }
@@ -12562,9 +12645,12 @@ function stbMarcar(k, valor){
   stbSalvar();
 }
 
+// Marcar age no que está à vista: com o filtro de uma pessoa ligado,
+// marca só os itens dela.
 function stbMarcarTodos(valor){
   if (!_stbDia) return;
-  _stbDia.itens.forEach(function(i){ i.marcado = !!valor; });
+  if (valor) stbVisiveis().forEach(function(v){ v.i.marcado = true; });
+  else _stbDia.itens.forEach(function(i){ i.marcado = false; });
   stbRender();
   stbSalvar();
 }
@@ -12574,7 +12660,7 @@ function stbAplicarAcomp(){
   var el = document.getElementById('stb-acomp-todos');
   var v = el ? String(el.value || '').trim() : '';
   if (!v) return;
-  _stbDia.itens.forEach(function(i){ i.acomp = v; });
+  stbVisiveis().forEach(function(x){ x.i.acomp = v; });
   stbRender();
   stbSalvar();
 }
@@ -12601,7 +12687,9 @@ function stbExportar(){
     ws['!cols'] = [{ wch:13 },{ wch:8 },{ wch:17 },{ wch:24 },{ wch:17 },{ wch:110 }];
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'RPA');
-    XLSX.writeFile(wb, 'Status_B_' + String(_stbDia.data || '').replace(/-/g, '') + '.xlsx');
+    var sufixo = (_stbFiltroNome && _stbFiltroNome !== '__sem__')
+      ? '_' + _stbFiltroNome.replace(/[^A-Za-zÀ-ú0-9]+/g, '_') : '';
+    XLSX.writeFile(wb, 'Status_B_' + String(_stbDia.data || '').replace(/-/g, '') + sufixo + '.xlsx');
     if (st) st.innerHTML = '<span style="color:var(--vd)">✓ ' + cpNum(marcados.length)
       + ' linha(s) exportadas no formato do script.</span>';
   } catch (e) {
@@ -12624,7 +12712,8 @@ async function stbSalvar(){
       emTratativa: +d.emTratativa || 0, statusB: +d.statusB || 0, eliminado: +d.eliminado || 0,
       itens: (d.itens || []).slice(0, 5000).map(function(i){
         return { rc:String(i.rc||''), seq:String(i.seq||''), novoItem:String(i.novoItem||''),
-                 acomp:String(i.acomp||''), comentario:String(i.comentario||''), marcado:!!i.marcado,
+                 acomp:String(i.acomp||''), nome:String(i.nome||''),
+                 comentario:String(i.comentario||''), marcado:!!i.marcado,
                  textoBreve:String(i.textoBreve||''), pedido:String(i.pedido||'') };
       }),
       atualizadoEm: new Date().toISOString(), atualizadoPor: cpQuem()
@@ -12654,7 +12743,7 @@ async function stbPreenchidosAnteriores(data){
       (dia.itens || []).forEach(function(i){
         // só herda o que você realmente mexeu: comentário ou marcação.
         // O nº de acompanhamento sozinho não conta — ele já vem da BU.
-        if (!(i.comentario || '').trim() && !i.marcado) return;
+        if (!(i.comentario || '').trim() && !(i.nome || '').trim() && !i.marcado) return;
         out[i.rc + '|' + i.seq] = i;   // o dia mais recente prevalece
       });
     });
