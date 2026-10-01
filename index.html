@@ -1294,6 +1294,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <button class="stab active" id="cp-sub-btn-pedidos" onclick="cpSubTab('pedidos',this)">📦 Controle de Pedidos</button>
           <button class="stab" id="cp-sub-btn-abertura" onclick="cpSubTab('abertura',this)">📂 Abertura de PATEC</button>
           <button class="stab" id="cp-sub-btn-mapa" onclick="cpSubTab('mapa',this)">🗺️ Distribuição do MAPA</button>
+          <button class="stab" id="cp-sub-btn-statusb" onclick="cpSubTab('statusb',this)">📋 Status B</button>
         </div>
 
         <div id="cp-sub-pedidos">
@@ -1517,6 +1518,37 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div id="md-equipe"></div>
           <div id="md-lista"></div>
         </div><!-- /cp-sub-mapa -->
+
+        <!-- ══ STATUS B ═══════════════════════════════════════════ -->
+        <div id="cp-sub-statusb" style="display:none">
+
+          <div class="cd" style="border-top:3px solid var(--azm)">
+            <div class="cd-t">📋 Status B — pedidos eliminados a duplicar</div>
+            <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:.9rem">
+              <div>
+                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">DATA DA BU</label>
+                <input type="date" id="stb-data" onchange="stbTrocarData()"
+                  style="font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;color:var(--az);font-weight:600">
+              </div>
+            </div>
+            <div style="border:2px dashed var(--brd);border-radius:10px;padding:1.3rem;text-align:center;cursor:pointer;background:var(--cin)"
+              onclick="document.getElementById('stb-file-input').click()"
+              ondragover="event.preventDefault()" ondrop="stbDrop(event)">
+              <div style="font-size:24px;margin-bottom:.3rem">📄</div>
+              <div style="font-size:13px;font-weight:600">Arraste aqui a BU</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:4px">
+                .xlsb, .xlsx ou .csv — leio a aba BU e filtro em tratativa · status B · tratar pedido eliminado
+              </div>
+              <input type="file" id="stb-file-input" accept=".xlsb,.xlsx,.xls,.csv" style="display:none"
+                onchange="stbUpload(this.files[0]); this.value='';">
+            </div>
+            <div id="stb-status" style="margin-top:.7rem;font-size:12px"></div>
+            <div id="stb-resumo"></div>
+          </div>
+
+          <div id="stb-lista"></div>
+        </div><!-- /cp-sub-statusb -->
+
 
       </div>
 
@@ -11489,7 +11521,7 @@ function apSubAtiva(){
   return el && el.style.display !== 'none';
 }
 function cpSubTab(qual, btn){
-  ['pedidos','abertura','mapa'].forEach(function(k){
+  ['pedidos','abertura','mapa','statusb'].forEach(function(k){
     var el = document.getElementById('cp-sub-' + k);
     if (el) el.style.display = (qual === k) ? 'block' : 'none';
     var b = document.getElementById('cp-sub-btn-' + k);
@@ -11506,6 +11538,7 @@ function cpSubTab(qual, btn){
   if (qual === 'pedidos')  cpAbrir();
   if (qual === 'abertura') apAbrir();
   if (qual === 'mapa')     mdAbrir();
+  if (qual === 'statusb')  stbAbrir();
 }
 
 function apDataSel(){
@@ -12260,6 +12293,351 @@ function apPintarCfg(){
   if (t && !t.value) t.value = (_apCfg.pessoas || []).join('\n');
 }
 
+
+
+// ══════════════════════════════════════════════════════════════════
+// STATUS B — pedidos eliminados a duplicar
+//
+// Todo dia o André sobe a BU. Desta base saem os itens que estão
+// EM TRATATIVA (coluna E), com STATUS_RC = B (coluna L) e
+// ANALISTA_AUTOMATICO = Tratar Pedido Eliminado (coluna BU).
+//
+// Para cada um a equipe duplica o item no SAP: a tela monta a linha
+// no formato do script de RPA (RC, Item, Grupo Comprador, Número de
+// Acompanhamento, Título e Texto) e exporta as linhas marcadas.
+// ══════════════════════════════════════════════════════════════════
+
+var STB_COL = 'status_b';
+var STB_GRUPO = 'L19';
+var STB_TITULO = 'Linha duplicada';
+var _stbDia = null;   // { data, arquivo, itens:[], lidas, atualizadoEm, atualizadoPor }
+
+function stbTextoDe(item, novoItem){
+  return 'Item ' + (item || '') + ' duplicado e concluído devido cancelamento do pedido de compras '
+       + 'e manutenção do status B na RC. A aquisição será realizada através do item '
+       + (novoItem || '');
+}
+
+function stbDataSel(){
+  var el = document.getElementById('stb-data');
+  return (el && el.value) || cpHojeISO();
+}
+
+// número do SAP vem como 35530828.0 — vira texto inteiro
+function stbInt(v){
+  if (v == null || v === '') return '';
+  if (typeof v === 'number') return String(Math.round(v));
+  var t = String(v).trim();
+  var n = parseFloat(t.replace(',', '.'));
+  return isFinite(n) ? String(Math.round(n)) : t;
+}
+
+// ── leitura da BU ─────────────────────────────────────────────────
+function stbLerBU(linhas){
+  var r = { itens:[], lidas:0, aviso:'', emTratativa:0, statusB:0, eliminado:0 };
+  if (!linhas || !linhas.length) { r.aviso = 'Arquivo vazio.'; return r; }
+
+  var iCab = -1, cabs = [];
+  for (var k = 0; k < Math.min(linhas.length, 15); k++) {
+    var c = (linhas[k] || []).map(cpNormCab);
+    if (c.indexOf('STATUS_CARTEIRA') !== -1 || c.indexOf('STATUS_RC') !== -1) { iCab = k; cabs = c; break; }
+  }
+  if (iCab === -1) { r.aviso = 'Não achei STATUS_CARTEIRA nem STATUS_RC — isto é a BU mesmo?'; return r; }
+
+  var ix = function(nomes){ return _cpAchaCol(cabs, nomes); };
+  var col = {
+    rc: ix(['RC']), seq: ix(['SEQ','ITEM']),
+    carteira: ix(['STATUS_CARTEIRA']), statusRc: ix(['STATUS_RC']),
+    aa: ix(['ANALISTA_AUTOMATICO']), acomp: ix(['N_ACOMPANHAMENTO','NUMERO_ACOMPANHAMENTO']),
+    texto: ix(['TEXTO_BREVE']), ped: ix(['NUMERO_PEDIDO'])
+  };
+  r.colunas = col;
+  if (col.carteira === -1 || col.statusRc === -1 || col.aa === -1) {
+    r.aviso = 'A BU precisa ter STATUS_CARTEIRA, STATUS_RC e ANALISTA_AUTOMATICO.';
+    return r;
+  }
+
+  var pega = function(l, j){ return j === -1 ? '' : String(l[j] == null ? '' : l[j]).trim(); };
+  for (var b = iCab + 1; b < linhas.length; b++) {
+    var l = linhas[b] || [];
+    if (col.rc !== -1 && !String(l[col.rc] == null ? '' : l[col.rc]).trim()) continue;
+    r.lidas++;
+    var cart = cpNormCab(pega(l, col.carteira));
+    var st   = cpNormCab(pega(l, col.statusRc));
+    var aa   = cpNormCab(pega(l, col.aa));
+    if (cart.indexOf('TRATATIVA') !== -1) r.emTratativa++;
+    if (st === 'B') r.statusB++;
+    if (aa.indexOf('TRATAR_PEDIDO_ELIMINADO') !== -1) r.eliminado++;
+    if (cart.indexOf('TRATATIVA') === -1) continue;
+    if (st !== 'B') continue;
+    if (aa.indexOf('TRATAR_PEDIDO_ELIMINADO') === -1) continue;
+
+    var seq = stbInt(l[col.seq]);
+    r.itens.push({
+      rc: stbInt(l[col.rc]), seq: seq,
+      novoItem: seq ? String(Number(seq) + 10) : '',   // sugestão: o próximo item
+      acomp: pega(l, col.acomp) || '.',
+      marcado: false,
+      textoBreve: pega(l, col.texto),
+      pedido: stbInt(l[col.ped])
+    });
+  }
+  if (!r.itens.length && !r.aviso) {
+    r.aviso = 'Nenhum item em tratativa com status B e Tratar Pedido Eliminado.';
+  }
+  return r;
+}
+
+function stbDrop(e){
+  e.preventDefault();
+  var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) stbUpload(f);
+}
+
+async function stbUpload(file){
+  if (!file) return;
+  var st = document.getElementById('stb-status');
+  if (st) st.innerHTML = '⏳ Lendo a BU... (arquivo grande pode levar alguns segundos)';
+  try {
+    var buf = await file.arrayBuffer();
+    var wb = XLSX.read(buf, { type:'array', cellDates:true });
+    var nome = wb.SheetNames.indexOf('BU') !== -1 ? 'BU' : wb.SheetNames[0];
+    var linhas = XLSX.utils.sheet_to_json(wb.Sheets[nome], { header:1, defval:'', raw:true });
+    var r = stbLerBU(linhas);
+    if (!r.itens.length) {
+      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ ' + cpEsc(r.aviso) + '</span>';
+      return;
+    }
+    // o que já estava marcado/preenchido para a mesma RC+item é mantido
+    var antes = {};
+    ((_stbDia || {}).itens || []).forEach(function(i){ antes[i.rc + '|' + i.seq] = i; });
+    r.itens.forEach(function(i){
+      var a = antes[i.rc + '|' + i.seq];
+      if (a) { i.marcado = !!a.marcado; i.novoItem = a.novoItem || i.novoItem; i.acomp = a.acomp || i.acomp; }
+    });
+
+    _stbDia = { data: stbDataSel(), arquivo: file.name, aba: nome,
+                itens: r.itens, lidas: r.lidas,
+                emTratativa: r.emTratativa, statusB: r.statusB, eliminado: r.eliminado,
+                atualizadoEm: new Date().toISOString(), atualizadoPor: cpQuem() };
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ <strong>' + cpEsc(file.name) + '</strong> — aba '
+      + cpEsc(nome) + ', ' + cpNum(r.lidas) + ' linhas lidas, <strong>' + cpNum(r.itens.length)
+      + '</strong> para duplicar.</span>';
+    stbRender();
+    var gravou = await stbSalvar();
+    if (!gravou && st) {
+      st.innerHTML += '<div style="color:var(--vm);margin-top:4px">✗ Está na tela, mas '
+        + '<strong>não foi gravado</strong>: ' + cpEsc((_cpUltimaGravacao || {}).motivo || 'erro desconhecido') + '.</div>';
+    }
+  } catch (e) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Erro ao ler: ' + cpEsc(e.message) + '</span>';
+  }
+}
+
+// ── telas ─────────────────────────────────────────────────────────
+function stbRender(){
+  stbRenderResumo();
+  stbRenderLista();
+}
+
+function stbRenderResumo(){
+  var box = document.getElementById('stb-resumo');
+  if (!box) return;
+  if (!_stbDia) { box.innerHTML = ''; return; }
+  var d = _stbDia;
+  var marcados = (d.itens || []).filter(function(i){ return i.marcado; }).length;
+  var rcs = {};
+  (d.itens || []).forEach(function(i){ rcs[i.rc] = 1; });
+  var card = function(rot, val, sub, cls){
+    return '<div class="kc' + (cls ? ' ' + cls : '') + '"><div class="kc-l">' + cpEsc(rot) + '</div>'
+      + '<div class="kc-v">' + val + '</div>'
+      + (sub ? '<div class="kc-s">' + sub + '</div>' : '') + '</div>';
+  };
+  box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;margin-top:.9rem">'
+    + card('ITENS PARA DUPLICAR', cpNum((d.itens || []).length),
+        'em tratativa · status B · pedido eliminado')
+    + card('RCs ENVOLVIDAS', cpNum(Object.keys(rcs).length), 'algumas têm mais de um item')
+    + card('MARCADOS COMO LINHA DUPLICADA', cpNum(marcados),
+        marcados ? 'vão para o arquivo do script' : 'marque os que já duplicou',
+        marcados ? 'ok' : '')
+    + card('LINHAS LIDAS DA BU', cpNum(d.lidas || 0),
+        cpNum(d.emTratativa || 0) + ' em tratativa · ' + cpNum(d.statusB || 0) + ' status B')
+    + '</div>';
+}
+
+function stbRenderLista(){
+  var box = document.getElementById('stb-lista');
+  if (!box) return;
+  if (!_stbDia || !(_stbDia.itens || []).length) { box.innerHTML = ''; return; }
+  var d = _stbDia;
+  var marcados = d.itens.filter(function(i){ return i.marcado; }).length;
+
+  var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between">'
+    + '<span>🧾 Linhas para o script — ' + cpDataBR(d.data) + '</span>'
+    + '<span style="display:flex;gap:8px;align-items:center">'
+    +   '<button class="btn btn-s" onclick="stbMarcarTodos(true)">Marcar todos</button>'
+    +   '<button class="btn btn-s" onclick="stbMarcarTodos(false)">Desmarcar</button>'
+    +   '<button class="btn btn-p" onclick="stbExportar()">⬇ Exportar para o script ('
+    +     cpNum(marcados) + ')</button>'
+    + '</span></div>'
+
+    + '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:.9rem;'
+    +   'background:var(--cin);border:1px solid var(--brd);border-radius:8px;padding:9px 11px">'
+    +   '<div><label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:3px">'
+    +     'NÚMERO DE ACOMPANHAMENTO — APLICAR A TODOS</label>'
+    +     '<input type="text" id="stb-acomp-todos" placeholder="." '
+    +       'style="width:190px;font-size:12.5px;padding:5px 9px;border:1.5px solid var(--brd);border-radius:6px"></div>'
+    +   '<button class="btn btn-s" onclick="stbAplicarAcomp()">Aplicar</button>'
+    +   '<div style="font-size:10.5px;color:var(--tx2);flex:1;min-width:220px">'
+    +     'O <strong>novo item</strong> já vem sugerido como o próximo (10 → 20). '
+    +     'Altere onde precisar: é ele que fecha o texto.</div>'
+    + '</div>'
+
+    + '<div style="overflow:auto;max-height:560px"><table>'
+    + '<thead><tr><th style="text-align:center">Linha duplicada</th><th>RC</th><th>Item</th>'
+    + '<th>Grupo Comprador</th><th>Nº Acompanhamento</th><th>Novo item</th><th>Texto</th></tr></thead><tbody>';
+
+  d.itens.forEach(function(i, k){
+    h += '<tr' + (i.marcado ? ' style="background:var(--vdc)"' : '') + '>'
+      + '<td style="text-align:center"><input type="checkbox" onchange="stbMarcar(' + k + ', this.checked)"'
+      +   (i.marcado ? ' checked' : '') + ' style="width:16px;height:16px;cursor:pointer"></td>'
+      + '<td style="font-weight:700;color:var(--az)">' + cpEsc(i.rc) + '</td>'
+      + '<td style="font-weight:600">' + cpEsc(i.seq) + '</td>'
+      + '<td style="color:var(--tx2)">' + STB_GRUPO + '</td>'
+      + '<td><input type="text" value="' + cpEsc(i.acomp) + '" onchange="stbCampo(' + k + ', \'acomp\', this.value)"'
+      +   ' style="width:120px;font-size:11.5px;padding:3px 6px;border:1px solid var(--brd);border-radius:5px"></td>'
+      + '<td><input type="text" value="' + cpEsc(i.novoItem) + '" onchange="stbCampo(' + k + ', \'novoItem\', this.value)"'
+      +   ' style="width:70px;font-size:11.5px;padding:3px 6px;border:1px solid var(--brd);border-radius:5px;font-weight:700"></td>'
+      + '<td style="font-size:10.5px;color:var(--tx2);white-space:normal;min-width:330px" id="stb-txt-' + k + '">'
+      +   cpEsc(stbTextoDe(i.seq, i.novoItem)) + '</td>'
+      + '</tr>';
+  });
+
+  h += '</tbody></table></div>'
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:8px">'
+    + 'O arquivo sai no mesmo formato do script de RPA: cabeçalho na linha 7 e as colunas '
+    + '<strong>RC · Item · Grupo Comprador · Número de Acompanhamento · Título · Texto</strong>.</div>'
+    + '</div>';
+  box.innerHTML = h;
+}
+
+// ── edição ────────────────────────────────────────────────────────
+function stbCampo(k, campo, valor){
+  if (!_stbDia || !_stbDia.itens[k]) return;
+  _stbDia.itens[k][campo] = String(valor || '').trim();
+  if (campo === 'novoItem') {
+    var td = document.getElementById('stb-txt-' + k);
+    if (td) td.textContent = stbTextoDe(_stbDia.itens[k].seq, _stbDia.itens[k].novoItem);
+  }
+  stbSalvar();
+}
+
+function stbMarcar(k, valor){
+  if (!_stbDia || !_stbDia.itens[k]) return;
+  _stbDia.itens[k].marcado = !!valor;
+  stbRender();
+  stbSalvar();
+}
+
+function stbMarcarTodos(valor){
+  if (!_stbDia) return;
+  _stbDia.itens.forEach(function(i){ i.marcado = !!valor; });
+  stbRender();
+  stbSalvar();
+}
+
+function stbAplicarAcomp(){
+  if (!_stbDia) return;
+  var el = document.getElementById('stb-acomp-todos');
+  var v = el ? String(el.value || '').trim() : '';
+  if (!v) return;
+  _stbDia.itens.forEach(function(i){ i.acomp = v; });
+  stbRender();
+  stbSalvar();
+}
+
+// ── exportar no formato do script ─────────────────────────────────
+function stbExportar(){
+  if (!_stbDia) return;
+  var marcados = _stbDia.itens.filter(function(i){ return i.marcado; });
+  var st = document.getElementById('stb-status');
+  if (!marcados.length) {
+    if (st) st.innerHTML = '<span style="color:var(--am)">Marque ao menos uma linha duplicada antes de exportar.</span>';
+    return;
+  }
+  try {
+    // o script espera o cabeçalho na linha 7 e os dados a partir da 8
+    var aoa = [['RC','Item','Grupo Comprador','Número de Acompanhamento','Título','Texto']];
+    marcados.forEach(function(i){
+      aoa.push([i.rc, i.seq, STB_GRUPO, i.acomp || '.', STB_TITULO, stbTextoDe(i.seq, i.novoItem)]);
+    });
+    // começa em A7 para cair exatamente onde o script lê
+    var ws = XLSX.utils.aoa_to_sheet([['']]);
+    XLSX.utils.sheet_add_aoa(ws, aoa, { origin:'A7' });
+    ws['!ref'] = 'A1:F' + (6 + aoa.length);
+    ws['!cols'] = [{ wch:13 },{ wch:8 },{ wch:17 },{ wch:24 },{ wch:17 },{ wch:110 }];
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'RPA');
+    XLSX.writeFile(wb, 'Status_B_' + String(_stbDia.data || '').replace(/-/g, '') + '.xlsx');
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ ' + cpNum(marcados.length)
+      + ' linha(s) exportadas no formato do script.</span>';
+  } catch (e) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Não consegui gerar o Excel: ' + cpEsc(e.message) + '</span>';
+  }
+}
+
+// ── persistência ──────────────────────────────────────────────────
+async function stbSalvar(){
+  if (!_stbDia) return false;
+  try {
+    var db = getDB();
+    if (!db) return _cpGravou(false, _pedidosConfigPronta()
+      ? 'não consegui abrir a conexão com o Firebase'
+      : 'o Firebase deste módulo ainda não está configurado');
+    var d = _stbDia;
+    await db.collection(STB_COL).doc(d.data).set({
+      data: d.data, arquivo: d.arquivo || '', lidas: +d.lidas || 0,
+      emTratativa: +d.emTratativa || 0, statusB: +d.statusB || 0, eliminado: +d.eliminado || 0,
+      itens: (d.itens || []).slice(0, 5000).map(function(i){
+        return { rc:String(i.rc||''), seq:String(i.seq||''), novoItem:String(i.novoItem||''),
+                 acomp:String(i.acomp||''), marcado:!!i.marcado,
+                 textoBreve:String(i.textoBreve||''), pedido:String(i.pedido||'') };
+      }),
+      atualizadoEm: new Date().toISOString(), atualizadoPor: cpQuem()
+    });
+    return _cpGravou(true);
+  } catch (e) {
+    console.warn('stbSalvar:', e);
+    return _cpGravou(false, String(e && (e.message || e.code) || e));
+  }
+}
+
+async function stbCarregar(data){
+  try {
+    var db = getDB(); if (!db) { _stbDia = null; return; }
+    var doc = await db.collection(STB_COL).doc(data).get();
+    if (!doc || !doc.exists) { _stbDia = null; return; }
+    var d = doc.data() || {};
+    _stbDia = { data:d.data || data, arquivo:d.arquivo || '', itens:d.itens || [],
+                lidas:+d.lidas || 0, emTratativa:+d.emTratativa || 0, statusB:+d.statusB || 0,
+                eliminado:+d.eliminado || 0,
+                atualizadoEm:d.atualizadoEm || '', atualizadoPor:d.atualizadoPor || '' };
+  } catch (e) { console.warn('stbCarregar:', e); _stbDia = null; }
+}
+
+async function stbAbrir(){
+  var el = document.getElementById('stb-data');
+  if (el && !el.value) el.value = cpHojeISO();
+  await stbCarregar(stbDataSel());
+  stbRender();
+}
+
+async function stbTrocarData(){
+  var st = document.getElementById('stb-status');
+  if (st) st.innerHTML = '';
+  await stbCarregar(stbDataSel());
+  stbRender();
+}
 
 // ══════════════════════════════════════════════════════════════════
 // DISTRIBUIÇÃO DO MAPA
@@ -30030,7 +30408,7 @@ function trocarModulo(){
 // O módulo nasceu vazio, mas o que foi lançado antes continua guardado
 // na base do ADLV. Este botão copia esses dias para cá, sem apagar
 // nada de lá e sem sobrescrever o que já existe aqui.
-var PEDIDOS_COLECOES = ['controle_pedidos', 'abertura_patec', 'distribuicao_mapa'];
+var PEDIDOS_COLECOES = ['controle_pedidos', 'abertura_patec', 'distribuicao_mapa', 'status_b'];
 var PEDIDOS_CONFIGS  = ['controle_pedidos_fora', 'abertura_patec_cfg',
                         'abertura_patec_hist', 'distribuicao_mapa_cfg'];
 
