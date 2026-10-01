@@ -12377,6 +12377,7 @@ function stbLerBU(linhas){
       rc: stbInt(l[col.rc]), seq: seq,
       novoItem: seq ? String(Number(seq) + 10) : '',   // sugestão: o próximo item
       acomp: pega(l, col.acomp) || '.',
+      comentario: '',          // só do dash — nunca vai para o script
       marcado: false,
       textoBreve: pega(l, col.texto),
       pedido: stbInt(l[col.ped])
@@ -12408,21 +12409,34 @@ async function stbUpload(file){
       if (st) st.innerHTML = '<span style="color:var(--vm)">✗ ' + cpEsc(r.aviso) + '</span>';
       return;
     }
-    // o que já estava marcado/preenchido para a mesma RC+item é mantido
+    // O item que continua na BU volta com o que você já tinha posto —
+    // inclusive de dias anteriores, senão o comentário de cobrança se
+    // perderia justamente no item que ninguém tratou.
     var antes = {};
+    var herdados = await stbPreenchidosAnteriores(stbDataSel());
+    Object.keys(herdados).forEach(function(k){ antes[k] = herdados[k]; });
     ((_stbDia || {}).itens || []).forEach(function(i){ antes[i.rc + '|' + i.seq] = i; });
+    var reaproveitados = 0;
     r.itens.forEach(function(i){
       var a = antes[i.rc + '|' + i.seq];
-      if (a) { i.marcado = !!a.marcado; i.novoItem = a.novoItem || i.novoItem; i.acomp = a.acomp || i.acomp; }
+      if (!a) return;
+      i.marcado    = !!a.marcado;
+      i.novoItem   = a.novoItem || i.novoItem;
+      i.acomp      = a.acomp || i.acomp;
+      i.comentario = a.comentario || '';
+      if (a.comentario || a.marcado) reaproveitados++;
     });
+    r.reaproveitados = reaproveitados;
 
     _stbDia = { data: stbDataSel(), arquivo: file.name, aba: nome,
-                itens: r.itens, lidas: r.lidas,
+                itens: r.itens, lidas: r.lidas, reaproveitados: r.reaproveitados || 0,
                 emTratativa: r.emTratativa, statusB: r.statusB, eliminado: r.eliminado,
                 atualizadoEm: new Date().toISOString(), atualizadoPor: cpQuem() };
     if (st) st.innerHTML = '<span style="color:var(--vd)">✓ <strong>' + cpEsc(file.name) + '</strong> — aba '
       + cpEsc(nome) + ', ' + cpNum(r.lidas) + ' linhas lidas, <strong>' + cpNum(r.itens.length)
-      + '</strong> para duplicar.</span>';
+      + '</strong> para duplicar.'
+      + (r.reaproveitados ? ' <span style="color:var(--az)">' + cpNum(r.reaproveitados)
+          + ' já vinham com comentário ou marcação de antes.</span>' : '') + '</span>';
     stbRender();
     var gravou = await stbSalvar();
     if (!gravou && st) {
@@ -12460,6 +12474,8 @@ function stbRenderResumo(){
     + card('MARCADOS COMO LINHA DUPLICADA', cpNum(marcados),
         marcados ? 'vão para o arquivo do script' : 'marque os que já duplicou',
         marcados ? 'ok' : '')
+    + card('COM COMENTÁRIO', cpNum((d.itens || []).filter(function(i){ return (i.comentario || '').trim(); }).length),
+        'alguém está tratando')
     + card('LINHAS LIDAS DA BU', cpNum(d.lidas || 0),
         cpNum(d.emTratativa || 0) + ' em tratativa · ' + cpNum(d.statusB || 0) + ' status B')
     + '</div>';
@@ -12495,7 +12511,9 @@ function stbRenderLista(){
 
     + '<div style="overflow:auto;max-height:560px"><table>'
     + '<thead><tr><th style="text-align:center">Linha duplicada</th><th>RC</th><th>Item</th>'
-    + '<th>Grupo Comprador</th><th>Nº Acompanhamento</th><th>Novo item</th><th>Texto</th></tr></thead><tbody>';
+    + '<th>Grupo Comprador</th>'
+    + '<th title="Só aparece aqui no painel — não entra no arquivo do script">Comentário</th>'
+    + '<th>Nº Acompanhamento</th><th>Novo item</th><th>Texto</th></tr></thead><tbody>';
 
   d.itens.forEach(function(i, k){
     h += '<tr' + (i.marcado ? ' style="background:var(--vdc)"' : '') + '>'
@@ -12504,6 +12522,10 @@ function stbRenderLista(){
       + '<td style="font-weight:700;color:var(--az)">' + cpEsc(i.rc) + '</td>'
       + '<td style="font-weight:600">' + cpEsc(i.seq) + '</td>'
       + '<td style="color:var(--tx2)">' + STB_GRUPO + '</td>'
+      + '<td><input type="text" value="' + cpEsc(i.comentario || '') + '" placeholder="quem está tratando"'
+      +   ' onchange="stbCampo(' + k + ', \'comentario\', this.value)"'
+      +   ' style="width:160px;font-size:11.5px;padding:3px 6px;border:1px solid var(--brd);border-radius:5px;'
+      +   'background:' + ((i.comentario || '') ? 'var(--amc)' : '#fff') + '"></td>'
       + '<td><input type="text" value="' + cpEsc(i.acomp) + '" onchange="stbCampo(' + k + ', \'acomp\', this.value)"'
       +   ' style="width:120px;font-size:11.5px;padding:3px 6px;border:1px solid var(--brd);border-radius:5px"></td>'
       + '<td><input type="text" value="' + cpEsc(i.novoItem) + '" onchange="stbCampo(' + k + ', \'novoItem\', this.value)"'
@@ -12516,7 +12538,8 @@ function stbRenderLista(){
   h += '</tbody></table></div>'
     + '<div style="font-size:10.5px;color:var(--tx2);margin-top:8px">'
     + 'O arquivo sai no mesmo formato do script de RPA: cabeçalho na linha 7 e as colunas '
-    + '<strong>RC · Item · Grupo Comprador · Número de Acompanhamento · Título · Texto</strong>.</div>'
+    + '<strong>RC · Item · Grupo Comprador · Número de Acompanhamento · Título · Texto</strong>. '
+    + 'O <strong>comentário fica só aqui</strong> — não entra no arquivo.</div>'
     + '</div>';
   box.innerHTML = h;
 }
@@ -12597,10 +12620,11 @@ async function stbSalvar(){
     var d = _stbDia;
     await db.collection(STB_COL).doc(d.data).set({
       data: d.data, arquivo: d.arquivo || '', lidas: +d.lidas || 0,
+      reaproveitados: +d.reaproveitados || 0,
       emTratativa: +d.emTratativa || 0, statusB: +d.statusB || 0, eliminado: +d.eliminado || 0,
       itens: (d.itens || []).slice(0, 5000).map(function(i){
         return { rc:String(i.rc||''), seq:String(i.seq||''), novoItem:String(i.novoItem||''),
-                 acomp:String(i.acomp||''), marcado:!!i.marcado,
+                 acomp:String(i.acomp||''), comentario:String(i.comentario||''), marcado:!!i.marcado,
                  textoBreve:String(i.textoBreve||''), pedido:String(i.pedido||'') };
       }),
       atualizadoEm: new Date().toISOString(), atualizadoPor: cpQuem()
@@ -12612,6 +12636,32 @@ async function stbSalvar(){
   }
 }
 
+// Pega o que já foi preenchido antes desta data, do dia mais recente
+// para o mais antigo — o item que ninguém tratou mantém o comentário.
+async function stbPreenchidosAnteriores(data){
+  var out = {};
+  try {
+    var db = getDB(); if (!db) return out;
+    var snap = await db.collection(STB_COL).get();
+    var dias = [];
+    snap.forEach(function(doc){
+      var d = doc.data() || {};
+      var dt = d.data || doc.id;
+      if (dt < data) dias.push({ data:dt, itens:d.itens || [] });
+    });
+    dias.sort(function(a, b){ return a.data < b.data ? -1 : (a.data > b.data ? 1 : 0); });
+    dias.forEach(function(dia){
+      (dia.itens || []).forEach(function(i){
+        // só herda o que você realmente mexeu: comentário ou marcação.
+        // O nº de acompanhamento sozinho não conta — ele já vem da BU.
+        if (!(i.comentario || '').trim() && !i.marcado) return;
+        out[i.rc + '|' + i.seq] = i;   // o dia mais recente prevalece
+      });
+    });
+  } catch (e) { console.warn('stbPreenchidosAnteriores:', e); }
+  return out;
+}
+
 async function stbCarregar(data){
   try {
     var db = getDB(); if (!db) { _stbDia = null; return; }
@@ -12619,6 +12669,7 @@ async function stbCarregar(data){
     if (!doc || !doc.exists) { _stbDia = null; return; }
     var d = doc.data() || {};
     _stbDia = { data:d.data || data, arquivo:d.arquivo || '', itens:d.itens || [],
+                reaproveitados:+d.reaproveitados || 0,
                 lidas:+d.lidas || 0, emTratativa:+d.emTratativa || 0, statusB:+d.statusB || 0,
                 eliminado:+d.eliminado || 0,
                 atualizadoEm:d.atualizadoEm || '', atualizadoPor:d.atualizadoPor || '' };
