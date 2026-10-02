@@ -13416,15 +13416,25 @@ function gpItens(){
 }
 
 function gpContar(){
-  var c = {}, vindos = 0, aguardando = {};
-  GOV_CARDS.forEach(function(x){ c[x.chave] = 0; aguardando[x.chave] = 0; });
+  var c = {}, vindos = 0, aguardando = {}, comData = {}, origem = {};
+  GOV_CARDS.forEach(function(x){ c[x.chave] = 0; aguardando[x.chave] = 0; comData[x.chave] = 0; origem[x.chave] = 0; });
   gpItens().forEach(function(it){
     var e = gpEstado(it);
     c[e.card] = (c[e.card] || 0) + 1;
+    origem[e.origem] = (origem[e.origem] || 0) + 1;
+    if (e.dataNeg) comData[e.origem] = (comData[e.origem] || 0) + 1;
     if (e.card !== e.origem) vindos++;
     if ((e.card === 'patec' || e.card === 'patecman') && !e.liberado) aguardando[e.card]++;
   });
-  return { por:c, vindos:vindos, aguardando:aguardando };
+  return { por:c, vindos:vindos, aguardando:aguardando, comData:comData, origem:origem };
+}
+
+// Quantos itens do levelboard encontram par (RC + item) no MAPA do dia.
+function gpCasamComOMapa(){
+  var mapa = {}, n = 0;
+  gpItens().forEach(function(it){ mapa[gpChave(it)] = 1; });
+  Object.keys((_gpLb && _gpLb.itens) || {}).forEach(function(k){ if (mapa[k]) n++; });
+  return n;
 }
 
 function gpRender(){
@@ -13444,7 +13454,16 @@ function gpRender(){
       + '<strong style="color:var(--tx)">' + cpNum(gpItens().length) + '</strong> itens do MAPA de '
       + cpDataBR(_gpBase.data) + (_gpBase.arquivo ? ' (' + cpEsc(_gpBase.arquivo) + ')' : '')
       + (_gpLb.lidas ? ' · levelboard com ' + cpNum(_gpLb.uteis) + ' item(ns) de negociação' : '')
-      + '</div>';
+      + '</div>'
+      + (_gpLb.uteis ? (function(){
+            var casam = gpCasamComOMapa();
+            return casam
+              ? '<div style="font-size:11px;color:var(--vd);padding-bottom:.5rem">'
+                + casam + ' deles batem com RC + item do MAPA de hoje.</div>'
+              : '<div style="font-size:11px;color:var(--am);padding-bottom:.5rem">'
+                + '⚠ Nenhum item do levelboard bate com RC + item do MAPA de hoje — '
+                + 'as duas extrações parecem ser de recortes diferentes.</div>';
+          })() : '');
   }
   var ct = gpContar();
   var h = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">';
@@ -13460,6 +13479,10 @@ function gpRender(){
       +   cpEsc(x.nome.toUpperCase()) + '</div>'
       + (ag ? '<div style="font-size:10px;color:var(--tx2);margin-top:4px">' + cpNum(ag)
               + ' aguardando os 2 dias</div>' : '')
+      + ((x.chave === 'negociar' || x.chave === 'dpv')
+          ? '<div style="font-size:10px;color:var(--tx2);margin-top:4px">'
+            + cpNum(n - (ct.comData[x.chave] || 0)) + ' sem data de negociação</div>'
+          : '')
       + '</div>';
   });
   h += '</div>';
@@ -13467,6 +13490,11 @@ function gpRender(){
     h += '<div style="font-size:11px;color:var(--vd);margin-top:10px">'
       + '↗ ' + cpNum(ct.vindos) + ' item(ns) saíram de negociação e já estão em Emitir pedido '
       + '(passaram os 2 dias úteis).</div>';
+  }
+  if (_gpRecado) {
+    h += '<div style="font-size:11.5px;font-weight:600;color:var(--azm);background:var(--azc);'
+      + 'border:1px solid var(--azm);border-radius:8px;padding:7px 11px;margin-top:10px">'
+      + cpEsc(_gpRecado) + '</div>';
   }
   box.innerHTML = h;
   gpRenderDetalhe();
@@ -13574,8 +13602,22 @@ async function gpTrocarDataNeg(chave, valor){
   _gpNeg[chave].data = String(valor || '').trim();
   if (!_gpNeg[chave].data && !_gpNeg[chave].comentario) delete _gpNeg[chave];
   await gpGravarNeg();
+  // conta a mudança: é o momento em que o item troca de card
+  var it = gpItens().filter(function(x){ return gpChave(x) === chave; })[0];
+  _gpRecado = '';
+  if (it) {
+    var e = gpEstado(it);
+    if (e.card !== e.origem) {
+      _gpRecado = '↗ RC ' + it.rc + '/' + it.seq + ' saiu de ' + govNomeCard(e.origem)
+                + ' e está em Emitir pedido.';
+    } else if (e.dataNeg && e.libera) {
+      _gpRecado = '⏳ RC ' + it.rc + '/' + it.seq + ' vai para Emitir pedido em '
+                + cpDataBR(e.libera) + ' (2 dias úteis).';
+    }
+  }
   gpRender();
 }
+var _gpRecado = '';
 
 async function gpTrocarComentario(chave, valor){
   if (!_gpNeg[chave]) _gpNeg[chave] = { comentario:'', data:'' };
@@ -13646,6 +13688,14 @@ async function gpUploadLevelboard(file){
     if (st) st.innerHTML = '<span style="color:var(--vd)">✓ <strong>' + cpEsc(file.name) + '</strong> — '
       + cpNum(r.lidas) + ' linhas, ' + cpNum(r.uteis) + ' com negociação/fornecedor/NM'
       + (ok ? '.' : ' <span style="color:var(--am)">(não consegui gravar no Firebase)</span>') + '</span>';
+    if (gpItens().length) {
+      var casam = gpCasamComOMapa();
+      if (st) st.innerHTML += casam
+        ? '<div style="font-size:11px;color:var(--vd);margin-top:4px">' + casam
+          + ' casam com RC + item do MAPA do dia.</div>'
+        : '<div style="font-size:11px;color:var(--am);margin-top:4px">⚠ Nenhum casa com RC + item '
+          + 'do MAPA do dia — confira se as duas extrações são do mesmo recorte.</div>';
+    }
     gpRender();
   } catch (e) {
     if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Erro ao ler: ' + cpEsc(e.message) + '</span>';
