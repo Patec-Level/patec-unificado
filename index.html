@@ -11001,16 +11001,16 @@ function cpDataISO(v){
   return '';
 }
 
-// O Cockpit: pedido emitido (status 3), sem código de eliminação,
-// do gerente RLRT e com o PSMV ainda em liberação.
-var CP_COCKPIT = { status:'3', gerente:'RLRT', psmv:'Em liberação' };
+// O Cockpit: pedido emitido (status 3), sem código de eliminação e do
+// gerente RLRT. A coluna R (STATUS_PSMV) não filtra nada — ela é o que
+// se conta depois dos filtros, e as linhas sem nada em R também contam.
+var CP_COCKPIT = { status:'3', gerente:'RLRT' };
 function _cpCockpitLinha(linha, col){
-  if (col.st === -1 || col.ger === -1 || col.psmv === -1) return false;
+  if (col.st === -1 || col.ger === -1) return false;
   var st = String(linha[col.st] == null ? '' : linha[col.st]).trim();
   if (st.replace(/[,.]0+$/, '') !== CP_COCKPIT.status) return false;
   if (col.el !== -1 && _cpTemEliminacao(linha[col.el])) return false;
   if (cpNormCab(linha[col.ger]) !== cpNormCab(CP_COCKPIT.gerente)) return false;
-  if (cpNormCab(linha[col.psmv]) !== cpNormCab(CP_COCKPIT.psmv)) return false;
   return true;
 }
 
@@ -13419,6 +13419,8 @@ var _gpLb    = { itens:{}, arquivo:'', lidas:0, uteis:0, atualizadoEm:'' };
 var _gpCard  = '';
 var _gpRej   = { itens:[], arquivo:'', lidas:0, fora:0, atualizadoEm:'', atualizadoPor:'' };
 var _gpCock  = { itens:[], total:0, arquivo:'', atualizadoEm:'', atualizadoPor:'' };
+var _gpCockPsmv = '';
+function gpCockFiltrar(v){ _gpCockPsmv = (v === _gpCockPsmv) ? '' : v; gpRenderDetalhe(); }
 
 // O Cockpit vem da medição de momento do Controle de Pedidos: toda vez
 // que ele sobe a medição, a lista é refeita.
@@ -13651,7 +13653,7 @@ function gpRender(){
           : '')
       + (x.chave === 'cockpit'
           ? '<div style="font-size:10px;color:var(--tx2);margin-top:4px">'
-            + (_gpCock.total ? 'emitido · ' + cpEsc(CP_COCKPIT.gerente) + ' · ' + cpEsc(CP_COCKPIT.psmv)
+            + (_gpCock.total ? 'emitido · ' + cpEsc(CP_COCKPIT.gerente) + ' · contado pela coluna R'
                              : 'suba a medição no Controle de Pedidos') + '</div>'
           : '')
       + '</div>';
@@ -13847,8 +13849,8 @@ function gpHtmlCockpit(){
     + '<div style="font-size:11px;color:var(--tx2);line-height:1.8;margin-bottom:.7rem">'
     +   'Da medição de momento do Controle de Pedidos: <strong>STATUS_PROCESSO 3</strong> (emitido) · '
     +   '<strong>CODIGO_ELIMINACAO_ITEM_PEDIDO vazio</strong> · '
-    +   '<strong>GERENTE ' + cpEsc(CP_COCKPIT.gerente) + '</strong> · '
-    +   '<strong>STATUS_PSMV ' + cpEsc(CP_COCKPIT.psmv) + '</strong>.'
+    +   '<strong>GERENTE ' + cpEsc(CP_COCKPIT.gerente) + '</strong>. '
+    +   'A contagem é pela coluna <strong>R (STATUS_PSMV)</strong>, com os vazios inclusive.'
     +   (_gpCock.arquivo ? '<br>Última medição: <strong>' + cpEsc(_gpCock.arquivo) + '</strong>'
         + (_gpCock.atualizadoEm ? ' — ' + cpDataBR(String(_gpCock.atualizadoEm).slice(0,10)) : '') + '.' : '')
     + '</div>';
@@ -13858,24 +13860,60 @@ function gpHtmlCockpit(){
       + 'que esta lista se monta sozinha.</div></div>';
     return h;
   }
+  // a conta que ele pediu: pela coluna R, com os vazios contando.
+  // "Em liberação" e "EM LIBERACAO" são o mesmo status — agrupo pelo
+  // texto sem acento e mostro a primeira grafia que apareceu.
+  var porPsmv = {}, rotulo = {};
+  itens.forEach(function(i){
+    var bruto = (i.psmv || '').trim();
+    var k = bruto ? cpNormCab(bruto) : '(vazio)';
+    if (!rotulo[k]) rotulo[k] = bruto || '(vazio)';
+    porPsmv[k] = (porPsmv[k] || 0) + 1;
+  });
+  var chaves = Object.keys(porPsmv).sort(function(a, b){ return porPsmv[b] - porPsmv[a]; });
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:.8rem">';
+  h += '<span onclick="gpCockFiltrar(\'\')" style="cursor:pointer;font-size:11px;font-weight:700;'
+    + 'padding:4px 10px;border-radius:14px;border:1.5px solid var(--az);'
+    + (_gpCockPsmv ? 'color:var(--az);background:#fff' : 'color:#fff;background:var(--az)') + '">'
+    + 'Todos ' + cpNum(itens.length) + '</span>';
+  chaves.forEach(function(k){
+    var sel = _gpCockPsmv === k;
+    h += '<span onclick="gpCockFiltrar(\'' + cpEsc(k).replace(/'/g, '') + '\')" '
+      + 'style="cursor:pointer;font-size:11px;font-weight:600;padding:4px 10px;border-radius:14px;'
+      + 'border:1.5px solid var(--brd);'
+      + (sel ? 'color:#fff;background:var(--azm);border-color:var(--azm)' : 'color:var(--tx);background:var(--cin)')
+      + '">' + cpEsc(rotulo[k]) + ' <strong>' + cpNum(porPsmv[k]) + '</strong></span>';
+  });
+  h += '</div>';
+
+  if (_gpCockPsmv) {
+    itens = itens.filter(function(i){
+      var bruto = (i.psmv || '').trim();
+      return (bruto ? cpNormCab(bruto) : '(vazio)') === _gpCockPsmv;
+    });
+  }
+
   var soma = 0, porComprador = {};
   itens.forEach(function(i){
     soma += (+i.valor || 0);
     porComprador[i.comprador || '(sem comprador)'] = (porComprador[i.comprador || '(sem comprador)'] || 0) + 1;
   });
   h += '<div style="font-size:11px;color:var(--tx2);line-height:1.8;margin-bottom:.6rem">'
-    + (soma ? '<div><strong style="color:var(--tx)">' + mdDinheiro(soma) + '</strong> em pedidos parados em liberação.</div>' : '')
+    + (soma ? '<div><strong style="color:var(--tx)">' + mdDinheiro(soma) + '</strong> em pedidos'
+            + (_gpCockPsmv ? ' em ' + cpEsc(_gpCockPsmv) : '') + '.</div>' : '')
     + '<div>Por comprador: ' + Object.keys(porComprador)
         .sort(function(a, b){ return porComprador[b] - porComprador[a]; })
         .map(function(k){ return cpEsc(k) + ' <strong>' + porComprador[k] + '</strong>'; }).join(' · ')
     + '</div></div>';
   h += '<div style="overflow:auto;max-height:520px"><table><thead><tr>'
-    + '<th>Pedido</th><th>Chave</th><th>RC</th><th>Item</th><th>Comprador</th>'
+    + '<th>Pedido</th><th>Status PSMV</th><th>Chave</th><th>RC</th><th>Item</th><th>Comprador</th>'
     + '<th>Grupo</th><th>Fornecedor</th><th>Criado em</th>'
     + '<th style="text-align:right">Valor do pedido</th></tr></thead><tbody>';
   itens.forEach(function(i){
     h += '<tr>'
       + '<td style="font-weight:700;color:var(--az)">' + cpEsc(i.pedido || '—') + '</td>'
+      + '<td style="font-size:10.5px;font-weight:600;color:' + ((i.psmv || '').trim() ? 'var(--tx)' : 'var(--am)') + '">'
+      +   cpEsc((i.psmv || '').trim() || '(vazio)') + '</td>'
       + '<td>' + cpEsc(i.chave || '—') + '</td>'
       + '<td style="font-weight:600">' + cpEsc(i.rc || '—') + '</td>'
       + '<td>' + cpEsc(i.item || '—') + '</td>'
@@ -14118,10 +14156,11 @@ function gpCopiar(){
     return;
   }
   if (_gpCard === 'cockpit') {
-    var tc = ['COCKPIT — ' + cpNum(_gpCock.total || 0) + ' item(ns) emitidos em liberação ('
-              + CP_COCKPIT.gerente + ')', ''];
+    var tc = ['COCKPIT — ' + cpNum(_gpCock.total || 0) + ' item(ns) emitidos do gerente '
+              + CP_COCKPIT.gerente, ''];
     _gpCock.itens.forEach(function(i){
-      tc.push('Pedido ' + i.pedido + (i.chave ? ' · ' + i.chave : '')
+      tc.push('Pedido ' + i.pedido + ' · ' + ((i.psmv || '').trim() || '(vazio)')
+        + (i.chave ? ' · ' + i.chave : '')
         + (i.rc ? ' · RC ' + i.rc + '/' + i.item : '')
         + (i.comprador ? ' · ' + i.comprador : '')
         + (i.criacao ? ' · criado em ' + cpDataBR(i.criacao) : ''));
