@@ -707,6 +707,29 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 <div class="ct">
 
     <!-- ══════════════════ MÓDULO PEDIDOS ══════════════════ -->
+    <div class="page" id="p-governanca-pedidos">
+      <div class="cd">
+        <div class="cd-t" style="justify-content:space-between">
+          <span>🏛️ Governança de pedidos</span>
+          <span style="display:flex;gap:8px;align-items:center">
+            <input type="date" id="gp-data" onchange="gpTrocarData()"
+              style="font-size:12px;padding:5px 9px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
+            <button class="btn btn-s" onclick="gpAbrir()">↻ Atualizar</button>
+          </span>
+        </div>
+        <div id="gp-aviso" style="font-size:12px"></div>
+        <div id="gp-cards"></div>
+        <div style="font-size:10.5px;color:var(--tx2);margin-top:10px;line-height:1.6">
+          Os cinco cards saem da coluna <strong>ANALISTA_AUTOMATICO</strong> do MAPA do dia ·
+          em <strong>Negociar preço</strong> e <strong>DPV</strong>, a data que o comprador digitar
+          conta <strong>2 dias úteis</strong> e o item passa para <strong>Emitir pedido</strong> ·
+          em <strong>PATEC</strong> e <strong>PATEC manual</strong>, quem dá a data é a coluna
+          <strong>NEGOCIACAO</strong> do levelboard.
+        </div>
+      </div>
+      <div id="gp-detalhe"></div>
+    </div>
+
     <div class="page" id="p-pedidos">
       <div id="pedidos-aviso-config"></div>
       <div id="pedidos-conteudo"></div>
@@ -1559,6 +1582,26 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             </div>
             <div style="margin-top:.7rem">
               <button class="btn btn-s" onclick="mdrEsquecerLotes()">↺ Esquecer os lotes já rodados</button>
+            </div>
+          </div>
+
+          <div class="cd">
+            <div class="cd-t">📊 Levelboard — negociação e fornecedor ganhador</div>
+            <div style="border:2px dashed var(--brd);border-radius:10px;padding:1.2rem;text-align:center;cursor:pointer;background:var(--cin)"
+              onclick="document.getElementById('gp-lb-input').click()"
+              ondragover="event.preventDefault()" ondrop="gpLbDrop(event)">
+              <div style="font-size:22px;margin-bottom:.3rem">📊</div>
+              <div style="font-size:13px;font-weight:600">Arraste aqui a planilha do levelboard</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:4px">
+                .csv, .xlsx ou .xlsb — leio NEGOCIACAO, FORNECEDOR_GANHADOR_PATEC e NM_PEDIDO
+              </div>
+              <input type="file" id="gp-lb-input" accept=".xlsb,.xlsx,.xls,.csv" style="display:none"
+                onchange="gpUploadLevelboard(this.files[0]); this.value='';">
+            </div>
+            <div id="gp-lb-status" style="margin-top:.7rem;font-size:12px"></div>
+            <div style="font-size:10.5px;color:var(--tx2);margin-top:6px;line-height:1.6">
+              É daqui que a Governança tira a data de negociação dos itens de PATEC —
+              dois dias úteis depois dela o item fica apto a pedido.
             </div>
           </div>
 
@@ -7576,6 +7619,7 @@ function go(id, el) {
     Promise.all(promises).then(()=>{ govInicializar(); if(!_bkDados?.rows?.length) bkCarregarFirebase().then(()=>pcInicializar()); else pcInicializar(); });
     if(promises.length===0){ govInicializar(); pcInicializar(); }
   }, 300);
+  if(id==='governanca-pedidos') setTimeout(()=>{ try{ gpAbrir(); }catch(e){ console.warn('gpAbrir:', e); } }, 80);
   if(id==='radar') setTimeout(()=>{
     if(!_radarDados?.length){
       fbCarregarRadar().then(()=>{ try{ renderRadarOperacional(); }catch(e){} });
@@ -13039,18 +13083,38 @@ var MD_COL = 'distribuicao_mapa';
 var MD_LIMITE_DPV = 92500;
 var MD_SLA_ALERTA = 60;
 var MD_PRAZO_VALIDO = 90;
+// Os três que a equipe distribui. Os dois de PATEC aparecem na
+// Governança, mas não entram na matriz de atividades.
 var MD_STATUS = [
   { chave:'emitir',   nome:'Emitir Pedido',                 cor:'#3266AD' },
   { chave:'negociar', nome:'Negociar Preço Excessivo',      cor:'var(--am)' },
   { chave:'dpv',      nome:'Negociar, acima do limite DPV', cor:'var(--vm)' }
 ];
+// Os cinco cards da Governança, na ordem que ele pediu.
+var GOV_CARDS = [
+  { chave:'emitir',   nome:'Emitir pedido',                 cor:'var(--azm)', fundo:'var(--azc)' },
+  { chave:'patec',    nome:'Emitir pedido PATEC',           cor:'var(--vd)',  fundo:'var(--vdc)' },
+  { chave:'patecman', nome:'Emitir pedido PATEC manual',    cor:'var(--az)',  fundo:'var(--cin)' },
+  { chave:'negociar', nome:'Negociar preço',                cor:'var(--am)',  fundo:'var(--amc)' },
+  { chave:'dpv',      nome:'Negociar, acima do limite DPV', cor:'var(--vm)',  fundo:'var(--vmc)' }
+];
+function govNomeCard(ch){
+  for (var i = 0; i < GOV_CARDS.length; i++) if (GOV_CARDS[i].chave === ch) return GOV_CARDS[i].nome;
+  return ch;
+}
 var _mdCfg  = { pessoas:[], atividades:{}, cotaDia:0, cotaSemana:0, dias:5 };
 var _mdBase = null;
 var _mdDist = null;
 
 function mdStatusChave(v){
   var t = cpNormCab(v);
-  if (t.indexOf('EMITIR_PEDIDO') !== -1) return 'emitir';
+  // o mais específico primeiro: "Emitir Pedido PATEC Manual" também
+  // contém "Emitir Pedido"
+  if (t.indexOf('EMITIR_PEDIDO') !== -1) {
+    if (t.indexOf('MANUAL') !== -1) return 'patecman';
+    if (t.indexOf('PATEC') !== -1)   return 'patec';
+    return 'emitir';
+  }
   if (t.indexOf('ACIMA_DO_LIMITE_DPV') !== -1 || t.indexOf('LIMITE_DPV') !== -1) return 'dpv';
   if (t.indexOf('NEGOCIAR_PRECO') !== -1) return 'negociar';
   return '';
@@ -13169,10 +13233,12 @@ function mdLerMapa(linhas){
     };
     it.chave = it.rc + '|' + it.seq;
     r.itens.push(it);
-    r.porStatus[ch]++;
+    if (r.porStatus[ch] !== undefined) r.porStatus[ch]++;
+    else r.porStatus[ch] = 1;
   }
   r.total = r.itens.length;
-  if (!r.total) r.aviso = 'Nenhum item de Emitir Pedido, Negociar Preço Excessivo ou Negociar acima do limite DPV.';
+  if (!r.total) r.aviso = 'Nenhum item de Emitir Pedido, Emitir Pedido PATEC, Negociar Preço Excessivo '
+                        + 'ou Negociar acima do limite DPV.';
   return r;
 }
 
@@ -13204,6 +13270,7 @@ async function mdUpload(file){
     }
     _mdBase = r;
     _mdDist = null;
+    await gpSalvarBase(r, mdDataSel());
     if (st) st.innerHTML = '<span style="color:var(--vd)">✓ <strong>' + cpEsc(file.name) + '</strong> — aba '
       + cpEsc(r.aba) + ', ' + cpNum(r.lidas) + ' linhas lidas, ' + cpNum(r.total)
       + ' para a equipe.</span>';
@@ -13289,6 +13356,413 @@ async function mdSalvarEquipe(){
 
 // Blocos: a mesma OPORTUNIDADE anda sempre junta, seja qual for o
 // status dos itens dela. Nunca vai para dois compradores.
+
+
+// ── GOVERNANÇA DE PEDIDOS ─────────────────────────────────────────
+// Cinco cards saídos da coluna ANALISTA_AUTOMATICO do MAPA. O que move
+// um item de card é a data de negociação: dois dias úteis depois dela o
+// item fica apto a pedido. Essa data vem do comprador (Negociar preço e
+// DPV) ou da coluna NEGOCIACAO do levelboard (PATEC e PATEC manual).
+var GP_COL   = 'governanca_mapa';
+var _gpBase  = null;    // { data, itens:[] } — o MAPA do dia
+var _gpNeg   = {};      // rc|seq -> { comentario, data }
+var _gpLb    = { itens:{}, arquivo:'', lidas:0, uteis:0, atualizadoEm:'' };
+var _gpCard  = '';
+
+function gpDataSel(){
+  var el = document.getElementById('gp-data');
+  return (el && el.value) ? el.value : cpHojeISO();
+}
+
+// Soma dias úteis — sábado e domingo não contam.
+function gpMaisDiasUteis(iso, n){
+  if (!iso) return '';
+  var d = new Date(iso + 'T12:00:00');
+  if (isNaN(d.getTime())) return '';
+  var somados = 0;
+  while (somados < n) {
+    d.setDate(d.getDate() + 1);
+    var w = d.getDay();
+    if (w !== 0 && w !== 6) somados++;
+  }
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+       + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function gpChave(it){ return String(it.rc || '') + '|' + String(it.seq || ''); }
+
+// O estado de um item: onde ele cai hoje e por quê.
+function gpEstado(it){
+  var k = gpChave(it);
+  var man = _gpNeg[k] || {};
+  var lb  = (_gpLb.itens || {})[k] || {};
+  var ch  = it.statusChave;
+  // a data que o comprador digita vence a do levelboard
+  var dataNeg = man.data || lb.negociacao || '';
+  var libera  = dataNeg ? gpMaisDiasUteis(dataNeg, 2) : '';
+  var liberado = !!libera && libera <= cpHojeISO();
+  var card = ch;
+  // negociação madura empurra o item para Emitir pedido
+  if ((ch === 'negociar' || ch === 'dpv') && liberado) card = 'emitir';
+  return { chave:k, origem:ch, card:card,
+           comentario: man.comentario || '', dataNeg: dataNeg,
+           libera: libera, liberado: liberado,
+           fonte: man.data ? 'digitada' : (lb.negociacao ? 'levelboard' : ''),
+           fornecedor: lb.fornecedor || '', nmPedido: lb.nmPedido || '' };
+}
+
+function gpItens(){
+  return (_gpBase && _gpBase.itens) ? _gpBase.itens : [];
+}
+
+function gpContar(){
+  var c = {}, vindos = 0, aguardando = {};
+  GOV_CARDS.forEach(function(x){ c[x.chave] = 0; aguardando[x.chave] = 0; });
+  gpItens().forEach(function(it){
+    var e = gpEstado(it);
+    c[e.card] = (c[e.card] || 0) + 1;
+    if (e.card !== e.origem) vindos++;
+    if ((e.card === 'patec' || e.card === 'patecman') && !e.liberado) aguardando[e.card]++;
+  });
+  return { por:c, vindos:vindos, aguardando:aguardando };
+}
+
+function gpRender(){
+  var box = document.getElementById('gp-cards');
+  var av  = document.getElementById('gp-aviso');
+  if (!box) return;
+  if (!gpItens().length) {
+    box.innerHTML = '';
+    if (av) av.innerHTML = '<div style="color:var(--am);padding:.6rem 0">'
+      + 'Nenhum MAPA guardado para ' + cpDataBR(gpDataSel()) + '. '
+      + 'Suba o MAPA do dia em <strong>Controle de Pedidos › Distribuição do MAPA</strong>.</div>';
+    gpRenderDetalhe();
+    return;
+  }
+  if (av) {
+    av.innerHTML = '<div style="color:var(--tx2);padding:.4rem 0 .7rem">'
+      + '<strong style="color:var(--tx)">' + cpNum(gpItens().length) + '</strong> itens do MAPA de '
+      + cpDataBR(_gpBase.data) + (_gpBase.arquivo ? ' (' + cpEsc(_gpBase.arquivo) + ')' : '')
+      + (_gpLb.lidas ? ' · levelboard com ' + cpNum(_gpLb.uteis) + ' item(ns) de negociação' : '')
+      + '</div>';
+  }
+  var ct = gpContar();
+  var h = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">';
+  GOV_CARDS.forEach(function(x){
+    var n = ct.por[x.chave] || 0;
+    var ag = ct.aguardando[x.chave] || 0;
+    var sel = _gpCard === x.chave;
+    h += '<div onclick="gpAbrirCard(\'' + x.chave + '\')" style="cursor:pointer;border-radius:12px;'
+      + 'padding:1rem .9rem;text-align:center;background:' + x.fundo + ';'
+      + 'border:' + (sel ? '2.5px' : '1.5px') + ' solid ' + x.cor + ';transition:.15s">'
+      + '<div style="font-size:30px;font-weight:800;color:' + x.cor + ';line-height:1.1">' + cpNum(n) + '</div>'
+      + '<div style="font-size:11px;font-weight:700;color:' + x.cor + ';margin-top:5px;letter-spacing:.2px">'
+      +   cpEsc(x.nome.toUpperCase()) + '</div>'
+      + (ag ? '<div style="font-size:10px;color:var(--tx2);margin-top:4px">' + cpNum(ag)
+              + ' aguardando os 2 dias</div>' : '')
+      + '</div>';
+  });
+  h += '</div>';
+  if (ct.vindos) {
+    h += '<div style="font-size:11px;color:var(--vd);margin-top:10px">'
+      + '↗ ' + cpNum(ct.vindos) + ' item(ns) saíram de negociação e já estão em Emitir pedido '
+      + '(passaram os 2 dias úteis).</div>';
+  }
+  box.innerHTML = h;
+  gpRenderDetalhe();
+}
+
+function gpAbrirCard(ch){
+  _gpCard = (_gpCard === ch) ? '' : ch;
+  gpRender();
+}
+
+function gpRenderDetalhe(){
+  var box = document.getElementById('gp-detalhe');
+  if (!box) return;
+  if (!_gpCard) { box.innerHTML = ''; return; }
+  var lista = [];
+  gpItens().forEach(function(it){
+    var e = gpEstado(it);
+    if (e.card === _gpCard) lista.push({ it:it, e:e });
+  });
+  lista.sort(function(a, b){
+    if ((b.it.sla || 0) !== (a.it.sla || 0)) return (b.it.sla || 0) - (a.it.sla || 0);
+    return String(a.it.rc).localeCompare(String(b.it.rc));
+  });
+  var editavel = (_gpCard === 'negociar' || _gpCard === 'dpv');
+  var dePatec  = (_gpCard === 'patec' || _gpCard === 'patecman');
+
+  var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between">'
+    + '<span>' + cpEsc(govNomeCard(_gpCard)) + ' — ' + cpNum(lista.length) + ' RC(s)</span>'
+    + '<span style="display:flex;gap:8px">'
+    +   '<button class="btn btn-s" onclick="gpCopiar()">📋 Copiar</button>'
+    +   '<button class="btn btn-s" onclick="gpBaixarExcel()">⬇ Baixar Excel</button>'
+    +   '<button class="btn btn-s" onclick="gpAbrirCard(\'' + _gpCard + '\')">✕ Fechar</button>'
+    + '</span></div>';
+  if (!lista.length) {
+    h += '<div style="font-size:12px;color:var(--tx2)">Nenhuma RC neste card.</div></div>';
+    box.innerHTML = h; return;
+  }
+  h += '<div style="overflow:auto;max-height:560px"><table><thead><tr>'
+    + '<th>RC</th><th>Item</th><th>Oportunidade</th><th>Item op.</th>'
+    + '<th style="text-align:right">SLA</th><th>Segmento</th>'
+    + (dePatec ? '<th>Fornecedor ganhador</th><th>NM do pedido</th>' : '')
+    + '<th>Data da negociação</th><th>Apto a pedido</th>'
+    + (editavel ? '<th>Comentário</th>' : '')
+    + '<th>Situação</th></tr></thead><tbody>';
+  lista.forEach(function(x){
+    var it = x.it, e = x.e;
+    h += '<tr>'
+      + '<td style="font-weight:700;color:var(--az)">' + cpEsc(it.rc) + '</td>'
+      + '<td>' + cpEsc(it.seq) + '</td>'
+      + '<td>' + cpEsc(it.op || '—') + '</td>'
+      + '<td>' + cpEsc(it.itemOp || '—') + '</td>'
+      + '<td style="text-align:right;font-weight:600">' + cpNum(it.sla || 0) + '</td>'
+      + '<td style="font-size:10.5px">' + cpEsc(it.seg || '—') + '</td>';
+    if (dePatec) {
+      h += '<td>' + cpEsc(e.fornecedor || '—') + '</td>'
+        +  '<td>' + cpEsc(e.nmPedido || '—') + '</td>';
+    }
+    h += '<td>' + (editavel
+        ? '<input type="date" value="' + cpEsc(e.dataNeg) + '" onchange="gpTrocarDataNeg(\'' + cpEsc(e.chave) + '\', this.value)" '
+          + 'style="font-size:10.5px;padding:3px 5px;border:1px solid var(--brd);border-radius:5px">'
+        : (e.dataNeg ? cpDataBR(e.dataNeg) : '—')) + '</td>'
+      + '<td style="font-size:10.5px;font-weight:600;color:' + (e.liberado ? 'var(--vd)' : 'var(--tx2)') + '">'
+      +   (e.libera ? cpDataBR(e.libera) : '—') + '</td>';
+    if (editavel) {
+      h += '<td><input type="text" value="' + cpEsc(e.comentario) + '" placeholder="quem está tratando"'
+        +  ' onchange="gpTrocarComentario(\'' + cpEsc(e.chave) + '\', this.value)"'
+        +  ' style="font-size:10.5px;padding:3px 6px;border:1px solid var(--brd);border-radius:5px;width:160px"></td>';
+    }
+    h += '<td style="font-size:10px">' + gpSelo(e) + '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  if (editavel) {
+    h += '<div style="font-size:10.5px;color:var(--tx2);margin-top:8px">'
+      + 'Digite a data em que negociou. Dois dias úteis depois, o item sai deste card e '
+      + 'aparece em <strong>Emitir pedido</strong>, mesmo que o MAPA do dia continue trazendo '
+      + 'ele como negociação.</div>';
+  }
+  h += '</div>';
+  box.innerHTML = h;
+}
+
+function gpSelo(e){
+  if (e.card !== e.origem) return '<span style="background:var(--vdc);color:var(--vd);border:1px solid var(--vd);'
+    + 'border-radius:4px;padding:1px 5px;font-weight:700">VEIO DE ' + cpEsc(govNomeCard(e.origem).toUpperCase()) + '</span>';
+  if (e.dataNeg && !e.liberado) return '<span style="background:var(--amc);color:var(--am);border:1px solid var(--am);'
+    + 'border-radius:4px;padding:1px 5px;font-weight:700">AGUARDANDO 2 DIAS</span>';
+  if (e.dataNeg && e.liberado) return '<span style="background:var(--vdc);color:var(--vd);border:1px solid var(--vd);'
+    + 'border-radius:4px;padding:1px 5px;font-weight:700">APTO A PEDIDO</span>';
+  return '<span style="color:var(--tx2)">sem data de negociação</span>';
+}
+
+// ── o que o comprador digita ──────────────────────────────────────
+async function gpGravarNeg(){
+  try {
+    var db = getDB(); if (!db) return false;
+    await db.collection('config').doc('governanca_negociacao').set({
+      itens:_gpNeg, atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem()
+    });
+    return true;
+  } catch (e) { console.warn('gpGravarNeg:', e); return false; }
+}
+
+async function gpTrocarDataNeg(chave, valor){
+  if (!_gpNeg[chave]) _gpNeg[chave] = { comentario:'', data:'' };
+  _gpNeg[chave].data = String(valor || '').trim();
+  if (!_gpNeg[chave].data && !_gpNeg[chave].comentario) delete _gpNeg[chave];
+  await gpGravarNeg();
+  gpRender();
+}
+
+async function gpTrocarComentario(chave, valor){
+  if (!_gpNeg[chave]) _gpNeg[chave] = { comentario:'', data:'' };
+  _gpNeg[chave].comentario = String(valor || '').trim();
+  if (!_gpNeg[chave].data && !_gpNeg[chave].comentario) delete _gpNeg[chave];
+  await gpGravarNeg();
+}
+
+// ── o levelboard ──────────────────────────────────────────────────
+function gpLerLevelboard(linhas){
+  var r = { itens:{}, lidas:0, uteis:0, aviso:'', colunas:{} };
+  if (!linhas || !linhas.length) { r.aviso = 'Arquivo vazio.'; return r; }
+  var iCab = -1, cabs = [];
+  for (var k = 0; k < Math.min(linhas.length, 15); k++) {
+    var c = (linhas[k] || []).map(cpNormCab);
+    if (c.indexOf('NEGOCIACAO') !== -1 || c.indexOf('FORNECEDOR_GANHADOR_PATEC') !== -1) { iCab = k; cabs = c; break; }
+  }
+  if (iCab === -1) {
+    r.aviso = 'Não achei as colunas NEGOCIACAO / FORNECEDOR_GANHADOR_PATEC — isto é o levelboard?';
+    return r;
+  }
+  var ix = function(n){ return _cpAchaCol(cabs, n); };
+  var col = { rc: ix(['RC']), seq: ix(['SEQ','ITEM']),
+              neg: ix(['NEGOCIACAO']), forn: ix(['FORNECEDOR_GANHADOR_PATEC']),
+              nm: ix(['NM_PEDIDO']) };
+  r.colunas = col;
+  if (col.rc === -1) { r.aviso = 'Não achei a coluna RC no levelboard.'; return r; }
+  var pega = function(l, j){ return j === -1 ? '' : String(l[j] == null ? '' : l[j]).trim(); };
+  for (var b = iCab + 1; b < linhas.length; b++) {
+    var l = linhas[b] || [];
+    var rc = pega(l, col.rc);
+    if (!rc) continue;
+    r.lidas++;
+    var neg  = cpDataISO(pega(l, col.neg));   // "solicitado" e vazio viram ''
+    var forn = pega(l, col.forn);
+    var nm   = pega(l, col.nm);
+    if (!neg && !forn && !nm) continue;
+    r.itens[rc + '|' + pega(l, col.seq)] = { negociacao:neg, fornecedor:forn, nmPedido:nm };
+    r.uteis++;
+  }
+  if (!r.uteis) r.aviso = 'Li ' + r.lidas + ' linha(s), mas nenhuma com negociação, fornecedor ganhador ou NM do pedido.';
+  return r;
+}
+
+function gpLbDrop(e){
+  e.preventDefault();
+  var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) gpUploadLevelboard(f);
+}
+
+async function gpUploadLevelboard(file){
+  if (!file) return;
+  var st = document.getElementById('gp-lb-status');
+  if (st) st.innerHTML = '⏳ Lendo o levelboard...';
+  try {
+    var buf = await file.arrayBuffer();
+    var wb = _lerWorkbookBR(buf, file.name);
+    var nome = wb.SheetNames[0];
+    var linhas = XLSX.utils.sheet_to_json(wb.Sheets[nome], { header:1, defval:'', raw:true });
+    var r = gpLerLevelboard(linhas);
+    if (!r.uteis) {
+      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ ' + cpEsc(r.aviso) + '</span>';
+      return;
+    }
+    _gpLb = { itens:r.itens, arquivo:file.name, lidas:r.lidas, uteis:r.uteis,
+              atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem() };
+    var ok = await gpGravarLb();
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ <strong>' + cpEsc(file.name) + '</strong> — '
+      + cpNum(r.lidas) + ' linhas, ' + cpNum(r.uteis) + ' com negociação/fornecedor/NM'
+      + (ok ? '.' : ' <span style="color:var(--am)">(não consegui gravar no Firebase)</span>') + '</span>';
+    gpRender();
+  } catch (e) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Erro ao ler: ' + cpEsc(e.message) + '</span>';
+  }
+}
+
+async function gpGravarLb(){
+  try {
+    var db = getDB(); if (!db) return false;
+    await db.collection('config').doc('governanca_levelboard').set(_gpLb);
+    return true;
+  } catch (e) { console.warn('gpGravarLb:', e); return false; }
+}
+
+// ── a base do MAPA, guardada a cada upload ────────────────────────
+async function gpSalvarBase(r, data){
+  try {
+    var db = getDB(); if (!db || !r || !r.itens) return false;
+    var enxuto = function(i){
+      return { rc:i.rc, seq:i.seq, op:i.op || '', itemOp:i.itemOp || '',
+               statusChave:i.statusChave, status:i.status || '', sla:+i.sla || 0,
+               seg:i.seg || '', tipo:i.tipo || '', valor:+i.valor || 0,
+               acomp:i.acomp || '', nm:i.nm || '', centro:i.centro || '',
+               texto:i.texto || '', forn:i.forn || '', prazo:i.prazo || '', dpv:!!i.dpv };
+    };
+    await db.collection(GP_COL).doc(data).set({
+      data:data, arquivo:r.arquivo || '', total:r.itens.length,
+      itens: r.itens.slice(0, 6000).map(enxuto),
+      atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem()
+    });
+    return true;
+  } catch (e) { console.warn('gpSalvarBase:', e); return false; }
+}
+
+async function gpCarregarBase(data){
+  try {
+    var db = getDB(); if (!db) { _gpBase = null; return; }
+    var doc = await db.collection(GP_COL).doc(data).get();
+    if (!doc || !doc.exists) { _gpBase = null; return; }
+    var d = doc.data() || {};
+    _gpBase = { data:d.data || data, arquivo:d.arquivo || '', itens:d.itens || [] };
+  } catch (e) { console.warn('gpCarregarBase:', e); _gpBase = null; }
+}
+
+async function gpAbrir(){
+  var el = document.getElementById('gp-data');
+  if (el && !el.value) el.value = cpHojeISO();
+  try {
+    var db = getDB();
+    if (db) {
+      var d1 = await db.collection('config').doc('governanca_negociacao').get();
+      if (d1 && d1.exists) _gpNeg = (d1.data() || {}).itens || {};
+      var d2 = await db.collection('config').doc('governanca_levelboard').get();
+      if (d2 && d2.exists) {
+        var L = d2.data() || {};
+        _gpLb = { itens:L.itens || {}, arquivo:L.arquivo || '', lidas:+L.lidas || 0,
+                  uteis:+L.uteis || 0, atualizadoEm:L.atualizadoEm || '' };
+      }
+    }
+  } catch (e) { console.warn('gpAbrir config:', e); }
+  await gpCarregarBase(gpDataSel());
+  gpRender();
+}
+
+async function gpTrocarData(){
+  await gpCarregarBase(gpDataSel());
+  gpRender();
+}
+
+// ── mandar para a equipe ──────────────────────────────────────────
+function gpLinhasDoCard(){
+  var out = [];
+  gpItens().forEach(function(it){
+    var e = gpEstado(it);
+    if (e.card === _gpCard) out.push({ it:it, e:e });
+  });
+  return out;
+}
+
+function gpCopiar(){
+  var l = gpLinhasDoCard();
+  var t = [govNomeCard(_gpCard).toUpperCase() + ' — ' + cpDataBR(gpDataSel()) + ' (' + l.length + ' RCs)', ''];
+  l.forEach(function(x){
+    t.push('RC ' + x.it.rc + '/' + x.it.seq
+      + (x.it.op ? ' · Oport. ' + x.it.op : '')
+      + (x.e.dataNeg ? ' · negociado em ' + cpDataBR(x.e.dataNeg) : '')
+      + (x.e.libera ? ' · apto em ' + cpDataBR(x.e.libera) : '')
+      + (x.e.fornecedor ? ' · fornecedor ' + x.e.fornecedor : '')
+      + (x.e.comentario ? ' · ' + x.e.comentario : ''));
+  });
+  cpCopiaTexto(t.join('\n'), 'Lista copiada — é só mandar para a equipe.');
+}
+
+function gpBaixarExcel(){
+  try {
+    var l = gpLinhasDoCard();
+    if (!l.length) return;
+    var cab = ['Card','RC','Item','Oportunidade','Item oport.','SLA','Segmento','Status do MAPA',
+               'Data da negociação','Apto a pedido','Fornecedor ganhador','NM do pedido',
+               'Comentário','Situação'];
+    var aoa = [cab];
+    l.forEach(function(x){
+      var it = x.it, e = x.e;
+      aoa.push([govNomeCard(e.card), it.rc, it.seq, it.op || '', it.itemOp || '', it.sla || 0,
+                it.seg || '', it.status || '',
+                e.dataNeg ? cpDataBR(e.dataNeg) : '', e.libera ? cpDataBR(e.libera) : '',
+                e.fornecedor || '', e.nmPedido || '', e.comentario || '',
+                e.card !== e.origem ? 'Veio de ' + govNomeCard(e.origem)
+                  : (e.dataNeg ? (e.liberado ? 'Apto a pedido' : 'Aguardando 2 dias') : 'Sem data')]);
+    });
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = cab.map(function(c){ return { wch: Math.max(10, Math.min(28, c.length + 4)) }; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Governanca');
+    XLSX.writeFile(wb, 'Governanca_' + _gpCard + '_' + String(gpDataSel()).replace(/-/g, '') + '.xlsx');
+  } catch (e) { console.warn('gpBaixarExcel:', e); }
+}
 
 // ── MAPA DE REAPROVEITAMENTO ──────────────────────────────────────
 // Um mesmo dia pode ter vários mapas caminhando juntos. O reap vem por
@@ -13501,19 +13975,17 @@ function mdrRenderResumo(r){
     return B.entram - A.entram || a.localeCompare(b);
   });
   var h = '<div style="margin-top:.8rem;overflow:auto;max-height:280px"><table>'
-    + '<thead><tr><th>Lote</th><th>Data do lote</th><th style="text-align:center">Situação</th>'
+    + '<thead><tr><th>Lote</th><th>Data do lote</th>'
     + '<th style="text-align:right">Linhas</th><th style="text-align:right">Já com pedido</th>'
-    + '<th style="text-align:right">Resolvidos</th><th style="text-align:right">Para emissão</th>'
+    + '<th style="text-align:right">Fora pelo status</th><th style="text-align:right">Para emissão</th>'
     + '</tr></thead><tbody>';
   chaves.forEach(function(k){
     var L = r.lotes[k];
     h += '<tr>'
       + '<td style="font-weight:700;color:var(--az)">' + cpEsc(L.lote) + '</td>'
       + '<td style="font-size:10.5px;color:var(--tx2)">'
-      +   cpEsc(mdrDataDoLote(L.lote, r.dataLote)) + '</td>'
-      + '<td style="text-align:center">' + (L.novo
-          ? '<span style="background:var(--vdc);color:var(--vd);border:1px solid var(--vd);border-radius:4px;padding:1px 6px;font-size:9.5px;font-weight:700">LOTE NOVO</span>'
-          : '<span style="background:var(--cin);color:var(--tx2);border:1px solid var(--brd);border-radius:4px;padding:1px 6px;font-size:9.5px;font-weight:700">JÁ RODOU</span>')
+      +   cpEsc(mdrDataDoLote(L.lote, r.dataLote))
+      +   (L.novo ? ' <span style="background:var(--vdc);color:var(--vd);border:1px solid var(--vd);border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700">NOVO</span>' : '')
       + '</td>'
       + '<td style="text-align:right">' + cpNum(L.linhas) + '</td>'
       + '<td style="text-align:right;color:var(--tx2)">' + cpNum(L.comPedido) + '</td>'
@@ -13609,6 +14081,12 @@ async function mdrEsquecerLotes(){
   _mdrBase = null;
   mdrRenderResumo(null);
   mdRender();
+}
+
+// PATEC e PATEC manual aparecem na Governança, mas não são repartidos
+// pela matriz de atividades — ninguém marcou atividade para eles.
+function mdEntraNaDistribuicao(it){
+  return it.statusChave === 'emitir' || it.statusChave === 'negociar' || it.statusChave === 'dpv';
 }
 
 function mdBlocos(itens){
@@ -13806,7 +14284,7 @@ async function mdDistribuir(){
     if (st) st.innerHTML = '<span style="color:var(--vm)">Informe quantos itens cada um faz por dia.</span>';
     return;
   }
-  var itensMapa = temMapa ? _mdBase.itens : [];
+  var itensMapa = temMapa ? _mdBase.itens.filter(mdEntraNaDistribuicao) : [];
   var itensReap = temReap ? _mdrBase.itens : [];
   itensMapa.forEach(function(it){ if (!it.origem) it.origem = 'mapa'; });
   var res = mdCalcular(itensMapa, _mdCfg.pessoas, _mdCfg.atividades,
@@ -31001,7 +31479,8 @@ const PERMS_SIDEBAR = {
   'analista-auto':  { icon:'🤖', label:'Analista Automático',      mod:'EXECUÇÃO', hiddenFast:true },
   'consulta-q18':   { icon:'🚫', label:'Consulta Q18',             mod:'EXECUÇÃO', hiddenFast:true },
   'pr-bancoferias': { icon:'🗓', label:'Gestão de Jornada',        mod:'EXECUÇÃO' },
-  // Só existe dentro do módulo Pedidos, que tem Firebase próprio
+  // Só existem dentro do módulo Pedidos, que tem Firebase próprio
+  'governanca-pedidos': { icon:'🏛️', label:'Governança',           mod:'EXECUÇÃO', soPedidos:true },
   'pedidos':        { icon:'📦', label:'Controle de Pedidos',      mod:'EXECUÇÃO', soPedidos:true },
 };
 
