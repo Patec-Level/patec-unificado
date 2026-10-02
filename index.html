@@ -11128,6 +11128,27 @@ function cpHandleDrop(e){
 // precisar arrastar de novo.
 var _cpArquivoPendente = null;
 
+
+// Lê a planilha sem deixar o SheetJS adivinhar datas em arquivo de texto.
+// xlsx/xlsb/xls (binários) continuam como antes — neles a data é um número
+// e não tem ambiguidade. CSV/TXT vem como texto puro.
+function _lerWorkbookBR(buf, nome){
+  var u8 = new Uint8Array(buf);
+  var ehZip = u8.length > 1 && u8[0] === 0x50 && u8[1] === 0x4B;          // PK — xlsx/xlsb
+  var ehOle = u8.length > 7 && u8[0] === 0xD0 && u8[1] === 0xCF;          // xls antigo
+  if (ehZip || ehOle) return XLSX.read(buf, { type:'array', cellDates:true });
+  // O que sobra é texto — mesmo que o nome termine em .xlsx.
+  var txt = '';
+  try {
+    txt = new TextDecoder('utf-8', { fatal:false }).decode(u8);
+    if (txt.indexOf('�') !== -1) txt = new TextDecoder('windows-1252').decode(u8);
+  } catch(e){
+    try { txt = new TextDecoder('windows-1252').decode(u8); }
+    catch(e2){ return XLSX.read(buf, { type:'array', cellDates:true }); }
+  }
+  return XLSX.read(txt, { type:'string', raw:true });
+}
+
 async function cpUsarDataDoArquivo(data){
   var el = document.getElementById('cp-data');
   if (el) el.value = data;
@@ -11149,7 +11170,7 @@ async function cpHandleUpload(file){
   try {
     _cpUltimoArquivo = file;
     var buf = await file.arrayBuffer();
-    var wb = XLSX.read(buf, { type:'array', cellDates:true });
+    var wb = _lerWorkbookBR(buf, file.name);
 
     // O arquivo pode ter mais de uma planilha — e a medição nem sempre está
     // na primeira. Lê todas e fica com a que de fato tem o dia escolhido.
@@ -11166,6 +11187,7 @@ async function cpHandleUpload(file){
     }
     if (!med) med = cpLerMedicao([], data);
     med.planilhas = nomes;
+    med.arquivoInfo = _cpIdentidadeArquivo(file);
     _cpLeituraCrua = { data:data, cabecalho: med.cabecalhoCompleto || [], linhas: med.linhasDoDia || [] };
 
     if (med.aviso && !med.compradores.length) {
@@ -11181,6 +11203,8 @@ async function cpHandleUpload(file){
           st.innerHTML += '<div style="margin-top:8px;font-size:11px;color:var(--tx2);background:var(--cin);'
             + 'border:1px solid var(--brd);border-radius:7px;padding:8px 10px;line-height:1.7">'
             + '<strong style="color:var(--tx)">O que eu li no arquivo:</strong><br>'
+            + 'Arquivo: <strong>' + cpEsc(_cpIdentidadeArquivo(file)) + '</strong><br>'
+            + 'Datas lidas como <strong>dia/mês/ano</strong>.<br>'
             + 'Planilha: <strong>' + cpEsc(med.planilha || '—') + '</strong>'
             + ((med.planilhas && med.planilhas.length > 1)
                 ? ' <span style="color:var(--am)">(o arquivo tem ' + med.planilhas.length
@@ -11264,6 +11288,7 @@ async function cpHandleUpload(file){
 
 function cpTextoLeitura(med, data){
   var t = [];
+  if (med.arquivoInfo) t.push('Arquivo: <strong>' + cpEsc(med.arquivoInfo) + '</strong>.');
   if (med.planilhas && med.planilhas.length > 1)
     t.push('Planilha lida: <strong>' + cpEsc(med.planilha || '—') + '</strong> (de '
            + med.planilhas.length + ').');
@@ -11973,7 +11998,7 @@ function apHandleDrop(e){
 
 async function apLerArquivo(file){
   var buf = await file.arrayBuffer();
-  var wb = XLSX.read(buf, { type:'array', cellDates:true });
+  var wb = _lerWorkbookBR(buf, file.name);
   var ws = wb.Sheets[wb.SheetNames[0]];
   return apLerPlanilha(XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:true }));
 }
@@ -12608,7 +12633,7 @@ async function stbUpload(file){
   if (st) st.innerHTML = '⏳ Lendo a BU... (arquivo grande pode levar alguns segundos)';
   try {
     var buf = await file.arrayBuffer();
-    var wb = XLSX.read(buf, { type:'array', cellDates:true });
+    var wb = _lerWorkbookBR(buf, file.name);
     var nome = wb.SheetNames.indexOf('BU') !== -1 ? 'BU' : wb.SheetNames[0];
     var linhas = XLSX.utils.sheet_to_json(wb.Sheets[nome], { header:1, defval:'', raw:true });
     var r = stbLerBU(linhas);
@@ -13110,7 +13135,7 @@ function mdLerMapa(linhas){
 
 async function mdLerArquivo(file){
   var buf = await file.arrayBuffer();
-  var wb = XLSX.read(buf, { type:'array', cellDates:true });
+  var wb = _lerWorkbookBR(buf, file.name);
   var nome = wb.SheetNames.indexOf('MAPA') !== -1 ? 'MAPA' : wb.SheetNames[0];
   var linhas = XLSX.utils.sheet_to_json(wb.Sheets[nome], { header:1, defval:'', raw:true });
   var r = mdLerMapa(linhas);
@@ -13868,6 +13893,19 @@ function cpPintarChaveEliminados(){
 // Quando a conta não fecha, o que resolve é ver as linhas daquele dia
 // com TODAS as colunas. São poucas — vira um arquivo de mandar por e-mail.
 var _cpLeituraCrua = null;
+function _cpIdentidadeArquivo(file){
+  if (!file) return '';
+  var mb = file.size / 1048576;
+  var tam = mb >= 1 ? mb.toFixed(1).replace('.', ',') + ' MB'
+                    : Math.max(1, Math.round(file.size / 1024)) + ' KB';
+  var q = '';
+  try {
+    var d = new Date(file.lastModified);
+    if (!isNaN(d)) q = ' · salvo em ' + d.toLocaleDateString('pt-BR') + ' às '
+                     + d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
+  } catch(e){}
+  return file.name + ' · ' + tam + q;
+}
 var _cpUltimoArquivo = null;
 function cpBaixarLinhasDoDia(){
   try {
