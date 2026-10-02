@@ -11001,10 +11001,16 @@ function cpDataISO(v){
   return '';
 }
 
-// O Cockpit: pedido emitido (status 3), sem código de eliminação e do
-// gerente RLRT. A coluna R (STATUS_PSMV) não filtra nada — ela é o que
-// se conta depois dos filtros, e as linhas sem nada em R também contam.
-var CP_COCKPIT = { status:'3', gerente:'RLRT' };
+// O Cockpit: pedido emitido (status 3), sem código de eliminação (0 e
+// #N/A contam como vazio) e do gerente RLRT. Depois desses três filtros,
+// o número do card é a contagem da coluna R em "Em liberação".
+// Guardo também os outros status de R, para dar para olhar ao lado.
+var CP_COCKPIT = { status:'3', gerente:'RLRT', psmv:'Em liberação' };
+// O arquivo às vezes vem com o acento quebrado ("EM LIBERA??O"), então
+// comparo pelo começo do texto, sem acento.
+function _cpEmLiberacao(v){
+  return cpNormCab(v).indexOf('EM_LIBERA') === 0;
+}
 function _cpCockpitLinha(linha, col){
   if (col.st === -1 || col.ger === -1) return false;
   var st = String(linha[col.st] == null ? '' : linha[col.st]).trim();
@@ -11063,7 +11069,7 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
             naData:0, semData:0, statusNaData:{}, elimNaData:{},
             linhasDoDia:[], cabecalhoCompleto:[], feitosBarrados:0,
             comCodigo:0, feitosComCodigo:0, cortouEliminados: !!cortarEliminados,
-            cockpit:[], cockpitTotal:0 };
+            cockpit:[], cockpitTotal:0, cockpitEmLib:0 };
   if (!linhas || !linhas.length) { r.aviso = 'Arquivo vazio.'; return r; }
 
   // acha a linha de cabeçalho — costuma ser a 1a, mas o arquivo pode
@@ -11151,6 +11157,7 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
           });
         }
         r.cockpitTotal++;
+        if (iPsmv !== -1 && _cpEmLiberacao(lb[iPsmv])) r.cockpitEmLib++;
       }
 
       // A data vem ANTES da eliminação: assim dá para dizer quantas linhas
@@ -13419,7 +13426,7 @@ var _gpLb    = { itens:{}, arquivo:'', lidas:0, uteis:0, atualizadoEm:'' };
 var _gpCard  = '';
 var _gpRej   = { itens:[], arquivo:'', lidas:0, fora:0, atualizadoEm:'', atualizadoPor:'' };
 var _gpCock  = { itens:[], total:0, arquivo:'', atualizadoEm:'', atualizadoPor:'' };
-var _gpCockPsmv = '';
+var _gpCockPsmv = cpNormCab('Em liberação');   // o card abre já nele
 function gpCockFiltrar(v){ _gpCockPsmv = (v === _gpCockPsmv) ? '' : v; gpRenderDetalhe(); }
 
 // O Cockpit vem da medição de momento do Controle de Pedidos: toda vez
@@ -13428,6 +13435,7 @@ async function gpSalvarCockpit(med, arquivo){
   try {
     if (!med || !med.cockpit) return false;
     _gpCock = { itens: med.cockpit.slice(0, 4000), total: +med.cockpitTotal || 0,
+                emLib: +med.cockpitEmLib || 0,
                 arquivo: arquivo || '', atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem() };
     var db = getDB(); if (!db) return false;
     await db.collection('config').doc('governanca_cockpit').set(_gpCock);
@@ -13590,7 +13598,7 @@ function gpContar(){
     if ((e.card === 'patec' || e.card === 'patecman') && !e.liberado) aguardando[e.card]++;
   });
   c.rejeitados = (_gpRej && _gpRej.itens) ? _gpRej.itens.length : 0;
-  c.cockpit    = (_gpCock && _gpCock.total) ? _gpCock.total : 0;
+  c.cockpit    = (_gpCock && _gpCock.emLib) ? _gpCock.emLib : 0;
   return { por:c, vindos:vindos, aguardando:aguardando, comData:comData, origem:origem };
 }
 
@@ -13653,7 +13661,7 @@ function gpRender(){
           : '')
       + (x.chave === 'cockpit'
           ? '<div style="font-size:10px;color:var(--tx2);margin-top:4px">'
-            + (_gpCock.total ? 'emitido · ' + cpEsc(CP_COCKPIT.gerente) + ' · contado pela coluna R'
+            + (_gpCock.total ? cpEsc(CP_COCKPIT.psmv) + ' · emitido · ' + cpEsc(CP_COCKPIT.gerente)
                              : 'suba a medição no Controle de Pedidos') + '</div>'
           : '')
       + '</div>';
@@ -13840,7 +13848,7 @@ function gpHtmlCockpit(){
     return String(a.pedido).localeCompare(String(b.pedido));
   });
   var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between">'
-    + '<span>Cockpit — ' + cpNum(_gpCock.total || 0) + ' item(ns)</span>'
+    + '<span>Cockpit — ' + cpNum(_gpCock.emLib || 0) + ' em liberação</span>'
     + '<span style="display:flex;gap:8px">'
     +   (itens.length ? '<button class="btn btn-s" onclick="gpCopiar()">📋 Copiar</button>'
                       + '<button class="btn btn-s" onclick="gpBaixarExcel()">⬇ Baixar Excel</button>' : '')
@@ -13850,7 +13858,9 @@ function gpHtmlCockpit(){
     +   'Da medição de momento do Controle de Pedidos: <strong>STATUS_PROCESSO 3</strong> (emitido) · '
     +   '<strong>CODIGO_ELIMINACAO_ITEM_PEDIDO vazio</strong> · '
     +   '<strong>GERENTE ' + cpEsc(CP_COCKPIT.gerente) + '</strong>. '
-    +   'A contagem é pela coluna <strong>R (STATUS_PSMV)</strong>, com os vazios inclusive.'
+    +   'Dentro disso, o número do card é a contagem da coluna <strong>R (STATUS_PSMV)</strong> '
+    +   'em <strong>' + cpEsc(CP_COCKPIT.psmv) + '</strong>. Os outros status de R ficam nos '
+    +   'botões abaixo, se você quiser olhar.'
     +   (_gpCock.arquivo ? '<br>Última medição: <strong>' + cpEsc(_gpCock.arquivo) + '</strong>'
         + (_gpCock.atualizadoEm ? ' — ' + cpDataBR(String(_gpCock.atualizadoEm).slice(0,10)) : '') + '.' : '')
     + '</div>';
@@ -13875,7 +13885,7 @@ function gpHtmlCockpit(){
   h += '<span onclick="gpCockFiltrar(\'\')" style="cursor:pointer;font-size:11px;font-weight:700;'
     + 'padding:4px 10px;border-radius:14px;border:1.5px solid var(--az);'
     + (_gpCockPsmv ? 'color:var(--az);background:#fff' : 'color:#fff;background:var(--az)') + '">'
-    + 'Todos ' + cpNum(itens.length) + '</span>';
+    + 'Todos os emitidos ' + cpNum(itens.length) + '</span>';
   chaves.forEach(function(k){
     var sel = _gpCockPsmv === k;
     h += '<span onclick="gpCockFiltrar(\'' + cpEsc(k).replace(/'/g, '') + '\')" '
@@ -14106,8 +14116,9 @@ async function gpAbrir(){
       var d4 = await db.collection('config').doc('governanca_cockpit').get();
       if (d4 && d4.exists) {
         var C = d4.data() || {};
-        _gpCock = { itens:C.itens || [], total:+C.total || 0, arquivo:C.arquivo || '',
-                    atualizadoEm:C.atualizadoEm || '', atualizadoPor:C.atualizadoPor || '' };
+        _gpCock = { itens:C.itens || [], total:+C.total || 0, emLib:+C.emLib || 0,
+                    arquivo:C.arquivo || '', atualizadoEm:C.atualizadoEm || '',
+                    atualizadoPor:C.atualizadoPor || '' };
       }
       var d3 = await db.collection('config').doc('governanca_rejeitados').get();
       if (d3 && d3.exists) {
@@ -14156,8 +14167,8 @@ function gpCopiar(){
     return;
   }
   if (_gpCard === 'cockpit') {
-    var tc = ['COCKPIT — ' + cpNum(_gpCock.total || 0) + ' item(ns) emitidos do gerente '
-              + CP_COCKPIT.gerente, ''];
+    var tc = ['COCKPIT — ' + cpNum(_gpCock.emLib || 0) + ' item(ns) em liberação ('
+              + CP_COCKPIT.gerente + ')', ''];
     _gpCock.itens.forEach(function(i){
       tc.push('Pedido ' + i.pedido + ' · ' + ((i.psmv || '').trim() || '(vazio)')
         + (i.chave ? ' · ' + i.chave : '')
