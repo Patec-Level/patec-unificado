@@ -10938,7 +10938,7 @@ function _cpAchaCol(cabs, nomes){
 function cpLerMedicao(linhas, dataAlvo){
   var r = { compradores:[], memorizado:0, emitido:0, outros:0, total:0,
             lidas:0, foraDaData:0, eliminadas:0, formato:'', colunas:{}, aviso:'',
-            itensMem:[] };
+            itensMem:[], datasNoArquivo:{}, valoresStatus:{}, cabecalhos:[] };
   if (!linhas || !linhas.length) { r.aviso = 'Arquivo vazio.'; return r; }
 
   // acha a linha de cabeçalho — costuma ser a 1a, mas o arquivo pode
@@ -10966,6 +10966,9 @@ function cpLerMedicao(linhas, dataAlvo){
   var iIt   = _cpAchaCol(cabs, ['LINHAREQUISICAO','LINHA_REQUISICAO','ITEM_RC','ITEM_REQUISICAO','ITEM_DA_RC','SEQ']);
   r.colunas = { comprador:iQuem, status:iSt, data:iDt, eliminacao:iEl,
                 memorizado:iMem, emitido:iEmi, chave:iCh, pedido:iPd, rc:iRc, item:iIt };
+  r.cabecalhos = (linhas[iCab] || []).map(function(x){ return String(x == null ? '' : x).trim(); })
+                   .filter(function(x){ return !!x; });
+  r.nomeColuna = function(j){ return j === -1 ? '—' : (r.cabecalhos[j] || ('coluna ' + (j + 1))); };
 
   var mapa = {};
   var pega = function(nome){
@@ -11003,9 +11006,12 @@ function cpLerMedicao(linhas, dataAlvo){
       if (iEl !== -1 && String(lb[iEl] == null ? '' : lb[iEl]).trim() !== '') { r.eliminadas++; continue; }
       if (iDt !== -1 && dataAlvo) {
         var d = cpDataISO(lb[iDt]);
+        if (d) r.datasNoArquivo[d] = (r.datasNoArquivo[d] || 0) + 1;
         if (d && d !== dataAlvo) { r.foraDaData++; continue; }
       }
       r.lidas++;
+      var bruto = String(lb[iSt] == null ? '' : lb[iSt]).trim();
+      r.valoresStatus[bruto || '(vazio)'] = (r.valoresStatus[bruto || '(vazio)'] || 0) + 1;
       var st = cpStatusNome(lb[iSt]);
       var oB = pega(nomeB);
       if (st === 'memorizado') {
@@ -11031,6 +11037,26 @@ function cpLerMedicao(linhas, dataAlvo){
   if (!r.compradores.length && !r.aviso) {
     r.aviso = 'Nenhum pedido memorizado ou emitido encontrado'
             + (dataAlvo ? ' para ' + cpDataBR(dataAlvo) : '') + '.';
+    // o caso mais comum: a tela ficou aberta e a data virou
+    var ds = Object.keys(r.datasNoArquivo).sort(function(a, b){
+      return r.datasNoArquivo[b] - r.datasNoArquivo[a];
+    });
+    var cab = (linhas[iCab] || []).map(function(x){ return String(x == null ? '' : x).trim(); });
+    var nm = function(j){ return j === -1 ? '— não encontrada' : (cab[j] || ('coluna ' + (j + 1))); };
+    r.diag = {
+      comprador: nm(iQuem), status: nm(iSt), data: nm(iDt), eliminacao: nm(iEl),
+      lidas: r.lidas, eliminadas: r.eliminadas, foraDaData: r.foraDaData,
+      status5: Object.keys(r.valoresStatus)
+        .sort(function(a, b){ return r.valoresStatus[b] - r.valoresStatus[a]; })
+        .slice(0, 6).map(function(v){ return v + ' (' + r.valoresStatus[v] + ')'; })
+    };
+    if (ds.length) {
+      r.dataSugerida = ds[0];
+      if (ds.length > 1 || ds[0] !== dataAlvo)
+      r.aviso += ' O arquivo traz pedidos de ' + ds.slice(0, 3).map(function(d){
+        return cpDataBR(d) + ' (' + r.datasNoArquivo[d] + ')';
+      }).join(', ') + (ds.length > 3 ? ' e mais ' + (ds.length - 3) + ' data(s)' : '') + '.';
+    }
   }
   return r;
 }
@@ -11040,6 +11066,21 @@ function cpHandleDrop(e){
   e.preventDefault();
   var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
   if (f) cpHandleUpload(f);
+}
+
+// Guarda o arquivo recusado por causa da data, para reler sem você
+// precisar arrastar de novo.
+var _cpArquivoPendente = null;
+
+async function cpUsarDataDoArquivo(data){
+  var el = document.getElementById('cp-data');
+  if (el) el.value = data;
+  await cpTrocarData();
+  if (_cpArquivoPendente) {
+    var f = _cpArquivoPendente;
+    _cpArquivoPendente = null;
+    await cpHandleUpload(f);
+  }
 }
 
 async function cpHandleUpload(file){
@@ -11057,7 +11098,32 @@ async function cpHandleUpload(file){
     var med = cpLerMedicao(linhas, data);
 
     if (med.aviso && !med.compradores.length) {
-      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ ' + cpEsc(med.aviso) + '</span>';
+      if (st) {
+        st.innerHTML = '<span style="color:var(--vm)">✗ ' + cpEsc(med.aviso) + '</span>'
+          + ((med.dataSugerida && med.dataSugerida !== data)
+              ? '<div style="margin-top:6px"><button class="btn btn-p" onclick="cpUsarDataDoArquivo(\''
+                + med.dataSugerida + '\')">Usar a data do arquivo (' + cpDataBR(med.dataSugerida)
+                + ') e ler de novo</button></div>'
+              : '');
+        if (med.diag) {
+          var g = med.diag;
+          st.innerHTML += '<div style="margin-top:8px;font-size:11px;color:var(--tx2);background:var(--cin);'
+            + 'border:1px solid var(--brd);border-radius:7px;padding:8px 10px;line-height:1.7">'
+            + '<strong style="color:var(--tx)">O que eu li no arquivo:</strong><br>'
+            + 'Comprador: <strong>' + cpEsc(g.comprador) + '</strong> · '
+            + 'Status: <strong>' + cpEsc(g.status) + '</strong> · '
+            + 'Data: <strong>' + cpEsc(g.data) + '</strong> · '
+            + 'Eliminação: <strong>' + cpEsc(g.eliminacao) + '</strong><br>'
+            + cpNum(g.lidas) + ' linha(s) consideradas · ' + cpNum(g.eliminadas) + ' eliminada(s) · '
+            + cpNum(g.foraDaData) + ' de outra data<br>'
+            + 'Valores que apareceram na coluna de status: <strong>'
+            + cpEsc(g.status5.join(' · ') || 'nenhum') + '</strong><br>'
+            + '<span style="color:var(--am)">Conto como feito só o status <strong>2</strong> (memorizado) e '
+            + '<strong>3</strong> (emitido). Se os valores acima forem outros, me mande esta linha que eu ajusto.</span>'
+            + '</div>';
+        }
+        _cpArquivoPendente = file;
+      }
       return;
     }
 
