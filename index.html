@@ -11001,6 +11001,19 @@ function cpDataISO(v){
   return '';
 }
 
+// O Cockpit: pedido emitido (status 3), sem código de eliminação,
+// do gerente RLRT e com o PSMV ainda em liberação.
+var CP_COCKPIT = { status:'3', gerente:'RLRT', psmv:'Em liberação' };
+function _cpCockpitLinha(linha, col){
+  if (col.st === -1 || col.ger === -1 || col.psmv === -1) return false;
+  var st = String(linha[col.st] == null ? '' : linha[col.st]).trim();
+  if (st.replace(/[,.]0+$/, '') !== CP_COCKPIT.status) return false;
+  if (col.el !== -1 && _cpTemEliminacao(linha[col.el])) return false;
+  if (cpNormCab(linha[col.ger]) !== cpNormCab(CP_COCKPIT.gerente)) return false;
+  if (cpNormCab(linha[col.psmv]) !== cpNormCab(CP_COCKPIT.psmv)) return false;
+  return true;
+}
+
 // A coluna de eliminação costuma vir vazia quando o item está vivo, mas
 // várias extrações trazem 0 (ou 0,00, "-", "N/A") no lugar do vazio. Isso
 // não é eliminação — é a ausência dela. Tratar 0 como eliminado derrubava
@@ -11049,7 +11062,8 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
             itensMem:[], datasNoArquivo:{}, valoresStatus:{}, cabecalhos:[],
             naData:0, semData:0, statusNaData:{}, elimNaData:{},
             linhasDoDia:[], cabecalhoCompleto:[], feitosBarrados:0,
-            comCodigo:0, feitosComCodigo:0, cortouEliminados: !!cortarEliminados };
+            comCodigo:0, feitosComCodigo:0, cortouEliminados: !!cortarEliminados,
+            cockpit:[], cockpitTotal:0 };
   if (!linhas || !linhas.length) { r.aviso = 'Arquivo vazio.'; return r; }
 
   // acha a linha de cabeçalho — costuma ser a 1a, mas o arquivo pode
@@ -11071,12 +11085,18 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
   var iSt   = _cpAchaCol(cabs, ['STATUS_PROCESSO','STATUS','SITUACAO','STATUS_DO_PROCESSO']);
   var iDt   = _cpAchaCol(cabs, ['CRIACAO_PEDIDO','DATA_CRIACAO','DT_CRIACAO','CRIACAO','DATA','DATA_DO_PEDIDO']);
   var iEl   = _cpAchaCol(cabs, ['CODIGO_ELIMINACAO_ITEM_PEDIDO','CODIGO_ELIMINACAO','COD_ELIMINACAO','ELIMINACAO','ELIMINADO']);
+  var iGer  = _cpAchaCol(cabs, ['GERENTE']);
+  var iPsmv = _cpAchaCol(cabs, ['STATUS_PSMV']);
+  var iForn = _cpAchaCol(cabs, ['NOME_FORNECEDOR']);
+  var iGrp  = _cpAchaCol(cabs, ['GRUPO_COMPRADOR','GRUPO_COMPRADORES']);
+  var iVal  = _cpAchaCol(cabs, ['VALOR_TOTAL_BRUTO_PEDIDO_SAP','VALOR_TOTAL_BRUTO_PEDIDO']);
   var iCh   = _cpAchaCol(cabs, ['CHAVE','CHAVE_PEDIDO']);
   var iPd   = _cpAchaCol(cabs, ['PEDIDO','NUMERO_PEDIDO','NUM_PEDIDO']);
   var iRc   = _cpAchaCol(cabs, ['REQUISICAO','RC','NUMERO_RC','NUM_RC','REQUISICAO_COMPRA','REQ']);
   var iIt   = _cpAchaCol(cabs, ['LINHAREQUISICAO','LINHA_REQUISICAO','ITEM_RC','ITEM_REQUISICAO','ITEM_DA_RC','SEQ']);
   r.colunas = { comprador:iQuem, status:iSt, data:iDt, eliminacao:iEl,
-                memorizado:iMem, emitido:iEmi, chave:iCh, pedido:iPd, rc:iRc, item:iIt };
+                memorizado:iMem, emitido:iEmi, chave:iCh, pedido:iPd, rc:iRc, item:iIt,
+                gerente:iGer, psmv:iPsmv };
   r.cabecalhos = (linhas[iCab] || []).map(function(x){ return String(x == null ? '' : x).trim(); })
                    .filter(function(x){ return !!x; });
   r.cabecalhoCompleto = (linhas[iCab] || []).map(function(x){ return String(x == null ? '' : x).trim(); });
@@ -11115,6 +11135,23 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
       var lb = linhas[b] || [];
       var nomeB = String(lb[iQuem] == null ? '' : lb[iQuem]).trim();
       if (!nomeB) continue;
+
+      // ── Cockpit ──────────────────────────────────────────────────
+      // Independe da data escolhida: é uma fotografia do que está
+      // emitido, vivo, do gerente RLRT e ainda em liberação.
+      if (_cpCockpitLinha(lb, { st:iSt, el:iEl, ger:iGer, psmv:iPsmv })) {
+        if (r.cockpit.length < 5000) {
+          var p1 = function(j){ return j === -1 ? '' : String(lb[j] == null ? '' : lb[j]).trim(); };
+          r.cockpit.push({
+            pedido: p1(iPd), chave: p1(iCh), rc: p1(iRc), item: p1(iIt),
+            comprador: nomeB, gerente: p1(iGer), psmv: p1(iPsmv),
+            grupo: p1(iGrp), forn: p1(iForn),
+            valor: iVal === -1 ? 0 : mdNum(lb[iVal]),
+            criacao: iDt === -1 ? '' : cpDataISO(lb[iDt])
+          });
+        }
+        r.cockpitTotal++;
+      }
 
       // A data vem ANTES da eliminação: assim dá para dizer quantas linhas
       // são do dia escolhido antes de qualquer outro corte — era isso que
@@ -11276,6 +11313,8 @@ async function cpHandleUpload(file){
     med.planilhas = nomes;
     med.arquivoInfo = _cpIdentidadeArquivo(file);
     _cpLeituraCrua = { data:data, cabecalho: med.cabecalhoCompleto || [], linhas: med.linhasDoDia || [] };
+    // o Cockpit não depende da data nem de a medição ter dado certo
+    await gpSalvarCockpit(med, file.name);
 
     if (med.aviso && !med.compradores.length) {
       if (st) {
@@ -13097,7 +13136,8 @@ var GOV_CARDS = [
   { chave:'patecman', nome:'Emitir pedido PATEC manual',    cor:'var(--az)',  fundo:'var(--cin)' },
   { chave:'negociar', nome:'Negociar preço',                cor:'var(--am)',  fundo:'var(--amc)' },
   { chave:'dpv',      nome:'Negociar, acima do limite DPV', cor:'var(--vm)',  fundo:'var(--vmc)' },
-  { chave:'rejeitados', nome:'Rejeitados',                  cor:'var(--vm)',  fundo:'var(--vmc)', proprio:true }
+  { chave:'rejeitados', nome:'Rejeitados',                  cor:'var(--vm)',  fundo:'var(--vmc)', proprio:true },
+  { chave:'cockpit',    nome:'Cockpit',                     cor:'var(--az)',  fundo:'var(--azc)', proprio:true }
 ];
 // Só estes grupos de compras entram na conta dos rejeitados.
 var GP_GRUPOS = ['L01','L02','L03','L04','L05','L06','L08','L09','L10','L11','L12','L13','L14',
@@ -13378,6 +13418,20 @@ var _gpNeg   = {};      // rc|seq -> { comentario, data }
 var _gpLb    = { itens:{}, arquivo:'', lidas:0, uteis:0, atualizadoEm:'' };
 var _gpCard  = '';
 var _gpRej   = { itens:[], arquivo:'', lidas:0, fora:0, atualizadoEm:'', atualizadoPor:'' };
+var _gpCock  = { itens:[], total:0, arquivo:'', atualizadoEm:'', atualizadoPor:'' };
+
+// O Cockpit vem da medição de momento do Controle de Pedidos: toda vez
+// que ele sobe a medição, a lista é refeita.
+async function gpSalvarCockpit(med, arquivo){
+  try {
+    if (!med || !med.cockpit) return false;
+    _gpCock = { itens: med.cockpit.slice(0, 4000), total: +med.cockpitTotal || 0,
+                arquivo: arquivo || '', atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem() };
+    var db = getDB(); if (!db) return false;
+    await db.collection('config').doc('governanca_cockpit').set(_gpCock);
+    return true;
+  } catch (e) { console.warn('gpSalvarCockpit:', e); return false; }
+}
 
 // A planilha de rejeitados: conta só os grupos de compras da nossa lista.
 function gpLerRejeitados(linhas){
@@ -13534,6 +13588,7 @@ function gpContar(){
     if ((e.card === 'patec' || e.card === 'patecman') && !e.liberado) aguardando[e.card]++;
   });
   c.rejeitados = (_gpRej && _gpRej.itens) ? _gpRej.itens.length : 0;
+  c.cockpit    = (_gpCock && _gpCock.total) ? _gpCock.total : 0;
   return { por:c, vindos:vindos, aguardando:aguardando, comData:comData, origem:origem };
 }
 
@@ -13594,6 +13649,11 @@ function gpRender(){
             + (_gpRej.lidas ? cpNum(_gpRej.lidas) + ' linhas · ' + cpNum(_gpRej.fora) + ' de outros grupos'
                             : 'suba a planilha aqui dentro') + '</div>'
           : '')
+      + (x.chave === 'cockpit'
+          ? '<div style="font-size:10px;color:var(--tx2);margin-top:4px">'
+            + (_gpCock.total ? 'emitido · ' + cpEsc(CP_COCKPIT.gerente) + ' · ' + cpEsc(CP_COCKPIT.psmv)
+                             : 'suba a medição no Controle de Pedidos') + '</div>'
+          : '')
       + '</div>';
   });
   h += '</div>';
@@ -13621,6 +13681,7 @@ function gpRenderDetalhe(){
   if (!box) return;
   if (!_gpCard) { box.innerHTML = ''; return; }
   if (_gpCard === 'rejeitados') { box.innerHTML = gpHtmlRejeitados(); return; }
+  if (_gpCard === 'cockpit')    { box.innerHTML = gpHtmlCockpit();    return; }
   var lista = [];
   gpItens().forEach(function(it){
     var e = gpEstado(it);
@@ -13766,6 +13827,69 @@ function gpHtmlRejeitados(){
       + '<td style="font-size:10.5px">' + cpEsc(i.quem || '—') + '</td></tr>';
   });
   h += '</tbody></table></div></div>';
+  return h;
+}
+
+// O Cockpit sai da medição de momento, não do MAPA.
+function gpHtmlCockpit(){
+  var itens = (_gpCock && _gpCock.itens) ? _gpCock.itens.slice() : [];
+  itens.sort(function(a, b){
+    if ((a.criacao || '') !== (b.criacao || '')) return String(a.criacao).localeCompare(String(b.criacao));
+    return String(a.pedido).localeCompare(String(b.pedido));
+  });
+  var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between">'
+    + '<span>Cockpit — ' + cpNum(_gpCock.total || 0) + ' item(ns)</span>'
+    + '<span style="display:flex;gap:8px">'
+    +   (itens.length ? '<button class="btn btn-s" onclick="gpCopiar()">📋 Copiar</button>'
+                      + '<button class="btn btn-s" onclick="gpBaixarExcel()">⬇ Baixar Excel</button>' : '')
+    +   '<button class="btn btn-s" onclick="gpAbrirCard(\'cockpit\')">✕ Fechar</button>'
+    + '</span></div>'
+    + '<div style="font-size:11px;color:var(--tx2);line-height:1.8;margin-bottom:.7rem">'
+    +   'Da medição de momento do Controle de Pedidos: <strong>STATUS_PROCESSO 3</strong> (emitido) · '
+    +   '<strong>CODIGO_ELIMINACAO_ITEM_PEDIDO vazio</strong> · '
+    +   '<strong>GERENTE ' + cpEsc(CP_COCKPIT.gerente) + '</strong> · '
+    +   '<strong>STATUS_PSMV ' + cpEsc(CP_COCKPIT.psmv) + '</strong>.'
+    +   (_gpCock.arquivo ? '<br>Última medição: <strong>' + cpEsc(_gpCock.arquivo) + '</strong>'
+        + (_gpCock.atualizadoEm ? ' — ' + cpDataBR(String(_gpCock.atualizadoEm).slice(0,10)) : '') + '.' : '')
+    + '</div>';
+  if (!itens.length) {
+    h += '<div style="font-size:12px;color:var(--tx2)">'
+      + 'Nada aqui ainda. Suba a medição de momento em <strong>Controle de Pedidos</strong> '
+      + 'que esta lista se monta sozinha.</div></div>';
+    return h;
+  }
+  var soma = 0, porComprador = {};
+  itens.forEach(function(i){
+    soma += (+i.valor || 0);
+    porComprador[i.comprador || '(sem comprador)'] = (porComprador[i.comprador || '(sem comprador)'] || 0) + 1;
+  });
+  h += '<div style="font-size:11px;color:var(--tx2);line-height:1.8;margin-bottom:.6rem">'
+    + (soma ? '<div><strong style="color:var(--tx)">' + mdDinheiro(soma) + '</strong> em pedidos parados em liberação.</div>' : '')
+    + '<div>Por comprador: ' + Object.keys(porComprador)
+        .sort(function(a, b){ return porComprador[b] - porComprador[a]; })
+        .map(function(k){ return cpEsc(k) + ' <strong>' + porComprador[k] + '</strong>'; }).join(' · ')
+    + '</div></div>';
+  h += '<div style="overflow:auto;max-height:520px"><table><thead><tr>'
+    + '<th>Pedido</th><th>Chave</th><th>RC</th><th>Item</th><th>Comprador</th>'
+    + '<th>Grupo</th><th>Fornecedor</th><th>Criado em</th>'
+    + '<th style="text-align:right">Valor do pedido</th></tr></thead><tbody>';
+  itens.forEach(function(i){
+    h += '<tr>'
+      + '<td style="font-weight:700;color:var(--az)">' + cpEsc(i.pedido || '—') + '</td>'
+      + '<td>' + cpEsc(i.chave || '—') + '</td>'
+      + '<td style="font-weight:600">' + cpEsc(i.rc || '—') + '</td>'
+      + '<td>' + cpEsc(i.item || '—') + '</td>'
+      + '<td style="font-size:10.5px">' + cpEsc(i.comprador || '—') + '</td>'
+      + '<td>' + cpEsc(i.grupo || '—') + '</td>'
+      + '<td style="font-size:10.5px">' + cpEsc(i.forn || '—') + '</td>'
+      + '<td>' + (i.criacao ? cpDataBR(i.criacao) : '—') + '</td>'
+      + '<td style="text-align:right">' + (i.valor ? mdDinheiro(i.valor) : '—') + '</td></tr>';
+  });
+  h += '</tbody></table>'
+    + (_gpCock.total > itens.length
+        ? '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">Mostrando as primeiras '
+          + cpNum(itens.length) + ' de ' + cpNum(_gpCock.total) + '.</div>' : '')
+    + '</div></div>';
   return h;
 }
 
@@ -13941,6 +14065,12 @@ async function gpAbrir(){
     if (db) {
       var d1 = await db.collection('config').doc('governanca_negociacao').get();
       if (d1 && d1.exists) _gpNeg = (d1.data() || {}).itens || {};
+      var d4 = await db.collection('config').doc('governanca_cockpit').get();
+      if (d4 && d4.exists) {
+        var C = d4.data() || {};
+        _gpCock = { itens:C.itens || [], total:+C.total || 0, arquivo:C.arquivo || '',
+                    atualizadoEm:C.atualizadoEm || '', atualizadoPor:C.atualizadoPor || '' };
+      }
       var d3 = await db.collection('config').doc('governanca_rejeitados').get();
       if (d3 && d3.exists) {
         var R = d3.data() || {};
@@ -13987,6 +14117,18 @@ function gpCopiar(){
     cpCopiaTexto(t.join('\n'), 'Lista de rejeitados copiada.');
     return;
   }
+  if (_gpCard === 'cockpit') {
+    var tc = ['COCKPIT — ' + cpNum(_gpCock.total || 0) + ' item(ns) emitidos em liberação ('
+              + CP_COCKPIT.gerente + ')', ''];
+    _gpCock.itens.forEach(function(i){
+      tc.push('Pedido ' + i.pedido + (i.chave ? ' · ' + i.chave : '')
+        + (i.rc ? ' · RC ' + i.rc + '/' + i.item : '')
+        + (i.comprador ? ' · ' + i.comprador : '')
+        + (i.criacao ? ' · criado em ' + cpDataBR(i.criacao) : ''));
+    });
+    cpCopiaTexto(tc.join('\n'), 'Cockpit copiado.');
+    return;
+  }
   var l = gpLinhasDoCard();
   var t = [govNomeCard(_gpCard).toUpperCase() + ' — ' + cpDataBR(gpDataSel()) + ' (' + l.length + ' RCs)', ''];
   l.forEach(function(x){
@@ -14019,6 +14161,21 @@ function gpBaixarExcel(){
       var wbR = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wbR, wsR, 'Rejeitados');
       XLSX.writeFile(wbR, 'Rejeitados_' + String(gpDataSel()).replace(/-/g, '') + '.xlsx');
+      return;
+    }
+    if (_gpCard === 'cockpit') {
+      var cabC = ['Pedido','Chave','RC','Item','Comprador','Grupo comprador','Fornecedor',
+                  'Gerente','Status PSMV','Criado em','Valor do pedido'];
+      var aoaC = [cabC];
+      _gpCock.itens.forEach(function(i){
+        aoaC.push([i.pedido, i.chave, i.rc, i.item, i.comprador, i.grupo, i.forn,
+                   i.gerente, i.psmv, i.criacao ? cpDataBR(i.criacao) : '', +i.valor || 0]);
+      });
+      var wsC = XLSX.utils.aoa_to_sheet(aoaC);
+      wsC['!cols'] = cabC.map(function(c){ return { wch: Math.max(10, Math.min(30, c.length + 4)) }; });
+      var wbC = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wbC, wsC, 'Cockpit');
+      XLSX.writeFile(wbC, 'Cockpit_' + String(gpDataSel()).replace(/-/g, '') + '.xlsx');
       return;
     }
     var l = gpLinhasDoCard();
