@@ -11150,9 +11150,22 @@ async function cpHandleUpload(file){
     _cpUltimoArquivo = file;
     var buf = await file.arrayBuffer();
     var wb = XLSX.read(buf, { type:'array', cellDates:true });
-    var ws = wb.Sheets[wb.SheetNames[0]];
-    var linhas = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:true });
-    var med = cpLerMedicao(linhas, data);
+
+    // O arquivo pode ter mais de uma planilha — e a medição nem sempre está
+    // na primeira. Lê todas e fica com a que de fato tem o dia escolhido.
+    var nomes = wb.SheetNames || [];
+    var med = null;
+    for (var ip = 0; ip < nomes.length; ip++) {
+      var linhasP = XLSX.utils.sheet_to_json(wb.Sheets[nomes[ip]], { header:1, defval:'', raw:true });
+      var mp = cpLerMedicao(linhasP, data);
+      mp.planilha = nomes[ip];
+      var melhorQue = !med
+        || (mp.total || 0) > (med.total || 0)
+        || ((mp.total || 0) === (med.total || 0) && (mp.naData || 0) > (med.naData || 0));
+      if (melhorQue) med = mp;
+    }
+    if (!med) med = cpLerMedicao([], data);
+    med.planilhas = nomes;
     _cpLeituraCrua = { data:data, cabecalho: med.cabecalhoCompleto || [], linhas: med.linhasDoDia || [] };
 
     if (med.aviso && !med.compradores.length) {
@@ -11168,6 +11181,11 @@ async function cpHandleUpload(file){
           st.innerHTML += '<div style="margin-top:8px;font-size:11px;color:var(--tx2);background:var(--cin);'
             + 'border:1px solid var(--brd);border-radius:7px;padding:8px 10px;line-height:1.7">'
             + '<strong style="color:var(--tx)">O que eu li no arquivo:</strong><br>'
+            + 'Planilha: <strong>' + cpEsc(med.planilha || '—') + '</strong>'
+            + ((med.planilhas && med.planilhas.length > 1)
+                ? ' <span style="color:var(--am)">(o arquivo tem ' + med.planilhas.length
+                  + ': ' + cpEsc(med.planilhas.join(', ')) + ')</span>'
+                : '') + '<br>'
             + 'Comprador: <strong>' + cpEsc(g.comprador) + '</strong> · '
             + 'Status: <strong>' + cpEsc(g.status) + '</strong> · '
             + 'Data: <strong>' + cpEsc(g.data) + '</strong> · '
@@ -11246,6 +11264,9 @@ async function cpHandleUpload(file){
 
 function cpTextoLeitura(med, data){
   var t = [];
+  if (med.planilhas && med.planilhas.length > 1)
+    t.push('Planilha lida: <strong>' + cpEsc(med.planilha || '—') + '</strong> (de '
+           + med.planilhas.length + ').');
   t.push(med.formato === 'dinamizado' ? 'Arquivo já somado por comprador.'
                                       : cpNum(med.lidas) + ' linhas consideradas.');
   if (med.eliminadas) t.push(cpNum(med.eliminadas) + ' item(ns) eliminado(s) fora da conta.');
