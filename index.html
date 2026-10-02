@@ -13096,8 +13096,17 @@ var GOV_CARDS = [
   { chave:'patec',    nome:'Emitir pedido PATEC',           cor:'var(--vd)',  fundo:'var(--vdc)' },
   { chave:'patecman', nome:'Emitir pedido PATEC manual',    cor:'var(--az)',  fundo:'var(--cin)' },
   { chave:'negociar', nome:'Negociar preço',                cor:'var(--am)',  fundo:'var(--amc)' },
-  { chave:'dpv',      nome:'Negociar, acima do limite DPV', cor:'var(--vm)',  fundo:'var(--vmc)' }
+  { chave:'dpv',      nome:'Negociar, acima do limite DPV', cor:'var(--vm)',  fundo:'var(--vmc)' },
+  { chave:'rejeitados', nome:'Rejeitados',                  cor:'var(--vm)',  fundo:'var(--vmc)', proprio:true }
 ];
+// Só estes grupos de compras entram na conta dos rejeitados.
+var GP_GRUPOS = ['L01','L02','L03','L04','L05','L06','L08','L09','L10','L11','L12','L13','L14',
+  'L15','L16','L17','L18','L19','L20','L21','L22','L23','L24','L25','L27','L28','L29','L31',
+  'L32','L33','L34','L35','L36','L37','L38','L39','L40','L41','L43','L44','L45','L46','L47',
+  'L48','L50','L51','L52','L53','L54','L55','L56','L57','L58','USM','USN','USO','USP','USQ','USR'];
+function gpGrupoNosso(v){
+  return GP_GRUPOS.indexOf(String(v == null ? '' : v).trim().toUpperCase()) !== -1;
+}
 function govNomeCard(ch){
   for (var i = 0; i < GOV_CARDS.length; i++) if (GOV_CARDS[i].chave === ch) return GOV_CARDS[i].nome;
   return ch;
@@ -13368,6 +13377,104 @@ var _gpBase  = null;    // { data, itens:[] } — o MAPA do dia
 var _gpNeg   = {};      // rc|seq -> { comentario, data }
 var _gpLb    = { itens:{}, arquivo:'', lidas:0, uteis:0, atualizadoEm:'' };
 var _gpCard  = '';
+var _gpRej   = { itens:[], arquivo:'', lidas:0, fora:0, atualizadoEm:'', atualizadoPor:'' };
+
+// A planilha de rejeitados: conta só os grupos de compras da nossa lista.
+function gpLerRejeitados(linhas){
+  var r = { itens:[], lidas:0, fora:0, aviso:'', grupos:{}, colunas:{} };
+  if (!linhas || !linhas.length) { r.aviso = 'Arquivo vazio.'; return r; }
+  var iCab = -1, cabs = [];
+  for (var k = 0; k < Math.min(linhas.length, 15); k++) {
+    var c = (linhas[k] || []).map(cpNormCab);
+    if (c.indexOf('GRUPO_COMPRADOR') !== -1 || c.indexOf('DATA_REJEICAO') !== -1) { iCab = k; cabs = c; break; }
+  }
+  if (iCab === -1) {
+    r.aviso = 'Não achei a coluna Grupo Comprador — isto é a planilha de rejeitados?';
+    return r;
+  }
+  var ix = function(n){ return _cpAchaCol(cabs, n); };
+  var col = {
+    ger:    ix(['GERENCIA']), pedido: ix(['PEDIDO']), contrato: ix(['CONTRATO']),
+    grupo:  ix(['GRUPO_COMPRADOR','GRUPO_COMPRADORES']),
+    gerGrupo: ix(['GERENCIA_GRUPO_COMPRADOR']),
+    resp:   ix(['RESPONSAVEL_P_GRUPO_COMPRAD','RESPONSAVEL_P_GRUPO_COMPRADOR']),
+    forn:   ix(['FORNECEDOR']), tipo: ix(['TIPO_PEDIDO']),
+    remessa:ix(['MENOR_DATA_REMESSA']), nItens: ix(['N_ITENS']),
+    dataRej:ix(['DATA_REJEICAO']), dias: ix(['DIAS_REJEITADO']),
+    envios: ix(['N_ENVIOS_ARIBA']), prazo: ix(['PRAZO_RECUSA']),
+    motivo: ix(['MOTIVO_RECUSA']), quem: ix(['RESPONSAVEL'])
+  };
+  r.colunas = col;
+  if (col.grupo === -1) { r.aviso = 'Não achei a coluna Grupo Comprador.'; return r; }
+  var pega = function(l, j){ return j === -1 ? '' : String(l[j] == null ? '' : l[j]).trim(); };
+  for (var b = iCab + 1; b < linhas.length; b++) {
+    var l = linhas[b] || [];
+    var pedido = pega(l, col.pedido);
+    var grupo = pega(l, col.grupo);
+    if (!pedido && !grupo) continue;
+    r.lidas++;
+    if (!gpGrupoNosso(grupo)) { r.fora++; continue; }
+    r.grupos[grupo.toUpperCase()] = (r.grupos[grupo.toUpperCase()] || 0) + 1;
+    r.itens.push({
+      gerencia: pega(l, col.ger), pedido: pedido, contrato: pega(l, col.contrato),
+      grupo: grupo.toUpperCase(), gerGrupo: pega(l, col.gerGrupo), resp: pega(l, col.resp),
+      forn: pega(l, col.forn), tipo: pega(l, col.tipo),
+      remessa: cpDataISO(l[col.remessa]), nItens: Math.round(mdNum(l[col.nItens])) || 0,
+      dataRej: cpDataISO(l[col.dataRej]), dias: Math.round(mdNum(l[col.dias])) || 0,
+      envios: Math.round(mdNum(l[col.envios])) || 0,
+      prazo: pega(l, col.prazo), motivo: pega(l, col.motivo), quem: pega(l, col.quem)
+    });
+  }
+  if (!r.itens.length && !r.aviso) {
+    r.aviso = 'Li ' + r.lidas + ' linha(s), mas nenhuma é de um grupo de compras da nossa lista.';
+  }
+  return r;
+}
+
+function gpRejDrop(e){
+  e.preventDefault();
+  var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) gpUploadRejeitados(f);
+}
+
+async function gpUploadRejeitados(file){
+  if (!file) return;
+  var st = document.getElementById('gp-rej-status');
+  if (st) st.innerHTML = '⏳ Lendo os rejeitados...';
+  try {
+    var buf = await file.arrayBuffer();
+    var wb = _lerWorkbookBR(buf, file.name);
+    var nome = wb.SheetNames.indexOf('Export') !== -1 ? 'Export' : wb.SheetNames[0];
+    var linhas = XLSX.utils.sheet_to_json(wb.Sheets[nome], { header:1, defval:'', raw:true });
+    var r = gpLerRejeitados(linhas);
+    if (!r.itens.length) {
+      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ ' + cpEsc(r.aviso) + '</span>';
+      return;
+    }
+    _gpRej = { itens:r.itens, arquivo:file.name, aba:nome, lidas:r.lidas, fora:r.fora,
+               grupos:r.grupos, atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem() };
+    var ok = await gpGravarRej();
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ <strong>' + cpEsc(file.name) + '</strong> — '
+      + cpNum(r.lidas) + ' linhas, <strong>' + cpNum(r.itens.length) + '</strong> dos nossos grupos · '
+      + cpNum(r.fora) + ' de outros grupos fora da conta'
+      + (ok ? '.' : ' <span style="color:var(--am)">(não gravou no Firebase)</span>') + '</span>';
+    gpRender();
+  } catch (e) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Erro ao ler: ' + cpEsc(e.message) + '</span>';
+  }
+}
+
+async function gpGravarRej(){
+  try {
+    var db = getDB(); if (!db) return false;
+    await db.collection('config').doc('governanca_rejeitados').set({
+      itens:_gpRej.itens.slice(0, 4000), arquivo:_gpRej.arquivo || '', aba:_gpRej.aba || '',
+      lidas:+_gpRej.lidas || 0, fora:+_gpRej.fora || 0, grupos:_gpRej.grupos || {},
+      atualizadoEm:_gpRej.atualizadoEm, atualizadoPor:_gpRej.atualizadoPor || ''
+    });
+    return true;
+  } catch (e) { console.warn('gpGravarRej:', e); return false; }
+}
 
 function gpDataSel(){
   var el = document.getElementById('gp-data');
@@ -13426,6 +13533,7 @@ function gpContar(){
     if (e.card !== e.origem) vindos++;
     if ((e.card === 'patec' || e.card === 'patecman') && !e.liberado) aguardando[e.card]++;
   });
+  c.rejeitados = (_gpRej && _gpRej.itens) ? _gpRej.itens.length : 0;
   return { por:c, vindos:vindos, aguardando:aguardando, comData:comData, origem:origem };
 }
 
@@ -13442,14 +13550,12 @@ function gpRender(){
   var av  = document.getElementById('gp-aviso');
   if (!box) return;
   if (!gpItens().length) {
-    box.innerHTML = '';
     if (av) av.innerHTML = '<div style="color:var(--am);padding:.6rem 0">'
       + 'Nenhum MAPA guardado para ' + cpDataBR(gpDataSel()) + '. '
-      + 'Suba o MAPA do dia em <strong>Controle de Pedidos › Distribuição do MAPA</strong>.</div>';
-    gpRenderDetalhe();
-    return;
+      + 'Suba o MAPA do dia em <strong>Controle de Pedidos › Distribuição do MAPA</strong>. '
+      + 'O card de Rejeitados não depende do MAPA.</div>';
   }
-  if (av) {
+  else if (av) {
     av.innerHTML = '<div style="color:var(--tx2);padding:.4rem 0 .7rem">'
       + '<strong style="color:var(--tx)">' + cpNum(gpItens().length) + '</strong> itens do MAPA de '
       + cpDataBR(_gpBase.data) + (_gpBase.arquivo ? ' (' + cpEsc(_gpBase.arquivo) + ')' : '')
@@ -13483,6 +13589,11 @@ function gpRender(){
           ? '<div style="font-size:10px;color:var(--tx2);margin-top:4px">'
             + cpNum(n - (ct.comData[x.chave] || 0)) + ' sem data de negociação</div>'
           : '')
+      + (x.chave === 'rejeitados'
+          ? '<div style="font-size:10px;color:var(--tx2);margin-top:4px">'
+            + (_gpRej.lidas ? cpNum(_gpRej.lidas) + ' linhas · ' + cpNum(_gpRej.fora) + ' de outros grupos'
+                            : 'suba a planilha aqui dentro') + '</div>'
+          : '')
       + '</div>';
   });
   h += '</div>';
@@ -13509,6 +13620,7 @@ function gpRenderDetalhe(){
   var box = document.getElementById('gp-detalhe');
   if (!box) return;
   if (!_gpCard) { box.innerHTML = ''; return; }
+  if (_gpCard === 'rejeitados') { box.innerHTML = gpHtmlRejeitados(); return; }
   var lista = [];
   gpItens().forEach(function(it){
     var e = gpEstado(it);
@@ -13574,6 +13686,87 @@ function gpRenderDetalhe(){
   }
   h += '</div>';
   box.innerHTML = h;
+}
+
+// O card de Rejeitados tem vida própria: a planilha é subida aqui dentro.
+function gpHtmlRejeitados(){
+  var itens = (_gpRej && _gpRej.itens) ? _gpRej.itens.slice() : [];
+  itens.sort(function(a, b){
+    if ((b.dias || 0) !== (a.dias || 0)) return (b.dias || 0) - (a.dias || 0);
+    return String(a.pedido).localeCompare(String(b.pedido));
+  });
+  var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between">'
+    + '<span>Rejeitados — ' + cpNum(itens.length) + ' pedido(s) dos nossos grupos</span>'
+    + '<span style="display:flex;gap:8px">'
+    +   (itens.length ? '<button class="btn btn-s" onclick="gpCopiar()">📋 Copiar</button>'
+                      + '<button class="btn btn-s" onclick="gpBaixarExcel()">⬇ Baixar Excel</button>' : '')
+    +   '<button class="btn btn-s" onclick="gpAbrirCard(\'rejeitados\')">✕ Fechar</button>'
+    + '</span></div>'
+    + '<div style="border:2px dashed var(--brd);border-radius:10px;padding:1.1rem;text-align:center;cursor:pointer;background:var(--cin)"'
+    +   ' onclick="document.getElementById(\'gp-rej-input\').click()"'
+    +   ' ondragover="event.preventDefault()" ondrop="gpRejDrop(event)">'
+    +   '<div style="font-size:22px;margin-bottom:.3rem">📥</div>'
+    +   '<div style="font-size:13px;font-weight:600">Arraste aqui a planilha de rejeitados</div>'
+    +   '<div style="font-size:11px;color:var(--tx2);margin-top:4px">'
+    +     '.xlsx, .xlsb ou .csv — conto só os grupos de compras da nossa lista (' + GP_GRUPOS.length + ')</div>'
+    +   '<input type="file" id="gp-rej-input" accept=".xlsb,.xlsx,.xls,.csv" style="display:none"'
+    +     ' onchange="gpUploadRejeitados(this.files[0]); this.value=\'\';">'
+    + '</div>'
+    + '<div id="gp-rej-status" style="margin-top:.7rem;font-size:12px">'
+    +   (_gpRej.arquivo ? '<span style="color:var(--tx2)">Último arquivo: <strong>' + cpEsc(_gpRej.arquivo)
+        + '</strong>' + (_gpRej.atualizadoEm ? ' — ' + cpDataBR(String(_gpRej.atualizadoEm).slice(0,10)) : '')
+        + ' · ' + cpNum(_gpRej.lidas) + ' linhas, <strong>' + cpNum(itens.length)
+        + '</strong> dos nossos grupos, ' + cpNum(_gpRej.fora) + ' de outros grupos fora da conta.</span>' : '')
+    + '</div>';
+
+  if (!itens.length) {
+    h += '<div style="font-size:12px;color:var(--tx2);margin-top:.8rem">'
+      + 'Nenhum pedido rejeitado nos nossos grupos.</div></div>';
+    return h;
+  }
+
+  // um resumo rápido por grupo e por motivo
+  var porGrupo = {}, porMotivo = {}, itensSoma = 0;
+  itens.forEach(function(i){
+    porGrupo[i.grupo] = (porGrupo[i.grupo] || 0) + 1;
+    porMotivo[i.motivo || '(sem motivo)'] = (porMotivo[i.motivo || '(sem motivo)'] || 0) + 1;
+    itensSoma += (+i.nItens || 0);
+  });
+  var topo = function(o){
+    return Object.keys(o).sort(function(a, b){ return o[b] - o[a]; })
+      .map(function(k){ return cpEsc(k) + ' <strong>' + o[k] + '</strong>'; }).join(' · ');
+  };
+  h += '<div style="font-size:11px;color:var(--tx2);margin-top:.9rem;line-height:1.8">'
+    + '<div><strong style="color:var(--tx)">' + cpNum(itensSoma) + '</strong> itens em '
+    +   cpNum(itens.length) + ' pedidos.</div>'
+    + '<div>Por grupo: ' + topo(porGrupo) + '</div>'
+    + '<div>Por motivo: ' + topo(porMotivo) + '</div></div>';
+
+  h += '<div style="overflow:auto;max-height:520px;margin-top:.8rem"><table><thead><tr>'
+    + '<th>Pedido</th><th>Grupo</th><th>Responsável do grupo</th><th>Fornecedor</th>'
+    + '<th>Tipo</th><th style="text-align:right">Itens</th><th>Rejeitado em</th>'
+    + '<th style="text-align:right">Dias</th><th style="text-align:right">Envios</th>'
+    + '<th>Prazo</th><th>Motivo</th><th>Responsável</th></tr></thead><tbody>';
+  itens.forEach(function(i){
+    var velho = (+i.dias || 0) >= 3;
+    h += '<tr' + (velho ? ' style="background:var(--vmc)"' : '') + '>'
+      + '<td style="font-weight:700;color:var(--az)">' + cpEsc(i.pedido) + '</td>'
+      + '<td style="font-weight:600">' + cpEsc(i.grupo) + '</td>'
+      + '<td style="font-size:10.5px">' + cpEsc(i.resp || '—') + '</td>'
+      + '<td style="font-size:10.5px">' + cpEsc(i.forn || '—') + '</td>'
+      + '<td style="font-size:10.5px">' + cpEsc(i.tipo || '—') + '</td>'
+      + '<td style="text-align:right">' + cpNum(i.nItens) + '</td>'
+      + '<td>' + (i.dataRej ? cpDataBR(i.dataRej) : '—') + '</td>'
+      + '<td style="text-align:right;font-weight:700;color:' + (velho ? 'var(--vm)' : 'var(--tx)') + '">'
+      +   cpNum(i.dias) + '</td>'
+      + '<td style="text-align:right">' + cpNum(i.envios) + '</td>'
+      + '<td style="font-size:10.5px;color:' + (/FORA/i.test(i.prazo) ? 'var(--vm)' : 'var(--vd)') + '">'
+      +   cpEsc(i.prazo || '—') + '</td>'
+      + '<td style="font-size:10.5px">' + cpEsc(i.motivo || '—') + '</td>'
+      + '<td style="font-size:10.5px">' + cpEsc(i.quem || '—') + '</td></tr>';
+  });
+  h += '</tbody></table></div></div>';
+  return h;
 }
 
 function gpSelo(e){
@@ -13748,6 +13941,13 @@ async function gpAbrir(){
     if (db) {
       var d1 = await db.collection('config').doc('governanca_negociacao').get();
       if (d1 && d1.exists) _gpNeg = (d1.data() || {}).itens || {};
+      var d3 = await db.collection('config').doc('governanca_rejeitados').get();
+      if (d3 && d3.exists) {
+        var R = d3.data() || {};
+        _gpRej = { itens:R.itens || [], arquivo:R.arquivo || '', aba:R.aba || '',
+                   lidas:+R.lidas || 0, fora:+R.fora || 0, grupos:R.grupos || {},
+                   atualizadoEm:R.atualizadoEm || '', atualizadoPor:R.atualizadoPor || '' };
+      }
       var d2 = await db.collection('config').doc('governanca_levelboard').get();
       if (d2 && d2.exists) {
         var L = d2.data() || {};
@@ -13776,6 +13976,17 @@ function gpLinhasDoCard(){
 }
 
 function gpCopiar(){
+  if (_gpCard === 'rejeitados') {
+    var t = ['PEDIDOS REJEITADOS — ' + cpNum(_gpRej.itens.length) + ' pedido(s) dos nossos grupos', ''];
+    _gpRej.itens.forEach(function(i){
+      t.push('Pedido ' + i.pedido + ' · ' + i.grupo + ' · ' + (i.forn || '')
+        + (i.dias ? ' · ' + i.dias + ' dia(s) rejeitado' : '')
+        + (i.motivo ? ' · ' + i.motivo : '')
+        + (i.prazo ? ' · ' + i.prazo : ''));
+    });
+    cpCopiaTexto(t.join('\n'), 'Lista de rejeitados copiada.');
+    return;
+  }
   var l = gpLinhasDoCard();
   var t = [govNomeCard(_gpCard).toUpperCase() + ' — ' + cpDataBR(gpDataSel()) + ' (' + l.length + ' RCs)', ''];
   l.forEach(function(x){
@@ -13791,6 +14002,25 @@ function gpCopiar(){
 
 function gpBaixarExcel(){
   try {
+    if (_gpCard === 'rejeitados') {
+      var cabR = ['Pedido','Contrato','Grupo comprador','Gerência','Gerência do grupo',
+                  'Responsável do grupo','Fornecedor','Tipo de pedido','Menor data remessa',
+                  'Nº itens','Data da rejeição','Dias rejeitado','Nº envios Ariba',
+                  'Prazo recusa','Motivo recusa','Responsável'];
+      var aoaR = [cabR];
+      _gpRej.itens.forEach(function(i){
+        aoaR.push([i.pedido, i.contrato, i.grupo, i.gerencia, i.gerGrupo, i.resp, i.forn, i.tipo,
+                   i.remessa ? cpDataBR(i.remessa) : '', i.nItens,
+                   i.dataRej ? cpDataBR(i.dataRej) : '', i.dias, i.envios,
+                   i.prazo, i.motivo, i.quem]);
+      });
+      var wsR = XLSX.utils.aoa_to_sheet(aoaR);
+      wsR['!cols'] = cabR.map(function(c){ return { wch: Math.max(10, Math.min(30, c.length + 4)) }; });
+      var wbR = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wbR, wsR, 'Rejeitados');
+      XLSX.writeFile(wbR, 'Rejeitados_' + String(gpDataSel()).replace(/-/g, '') + '.xlsx');
+      return;
+    }
     var l = gpLinhasDoCard();
     if (!l.length) return;
     var cab = ['Card','RC','Item','Oportunidade','Item oport.','SLA','Segmento','Status do MAPA',
