@@ -10909,6 +10909,21 @@ function cpDataISO(v){
   return '';
 }
 
+// A coluna de eliminação costuma vir vazia quando o item está vivo, mas
+// várias extrações trazem 0 (ou 0,00, "-", "N/A") no lugar do vazio. Isso
+// não é eliminação — é a ausência dela. Tratar 0 como eliminado derrubava
+// o dia inteiro em silêncio.
+function _cpTemEliminacao(v){
+  var t = String(v == null ? '' : v).trim();
+  if (!t) return false;
+  if (/^[0.,\s]+$/.test(t)) return false;        // 0 · 00 · 0,00 · 0.0
+  if (/^[-–—\s]+$/.test(t)) return false;        // - · --
+  var c = t.toUpperCase().replace(/[^A-Z]/g, '');
+  if (c === 'NA' || c === 'NULL' || c === 'NAN' || c === 'NAO'
+      || c === 'FALSE' || c === 'VAZIO') return false;
+  return true;
+}
+
 // 2 = memorizado, 3 = emitido. Qualquer outro status não é "feito" —
 // ele aparece à parte, para nada sumir sem aviso.
 function cpStatusNome(v){
@@ -10938,7 +10953,8 @@ function _cpAchaCol(cabs, nomes){
 function cpLerMedicao(linhas, dataAlvo){
   var r = { compradores:[], memorizado:0, emitido:0, outros:0, total:0,
             lidas:0, foraDaData:0, eliminadas:0, formato:'', colunas:{}, aviso:'',
-            itensMem:[], datasNoArquivo:{}, valoresStatus:{}, cabecalhos:[] };
+            itensMem:[], datasNoArquivo:{}, valoresStatus:{}, cabecalhos:[],
+            naData:0, semData:0, statusNaData:{}, elimNaData:{} };
   if (!linhas || !linhas.length) { r.aviso = 'Arquivo vazio.'; return r; }
 
   // acha a linha de cabeçalho — costuma ser a 1a, mas o arquivo pode
@@ -11003,14 +11019,26 @@ function cpLerMedicao(linhas, dataAlvo){
       var lb = linhas[b] || [];
       var nomeB = String(lb[iQuem] == null ? '' : lb[iQuem]).trim();
       if (!nomeB) continue;
-      if (iEl !== -1 && String(lb[iEl] == null ? '' : lb[iEl]).trim() !== '') { r.eliminadas++; continue; }
+
+      // A data vem ANTES da eliminação: assim dá para dizer quantas linhas
+      // são do dia escolhido antes de qualquer outro corte — era isso que
+      // faltava para enxergar por que o dia vinha zerado.
       if (iDt !== -1 && dataAlvo) {
         var d = cpDataISO(lb[iDt]);
         if (d) r.datasNoArquivo[d] = (r.datasNoArquivo[d] || 0) + 1;
+        else   r.semData++;
         if (d && d !== dataAlvo) { r.foraDaData++; continue; }
       }
-      r.lidas++;
+      r.naData++;
+
       var bruto = String(lb[iSt] == null ? '' : lb[iSt]).trim();
+      var brutoEl = iEl === -1 ? '' : String(lb[iEl] == null ? '' : lb[iEl]).trim();
+      r.statusNaData[bruto || '(vazio)'] = (r.statusNaData[bruto || '(vazio)'] || 0) + 1;
+      r.elimNaData[brutoEl || '(vazio)'] = (r.elimNaData[brutoEl || '(vazio)'] || 0) + 1;
+
+      if (iEl !== -1 && _cpTemEliminacao(brutoEl)) { r.eliminadas++; continue; }
+
+      r.lidas++;
       r.valoresStatus[bruto || '(vazio)'] = (r.valoresStatus[bruto || '(vazio)'] || 0) + 1;
       var st = cpStatusNome(lb[iSt]);
       var oB = pega(nomeB);
@@ -11043,12 +11071,18 @@ function cpLerMedicao(linhas, dataAlvo){
     });
     var cab = (linhas[iCab] || []).map(function(x){ return String(x == null ? '' : x).trim(); });
     var nm = function(j){ return j === -1 ? '— não encontrada' : (cab[j] || ('coluna ' + (j + 1))); };
+    var topo = function(obj, n){
+      return Object.keys(obj || {})
+        .sort(function(a, b){ return obj[b] - obj[a]; })
+        .slice(0, n || 6).map(function(v){ return v + ' (' + obj[v] + ')'; });
+    };
     r.diag = {
       comprador: nm(iQuem), status: nm(iSt), data: nm(iDt), eliminacao: nm(iEl),
       lidas: r.lidas, eliminadas: r.eliminadas, foraDaData: r.foraDaData,
-      status5: Object.keys(r.valoresStatus)
-        .sort(function(a, b){ return r.valoresStatus[b] - r.valoresStatus[a]; })
-        .slice(0, 6).map(function(v){ return v + ' (' + r.valoresStatus[v] + ')'; })
+      naData: r.naData, semData: r.semData,
+      status5: topo(r.valoresStatus),
+      statusNaData: topo(r.statusNaData),
+      elimNaData: topo(r.elimNaData, 5)
     };
     if (ds.length) {
       r.dataSugerida = ds[0];
@@ -11114,12 +11148,18 @@ async function cpHandleUpload(file){
             + 'Status: <strong>' + cpEsc(g.status) + '</strong> · '
             + 'Data: <strong>' + cpEsc(g.data) + '</strong> · '
             + 'Eliminação: <strong>' + cpEsc(g.eliminacao) + '</strong><br>'
-            + cpNum(g.lidas) + ' linha(s) consideradas · ' + cpNum(g.eliminadas) + ' eliminada(s) · '
-            + cpNum(g.foraDaData) + ' de outra data<br>'
-            + 'Valores que apareceram na coluna de status: <strong>'
-            + cpEsc(g.status5.join(' · ') || 'nenhum') + '</strong><br>'
+            + cpNum(g.foraDaData) + ' linha(s) de outra data'
+            + (g.semData ? ' · ' + cpNum(g.semData) + ' sem data que eu entenda' : '') + '<br>'
+            + '<strong style="color:var(--tx)">' + cpNum(g.naData) + '</strong> linha(s) na data escolhida — '
+            + 'dessas, ' + cpNum(g.eliminadas) + ' eliminada(s) e <strong>' + cpNum(g.lidas)
+            + '</strong> que chegaram na conta<br>'
+            + 'Status das linhas do dia: <strong>'
+            + cpEsc(g.statusNaData.join(' · ') || 'nenhuma linha no dia') + '</strong><br>'
+            + 'Coluna de eliminação nas linhas do dia: <strong>'
+            + cpEsc(g.elimNaData.join(' · ') || '—') + '</strong><br>'
             + '<span style="color:var(--am)">Conto como feito só o status <strong>2</strong> (memorizado) e '
-            + '<strong>3</strong> (emitido). Se os valores acima forem outros, me mande esta linha que eu ajusto.</span>'
+            + '<strong>3</strong> (emitido), e deixo de fora o que tiver código de eliminação. '
+            + 'Se os valores acima forem outros, me mande esta linha que eu ajusto.</span>'
             + '</div>';
         }
         _cpArquivoPendente = file;
@@ -11173,6 +11213,8 @@ function cpTextoLeitura(med, data){
   t.push(med.formato === 'dinamizado' ? 'Arquivo já somado por comprador.'
                                       : cpNum(med.lidas) + ' linhas consideradas.');
   if (med.eliminadas) t.push(cpNum(med.eliminadas) + ' item(ns) eliminado(s) fora da conta.');
+  if (med.semData) t.push('<span style="color:var(--am)">' + cpNum(med.semData)
+    + ' linha(s) sem data legível — entraram em ' + cpDataBR(data) + '.</span>');
   if (med.foraDaData) t.push(cpNum(med.foraDaData) + ' de outras datas fora da conta (a medição é de ' + cpDataBR(data) + ').');
   if (med.outros) t.push('<span style="color:var(--am)">' + cpNum(med.outros)
     + ' linha(s) com outro status — não entram em "feito". Me avise se elas deveriam contar.</span>');
