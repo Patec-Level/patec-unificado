@@ -1315,7 +1315,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
         <div class="stabs" style="margin-bottom:1rem">
           <button class="stab active" id="cp-sub-btn-pedidos" onclick="cpSubTab('pedidos',this)">📦 Controle de Pedidos</button>
-          <button class="stab" id="cp-sub-btn-abertura" onclick="cpSubTab('abertura',this)">📂 Abertura de PATEC</button>
           <button class="stab" id="cp-sub-btn-mapa" onclick="cpSubTab('mapa',this)">🗺️ Distribuição do MAPA</button>
           <button class="stab" id="cp-sub-btn-statusb" onclick="cpSubTab('statusb',this)">📋 Status B</button>
         </div>
@@ -1373,97 +1372,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         </div><!-- /cp-sub-pedidos -->
 
         <!-- ── ABERTURA DE PATEC ── -->
-        <div id="cp-sub-abertura" style="display:none">
-
-          <div class="cd" style="border-top:3px solid var(--azm)">
-            <div class="cd-t">👥 Equipe e cota da abertura</div>
-            <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
-              <div>
-                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">DATA</label>
-                <input type="date" id="ap-data" onchange="apTrocarData()"
-                  style="font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;color:var(--az);font-weight:600">
-              </div>
-              <div>
-                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">QUANTAS PESSOAS</label>
-                <input type="number" id="ap-qtd-pessoas" min="1" step="1" placeholder="5"
-                  style="width:110px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
-              </div>
-              <div>
-                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">ITENS POR PESSOA / DIA</label>
-                <input type="number" id="ap-cota-dia" min="1" step="1" placeholder="30"
-                  style="width:130px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
-              </div>
-              <div>
-                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">ITENS POR PESSOA / SEMANA</label>
-                <input type="number" id="ap-cota-semana" min="1" step="1" placeholder="150"
-                  style="width:150px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
-              </div>
-              <div>
-                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">DIAS ÚTEIS</label>
-                <input type="number" id="ap-dias" min="1" max="7" step="1" placeholder="5"
-                  style="width:100px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
-              </div>
-              <div style="flex:1;min-width:260px">
-                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">NOMES DAS PESSOAS (um por linha)</label>
-                <textarea id="ap-nomes" rows="4" placeholder="Lory&#10;Ludy&#10;Wanessa"
-                  style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px;font-family:inherit;resize:vertical"></textarea>
-              </div>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:.8rem;flex-wrap:wrap;align-items:center">
-              <button class="btn btn-p" onclick="apSalvarEquipe()">💾 Salvar equipe e cota</button>
-              <span id="ap-equipe-aviso" style="font-size:11.5px"></span>
-            </div>
-          </div>
-
-          <div class="cd">
-            <div class="cd-t">📂 Planilha de abertura</div>
-            <div style="border:2px dashed var(--brd);border-radius:10px;padding:1.3rem;text-align:center;cursor:pointer;background:var(--cin)"
-              onclick="document.getElementById('ap-file-input').click()"
-              ondragover="event.preventDefault()" ondrop="apHandleDrop(event)">
-              <div style="font-size:24px;margin-bottom:.3rem">📄</div>
-              <div style="font-size:13px;font-weight:600">Arraste aqui a planilha de abertura</div>
-              <div style="font-size:11px;color:var(--tx2);margin-top:4px">
-                RC · SEQ · NUMERO_OPORTUNIDADE · SLA_DIAS · PID
-              </div>
-              <input type="file" id="ap-file-input" accept=".xlsx,.xls,.csv" style="display:none"
-                onchange="apHandleUpload(this.files[0]); this.value='';">
-            </div>
-            <div id="ap-status" style="margin-top:.7rem;font-size:12px"></div>
-            <div style="display:flex;gap:8px;margin-top:.8rem;flex-wrap:wrap">
-              <button class="btn btn-p" onclick="apDistribuir()">⚖ Distribuir entre a equipe</button>
-              <button class="btn btn-s" onclick="apRefazerTudo()" title="Ignora as atribuições anteriores e sorteia tudo de novo">♻ Refazer do zero</button>
-            </div>
-            <div style="font-size:10.5px;color:var(--tx2);margin-top:6px;line-height:1.6">
-              A distribuição é da <strong>semana inteira, separada por dia</strong>.
-              PID primeiro · SLA maior primeiro · a mesma oportunidade (e a mesma RC) sempre com a
-              mesma pessoa e no mesmo dia, mesmo que passe da cota do dia ·
-              quem já recebeu uma RC continua com ela ·
-              o que não couber nas cotas fica na fila, sem ser enviado.
-            </div>
-          </div>
-
-          <div id="ap-painel"></div>
-          <div id="ap-equipe"></div>
-          <div id="ap-lista"></div>
-
-          <div class="cd">
-            <div class="cd-t">📏 Medição da abertura</div>
-            <div style="font-size:11.5px;color:var(--tx2);margin-bottom:.7rem">
-              Suba a mesma extração, atualizada. O que sumiu da lista foi aberto.
-            </div>
-            <div style="border:2px dashed var(--brd);border-radius:10px;padding:1.1rem;text-align:center;cursor:pointer;background:var(--cin)"
-              onclick="document.getElementById('ap-med-input').click()"
-              ondragover="event.preventDefault()" ondrop="apMedDrop(event)">
-              <div style="font-size:13px;font-weight:600">Arraste aqui a extração atualizada</div>
-              <input type="file" id="ap-med-input" accept=".xlsx,.xls,.csv" style="display:none"
-                onchange="apMedirUpload(this.files[0]); this.value='';">
-            </div>
-            <div id="ap-med-status" style="margin-top:.7rem;font-size:12px"></div>
-          </div>
-
-          <div id="ap-medicao"></div>
-        </div><!-- /cp-sub-abertura -->
-
         <!-- ══ DISTRIBUIÇÃO DO MAPA ═══════════════════════════════ -->
         <div id="cp-sub-mapa" style="display:none">
 
@@ -1539,6 +1447,29 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               cada item vai para quem atua naquela atividade · SLA maior primeiro ·
               em Emitir Pedido, os itens <strong>L</strong> e <strong>Q</strong> são repartidos por igual ·
               o que não couber nas cotas fica na fila.
+            </div>
+          </div>
+
+          <div class="cd">
+            <div class="cd-t" style="justify-content:space-between">
+              <span>⭐ Itens prioritários</span>
+              <button class="btn btn-s" onclick="mdPrioLimpar()">↺ Limpar a lista</button>
+            </div>
+            <div style="border:2px dashed var(--brd);border-radius:10px;padding:1.1rem;text-align:center;cursor:pointer;background:var(--cin)"
+              onclick="document.getElementById('md-prio-input').click()"
+              ondragover="event.preventDefault()" ondrop="mdPrioDrop(event)">
+              <div style="font-size:22px;margin-bottom:.3rem">⭐</div>
+              <div style="font-size:13px;font-weight:600">Arraste aqui a planilha de itens prioritários</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:4px">
+                .xlsx, .xlsb ou .csv — leio RC e item; só com a RC, a RC inteira vira prioritária
+              </div>
+              <input type="file" id="md-prio-input" accept=".xlsb,.xlsx,.xls,.csv" style="display:none"
+                onchange="mdPrioUpload(this.files[0]); this.value='';">
+            </div>
+            <div id="md-prio-status" style="margin-top:.7rem;font-size:12px"></div>
+            <div style="font-size:10.5px;color:var(--tx2);margin-top:6px;line-height:1.6">
+              É a mesma regra que existia na Abertura de PATEC: o que está nesta lista vai
+              <strong>na frente</strong> na hora de distribuir, antes do SLA.
             </div>
           </div>
 
@@ -11882,7 +11813,7 @@ function apSubAtiva(){
   return el && el.style.display !== 'none';
 }
 function cpSubTab(qual, btn){
-  ['pedidos','abertura','mapa','statusb'].forEach(function(k){
+  ['pedidos','mapa','statusb'].forEach(function(k){
     var el = document.getElementById('cp-sub-' + k);
     if (el) el.style.display = (qual === k) ? 'block' : 'none';
     var b = document.getElementById('cp-sub-btn-' + k);
@@ -11897,7 +11828,6 @@ function cpSubTab(qual, btn){
   // fora: dentro do ADM quem carregava era o setAdmTab, e no módulo novo
   // não havia ninguém — por isso o dia e o histórico vinham vazios.
   if (qual === 'pedidos')  cpAbrir();
-  if (qual === 'abertura') apAbrir();
   if (qual === 'mapa')     mdAbrir();
   if (qual === 'statusb')  stbAbrir();
 }
@@ -13166,9 +13096,13 @@ var MD_PRAZO_VALIDO = 90;
 // Os três que a equipe distribui. Os dois de PATEC aparecem na
 // Governança, mas não entram na matriz de atividades.
 var MD_STATUS = [
-  { chave:'emitir',   nome:'Emitir Pedido',                 cor:'#3266AD' },
-  { chave:'negociar', nome:'Negociar Preço Excessivo',      cor:'var(--am)' },
-  { chave:'dpv',      nome:'Negociar, acima do limite DPV', cor:'var(--vm)' }
+  { chave:'emitir',    nome:'Emitir Pedido',                 cor:'#3266AD' },
+  { chave:'negociar',  nome:'Negociar Preço Excessivo',      cor:'var(--am)' },
+  { chave:'dpv',       nome:'Negociar, acima do limite DPV', cor:'var(--vm)' },
+  // A antiga aba Abertura de PATEC virou atividade daqui: o próprio MAPA
+  // já traz esses dois na coluna A.
+  { chave:'patecgm',   nome:'Abrir PATEC Grupo de Mercadoria Obrigatório', cor:'var(--vd)' },
+  { chave:'pateciden', nome:'Abrir PATEC idêntico não',      cor:'var(--azm)' }
 ];
 // Os cinco cards da Governança, na ordem que ele pediu.
 var GOV_CARDS = [
@@ -13207,6 +13141,10 @@ function mdStatusChave(v){
   }
   if (t.indexOf('ACIMA_DO_LIMITE_DPV') !== -1 || t.indexOf('LIMITE_DPV') !== -1) return 'dpv';
   if (t.indexOf('NEGOCIAR_PRECO') !== -1) return 'negociar';
+  if (t.indexOf('ABRIR_PATEC') !== -1) {
+    if (t.indexOf('GRUPO_DE_MERCADORIA') !== -1 || t.indexOf('GRUPO_MERCADORIA') !== -1) return 'patecgm';
+    if (t.indexOf('IDENTICO') !== -1) return 'pateciden';
+  }
   return '';
 }
 function mdStatusNome(ch){
@@ -13322,13 +13260,14 @@ function mdLerMapa(linhas){
       dpv: !!(kd2 && somaDpv[kd2] > MD_LIMITE_DPV)
     };
     it.chave = it.rc + '|' + it.seq;
+    it.prioritario = mdPrioEh(it.rc, it.seq);
     r.itens.push(it);
     if (r.porStatus[ch] !== undefined) r.porStatus[ch]++;
     else r.porStatus[ch] = 1;
   }
   r.total = r.itens.length;
-  if (!r.total) r.aviso = 'Nenhum item de Emitir Pedido, Emitir Pedido PATEC, Negociar Preço Excessivo '
-                        + 'ou Negociar acima do limite DPV.';
+  if (!r.total) r.aviso = 'Nenhum item nos status que eu trato: Emitir Pedido, Emitir Pedido PATEC, '
+                        + 'Negociar Preço Excessivo, acima do limite DPV e os dois de Abrir PATEC.';
   return r;
 }
 
@@ -14315,6 +14254,128 @@ function gpBaixarExcel(){
   } catch (e) { console.warn('gpBaixarExcel:', e); }
 }
 
+// ── ITENS PRIORITÁRIOS ────────────────────────────────────────────
+// A prioridade que existia na Abertura de PATEC (os PID na frente) agora
+// vem de uma lista que ele sobe. Guardo por RC+item e também só por RC:
+// quando a planilha traz só a RC, a RC inteira é prioritária.
+var _mdPrio = { chaves:{}, rcs:{}, arquivo:'', lidas:0, itens:0, soRc:0, atualizadoEm:'' };
+
+function mdPrioEh(rc, seq){
+  if (!_mdPrio) return false;
+  if (_mdPrio.rcs && _mdPrio.rcs[String(rc == null ? '' : rc).trim()]) return true;
+  return !!(_mdPrio.chaves && _mdPrio.chaves[String(rc == null ? '' : rc).trim() + '|'
+            + String(seq == null ? '' : seq).trim()]);
+}
+
+function mdLerPrioritarios(linhas){
+  var r = { chaves:{}, rcs:{}, lidas:0, itens:0, soRc:0, aviso:'' };
+  if (!linhas || !linhas.length) { r.aviso = 'Arquivo vazio.'; return r; }
+  // acha o cabeçalho; sem cabeçalho, coluna A é a RC e B é o item
+  var iCab = -1, iRc = 0, iIt = 1;
+  for (var k = 0; k < Math.min(linhas.length, 15); k++) {
+    var c = (linhas[k] || []).map(cpNormCab);
+    var a = _cpAchaCol(c, ['RC','REQUISICAO','NUMERO_RC','NUM_RC','REQUISICAO_COMPRA']);
+    if (a !== -1) {
+      iCab = k; iRc = a;
+      iIt = _cpAchaCol(c, ['SEQ','ITEM','LINHAREQUISICAO','LINHA_REQUISICAO','ITEM_RC','ITEM_DA_RC']);
+      break;
+    }
+  }
+  var pega = function(l, j){ return j === -1 ? '' : String(l[j] == null ? '' : l[j]).trim(); };
+  for (var b = iCab + 1; b < linhas.length; b++) {
+    var l = linhas[b] || [];
+    var rc = pega(l, iRc).replace(/\.0+$/, '');
+    if (!rc || !/^\d+$/.test(rc)) continue;
+    r.lidas++;
+    var it = pega(l, iIt).replace(/\.0+$/, '');
+    if (it) { r.chaves[rc + '|' + it] = 1; r.itens++; }
+    else    { r.rcs[rc] = 1; r.soRc++; }
+  }
+  if (!r.lidas) r.aviso = 'Não achei nenhuma RC na planilha.';
+  return r;
+}
+
+function mdPrioDrop(e){
+  e.preventDefault();
+  var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) mdPrioUpload(f);
+}
+
+async function mdPrioUpload(file){
+  if (!file) return;
+  var st = document.getElementById('md-prio-status');
+  if (st) st.innerHTML = '⏳ Lendo os prioritários...';
+  try {
+    var buf = await file.arrayBuffer();
+    var wb = _lerWorkbookBR(buf, file.name);
+    var linhas = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, defval:'', raw:true });
+    var r = mdLerPrioritarios(linhas);
+    if (!r.lidas) {
+      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ ' + cpEsc(r.aviso) + '</span>';
+      return;
+    }
+    _mdPrio = { chaves:r.chaves, rcs:r.rcs, arquivo:file.name, lidas:r.lidas,
+                itens:r.itens, soRc:r.soRc, atualizadoEm:new Date().toISOString(),
+                atualizadoPor:cpQuem() };
+    var ok = await mdPrioGravar();
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ <strong>' + cpEsc(file.name) + '</strong> — '
+      + cpNum(r.lidas) + ' linha(s): ' + cpNum(r.itens) + ' item(ns) e ' + cpNum(r.soRc)
+      + ' RC(s) inteiras' + (ok ? '.' : ' <span style="color:var(--am)">(não gravou no Firebase)</span>')
+      + '</span>';
+    mdRemarcarPrioritarios();
+  } catch (e) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Erro ao ler: ' + cpEsc(e.message) + '</span>';
+  }
+}
+
+// O que já está lido na tela é remarcado na hora, sem subir o MAPA de novo.
+function mdRemarcarPrioritarios(){
+  if (_mdBase && _mdBase.itens) _mdBase.itens.forEach(function(i){ i.prioritario = mdPrioEh(i.rc, i.seq); });
+  if (_mdrBase && _mdrBase.itens) _mdrBase.itens.forEach(function(i){ i.prioritario = mdPrioEh(i.rc, i.seq); });
+  if (_mdDist && _mdDist.res) {
+    (_mdDist.res.lista || []).forEach(function(p){
+      (p.itens || []).forEach(function(i){ i.prioritario = mdPrioEh(i.rc, i.seq); });
+    });
+  }
+  mdRenderResumo();
+  mdRender();
+}
+
+async function mdPrioGravar(){
+  try {
+    var db = getDB(); if (!db) return false;
+    await db.collection('config').doc('distribuicao_mapa_prioritarios').set(_mdPrio);
+    return true;
+  } catch (e) { console.warn('mdPrioGravar:', e); return false; }
+}
+
+async function mdPrioCarregar(){
+  try {
+    var db = getDB(); if (!db) return;
+    var doc = await db.collection('config').doc('distribuicao_mapa_prioritarios').get();
+    if (doc && doc.exists) {
+      var d = doc.data() || {};
+      _mdPrio = { chaves:d.chaves || {}, rcs:d.rcs || {}, arquivo:d.arquivo || '',
+                  lidas:+d.lidas || 0, itens:+d.itens || 0, soRc:+d.soRc || 0,
+                  atualizadoEm:d.atualizadoEm || '' };
+      var st = document.getElementById('md-prio-status');
+      if (st && _mdPrio.arquivo) st.innerHTML = '<span style="color:var(--tx2)">Última lista: <strong>'
+        + cpEsc(_mdPrio.arquivo) + '</strong> — ' + cpNum(_mdPrio.itens) + ' item(ns) e '
+        + cpNum(_mdPrio.soRc) + ' RC(s) inteiras.</span>';
+    }
+  } catch (e) { console.warn('mdPrioCarregar:', e); }
+}
+
+async function mdPrioLimpar(){
+  if (!confirm('Limpar a lista de itens prioritários?')) return;
+  _mdPrio = { chaves:{}, rcs:{}, arquivo:'', lidas:0, itens:0, soRc:0,
+              atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem() };
+  await mdPrioGravar();
+  var st = document.getElementById('md-prio-status');
+  if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Lista limpa.</span>';
+  mdRemarcarPrioritarios();
+}
+
 // ── MAPA DE REAPROVEITAMENTO ──────────────────────────────────────
 // Um mesmo dia pode ter vários mapas caminhando juntos. O reap vem por
 // LOTE: lote que nunca rodou entra inteiro; lote que já rodou volta só
@@ -14456,6 +14517,7 @@ function mdLerReap(linhas, loteDigitado, dataLote){
       dpvGrupo:'', dpvValor:0, dpvItens:0, dpv:false
     };
     it.chave = it.rc + '|' + it.seq;
+    it.prioritario = mdPrioEh(it.rc, it.seq);
     r.itens.push(it);
     L.entram++;
   }
@@ -14637,7 +14699,8 @@ async function mdrEsquecerLotes(){
 // PATEC e PATEC manual aparecem na Governança, mas não são repartidos
 // pela matriz de atividades — ninguém marcou atividade para eles.
 function mdEntraNaDistribuicao(it){
-  return it.statusChave === 'emitir' || it.statusChave === 'negociar' || it.statusChave === 'dpv';
+  for (var i = 0; i < MD_STATUS.length; i++) if (MD_STATUS[i].chave === it.statusChave) return true;
+  return false;
 }
 
 function mdBlocos(itens){
@@ -14645,13 +14708,14 @@ function mdBlocos(itens){
   (itens || []).forEach(function(it, i){
     var k = it.op ? ('OP:' + it.op) : ('RC:' + (it.rc || ('~' + i)));
     if (!mapa[k]) {
-      mapa[k] = { id:k, itens:[], slaMax:0, porStatus:{}, statuses:[], tipoEmitir:'' };
+      mapa[k] = { id:k, itens:[], slaMax:0, porStatus:{}, statuses:[], tipoEmitir:'', prio:false };
       MD_STATUS.forEach(function(x){ mapa[k].porStatus[x.chave] = 0; });
     }
     var b = mapa[k];
     b.itens.push(it);
     b.porStatus[it.statusChave] = (b.porStatus[it.statusChave] || 0) + 1;
     if (it.sla > b.slaMax) b.slaMax = it.sla;
+    if (it.prioritario) b.prio = true;
     if (it.statusChave === 'emitir' && !b.tipoEmitir && (it.tipo === 'L' || it.tipo === 'Q')) {
       b.tipoEmitir = it.tipo;
     }
@@ -14663,9 +14727,11 @@ function mdBlocos(itens){
       .filter(function(ch){ return b.porStatus[ch] > 0; });
     return b;
   });
-  // SLA maior primeiro; empate: bloco maior e depois a RC, para a
+  // Prioritário na frente de tudo — é a regra que veio da Abertura de
+  // PATEC. Depois SLA maior; empate: bloco maior e depois a RC, para a
   // ordem não mudar de uma rodada para outra
   out.sort(function(a, b){
+    if (!!b.prio !== !!a.prio) return b.prio ? 1 : -1;
     if (b.slaMax !== a.slaMax) return b.slaMax - a.slaMax;
     if (b.n !== a.n) return b.n - a.n;
     return String(a.itens[0].rc).localeCompare(String(b.itens[0].rc));
@@ -14998,6 +15064,9 @@ function mdRenderEquipe(){
 
 function mdSinais(i){
   var t = [];
+  if (i.prioritario) t.push('<span title="Está na lista de itens prioritários" style="background:var(--amc);'
+    + 'color:var(--am);border:1px solid var(--am);border-radius:4px;padding:1px 5px;font-size:9.5px;'
+    + 'font-weight:700">★ PRIORITÁRIO</span>');
   if (i.origem === 'reap') t.push('<span title="Veio do MAPA de reaproveitamento · ' + cpEsc(i.lote || '')
     + (i.statusReap ? ' · status na planilha: ' + cpEsc(i.statusReap) : '')
     + '" style="background:var(--vdc);color:var(--vd);border:1px solid var(--vd);border-radius:4px;padding:1px 5px;font-size:9.5px;font-weight:700">REAP '
@@ -15124,12 +15193,13 @@ function mdBaixarExcel(){
   if (!_mdDist) return;
   try {
     var d = _mdDist;
-    var cab = ['Comprador','Dia','Atividade','RC','Item','Oportunidade','Item Oport.','SLA','SLA alto',
+    var cab = ['Comprador','Dia','Prioritário','Atividade','RC','Item','Oportunidade','Item Oport.','SLA','SLA alto',
                'Tipo família','Segmento','Família','Prazo','Dias do encerramento','Fluxo','N. acompanhamento',
                'NM material','Centro','Valor pedido','Acima do limite DPV','Valor do grupo DPV',
                'Fora da atividade','Fornecedor','Texto breve'];
     var linha = function(quem, i){
-      return [quem, i.dia ? 'Dia ' + i.dia : '', mdStatusNome(i.statusChave), i.rc, i.seq, i.op, i.itemOp,
+      return [quem, i.dia ? 'Dia ' + i.dia : '', i.prioritario ? 'SIM' : '',
+              mdStatusNome(i.statusChave), i.rc, i.seq, i.op, i.itemOp,
               i.sla, i.slaAlto ? 'SIM' : '', i.tipo, i.seg, i.familia, i.prazo,
               i.prazoDias == null ? '' : i.prazoDias, i.fluxo, i.acomp, i.nm, i.centro, i.valor,
               i.dpv ? 'SIM' : '', i.dpv ? i.dpvValor : '', i.foraAtividade ? 'SIM' : '', i.forn, i.texto];
@@ -15203,6 +15273,7 @@ async function mdSalvarDia(){
       return { rc:i.rc, seq:i.seq, op:i.op, sla:i.sla, tipo:i.tipo, seg:i.seg,
                statusChave:i.statusChave, dia:+i.dia || 0, fluxo:i.fluxo, prazo:i.prazo,
                dpv:!!i.dpv, valor:i.valor, foraAtividade:!!i.foraAtividade,
+               prioritario:!!i.prioritario,
                origem:i.origem || 'mapa', lote:i.lote || '', statusReap:i.statusReap || '',
                statusArquivo:i.statusArquivo || '', statusMarcado:!!i.statusMarcado,
                dataLote:i.dataLote || '' };
@@ -15256,6 +15327,7 @@ async function mdCarregarDia(data){
 }
 
 async function mdAbrir(){
+  await mdPrioCarregar();
   await mdrCarregarLotes();
   await mdrCarregarStatusManual();
   var el = document.getElementById('md-data');
