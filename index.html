@@ -1519,6 +1519,33 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             </div>
           </div>
 
+          <div class="cd">
+            <div class="cd-t">♻️ MAPA de reaproveitamento</div>
+            <div style="border:2px dashed var(--brd);border-radius:10px;padding:1.3rem;text-align:center;cursor:pointer;background:var(--cin)"
+              onclick="document.getElementById('mdr-file-input').click()"
+              ondragover="event.preventDefault()" ondrop="mdrDrop(event)">
+              <div style="font-size:24px;margin-bottom:.3rem">♻️</div>
+              <div style="font-size:13px;font-weight:600">Arraste aqui o MAPA de reap</div>
+              <div style="font-size:11px;color:var(--tx2);margin-top:4px">
+                .xlsx, .xlsb ou .csv — leio a aba LOTE e separo por lote
+              </div>
+              <input type="file" id="mdr-file-input" accept=".xlsb,.xlsx,.xls,.csv" style="display:none"
+                onchange="mdrUpload(this.files[0]); this.value='';">
+            </div>
+            <div id="mdr-status" style="margin-top:.7rem;font-size:12px"></div>
+            <div id="mdr-resumo"></div>
+            <div style="font-size:10.5px;color:var(--tx2);margin-top:8px;line-height:1.6">
+              Item que já tem <strong>pedido vinculado</strong> fica de fora ·
+              <strong>lote novo</strong> entra inteiro ·
+              <strong>lote que já rodou</strong> volta só com status vazio, PENDENTE ou PEDIDO MEMORIZADO ·
+              os itens de reap são repartidos em <strong>quantidade igual</strong> entre todos os
+              compradores da equipe, sem olhar a matriz de atividades, dentro da mesma cota do MAPA do dia.
+            </div>
+            <div style="margin-top:.7rem">
+              <button class="btn btn-s" onclick="mdrEsquecerLotes()">↺ Esquecer os lotes já rodados</button>
+            </div>
+          </div>
+
           <div id="md-painel"></div>
           <div id="md-equipe"></div>
           <div id="md-lista"></div>
@@ -13246,6 +13273,245 @@ async function mdSalvarEquipe(){
 
 // Blocos: a mesma OPORTUNIDADE anda sempre junta, seja qual for o
 // status dos itens dela. Nunca vai para dois compradores.
+
+// ── MAPA DE REAPROVEITAMENTO ──────────────────────────────────────
+// Um mesmo dia pode ter vários mapas caminhando juntos. O reap vem por
+// LOTE: lote que nunca rodou entra inteiro; lote que já rodou volta só
+// com o que ainda não foi emitido. Item que já tem pedido vinculado
+// (RC + item) nunca volta.
+var _mdrBase  = null;
+var _mdrLotes = { lotes:{}, atualizadoEm:'', atualizadoPor:'' };
+
+function mdrTemPedido(v){
+  var t = String(v == null ? '' : v).trim();
+  if (!t) return false;
+  if (/^[0.,\s-]+$/.test(t)) return false;        // 0, 0,00, "-"
+  if (t.charAt(0) === '#') return false;          // #N/A, #N/D, #REF! — o PROCV não achou
+  return true;
+}
+
+// Status que voltam para a equipe num lote já conhecido.
+function mdrVolta(status){
+  var c = cpNormCab(status);
+  if (!c) return true;                            // vazio
+  if (c.indexOf('PENDENTE') === 0) return true;   // PENDENTE e PENDENTE - URGENTE!
+  if (c.indexOf('PEDIDO_MEMORIZADO') === 0) return true;
+  return false;
+}
+
+function mdrLoteConhecido(lote){
+  return !!(_mdrLotes && _mdrLotes.lotes && _mdrLotes.lotes[lote]);
+}
+
+function mdLerReap(linhas){
+  var r = { itens:[], lidas:0, total:0, aviso:'', lotes:{},
+            comPedido:0, foraDoStatus:0, semRc:0 };
+  if (!linhas || !linhas.length) { r.aviso = 'Arquivo vazio.'; return r; }
+
+  var iCab = -1, cabs = [];
+  for (var k = 0; k < Math.min(linhas.length, 15); k++) {
+    var c = (linhas[k] || []).map(cpNormCab);
+    if (c.indexOf('LOTE_DO_REAP') !== -1 || c.indexOf('PEDIDO_VINC') !== -1) { iCab = k; cabs = c; break; }
+  }
+  if (iCab === -1) {
+    r.aviso = 'Não achei as colunas do reap (LOTE DO REAP / PEDIDO VINC.) — isto é o mapa de reaproveitamento?';
+    return r;
+  }
+
+  var ix = function(nomes){ return _cpAchaCol(cabs, nomes); };
+  var col = {
+    lote:   ix(['LOTE_DO_REAP','LOTE_REAP']),
+    status: ix(['STATUS']),
+    pedido: ix(['PEDIDO_VINC','PEDIDO_VINCULADO']),
+    rc:     ix(['RC']), item: ix(['ITEM']),
+    grupo:  ix(['GRUPO_COMPRADOR']), insp: ix(['INSP']),
+    prazo:  ix(['PRAZO_DE_ENTREGA']), texto: ix(['TEXTO_BREVE']),
+    forn:   ix(['FORNECEDOR']), nm: ix(['CODIGO_SAP','MATERIAL']),
+    centro: ix(['CENTRO']), valor: ix(['PRECO_TOTAL']),
+    obs:    ix(['OBSERVACAO']), acomp: ix(['N_DE_ACOMPANHAMENTO']),
+    familia:ix(['FAMILIA'])
+  };
+  r.colunas = col;
+  if (col.rc === -1) { r.aviso = 'Não achei a coluna RC no mapa de reap.'; return r; }
+
+  var pega = function(l, j){ return j === -1 ? '' : String(l[j] == null ? '' : l[j]).trim(); };
+  var vazias = 0;
+
+  for (var b = iCab + 1; b < linhas.length; b++) {
+    var l = linhas[b] || [];
+    var rc = pega(l, col.rc);
+    var lote = pega(l, col.lote) || '(sem lote)';
+    if (!rc) {
+      // a aba costuma ter centenas de milhares de linhas em branco no fim
+      if (++vazias > 200) break;
+      r.semRc++;
+      continue;
+    }
+    vazias = 0;
+    r.lidas++;
+
+    var st = pega(l, col.status);
+    var novo = !mdrLoteConhecido(lote);
+    if (!r.lotes[lote]) r.lotes[lote] = { lote:lote, novo:novo, linhas:0, comPedido:0, foraDoStatus:0, entram:0 };
+    var L = r.lotes[lote];
+    L.linhas++;
+
+    if (mdrTemPedido(pega(l, col.pedido))) { r.comPedido++; L.comPedido++; continue; }
+    if (!novo && !mdrVolta(st)) { r.foraDoStatus++; L.foraDoStatus++; continue; }
+
+    var insp = pega(l, col.insp).toUpperCase();
+    var it = {
+      origem:'reap', lote:lote, statusReap: st || '(vazio)',
+      statusChave:'emitir', status:'Emitir Pedido (reap)',
+      rc: rc, seq: pega(l, col.item), op:'', itemOp:'',
+      sla: 0, slaAlto:false,
+      tipo: (insp === 'L' || insp === 'Q') ? insp : '',
+      seg: pega(l, col.grupo), familia: pega(l, col.familia),
+      texto: pega(l, col.texto), forn: pega(l, col.forn),
+      nm: pega(l, col.nm), centro: pega(l, col.centro),
+      valor: col.valor === -1 ? 0 : mdNum(l[col.valor]),
+      encIso:'', prazoDias:null, prazo:'',
+      acomp: pega(l, col.acomp), fluxo:'', obs: pega(l, col.obs),
+      dpvGrupo:'', dpvValor:0, dpvItens:0, dpv:false
+    };
+    it.chave = it.rc + '|' + it.seq;
+    r.itens.push(it);
+    L.entram++;
+  }
+
+  r.total = r.itens.length;
+  if (!r.total && !r.aviso) {
+    r.aviso = 'Nenhum item do reap precisa de emissão agora'
+            + (r.comPedido ? ' — ' + cpNum(r.comPedido) + ' já têm pedido vinculado' : '')
+            + (r.foraDoStatus ? ' e ' + cpNum(r.foraDoStatus) + ' estão em lote conhecido com status resolvido' : '')
+            + '.';
+  }
+  return r;
+}
+
+async function mdrLerArquivo(file){
+  var buf = await file.arrayBuffer();
+  var wb = _lerWorkbookBR(buf, file.name);
+  var nome = wb.SheetNames.indexOf('LOTE') !== -1 ? 'LOTE' : wb.SheetNames[0];
+  var linhas = XLSX.utils.sheet_to_json(wb.Sheets[nome], { header:1, defval:'', raw:true });
+  var r = mdLerReap(linhas);
+  r.arquivo = file.name; r.aba = nome;
+  return r;
+}
+
+function mdrDrop(e){
+  e.preventDefault();
+  var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) mdrUpload(f);
+}
+
+async function mdrUpload(file){
+  if (!file) return;
+  var st = document.getElementById('mdr-status');
+  if (st) st.innerHTML = '⏳ Lendo o MAPA de reap...';
+  try {
+    var r = await mdrLerArquivo(file);
+    _mdrBase = r.total ? r : null;
+    _mdDist = null;
+    if (!r.total) {
+      if (st) st.innerHTML = '<span style="color:var(--am)">⚠ ' + cpEsc(r.aviso) + '</span>';
+    } else {
+      var novos = Object.keys(r.lotes).filter(function(k){ return r.lotes[k].novo; }).length;
+      if (st) st.innerHTML = '<span style="color:var(--vd)">✓ <strong>' + cpEsc(file.name) + '</strong> — aba '
+        + cpEsc(r.aba) + ', ' + cpNum(r.lidas) + ' linhas, ' + cpNum(r.total) + ' para emissão em '
+        + cpNum(Object.keys(r.lotes).length) + ' lote(s)' + (novos ? ' (' + novos + ' novo(s))' : '')
+        + '.</span>';
+    }
+    mdrRenderResumo(r);
+    mdRender();
+  } catch (e) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Erro ao ler: ' + cpEsc(e.message) + '</span>';
+  }
+}
+
+function mdrRenderResumo(r){
+  var box = document.getElementById('mdr-resumo');
+  if (!box) return;
+  if (!r || !r.lotes || !Object.keys(r.lotes).length) { box.innerHTML = ''; return; }
+  var chaves = Object.keys(r.lotes).sort(function(a, b){
+    var A = r.lotes[a], B = r.lotes[b];
+    if (A.novo !== B.novo) return A.novo ? -1 : 1;
+    return B.entram - A.entram || a.localeCompare(b);
+  });
+  var h = '<div style="margin-top:.8rem;overflow:auto;max-height:280px"><table>'
+    + '<thead><tr><th>Lote</th><th style="text-align:center">Situação</th>'
+    + '<th style="text-align:right">Linhas</th><th style="text-align:right">Já com pedido</th>'
+    + '<th style="text-align:right">Resolvidos</th><th style="text-align:right">Para emissão</th>'
+    + '</tr></thead><tbody>';
+  chaves.forEach(function(k){
+    var L = r.lotes[k];
+    h += '<tr>'
+      + '<td style="font-weight:700;color:var(--az)">' + cpEsc(L.lote) + '</td>'
+      + '<td style="text-align:center">' + (L.novo
+          ? '<span style="background:var(--vdc);color:var(--vd);border:1px solid var(--vd);border-radius:4px;padding:1px 6px;font-size:9.5px;font-weight:700">LOTE NOVO</span>'
+          : '<span style="background:var(--cin);color:var(--tx2);border:1px solid var(--brd);border-radius:4px;padding:1px 6px;font-size:9.5px;font-weight:700">JÁ RODOU</span>')
+      + '</td>'
+      + '<td style="text-align:right">' + cpNum(L.linhas) + '</td>'
+      + '<td style="text-align:right;color:var(--tx2)">' + cpNum(L.comPedido) + '</td>'
+      + '<td style="text-align:right;color:var(--tx2)">' + cpNum(L.foraDoStatus) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + cpNum(L.entram) + '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  box.innerHTML = h;
+}
+
+// ── os lotes que já rodaram ficam gravados ────────────────────────
+async function mdrCarregarLotes(){
+  try {
+    var db = getDB(); if (!db) return;
+    var doc = await db.collection('config').doc('distribuicao_mapa_lotes').get();
+    if (doc && doc.exists) {
+      var d = doc.data() || {};
+      _mdrLotes = { lotes: d.lotes || {}, atualizadoEm: d.atualizadoEm || '', atualizadoPor: d.atualizadoPor || '' };
+    }
+  } catch (e) { console.warn('mdrCarregarLotes:', e); }
+}
+
+async function mdrRegistrarLotes(itens, data){
+  if (!itens || !itens.length) return;
+  var vistos = {};
+  itens.forEach(function(it){ if (it.origem === 'reap' && it.lote) vistos[it.lote] = (vistos[it.lote] || 0) + 1; });
+  var nomes = Object.keys(vistos);
+  if (!nomes.length) return;
+  nomes.forEach(function(k){
+    var ja = _mdrLotes.lotes[k];
+    _mdrLotes.lotes[k] = {
+      primeiraVez: (ja && ja.primeiraVez) || data,
+      ultimaVez: data,
+      rodadas: ((ja && +ja.rodadas) || 0) + 1,
+      ultimaQtd: vistos[k]
+    };
+  });
+  _mdrLotes.atualizadoEm = new Date().toISOString();
+  _mdrLotes.atualizadoPor = cpQuem();
+  try {
+    var db = getDB(); if (!db) return;
+    await db.collection('config').doc('distribuicao_mapa_lotes').set(_mdrLotes);
+  } catch (e) { console.warn('mdrRegistrarLotes:', e); }
+}
+
+async function mdrEsquecerLotes(){
+  var n = Object.keys((_mdrLotes && _mdrLotes.lotes) || {}).length;
+  if (!n) { alert('Nenhum lote está marcado como já rodado.'); return; }
+  if (!confirm('Esquecer os ' + n + ' lote(s) já rodados?\n\n'
+    + 'Na próxima vez que você subir o reap, todos voltam a ser lote novo e entram inteiros.')) return;
+  _mdrLotes = { lotes:{}, atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem() };
+  try {
+    var db = getDB();
+    if (db) await db.collection('config').doc('distribuicao_mapa_lotes').set(_mdrLotes);
+  } catch (e) { console.warn('mdrEsquecerLotes:', e); }
+  var st = document.getElementById('mdr-status');
+  if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Lotes esquecidos. Suba o reap de novo.</span>';
+  _mdrBase = null;
+  mdrRenderResumo(null);
+  mdRender();
+}
+
 function mdBlocos(itens){
   var mapa = {};
   (itens || []).forEach(function(it, i){
@@ -13279,7 +13545,7 @@ function mdBlocos(itens){
   return out;
 }
 
-function mdCalcular(itens, pessoas, atividades, cotaDia, cotaSemana, dias){
+function mdCalcular(itens, pessoas, atividades, cotaDia, cotaSemana, dias, itensReap){
   var nDias  = Math.max(1, Math.min(7, Math.round(+dias || 5)));
   var cota   = Math.max(1, Math.round(+cotaDia || 1));
   var semana = Math.max(cota, Math.round(+cotaSemana || (cota * nDias)));
@@ -13287,11 +13553,12 @@ function mdCalcular(itens, pessoas, atividades, cotaDia, cotaSemana, dias){
               total:(itens || []).length, diasAcima:[], estourou:[], foraAtividade:[] };
   (pessoas || []).forEach(function(n){
     res.pessoas[n] = { nome:n, itens:[], blocos:[], n:0, porDia:new Array(nDias).fill(0),
-                       porStatus:{}, tipo:{ L:0, Q:0 }, tipoEmitir:{ L:0, Q:0 }, fora:0 };
+                       porStatus:{}, tipo:{ L:0, Q:0 }, tipoEmitir:{ L:0, Q:0 }, fora:0, reap:0 };
     MD_STATUS.forEach(function(x){ res.pessoas[n].porStatus[x.chave] = 0; });
   });
+  res.reap = 0;
   if (!pessoas || !pessoas.length) {
-    res.fila = (itens || []).slice(); res.lista = []; res.distribuidos = 0; return res;
+    res.fila = (itens || []).concat(itensReap || []); res.lista = []; res.distribuidos = 0; return res;
   }
 
   // quantos itens do bloco esse comprador realmente faz
@@ -13360,6 +13627,36 @@ function mdCalcular(itens, pessoas, atividades, cotaDia, cotaSemana, dias){
     if (b.n > cota) res.estourou.push({ nome:melhor, rc:b.itens[0].rc, n:b.n });
   });
 
+  // ── reap: sem agrupamento nenhum, só quantidade igual ───────────
+  // Aqui não existe oportunidade nem SLA. A única regra que ele pediu é
+  // repartir em partes iguais entre as pessoas selecionadas, dentro da
+  // mesma cota do MAPA do dia.
+  if (itensReap && itensReap.length) {
+    // "a única regra de agrupamento é a quantidade igual por pessoa
+    // selecionada" — então o reap vai para todo mundo da equipe, sem
+    // olhar a matriz de atividades.
+    var equipeReap = (pessoas || []).slice();
+    itensReap.forEach(function(it){
+      var cand = equipeReap.filter(function(n){ return res.pessoas[n].n < semana; });
+      if (!cand.length) { it.pessoa = ''; it.dia = 0; it.foraAtividade = false; res.fila.push(it); return; }
+      var melhor = cand[0];
+      cand.forEach(function(n){
+        var a = res.pessoas[n], m = res.pessoas[melhor];
+        if (a.n !== m.n) { if (a.n < m.n) melhor = n; return; }
+        if (a.reap !== m.reap) { if (a.reap < m.reap) melhor = n; return; }
+      });
+      var pr = res.pessoas[melhor];
+      it.pessoa = melhor;
+      it.foraAtividade = false;
+      pr.itens.push(it); pr.n++; pr.reap++;
+      pr.porStatus.emitir = (pr.porStatus.emitir || 0) + 1;
+      if (it.tipo === 'L' || it.tipo === 'Q') { pr.tipo[it.tipo]++; pr.tipoEmitir[it.tipo]++; }
+      pr.blocos.push({ id:'REAP:' + it.rc + '|' + it.seq, itens:[it], n:1, slaMax:0,
+                       porStatus:{ emitir:1 }, statuses:['emitir'], tipoEmitir:it.tipo || '' });
+      res.reap++;
+    });
+  }
+
   // os blocos de cada um caem nos dias: o mais urgente no começo da
   // semana, sem partir bloco e sem deixar dia vazio
   (pessoas || []).forEach(function(n){
@@ -13377,6 +13674,9 @@ function mdCalcular(itens, pessoas, atividades, cotaDia, cotaSemana, dias){
     p.porDia.forEach(function(v, k){ if (v > cota) res.diasAcima.push({ nome:n, dia:k + 1, n:v }); });
     p.itens.sort(function(a, c){
       if (a.dia !== c.dia) return (a.dia || 99) - (c.dia || 99);
+      // dentro do dia, o MAPA do dia vem antes do reap
+      var oa = a.origem === 'reap' ? 1 : 0, oc = c.origem === 'reap' ? 1 : 0;
+      if (oa !== oc) return oa - oc;
       if (c.sla !== a.sla) return c.sla - a.sla;
       return String(a.rc).localeCompare(String(c.rc));
     });
@@ -13389,8 +13689,10 @@ function mdCalcular(itens, pessoas, atividades, cotaDia, cotaSemana, dias){
 
 async function mdDistribuir(){
   var st = document.getElementById('md-status');
-  if (!_mdBase || !_mdBase.itens.length) {
-    if (st) st.innerHTML = '<span style="color:var(--am)">Suba o MAPA antes de distribuir.</span>';
+  var temMapa = !!(_mdBase && _mdBase.itens.length);
+  var temReap = !!(_mdrBase && _mdrBase.itens.length);
+  if (!temMapa && !temReap) {
+    if (st) st.innerHTML = '<span style="color:var(--am)">Suba o MAPA do dia ou o MAPA de reap antes de distribuir.</span>';
     return;
   }
   if (!_mdCfg.pessoas.length) {
@@ -13405,19 +13707,29 @@ async function mdDistribuir(){
     if (st) st.innerHTML = '<span style="color:var(--vm)">Informe quantos itens cada um faz por dia.</span>';
     return;
   }
-  var res = mdCalcular(_mdBase.itens, _mdCfg.pessoas, _mdCfg.atividades,
-                       _mdCfg.cotaDia, _mdCfg.cotaSemana, _mdCfg.dias);
+  var itensMapa = temMapa ? _mdBase.itens : [];
+  var itensReap = temReap ? _mdrBase.itens : [];
+  itensMapa.forEach(function(it){ if (!it.origem) it.origem = 'mapa'; });
+  var res = mdCalcular(itensMapa, _mdCfg.pessoas, _mdCfg.atividades,
+                       _mdCfg.cotaDia, _mdCfg.cotaSemana, _mdCfg.dias, itensReap);
   _mdDist = {
-    data: mdDataSel(), arquivo: _mdBase.arquivo,
+    data: mdDataSel(), arquivo: (temMapa ? _mdBase.arquivo : ''),
+    arquivoReap: temReap ? _mdrBase.arquivo : '',
     pessoas: _mdCfg.pessoas.slice(), atividades: _mdCfg.atividades,
     cotaDia: _mdCfg.cotaDia, cotaSemana: _mdCfg.cotaSemana, dias: res.dias,
-    porStatus: _mdBase.porStatus, totalMapa: _mdBase.total,
+    porStatus: temMapa ? _mdBase.porStatus : {}, totalMapa: temMapa ? _mdBase.total : 0,
+    totalReap: itensReap.length,
+    lotesReap: temReap ? Object.keys(_mdrBase.lotes) : [],
     res: res, geradoEm: new Date().toISOString(), geradoPor: cpQuem()
   };
   mdRender();
   await mdSalvarDia();
+  // o lote só passa a contar como "já rodou" depois de distribuído
+  await mdrRegistrarLotes(itensReap, mdDataSel());
+  if (temReap) mdrRenderResumo(_mdrBase);
   if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Distribuição feita: ' + cpNum(res.distribuidos)
-    + ' itens entre ' + res.lista.filter(function(p){ return p.n; }).length + ' comprador(es) · '
+    + ' itens entre ' + res.lista.filter(function(p){ return p.n; }).length + ' comprador(es)'
+    + (res.reap ? ' (' + cpNum(res.reap) + ' de reap)' : '') + ' · '
     + cpNum(res.fila.length) + ' na fila'
     + (res.semAtividade.length ? ' · ' + cpNum(res.semAtividade.length) + ' sem ninguém na atividade' : '')
     + '.</span>';
@@ -13523,7 +13835,8 @@ function mdRenderEquipe(){
     + '<th style="text-align:right">Semana</th>';
   for (var dd = 1; dd <= nDias; dd++) h += '<th style="text-align:right">Dia ' + dd + '</th>';
   MD_STATUS.forEach(function(x){ h += '<th style="text-align:right">' + cpEsc(x.nome.split(',')[0]) + '</th>'; });
-  h += '<th style="text-align:right" title="Itens L em Emitir Pedido">L emissão</th>'
+  h += '<th style="text-align:right" title="Itens vindos do MAPA de reaproveitamento">Reap</th>'
+    + '<th style="text-align:right" title="Itens L em Emitir Pedido">L emissão</th>'
     + '<th style="text-align:right" title="Itens Q em Emitir Pedido">Q emissão</th>'
     + '<th style="text-align:right" title="Itens de atividade que não é dele, que vieram junto com a oportunidade">Fora</th>'
     + '<th style="width:120px">Carga</th></tr></thead><tbody>';
@@ -13542,19 +13855,25 @@ function mdRenderEquipe(){
         + cpNum(p.porStatus[x.chave] || 0) + '</td>';
     });
     var te = p.tipoEmitir || p.tipo || { L:0, Q:0 };
-    h += '<td style="text-align:right">' + cpNum(te.L) + '</td>'
+    h += '<td style="text-align:right;color:' + ((p.reap || 0) ? 'var(--vd);font-weight:700' : 'var(--tx2)') + '">'
+      +   cpNum(p.reap || 0) + '</td>'
+      + '<td style="text-align:right">' + cpNum(te.L) + '</td>'
       + '<td style="text-align:right">' + cpNum(te.Q) + '</td>'
       + '<td style="text-align:right;color:' + ((p.fora || 0) ? 'var(--am);font-weight:700' : 'var(--tx2)') + '">'
       +   cpNum(p.fora || 0) + '</td>'
       + '<td>' + cpBarraSimples(p.n, alvo) + '</td></tr>';
   });
   h += '</tbody><tfoot><tr><td colspan="2">Total</td><td style="text-align:right">' + cpNum(r.distribuidos) + '</td>'
-    + '<td colspan="' + (nDias + MD_STATUS.length + 4) + '"></td></tr></tfoot></table></div></div>';
+    + '<td colspan="' + (nDias + MD_STATUS.length + 5) + '"></td></tr></tfoot></table></div></div>';
   box.innerHTML = h;
 }
 
 function mdSinais(i){
   var t = [];
+  if (i.origem === 'reap') t.push('<span title="Veio do MAPA de reaproveitamento · ' + cpEsc(i.lote || '')
+    + (i.statusReap ? ' · status na planilha: ' + cpEsc(i.statusReap) : '')
+    + '" style="background:var(--vdc);color:var(--vd);border:1px solid var(--vd);border-radius:4px;padding:1px 5px;font-size:9.5px;font-weight:700">REAP '
+    + cpEsc(i.lote || '') + '</span>');
   if (i.fluxo === 'PMM') t.push('<span title="PMM — não abre PATEC, segue direto para pedido" style="background:var(--vmc);color:var(--vm);border:1px solid var(--vm);border-radius:4px;padding:1px 5px;font-size:9.5px;font-weight:700">PMM</span>');
   if (i.fluxo === 'ORP') t.push('<span title="ORP — fluxo normal, pode ir para PATEC" style="background:var(--azc);color:var(--azm);border:1px solid var(--azm);border-radius:4px;padding:1px 5px;font-size:9.5px;font-weight:700">ORP</span>');
   if (i.slaAlto) t.push('<span title="SLA acima de ' + MD_SLA_ALERTA + ' dias" style="background:var(--amc);color:var(--am);border:1px solid var(--am);border-radius:4px;padding:1px 5px;font-size:9.5px;font-weight:700">SLA ' + i.sla + '</span>');
@@ -13571,13 +13890,15 @@ function mdRenderLista(){
   var r = _mdDist.res;
   var h = '<div class="cd"><div class="cd-t">📄 Lista por comprador, dia e atividade</div>'
     + '<div style="overflow:auto;max-height:520px"><table>'
-    + '<thead><tr><th>Comprador</th><th style="text-align:center">Dia</th><th>Atividade</th>'
+    + '<thead><tr><th>Mapa</th><th>Comprador</th><th style="text-align:center">Dia</th><th>Atividade</th>'
     + '<th>RC</th><th>Item</th><th>Oportunidade</th><th style="text-align:right">SLA</th>'
     + '<th style="text-align:center">Fam.</th><th>Segmento</th><th>Prazo</th>'
     + '<th style="text-align:right">Valor pedido</th><th>Sinalizações</th></tr></thead><tbody>';
   r.lista.forEach(function(p){
     p.itens.forEach(function(i){
       h += '<tr' + (i.dpv ? ' style="background:var(--vmc)"' : (i.slaAlto ? ' style="background:var(--amc)"' : '')) + '>'
+        + '<td style="font-size:10.5px;font-weight:700;color:' + (i.origem === 'reap' ? 'var(--vd)' : 'var(--azm)') + '">'
+        +   (i.origem === 'reap' ? 'Mapa reap' : 'Mapa normal') + '</td>'
         + '<td style="font-weight:600">' + cpEsc(p.nome) + '</td>'
         + '<td style="text-align:center;font-weight:700;color:var(--azm)">' + (i.dia ? 'D' + i.dia : '—') + '</td>'
         + '<td style="font-size:10.5px;color:' + mdStatusCor(i.statusChave) + ';font-weight:600">'
@@ -13613,6 +13934,8 @@ function mdTexto(){
     l.push('  ' + x.nome + ': ' + cpNum(d.porStatus[x.chave] || 0));
   });
   l.push('  Total: ' + cpNum(d.totalMapa));
+  if (d.totalReap) l.push('  Reaproveitamento: ' + cpNum(d.totalReap)
+    + (d.lotesReap && d.lotesReap.length ? ' (lotes ' + d.lotesReap.join(', ') + ')' : ''));
   r.lista.forEach(function(p){
     if (!p.n) return;
     l.push('');
@@ -13629,7 +13952,9 @@ function mdTexto(){
         if (i.dpv) s.push('ACIMA DO LIMITE DPV');
         if (i.prazo === 'Proposta vencida') s.push('PROPOSTA VENCIDA');
         if (i.foraAtividade) s.push('FORA DA SUA ATIVIDADE — veio junto com a oportunidade');
-        l.push('    [' + mdStatusNome(i.statusChave) + '] RC ' + i.rc + '/' + i.seq
+        if (i.origem === 'reap') s.unshift('REAP ' + (i.lote || ''));
+        l.push('    [' + (i.origem === 'reap' ? 'Emitir Pedido (reap)' : mdStatusNome(i.statusChave))
+             + '] RC ' + i.rc + '/' + i.seq
              + (i.op ? ' · Oport. ' + i.op : '') + (i.tipo ? ' · ' + i.tipo : '')
              + (s.length ? ' · ' + s.join(' · ') : ''));
       });
@@ -13660,14 +13985,29 @@ function mdBaixarExcel(){
               i.prazoDias == null ? '' : i.prazoDias, i.fluxo, i.acomp, i.nm, i.centro, i.valor,
               i.dpv ? 'SIM' : '', i.dpv ? i.dpvValor : '', i.foraAtividade ? 'SIM' : '', i.forn, i.texto];
     };
-    var aoa = [cab];
-    d.res.lista.forEach(function(p){ p.itens.forEach(function(i){ aoa.push(linha(p.nome, i)); }); });
-    d.res.fila.forEach(function(i){ aoa.push(linha('(fila)', i)); });
-    d.res.semAtividade.forEach(function(i){ aoa.push(linha('(sem atividade)', i)); });
+    var cabReap = ['Comprador','Dia','Lote','Status no reap','RC','Item','Tipo família',
+                   'Grupo comprador','N. acompanhamento','Código SAP','Centro','Valor',
+                   'Fornecedor','Texto breve','Observação'];
+    var linhaReap = function(quem, i){
+      return [quem, i.dia ? 'Dia ' + i.dia : '', i.lote, i.statusReap, i.rc, i.seq, i.tipo,
+              i.seg, i.acomp, i.nm, i.centro, i.valor, i.forn, i.texto, i.obs || ''];
+    };
+    var aoa = [cab], aoaR = [cabReap];
+    var joga = function(quem, i){
+      if (i.origem === 'reap') aoaR.push(linhaReap(quem, i)); else aoa.push(linha(quem, i));
+    };
+    d.res.lista.forEach(function(p){ p.itens.forEach(function(i){ joga(p.nome, i); }); });
+    d.res.fila.forEach(function(i){ joga('(fila)', i); });
+    d.res.semAtividade.forEach(function(i){ joga('(sem atividade)', i); });
     var ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols'] = cab.map(function(c){ return { wch: Math.max(9, Math.min(30, c.length + 4)) }; });
     var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'MAPA');
+    if (aoaR.length > 1) {
+      var wsR = XLSX.utils.aoa_to_sheet(aoaR);
+      wsR['!cols'] = cabReap.map(function(c){ return { wch: Math.max(9, Math.min(30, c.length + 4)) }; });
+      XLSX.utils.book_append_sheet(wb, wsR, 'REAP');
+    }
     XLSX.writeFile(wb, 'Distribuicao_MAPA_' + String(d.data || '').replace(/-/g, '') + '.xlsx');
   } catch (e) {
     var st = document.getElementById('md-status');
@@ -13709,15 +14049,18 @@ async function mdSalvarDia(){
     var enxuto = function(i){
       return { rc:i.rc, seq:i.seq, op:i.op, sla:i.sla, tipo:i.tipo, seg:i.seg,
                statusChave:i.statusChave, dia:+i.dia || 0, fluxo:i.fluxo, prazo:i.prazo,
-               dpv:!!i.dpv, valor:i.valor, foraAtividade:!!i.foraAtividade };
+               dpv:!!i.dpv, valor:i.valor, foraAtividade:!!i.foraAtividade,
+               origem:i.origem || 'mapa', lote:i.lote || '', statusReap:i.statusReap || '' };
     };
     await db.collection(MD_COL).doc(d.data).set({
       data:d.data, arquivo:d.arquivo || '', pessoas:d.pessoas || [], atividades:d.atividades || {},
       cotaDia:+d.cotaDia || 0, cotaSemana:+d.cotaSemana || 0, dias:+d.dias || 5,
       porStatus:d.porStatus || {}, totalMapa:+d.totalMapa || 0,
+      arquivoReap:d.arquivoReap || '', totalReap:+d.totalReap || 0, lotesReap:d.lotesReap || [],
       distribuicao: d.res.lista.map(function(p){
         return { nome:p.nome, n:p.n, porDia:p.porDia || [], porStatus:p.porStatus || {},
                  tipo:p.tipo || {}, tipoEmitir:p.tipoEmitir || {}, fora:+p.fora || 0,
+                 reap:+p.reap || 0,
                  itens:p.itens.slice(0, 4000).map(enxuto) };
       }),
       fila: d.res.fila.slice(0, 4000).map(enxuto),
@@ -13738,7 +14081,7 @@ async function mdCarregarDia(data){
     var lista = (d.distribuicao || []).map(function(p){
       return { nome:p.nome, n:+p.n||0, porDia:p.porDia||[], porStatus:p.porStatus||{},
                tipo:p.tipo||{L:0,Q:0}, tipoEmitir:p.tipoEmitir||{L:0,Q:0}, fora:+p.fora||0,
-               itens:p.itens||[] };
+               reap:+p.reap||0, itens:p.itens||[] };
     });
     var pessoas = {};
     lista.forEach(function(p){ pessoas[p.nome] = p; });
@@ -13746,8 +14089,10 @@ async function mdCarregarDia(data){
       data:d.data || data, arquivo:d.arquivo || '', pessoas:d.pessoas || [],
       atividades:d.atividades || {}, cotaDia:+d.cotaDia || 0, cotaSemana:+d.cotaSemana || 0,
       dias:+d.dias || 5, porStatus:d.porStatus || {}, totalMapa:+d.totalMapa || 0,
+      arquivoReap:d.arquivoReap || '', totalReap:+d.totalReap || 0, lotesReap:d.lotesReap || [],
       res: { lista:lista, pessoas:pessoas, fila:d.fila || [], semAtividade:d.semAtividade || [],
              dias:+d.dias || 5, cotaDia:+d.cotaDia || 0, cotaSemana:+d.cotaSemana || 0,
+             reap: lista.reduce(function(m, p){ return m + (+p.reap || 0); }, 0),
              diasAcima:[], estourou:[], foraAtividade:d.foraAtividade || [],
              distribuidos: lista.reduce(function(m, p){ return m + p.n; }, 0) },
       geradoEm:d.geradoEm || '', geradoPor:d.geradoPor || ''
@@ -13756,6 +14101,7 @@ async function mdCarregarDia(data){
 }
 
 async function mdAbrir(){
+  await mdrCarregarLotes();
   var el = document.getElementById('md-data');
   if (el && !el.value) el.value = cpHojeISO();
   await mdCarregarCfg();
