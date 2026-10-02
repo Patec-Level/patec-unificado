@@ -11011,10 +11011,17 @@ var CP_COCKPIT = { status:'3', gerente:'RLRT', psmv:'Em liberação' };
 function _cpEmLiberacao(v){
   return cpNormCab(v).indexOf('EM_LIBERA') === 0;
 }
+// O status vem ora como "3", ora como "03", ora como 3,00 — dependendo
+// de como a extração foi salva. Comparo pelo número.
+function _cpStatusNum(v){
+  var t = String(v == null ? '' : v).trim().replace(',', '.');
+  if (!t) return null;
+  var n = parseFloat(t);
+  return isFinite(n) ? n : null;
+}
 function _cpCockpitLinha(linha, col){
   if (col.st === -1 || col.ger === -1) return false;
-  var st = String(linha[col.st] == null ? '' : linha[col.st]).trim();
-  if (st.replace(/[,.]0+$/, '') !== CP_COCKPIT.status) return false;
+  if (_cpStatusNum(linha[col.st]) !== +CP_COCKPIT.status) return false;
   if (col.el !== -1 && _cpTemEliminacao(linha[col.el])) return false;
   if (cpNormCab(linha[col.ger]) !== cpNormCab(CP_COCKPIT.gerente)) return false;
   return true;
@@ -11158,9 +11165,9 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
       (function(){
         var F = r.cockFunil;
         F.lidas++;
-        var stC = String(lb[iSt] == null ? '' : lb[iSt]).trim().replace(/[,.]0+$/, '');
-        F.status[stC || '(vazio)'] = (F.status[stC || '(vazio)'] || 0) + 1;
-        if (stC !== CP_COCKPIT.status) return;
+        var stBruto = String(lb[iSt] == null ? '' : lb[iSt]).trim();
+        F.status[stBruto || '(vazio)'] = (F.status[stBruto || '(vazio)'] || 0) + 1;
+        if (_cpStatusNum(stBruto) !== +CP_COCKPIT.status) return;
         F.st3++;
         if (iEl !== -1 && _cpTemEliminacao(lb[iEl])) return;
         F.semElim++;
