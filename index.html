@@ -1521,6 +1521,22 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
           <div class="cd">
             <div class="cd-t">♻️ MAPA de reaproveitamento</div>
+            <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:.9rem">
+              <div>
+                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">NÚMERO DO LOTE</label>
+                <input type="text" id="mdr-lote" placeholder="Ex: lote 58"
+                  style="width:170px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
+              </div>
+              <div>
+                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">DATA DO LOTE</label>
+                <input type="date" id="mdr-lote-data"
+                  style="font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
+              </div>
+              <div style="font-size:10.5px;color:var(--tx2);max-width:420px;line-height:1.5">
+                Vale para as linhas que vierem sem lote na planilha, e é a data que fica
+                guardada no histórico de lotes.
+              </div>
+            </div>
             <div style="border:2px dashed var(--brd);border-radius:10px;padding:1.3rem;text-align:center;cursor:pointer;background:var(--cin)"
               onclick="document.getElementById('mdr-file-input').click()"
               ondragover="event.preventDefault()" ondrop="mdrDrop(event)">
@@ -13282,6 +13298,26 @@ async function mdSalvarEquipe(){
 var _mdrBase  = null;
 var _mdrLotes = { lotes:{}, atualizadoEm:'', atualizadoPor:'' };
 
+// Os status da coluna F, na ordem da aba FILTROS da planilha dele.
+var MDR_STATUS = ['PEDIDO SALVO','PEDIDO MEMORIZADO','OPORTUNIDADE NO PRAZO','NÃO SEGUIRÁ POR REAP',
+                  'PENDENTE','FORA DE REAP','PENDENTE - URGENTE!','AGUARDANDO DIRECIONAMENTO'];
+// Desses, os que ainda precisam de emissão quando o lote já rodou.
+var MDR_STATUS_VOLTA = ['', 'PENDENTE', 'PENDENTE - URGENTE!', 'PEDIDO MEMORIZADO'];
+
+// O status que o usuário marca na tela vence o que veio na planilha, e
+// fica gravado: assim ele tira da fila o que já resolveu sem precisar
+// mexer no arquivo.
+var _mdrStatusManual = {};
+
+function mdrLoteDaTela(){
+  var el = document.getElementById('mdr-lote');
+  return String((el ? el.value : '') || '').trim();
+}
+function mdrDataLoteDaTela(){
+  var el = document.getElementById('mdr-lote-data');
+  return String((el ? el.value : '') || '').trim();
+}
+
 function mdrTemPedido(v){
   var t = String(v == null ? '' : v).trim();
   if (!t) return false;
@@ -13293,19 +13329,31 @@ function mdrTemPedido(v){
 // Status que voltam para a equipe num lote já conhecido.
 function mdrVolta(status){
   var c = cpNormCab(status);
-  if (!c) return true;                            // vazio
-  if (c.indexOf('PENDENTE') === 0) return true;   // PENDENTE e PENDENTE - URGENTE!
-  if (c.indexOf('PEDIDO_MEMORIZADO') === 0) return true;
+  for (var i = 0; i < MDR_STATUS_VOLTA.length; i++) {
+    if (c === cpNormCab(MDR_STATUS_VOLTA[i])) return true;
+  }
   return false;
+}
+
+// Encaixa o que veio escrito na planilha num dos oito status conhecidos.
+function mdrStatusOficial(bruto){
+  var c = cpNormCab(bruto);
+  if (!c) return '';
+  for (var i = 0; i < MDR_STATUS.length; i++) {
+    if (cpNormCab(MDR_STATUS[i]) === c) return MDR_STATUS[i];
+  }
+  return String(bruto || '').trim();   // status fora da lista: mantenho como veio
 }
 
 function mdrLoteConhecido(lote){
   return !!(_mdrLotes && _mdrLotes.lotes && _mdrLotes.lotes[lote]);
 }
 
-function mdLerReap(linhas){
+function mdLerReap(linhas, loteDigitado, dataLote){
   var r = { itens:[], lidas:0, total:0, aviso:'', lotes:{},
-            comPedido:0, foraDoStatus:0, semRc:0 };
+            comPedido:0, foraDoStatus:0, semRc:0, semLote:0,
+            loteDigitado: loteDigitado || '', dataLote: dataLote || '',
+            porStatusReap:{} };
   if (!linhas || !linhas.length) { r.aviso = 'Arquivo vazio.'; return r; }
 
   var iCab = -1, cabs = [];
@@ -13340,7 +13388,8 @@ function mdLerReap(linhas){
   for (var b = iCab + 1; b < linhas.length; b++) {
     var l = linhas[b] || [];
     var rc = pega(l, col.rc);
-    var lote = pega(l, col.lote) || '(sem lote)';
+    var loteArq = pega(l, col.lote);
+    var lote = loteArq || loteDigitado || '(sem lote)';
     if (!rc) {
       // a aba costuma ter centenas de milhares de linhas em branco no fim
       if (++vazias > 200) break;
@@ -13349,8 +13398,13 @@ function mdLerReap(linhas){
     }
     vazias = 0;
     r.lidas++;
+    if (!loteArq) r.semLote++;
 
-    var st = pega(l, col.status);
+    var chaveIt = rc + '|' + pega(l, col.item);
+    var stArquivo = mdrStatusOficial(pega(l, col.status));
+    var marcado = _mdrStatusManual[chaveIt];
+    var st = (marcado === undefined) ? stArquivo : marcado;
+    r.porStatusReap[st || '(vazio)'] = (r.porStatusReap[st || '(vazio)'] || 0) + 1;
     var novo = !mdrLoteConhecido(lote);
     if (!r.lotes[lote]) r.lotes[lote] = { lote:lote, novo:novo, linhas:0, comPedido:0, foraDoStatus:0, entram:0 };
     var L = r.lotes[lote];
@@ -13361,7 +13415,9 @@ function mdLerReap(linhas){
 
     var insp = pega(l, col.insp).toUpperCase();
     var it = {
-      origem:'reap', lote:lote, statusReap: st || '(vazio)',
+      origem:'reap', lote:lote, dataLote: dataLote || '',
+      statusReap: st || '', statusArquivo: stArquivo || '',
+      statusMarcado: marcado !== undefined,
       statusChave:'emitir', status:'Emitir Pedido (reap)',
       rc: rc, seq: pega(l, col.item), op:'', itemOp:'',
       sla: 0, slaAlto:false,
@@ -13394,7 +13450,7 @@ async function mdrLerArquivo(file){
   var wb = _lerWorkbookBR(buf, file.name);
   var nome = wb.SheetNames.indexOf('LOTE') !== -1 ? 'LOTE' : wb.SheetNames[0];
   var linhas = XLSX.utils.sheet_to_json(wb.Sheets[nome], { header:1, defval:'', raw:true });
-  var r = mdLerReap(linhas);
+  var r = mdLerReap(linhas, mdrLoteDaTela(), mdrDataLoteDaTela());
   r.arquivo = file.name; r.aba = nome;
   return r;
 }
@@ -13429,6 +13485,12 @@ async function mdrUpload(file){
   }
 }
 
+function mdrDataDoLote(lote, dataDaTela){
+  var ja = _mdrLotes && _mdrLotes.lotes && _mdrLotes.lotes[lote];
+  var d = (ja && ja.dataLote) || dataDaTela || '';
+  return d ? cpDataBR(d) : '—';
+}
+
 function mdrRenderResumo(r){
   var box = document.getElementById('mdr-resumo');
   if (!box) return;
@@ -13439,7 +13501,7 @@ function mdrRenderResumo(r){
     return B.entram - A.entram || a.localeCompare(b);
   });
   var h = '<div style="margin-top:.8rem;overflow:auto;max-height:280px"><table>'
-    + '<thead><tr><th>Lote</th><th style="text-align:center">Situação</th>'
+    + '<thead><tr><th>Lote</th><th>Data do lote</th><th style="text-align:center">Situação</th>'
     + '<th style="text-align:right">Linhas</th><th style="text-align:right">Já com pedido</th>'
     + '<th style="text-align:right">Resolvidos</th><th style="text-align:right">Para emissão</th>'
     + '</tr></thead><tbody>';
@@ -13447,6 +13509,8 @@ function mdrRenderResumo(r){
     var L = r.lotes[k];
     h += '<tr>'
       + '<td style="font-weight:700;color:var(--az)">' + cpEsc(L.lote) + '</td>'
+      + '<td style="font-size:10.5px;color:var(--tx2)">'
+      +   cpEsc(mdrDataDoLote(L.lote, r.dataLote)) + '</td>'
       + '<td style="text-align:center">' + (L.novo
           ? '<span style="background:var(--vdc);color:var(--vd);border:1px solid var(--vd);border-radius:4px;padding:1px 6px;font-size:9.5px;font-weight:700">LOTE NOVO</span>'
           : '<span style="background:var(--cin);color:var(--tx2);border:1px solid var(--brd);border-radius:4px;padding:1px 6px;font-size:9.5px;font-weight:700">JÁ RODOU</span>')
@@ -13458,6 +13522,40 @@ function mdrRenderResumo(r){
   });
   h += '</tbody></table></div>';
   box.innerHTML = h;
+}
+
+// ── o status marcado na tela ──────────────────────────────────────
+async function mdrTrocarStatus(chave, valor){
+  if (valor === '__arquivo__') delete _mdrStatusManual[chave];
+  else _mdrStatusManual[chave] = valor;
+  var tocar = function(lista){
+    (lista || []).forEach(function(i){
+      if (i.origem === 'reap' && (i.rc + '|' + i.seq) === chave) {
+        i.statusReap = (valor === '__arquivo__') ? (i.statusArquivo || '') : valor;
+        i.statusMarcado = (valor !== '__arquivo__');
+      }
+    });
+  };
+  if (_mdrBase) tocar(_mdrBase.itens);
+  if (_mdDist && _mdDist.res) {
+    (_mdDist.res.lista || []).forEach(function(p){ tocar(p.itens); });
+    tocar(_mdDist.res.fila);
+  }
+  try {
+    var db = getDB();
+    if (db) await db.collection('config').doc('distribuicao_mapa_reap_status').set({
+      status:_mdrStatusManual, atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem()
+    });
+  } catch (e) { console.warn('mdrTrocarStatus:', e); }
+  mdRenderLista();
+}
+
+async function mdrCarregarStatusManual(){
+  try {
+    var db = getDB(); if (!db) return;
+    var doc = await db.collection('config').doc('distribuicao_mapa_reap_status').get();
+    if (doc && doc.exists) _mdrStatusManual = (doc.data() || {}).status || {};
+  } catch (e) { console.warn('mdrCarregarStatusManual:', e); }
 }
 
 // ── os lotes que já rodaram ficam gravados ────────────────────────
@@ -13472,7 +13570,7 @@ async function mdrCarregarLotes(){
   } catch (e) { console.warn('mdrCarregarLotes:', e); }
 }
 
-async function mdrRegistrarLotes(itens, data){
+async function mdrRegistrarLotes(itens, data, dataLote){
   if (!itens || !itens.length) return;
   var vistos = {};
   itens.forEach(function(it){ if (it.origem === 'reap' && it.lote) vistos[it.lote] = (vistos[it.lote] || 0) + 1; });
@@ -13483,6 +13581,7 @@ async function mdrRegistrarLotes(itens, data){
     _mdrLotes.lotes[k] = {
       primeiraVez: (ja && ja.primeiraVez) || data,
       ultimaVez: data,
+      dataLote: dataLote || (ja && ja.dataLote) || '',
       rodadas: ((ja && +ja.rodadas) || 0) + 1,
       ultimaQtd: vistos[k]
     };
@@ -13725,7 +13824,7 @@ async function mdDistribuir(){
   mdRender();
   await mdSalvarDia();
   // o lote só passa a contar como "já rodou" depois de distribuído
-  await mdrRegistrarLotes(itensReap, mdDataSel());
+  await mdrRegistrarLotes(itensReap, mdDataSel(), mdrDataLoteDaTela());
   if (temReap) mdrRenderResumo(_mdrBase);
   if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Distribuição feita: ' + cpNum(res.distribuidos)
     + ' itens entre ' + res.lista.filter(function(p){ return p.n; }).length + ' comprador(es)'
@@ -13883,6 +13982,26 @@ function mdSinais(i){
   return t.join(' ');
 }
 
+// O que o usuário escolher aqui vence o que veio na coluna F da planilha.
+function mdrSelectStatus(i){
+  var chave = i.rc + '|' + i.seq;
+  var atual = i.statusReap || '';
+  var h = '<select onchange="mdrTrocarStatus(\'' + cpEsc(chave) + '\', this.value)" '
+        + 'style="font-size:10.5px;padding:3px 5px;border:1px solid var(--brd);border-radius:5px;max-width:190px'
+        + (i.statusMarcado ? ';border-color:var(--azm);font-weight:700' : '') + '">';
+  h += '<option value="">(vazio)</option>';
+  MDR_STATUS.forEach(function(st){
+    h += '<option value="' + cpEsc(st) + '"' + (st === atual ? ' selected' : '') + '>' + cpEsc(st) + '</option>';
+  });
+  if (atual && MDR_STATUS.indexOf(atual) === -1) {
+    h += '<option value="' + cpEsc(atual) + '" selected>' + cpEsc(atual) + '</option>';
+  }
+  if (i.statusMarcado) h += '<option value="__arquivo__">↺ voltar ao da planilha'
+    + (i.statusArquivo ? ' (' + cpEsc(i.statusArquivo) + ')' : '') + '</option>';
+  h += '</select>';
+  return h;
+}
+
 function mdRenderLista(){
   var box = document.getElementById('md-lista');
   if (!box) return;
@@ -13890,7 +14009,7 @@ function mdRenderLista(){
   var r = _mdDist.res;
   var h = '<div class="cd"><div class="cd-t">📄 Lista por comprador, dia e atividade</div>'
     + '<div style="overflow:auto;max-height:520px"><table>'
-    + '<thead><tr><th>Mapa</th><th>Comprador</th><th style="text-align:center">Dia</th><th>Atividade</th>'
+    + '<thead><tr><th>Mapa</th><th>Status reap</th><th>Comprador</th><th style="text-align:center">Dia</th><th>Atividade</th>'
     + '<th>RC</th><th>Item</th><th>Oportunidade</th><th style="text-align:right">SLA</th>'
     + '<th style="text-align:center">Fam.</th><th>Segmento</th><th>Prazo</th>'
     + '<th style="text-align:right">Valor pedido</th><th>Sinalizações</th></tr></thead><tbody>';
@@ -13899,6 +14018,7 @@ function mdRenderLista(){
       h += '<tr' + (i.dpv ? ' style="background:var(--vmc)"' : (i.slaAlto ? ' style="background:var(--amc)"' : '')) + '>'
         + '<td style="font-size:10.5px;font-weight:700;color:' + (i.origem === 'reap' ? 'var(--vd)' : 'var(--azm)') + '">'
         +   (i.origem === 'reap' ? 'Mapa reap' : 'Mapa normal') + '</td>'
+        + '<td>' + (i.origem === 'reap' ? mdrSelectStatus(i) : '<span style="color:var(--tx2)">—</span>') + '</td>'
         + '<td style="font-weight:600">' + cpEsc(p.nome) + '</td>'
         + '<td style="text-align:center;font-weight:700;color:var(--azm)">' + (i.dia ? 'D' + i.dia : '—') + '</td>'
         + '<td style="font-size:10.5px;color:' + mdStatusCor(i.statusChave) + ';font-weight:600">'
@@ -13985,11 +14105,15 @@ function mdBaixarExcel(){
               i.prazoDias == null ? '' : i.prazoDias, i.fluxo, i.acomp, i.nm, i.centro, i.valor,
               i.dpv ? 'SIM' : '', i.dpv ? i.dpvValor : '', i.foraAtividade ? 'SIM' : '', i.forn, i.texto];
     };
-    var cabReap = ['Comprador','Dia','Lote','Status no reap','RC','Item','Tipo família',
+    var cabReap = ['Comprador','Dia','Lote','Data do lote','Status reap','Status na planilha',
+                   'Marcado na tela','RC','Item','Tipo família',
                    'Grupo comprador','N. acompanhamento','Código SAP','Centro','Valor',
                    'Fornecedor','Texto breve','Observação'];
     var linhaReap = function(quem, i){
-      return [quem, i.dia ? 'Dia ' + i.dia : '', i.lote, i.statusReap, i.rc, i.seq, i.tipo,
+      return [quem, i.dia ? 'Dia ' + i.dia : '', i.lote,
+              i.dataLote ? cpDataBR(i.dataLote) : '', i.statusReap || '(vazio)',
+              i.statusArquivo || '(vazio)', i.statusMarcado ? 'SIM' : '',
+              i.rc, i.seq, i.tipo,
               i.seg, i.acomp, i.nm, i.centro, i.valor, i.forn, i.texto, i.obs || ''];
     };
     var aoa = [cab], aoaR = [cabReap];
@@ -14050,7 +14174,9 @@ async function mdSalvarDia(){
       return { rc:i.rc, seq:i.seq, op:i.op, sla:i.sla, tipo:i.tipo, seg:i.seg,
                statusChave:i.statusChave, dia:+i.dia || 0, fluxo:i.fluxo, prazo:i.prazo,
                dpv:!!i.dpv, valor:i.valor, foraAtividade:!!i.foraAtividade,
-               origem:i.origem || 'mapa', lote:i.lote || '', statusReap:i.statusReap || '' };
+               origem:i.origem || 'mapa', lote:i.lote || '', statusReap:i.statusReap || '',
+               statusArquivo:i.statusArquivo || '', statusMarcado:!!i.statusMarcado,
+               dataLote:i.dataLote || '' };
     };
     await db.collection(MD_COL).doc(d.data).set({
       data:d.data, arquivo:d.arquivo || '', pessoas:d.pessoas || [], atividades:d.atividades || {},
@@ -14102,6 +14228,7 @@ async function mdCarregarDia(data){
 
 async function mdAbrir(){
   await mdrCarregarLotes();
+  await mdrCarregarStatusManual();
   var el = document.getElementById('md-data');
   if (el && !el.value) el.value = cpHojeISO();
   await mdCarregarCfg();
