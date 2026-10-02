@@ -11069,7 +11069,10 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
             naData:0, semData:0, statusNaData:{}, elimNaData:{},
             linhasDoDia:[], cabecalhoCompleto:[], feitosBarrados:0,
             comCodigo:0, feitosComCodigo:0, cortouEliminados: !!cortarEliminados,
-            cockpit:[], cockpitTotal:0, cockpitEmLib:0 };
+            cockpit:[], cockpitTotal:0, cockpitEmLib:0,
+            cockFunil:{ lidas:0, st3:0, semElim:0, rlrt:0, emLib:0,
+                        colGer:'', colPsmv:'', colSt:'', colElim:'',
+                        gerentes:{}, psmv:{}, status:{} } };
   if (!linhas || !linhas.length) { r.aviso = 'Arquivo vazio.'; return r; }
 
   // acha a linha de cabeçalho — costuma ser a 1a, mas o arquivo pode
@@ -11106,6 +11109,11 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
   r.cabecalhos = (linhas[iCab] || []).map(function(x){ return String(x == null ? '' : x).trim(); })
                    .filter(function(x){ return !!x; });
   r.cabecalhoCompleto = (linhas[iCab] || []).map(function(x){ return String(x == null ? '' : x).trim(); });
+  (function(){
+    var cru = r.cabecalhoCompleto, nm = function(j){ return j === -1 ? '— não encontrada' : (cru[j] || ('coluna ' + (j+1))); };
+    r.cockFunil.colSt = nm(iSt); r.cockFunil.colElim = nm(iEl);
+    r.cockFunil.colGer = nm(iGer); r.cockFunil.colPsmv = nm(iPsmv);
+  })();
   r.nomeColuna = function(j){ return j === -1 ? '—' : (r.cabecalhos[j] || ('coluna ' + (j + 1))); };
 
   var mapa = {};
@@ -11145,6 +11153,25 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
       // ── Cockpit ──────────────────────────────────────────────────
       // Independe da data escolhida: é uma fotografia do que está
       // emitido, vivo, do gerente RLRT e ainda em liberação.
+      // O funil guarda onde cada linha caiu — quando o card vem zerado,
+      // é esse caminho que diz o porquê.
+      (function(){
+        var F = r.cockFunil;
+        F.lidas++;
+        var stC = String(lb[iSt] == null ? '' : lb[iSt]).trim().replace(/[,.]0+$/, '');
+        F.status[stC || '(vazio)'] = (F.status[stC || '(vazio)'] || 0) + 1;
+        if (stC !== CP_COCKPIT.status) return;
+        F.st3++;
+        if (iEl !== -1 && _cpTemEliminacao(lb[iEl])) return;
+        F.semElim++;
+        var ger = iGer === -1 ? '' : String(lb[iGer] == null ? '' : lb[iGer]).trim();
+        F.gerentes[ger || '(vazio)'] = (F.gerentes[ger || '(vazio)'] || 0) + 1;
+        if (cpNormCab(ger) !== cpNormCab(CP_COCKPIT.gerente)) return;
+        F.rlrt++;
+        var ps = iPsmv === -1 ? '' : String(lb[iPsmv] == null ? '' : lb[iPsmv]).trim();
+        F.psmv[ps || '(vazio)'] = (F.psmv[ps || '(vazio)'] || 0) + 1;
+        if (_cpEmLiberacao(ps)) F.emLib++;
+      })();
       if (_cpCockpitLinha(lb, { st:iSt, el:iEl, ger:iGer, psmv:iPsmv })) {
         if (r.cockpit.length < 5000) {
           var p1 = function(j){ return j === -1 ? '' : String(lb[j] == null ? '' : lb[j]).trim(); };
@@ -13435,7 +13462,7 @@ async function gpSalvarCockpit(med, arquivo){
   try {
     if (!med || !med.cockpit) return false;
     _gpCock = { itens: med.cockpit.slice(0, 4000), total: +med.cockpitTotal || 0,
-                emLib: +med.cockpitEmLib || 0,
+                emLib: +med.cockpitEmLib || 0, funil: med.cockFunil || null,
                 arquivo: arquivo || '', atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem() };
     var db = getDB(); if (!db) return false;
     await db.collection('config').doc('governanca_cockpit').set(_gpCock);
@@ -13865,9 +13892,13 @@ function gpHtmlCockpit(){
         + (_gpCock.atualizadoEm ? ' — ' + cpDataBR(String(_gpCock.atualizadoEm).slice(0,10)) : '') + '.' : '')
     + '</div>';
   if (!itens.length) {
-    h += '<div style="font-size:12px;color:var(--tx2)">'
-      + 'Nada aqui ainda. Suba a medição de momento em <strong>Controle de Pedidos</strong> '
-      + 'que esta lista se monta sozinha.</div></div>';
+    h += gpFunilCockpit()
+      + '<div style="font-size:12px;color:var(--tx2);margin-top:.6rem">'
+      + (_gpCock.arquivo
+          ? 'Nenhuma linha passou pelos filtros nesta medição.'
+          : 'Nada aqui ainda. Suba a medição de momento em <strong>Controle de Pedidos</strong> '
+            + 'que esta lista se monta sozinha.')
+      + '</div></div>';
     return h;
   }
   // a conta que ele pediu: pela coluna R, com os vazios contando.
@@ -13915,7 +13946,8 @@ function gpHtmlCockpit(){
         .sort(function(a, b){ return porComprador[b] - porComprador[a]; })
         .map(function(k){ return cpEsc(k) + ' <strong>' + porComprador[k] + '</strong>'; }).join(' · ')
     + '</div></div>';
-  h += '<div style="overflow:auto;max-height:520px"><table><thead><tr>'
+  h += gpFunilCockpit();
+  h += '<div style="overflow:auto;max-height:520px;margin-top:.7rem"><table><thead><tr>'
     + '<th>Pedido</th><th>Status PSMV</th><th>Chave</th><th>RC</th><th>Item</th><th>Comprador</th>'
     + '<th>Grupo</th><th>Fornecedor</th><th>Criado em</th>'
     + '<th style="text-align:right">Valor do pedido</th></tr></thead><tbody>';
@@ -13939,6 +13971,31 @@ function gpHtmlCockpit(){
           + cpNum(itens.length) + ' de ' + cpNum(_gpCock.total) + '.</div>' : '')
     + '</div></div>';
   return h;
+}
+
+// O caminho que as linhas fizeram até o card — é o que responde
+// "por que deu zero".
+function gpFunilCockpit(){
+  var F = _gpCock && _gpCock.funil;
+  if (!F) return '';
+  var topo = function(o, n){
+    return Object.keys(o || {}).sort(function(a, b){ return o[b] - o[a]; }).slice(0, n || 6)
+      .map(function(k){ return cpEsc(k) + ' <strong>' + cpNum(o[k]) + '</strong>'; }).join(' · ') || '—';
+  };
+  return '<div style="font-size:11px;color:var(--tx2);background:var(--cin);border:1px solid var(--brd);'
+    + 'border-radius:8px;padding:9px 12px;line-height:1.8;margin-top:.5rem">'
+    + '<strong style="color:var(--tx)">O que eu li no arquivo:</strong><br>'
+    + 'Status: <strong>' + cpEsc(F.colSt) + '</strong> · Eliminação: <strong>' + cpEsc(F.colElim)
+    + '</strong> · Gerente: <strong>' + cpEsc(F.colGer) + '</strong> · PSMV: <strong>'
+    + cpEsc(F.colPsmv) + '</strong><br>'
+    + cpNum(F.lidas) + ' linha(s) → <strong>' + cpNum(F.st3) + '</strong> com status 3 → <strong>'
+    + cpNum(F.semElim) + '</strong> sem código de eliminação → <strong>' + cpNum(F.rlrt)
+    + '</strong> do gerente ' + cpEsc(CP_COCKPIT.gerente) + ' → <strong>' + cpNum(F.emLib)
+    + '</strong> em liberação<br>'
+    + 'Status que apareceram: ' + topo(F.status, 5) + '<br>'
+    + 'Gerentes (nos status 3 vivos): ' + topo(F.gerentes, 6) + '<br>'
+    + 'PSMV (nos do ' + cpEsc(CP_COCKPIT.gerente) + '): ' + topo(F.psmv, 6)
+    + '</div>';
 }
 
 function gpSelo(e){
@@ -14117,8 +14174,8 @@ async function gpAbrir(){
       if (d4 && d4.exists) {
         var C = d4.data() || {};
         _gpCock = { itens:C.itens || [], total:+C.total || 0, emLib:+C.emLib || 0,
-                    arquivo:C.arquivo || '', atualizadoEm:C.atualizadoEm || '',
-                    atualizadoPor:C.atualizadoPor || '' };
+                    funil:C.funil || null, arquivo:C.arquivo || '',
+                    atualizadoEm:C.atualizadoEm || '', atualizadoPor:C.atualizadoPor || '' };
       }
       var d3 = await db.collection('config').doc('governanca_rejeitados').get();
       if (d3 && d3.exists) {
