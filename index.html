@@ -1333,6 +1333,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             <input type="file" id="cp-file-input" accept=".xlsx,.xls,.csv" style="display:none"
               onchange="cpHandleUpload(this.files[0]); this.value='';">
           </div>
+          <label style="display:flex;align-items:center;gap:7px;margin-top:.6rem;font-size:11px;
+                        color:var(--tx2);cursor:pointer">
+            <input type="checkbox" id="cp-sem-eliminados" checked onchange="cpTrocarEliminados()">
+            Não contar itens com código de eliminação (CODIGO_ELIMINACAO_ITEM_PEDIDO)
+          </label>
           <div id="cp-status" style="margin-top:.7rem;font-size:12px"></div>
           <div id="cp-leitura" style="margin-top:.5rem;font-size:11px;color:var(--tx2)"></div>
         </div>
@@ -10950,11 +10955,14 @@ function _cpAchaCol(cabs, nomes){
 
 // Recebe as linhas cruas da planilha (array de arrays, primeira linha =
 // cabeçalho) e devolve a medição agregada por comprador.
-function cpLerMedicao(linhas, dataAlvo){
+function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
+  if (cortarEliminados === undefined) cortarEliminados = cpSemEliminados();
   var r = { compradores:[], memorizado:0, emitido:0, outros:0, total:0,
             lidas:0, foraDaData:0, eliminadas:0, formato:'', colunas:{}, aviso:'',
             itensMem:[], datasNoArquivo:{}, valoresStatus:{}, cabecalhos:[],
-            naData:0, semData:0, statusNaData:{}, elimNaData:{} };
+            naData:0, semData:0, statusNaData:{}, elimNaData:{},
+            linhasDoDia:[], cabecalhoCompleto:[], feitosBarrados:0,
+            comCodigo:0, feitosComCodigo:0, cortouEliminados: !!cortarEliminados };
   if (!linhas || !linhas.length) { r.aviso = 'Arquivo vazio.'; return r; }
 
   // acha a linha de cabeçalho — costuma ser a 1a, mas o arquivo pode
@@ -10984,6 +10992,7 @@ function cpLerMedicao(linhas, dataAlvo){
                 memorizado:iMem, emitido:iEmi, chave:iCh, pedido:iPd, rc:iRc, item:iIt };
   r.cabecalhos = (linhas[iCab] || []).map(function(x){ return String(x == null ? '' : x).trim(); })
                    .filter(function(x){ return !!x; });
+  r.cabecalhoCompleto = (linhas[iCab] || []).map(function(x){ return String(x == null ? '' : x).trim(); });
   r.nomeColuna = function(j){ return j === -1 ? '—' : (r.cabecalhos[j] || ('coluna ' + (j + 1))); };
 
   var mapa = {};
@@ -11035,8 +11044,21 @@ function cpLerMedicao(linhas, dataAlvo){
       var brutoEl = iEl === -1 ? '' : String(lb[iEl] == null ? '' : lb[iEl]).trim();
       r.statusNaData[bruto || '(vazio)'] = (r.statusNaData[bruto || '(vazio)'] || 0) + 1;
       r.elimNaData[brutoEl || '(vazio)'] = (r.elimNaData[brutoEl || '(vazio)'] || 0) + 1;
+      // guarda a linha crua do dia — é o que eu preciso ver quando a conta
+      // não fecha, e é um arquivo pequeno de mandar
+      if (r.linhasDoDia.length < 500) r.linhasDoDia.push(lb);
 
-      if (iEl !== -1 && _cpTemEliminacao(brutoEl)) { r.eliminadas++; continue; }
+      if (iEl !== -1 && _cpTemEliminacao(brutoEl)) {
+        r.comCodigo++;
+        if (cpStatusNome(lb[iSt])) r.feitosComCodigo++;
+      }
+      if (iEl !== -1 && cortarEliminados && _cpTemEliminacao(brutoEl)) {
+        r.eliminadas++;
+        // o caso que mais confunde: a linha É um feito (2 ou 3) e saiu só
+        // por causa do código de eliminação
+        if (cpStatusNome(lb[iSt])) r.feitosBarrados++;
+        continue;
+      }
 
       r.lidas++;
       r.valoresStatus[bruto || '(vazio)'] = (r.valoresStatus[bruto || '(vazio)'] || 0) + 1;
@@ -11079,7 +11101,7 @@ function cpLerMedicao(linhas, dataAlvo){
     r.diag = {
       comprador: nm(iQuem), status: nm(iSt), data: nm(iDt), eliminacao: nm(iEl),
       lidas: r.lidas, eliminadas: r.eliminadas, foraDaData: r.foraDaData,
-      naData: r.naData, semData: r.semData,
+      naData: r.naData, semData: r.semData, feitosBarrados: r.feitosBarrados,
       status5: topo(r.valoresStatus),
       statusNaData: topo(r.statusNaData),
       elimNaData: topo(r.elimNaData, 5)
@@ -11125,11 +11147,13 @@ async function cpHandleUpload(file){
   if (st) st.innerHTML = '⏳ Lendo a medição...';
   if (lt) lt.innerHTML = '';
   try {
+    _cpUltimoArquivo = file;
     var buf = await file.arrayBuffer();
     var wb = XLSX.read(buf, { type:'array', cellDates:true });
     var ws = wb.Sheets[wb.SheetNames[0]];
     var linhas = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:true });
     var med = cpLerMedicao(linhas, data);
+    _cpLeituraCrua = { data:data, cabecalho: med.cabecalhoCompleto || [], linhas: med.linhasDoDia || [] };
 
     if (med.aviso && !med.compradores.length) {
       if (st) {
@@ -11157,9 +11181,21 @@ async function cpHandleUpload(file){
             + cpEsc(g.statusNaData.join(' · ') || 'nenhuma linha no dia') + '</strong><br>'
             + 'Coluna de eliminação nas linhas do dia: <strong>'
             + cpEsc(g.elimNaData.join(' · ') || '—') + '</strong><br>'
+            + (g.feitosBarrados
+                ? '<div style="margin-top:6px;color:var(--vm)"><strong>' + cpNum(g.feitosBarrados)
+                  + ' linha(s) do dia eram memorizado/emitido e saíram só por causa do código de '
+                  + 'eliminação.</strong> Se na sua extração esse código não quer dizer item eliminado, '
+                  + 'desmarque a chave <em>"Não contar itens com código de eliminação"</em> logo acima '
+                  + 'e eles entram na conta.</div>'
+                : '')
             + '<span style="color:var(--am)">Conto como feito só o status <strong>2</strong> (memorizado) e '
             + '<strong>3</strong> (emitido), e deixo de fora o que tiver código de eliminação. '
             + 'Se os valores acima forem outros, me mande esta linha que eu ajusto.</span>'
+            + ((med.linhasDoDia && med.linhasDoDia.length)
+                ? '<div style="margin-top:8px"><button class="btn" onclick="cpBaixarLinhasDoDia()">'
+                  + '⬇ Baixar as ' + cpNum(med.linhasDoDia.length) + ' linha(s) desse dia (arquivo pequeno)'
+                  + '</button></div>'
+                : '')
             + '</div>';
         }
         _cpArquivoPendente = file;
@@ -11213,6 +11249,9 @@ function cpTextoLeitura(med, data){
   t.push(med.formato === 'dinamizado' ? 'Arquivo já somado por comprador.'
                                       : cpNum(med.lidas) + ' linhas consideradas.');
   if (med.eliminadas) t.push(cpNum(med.eliminadas) + ' item(ns) eliminado(s) fora da conta.');
+  else if (med.feitosComCodigo) t.push('<span style="color:var(--am)">' + cpNum(med.feitosComCodigo)
+    + ' item(ns) feito(s) com código de eliminação — estão contando. '
+    + 'Para tirá-los, marque a chave acima.</span>');
   if (med.semData) t.push('<span style="color:var(--am)">' + cpNum(med.semData)
     + ' linha(s) sem data legível — entraram em ' + cpDataBR(data) + '.</span>');
   if (med.foraDaData) t.push(cpNum(med.foraDaData) + ' de outras datas fora da conta (a medição é de ' + cpDataBR(data) + ').');
@@ -11357,6 +11396,7 @@ async function cpAbrir(){
     await cpCarregarHistorico();
     await cpCarregarDia(cpDataSel());
     cpPintarParametros();
+    cpPintarChaveEliminados();
     cpRender();
   } finally { _cpCarregando = false; }
 }
@@ -13779,6 +13819,53 @@ function cpTextoListaMem(){
 
 function cpCopiarListaMem(){
   cpCopiaTexto(cpTextoListaMem(), 'Lista dos memorizados copiada — é só colar para a equipe.');
+}
+
+// O código de eliminação nem sempre quer dizer "item morto": em algumas
+// extrações ele vem marcado em pedido que a equipe acabou de memorizar.
+// Por isso a conta passa a incluir esses itens, e quem decide o contrário
+// é a chave na tela.
+function cpSemEliminados(){
+  // o padrão continua sendo NÃO contar item eliminado — item morto não é
+  // pedido feito. A chave existe para a extração em que esse código não
+  // quer dizer isso.
+  try { return localStorage.getItem(_lsMod('cp_sem_eliminados')) !== '0'; }
+  catch(e){ return true; }
+}
+function cpTrocarEliminados(){
+  var c = document.getElementById('cp-sem-eliminados');
+  try { localStorage.setItem(_lsMod('cp_sem_eliminados'), c && c.checked ? '1' : '0'); } catch(e){}
+  if (_cpArquivoPendente) { cpHandleUpload(_cpArquivoPendente); return; }
+  if (_cpUltimoArquivo)   { cpHandleUpload(_cpUltimoArquivo);   return; }
+  cpRender();
+}
+function cpPintarChaveEliminados(){
+  var c = document.getElementById('cp-sem-eliminados');
+  if (c) c.checked = cpSemEliminados();
+}
+
+// Quando a conta não fecha, o que resolve é ver as linhas daquele dia
+// com TODAS as colunas. São poucas — vira um arquivo de mandar por e-mail.
+var _cpLeituraCrua = null;
+var _cpUltimoArquivo = null;
+function cpBaixarLinhasDoDia(){
+  try {
+    var L = _cpLeituraCrua;
+    if (!L || !L.linhas || !L.linhas.length) { alert('Não tenho as linhas desse dia guardadas. Suba a medição de novo.'); return; }
+    var aoa = [L.cabecalho.slice()];
+    L.linhas.forEach(function(lin){
+      var fila = [];
+      for (var i = 0; i < L.cabecalho.length; i++) {
+        var v = lin[i];
+        fila.push(v instanceof Date ? v.toISOString().slice(0,10) : (v == null ? '' : v));
+      }
+      aoa.push(fila);
+    });
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Linhas do dia');
+    XLSX.writeFile(wb, 'Linhas_' + String(L.data || '').replace(/-/g,'') + '.xlsx');
+  } catch (e) { alert('Não consegui gerar o arquivo: ' + e.message); }
 }
 
 function cpBaixarListaMem(){
