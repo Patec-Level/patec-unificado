@@ -1316,6 +1316,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div class="stabs" style="margin-bottom:1rem">
           <button class="stab active" id="cp-sub-btn-pedidos" onclick="cpSubTab('pedidos',this)">📦 Controle de Pedidos</button>
           <button class="stab" id="cp-sub-btn-mapa" onclick="cpSubTab('mapa',this)">🗺️ Distribuição do MAPA</button>
+          <button class="stab" id="cp-sub-btn-ctrlpatec" onclick="cpSubTab('ctrlpatec',this)">📈 Controle abrir PATEC</button>
+          <button class="stab" id="cp-sub-btn-ctrlneg" onclick="cpSubTab('ctrlneg',this)">📉 Controle negociação</button>
           <button class="stab" id="cp-sub-btn-statusb" onclick="cpSubTab('statusb',this)">📋 Status B</button>
         </div>
 
@@ -1384,6 +1386,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                   style="font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;color:var(--az);font-weight:600">
               </div>
               <div>
+                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">DATA DA DISTRIBUIÇÃO</label>
+                <input type="date" id="md-data-dist" onchange="mdSalvarEquipe()"
+                  style="font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
+              </div>
+              <div>
                 <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">QUANTAS PESSOAS</label>
                 <input type="number" id="md-qtd-pessoas" min="1" step="1" placeholder="4"
                   style="width:110px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
@@ -1416,6 +1423,15 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                 <span style="font-weight:500;color:var(--tx2)">— marque uma ou mais atividades</span>
               </div>
               <div id="md-atividades"></div>
+            </div>
+
+            <div style="margin-top:1.2rem">
+              <div style="font-size:11px;font-weight:700;color:var(--tx);margin-bottom:6px">
+                Quanto dá para cada um, atividade por atividade
+                <span style="font-weight:500;color:var(--tx2)">— mexa nos itens por semana e nos dias
+                úteis até o número por pessoa ficar do tamanho da equipe</span>
+              </div>
+              <div id="md-quadro"></div>
             </div>
 
             <div style="display:flex;gap:8px;margin-top:.9rem;flex-wrap:wrap;align-items:center">
@@ -1542,6 +1558,46 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         </div><!-- /cp-sub-mapa -->
 
         <!-- ══ STATUS B ═══════════════════════════════════════════ -->
+        <div id="cp-sub-ctrlpatec" style="display:none">
+          <div class="cd">
+            <div class="cd-t" style="justify-content:space-between">
+              <span>📈 Controle de abrir PATEC</span>
+              <span style="display:flex;gap:8px;align-items:center">
+                <input type="date" id="ctp-data" onchange="ctpAbrir()"
+                  style="font-size:12px;padding:5px 9px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
+                <button class="btn btn-s" onclick="ctpAbrir()">↻ Atualizar</button>
+                <button class="btn btn-s" onclick="ctpBaixarExcel()">⬇ Baixar Excel</button>
+              </span>
+            </div>
+            <div style="font-size:11px;color:var(--tx2);line-height:1.7;margin-bottom:.8rem">
+              Comparo a distribuição do dia escolhido com o MAPA que está carregado agora.
+              Item que foi distribuído e <strong>não aparece mais</strong> nos status de Abrir PATEC
+              conta como <strong>concluído</strong>, no nome de quem recebeu.
+            </div>
+            <div id="ctp-corpo"></div>
+          </div>
+        </div>
+
+        <div id="cp-sub-ctrlneg" style="display:none">
+          <div class="cd">
+            <div class="cd-t" style="justify-content:space-between">
+              <span>📉 Controle de negociação</span>
+              <span style="display:flex;gap:8px;align-items:center">
+                <input type="date" id="ctn-data" onchange="ctnAbrir()"
+                  style="font-size:12px;padding:5px 9px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
+                <button class="btn btn-s" onclick="ctnAbrir()">↻ Atualizar</button>
+                <button class="btn btn-s" onclick="ctnBaixarExcel()">⬇ Baixar Excel</button>
+              </span>
+            </div>
+            <div style="font-size:11px;color:var(--tx2);line-height:1.7;margin-bottom:.8rem">
+              Dos itens distribuídos em <strong>Negociar preço</strong> e
+              <strong>Negociar, acima do limite DPV</strong>, conta como feito o que já tem
+              <strong>data de negociação</strong> preenchida na Governança.
+            </div>
+            <div id="ctn-corpo"></div>
+          </div>
+        </div>
+
         <div id="cp-sub-statusb" style="display:none">
 
           <div class="cd" style="border-top:3px solid var(--azm)">
@@ -11813,7 +11869,7 @@ function apSubAtiva(){
   return el && el.style.display !== 'none';
 }
 function cpSubTab(qual, btn){
-  ['pedidos','mapa','statusb'].forEach(function(k){
+  ['pedidos','mapa','ctrlpatec','ctrlneg','statusb'].forEach(function(k){
     var el = document.getElementById('cp-sub-' + k);
     if (el) el.style.display = (qual === k) ? 'block' : 'none';
     var b = document.getElementById('cp-sub-btn-' + k);
@@ -11827,9 +11883,11 @@ function cpSubTab(qual, btn){
   // Cada sub-aba carrega a própria base ao abrir. A de Pedidos ficava de
   // fora: dentro do ADM quem carregava era o setAdmTab, e no módulo novo
   // não havia ninguém — por isso o dia e o histórico vinham vazios.
-  if (qual === 'pedidos')  cpAbrir();
-  if (qual === 'mapa')     mdAbrir();
-  if (qual === 'statusb')  stbAbrir();
+  if (qual === 'pedidos')   cpAbrir();
+  if (qual === 'mapa')      mdAbrir();
+  if (qual === 'ctrlpatec') ctpAbrir();
+  if (qual === 'ctrlneg')   ctnAbrir();
+  if (qual === 'statusb')   stbAbrir();
 }
 
 function apDataSel(){
@@ -13097,13 +13155,47 @@ var MD_PRAZO_VALIDO = 90;
 // Governança, mas não entram na matriz de atividades.
 var MD_STATUS = [
   { chave:'emitir',    nome:'Emitir Pedido',                 cor:'#3266AD' },
+  { chave:'patec',     nome:'Emitir Pedido PATEC',           cor:'var(--vd)' },
+  { chave:'patecman',  nome:'Emitir Pedido PATEC Manual',    cor:'var(--az)' },
   { chave:'negociar',  nome:'Negociar Preço Excessivo',      cor:'var(--am)' },
   { chave:'dpv',       nome:'Negociar, acima do limite DPV', cor:'var(--vm)' },
   // A antiga aba Abertura de PATEC virou atividade daqui: o próprio MAPA
   // já traz esses dois na coluna A.
   { chave:'patecgm',   nome:'Abrir PATEC Grupo de Mercadoria Obrigatório', cor:'var(--vd)' },
-  { chave:'pateciden', nome:'Abrir PATEC idêntico não',      cor:'var(--azm)' }
+  { chave:'pateciden', nome:'Abrir PATEC idêntico não',      cor:'var(--azm)' },
+  // Esta não vem do MAPA: vem da planilha de rejeitados da Governança.
+  { chave:'rejeitado', nome:'Rejeitado',                     cor:'var(--vm)' }
 ];
+// As que o MAPA alimenta; a de rejeitados tem fonte própria.
+function mdStatusDoMapa(ch){ return ch !== 'rejeitado'; }
+
+// Quantos itens cada atividade tem hoje, de onde quer que venham.
+function mdItensDaAtividade(ch){
+  if (ch === 'rejeitado') return (_gpRej && _gpRej.itens) ? _gpRej.itens.length : 0;
+  var n = 0;
+  if (_mdBase && _mdBase.itens) {
+    _mdBase.itens.forEach(function(i){ if (i.statusChave === ch) n++; });
+  }
+  return n;
+}
+
+// Os rejeitados da Governança entram na distribuição como itens.
+function mdItensRejeitados(){
+  var out = [];
+  ((_gpRej && _gpRej.itens) || []).forEach(function(i){
+    out.push({
+      statusChave:'rejeitado', status:'Rejeitado', origem:'rejeitado',
+      rc: i.pedido || '', seq: i.item || '', op:'', itemOp:'',
+      sla: +i.dias || 0, slaAlto:false,
+      seg: i.grupo || '', tipo:'', familia:'',
+      texto: i.motivo || '', forn: i.forn || '', nm:'', centro:'',
+      valor:0, encIso:'', prazoDias:null, prazo: i.prazo || '',
+      acomp:'', fluxo:'', dpvGrupo:'', dpvValor:0, dpvItens:0, dpv:false,
+      prioritario: false, respGrupo: i.resp || '', dataRej: i.dataRej || ''
+    });
+  });
+  return out;
+}
 // Os cinco cards da Governança, na ordem que ele pediu.
 var GOV_CARDS = [
   { chave:'emitir',   nome:'Emitir pedido',                 cor:'var(--azm)', fundo:'var(--azc)' },
@@ -13126,7 +13218,27 @@ function govNomeCard(ch){
   for (var i = 0; i < GOV_CARDS.length; i++) if (GOV_CARDS[i].chave === ch) return GOV_CARDS[i].nome;
   return ch;
 }
-var _mdCfg  = { pessoas:[], atividades:{}, cotaDia:0, cotaSemana:0, dias:5 };
+var _mdCfg  = { pessoas:[], atividades:{}, cotaDia:0, cotaSemana:0, dias:5, porAtividade:{} };
+
+// Cada atividade tem a sua conta: quantos itens por pessoa na semana e em
+// quantos dias úteis. Abrir PATEC e negociação aguentam volume maior que
+// emissão, e era isso que a cota única não deixava fazer.
+function mdCotaAtv(ch){
+  var c = (_mdCfg.porAtividade || {})[ch] || {};
+  var proprio = { semana: Math.round(+c.semana || 0) > 0, dias: Math.round(+c.dias || 0) > 0 };
+  var geral = Math.round(+_mdCfg.cotaSemana || 0);
+  var semana = proprio.semana ? Math.round(+c.semana) : (geral > 0 ? geral : 50);
+  var dias = proprio.dias ? Math.max(1, Math.min(7, Math.round(+c.dias)))
+                          : Math.max(1, Math.min(7, Math.round(+_mdCfg.dias || 5)));
+  return { semana: semana, dias: dias, proprio: proprio };
+}
+function mdPessoasDaAtividade(ch){
+  var out = [];
+  (_mdCfg.pessoas || []).forEach(function(n){
+    if ((_mdCfg.atividades[n] || []).indexOf(ch) !== -1) out.push(n);
+  });
+  return out;
+}
 var _mdBase = null;
 var _mdDist = null;
 
@@ -13300,6 +13412,7 @@ async function mdUpload(file){
     _mdBase = r;
     _mdDist = null;
     await gpSalvarBase(r, mdDataSel());
+    mdPintarQuadro();
     if (st) st.innerHTML = '<span style="color:var(--vd)">✓ <strong>' + cpEsc(file.name) + '</strong> — aba '
       + cpEsc(r.aba) + ', ' + cpNum(r.lidas) + ' linhas lidas, ' + cpNum(r.total)
       + ' para a equipe.</span>';
@@ -13343,6 +13456,69 @@ function mdPintarAtividades(){
   box.innerHTML = h;
 }
 
+// Quadro por atividade: itens, quem atua, quanto cai para cada um e em
+// quantos dias. É aqui que ele decide se põe mais gente ou se estica a
+// semana, antes de mandar distribuir.
+function mdPintarQuadro(){
+  var box = document.getElementById('md-quadro');
+  if (!box) return;
+  var h = '<div style="overflow:auto"><table><thead><tr>'
+    + '<th>Atividade</th><th style="text-align:right">Itens</th>'
+    + '<th style="text-align:right">Pessoas</th><th>Quem atua</th>'
+    + '<th style="text-align:right">Itens por pessoa</th>'
+    + '<th style="text-align:right">Itens/semana</th><th style="text-align:right">Dias úteis</th>'
+    + '<th style="text-align:right">Por pessoa/dia</th><th>Cabe?</th>'
+    + '</tr></thead><tbody>';
+  MD_STATUS.forEach(function(x){
+    var itens = mdItensDaAtividade(x.chave);
+    var quem  = mdPessoasDaAtividade(x.chave);
+    var cota  = mdCotaAtv(x.chave);
+    var porPessoa = quem.length ? Math.ceil(itens / quem.length) : 0;
+    var porDia    = cota.dias ? Math.ceil(cota.semana / cota.dias) : 0;
+    var capacidade = quem.length * cota.semana;
+    var cabe = itens <= capacidade;
+    h += '<tr>'
+      + '<td style="font-weight:600;color:' + x.cor + '">' + cpEsc(x.nome) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + cpNum(itens) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + cpNum(quem.length) + '</td>'
+      + '<td style="font-size:10.5px;color:var(--tx2)">' + cpEsc(quem.join(', ') || '— ninguém marcado') + '</td>'
+      + '<td style="text-align:right;font-weight:700;color:' + (quem.length ? 'var(--az)' : 'var(--vm)') + '">'
+      +   (quem.length ? cpNum(porPessoa) : '—') + '</td>'
+      + '<td style="text-align:right"><input type="number" min="1" step="1" id="md-sem-' + x.chave + '"'
+      +   ' value="' + (cota.proprio.semana ? cota.semana : '') + '" placeholder="' + cota.semana + '"'
+      +   ' title="Em branco segue a cota geral (' + cota.semana + ')" onchange="mdSalvarEquipe()"'
+      +   ' style="width:72px;font-size:12px;padding:3px 6px;border:1px solid var(--brd);border-radius:6px;text-align:right"></td>'
+      + '<td style="text-align:right"><input type="number" min="1" max="7" step="1" id="md-dias-' + x.chave + '"'
+      +   ' value="' + (cota.proprio.dias ? cota.dias : '') + '" placeholder="' + cota.dias + '"'
+      +   ' title="Em branco segue os dias gerais (' + cota.dias + ')" onchange="mdSalvarEquipe()"'
+      +   ' style="width:60px;font-size:12px;padding:3px 6px;border:1px solid var(--brd);border-radius:6px;text-align:right"></td>'
+      + '<td style="text-align:right">' + cpNum(porDia) + '</td>'
+      + '<td style="font-size:10.5px;font-weight:700;color:' + (cabe ? 'var(--vd)' : 'var(--am)') + '">'
+      +   (!quem.length ? '<span style="color:var(--vm)">sem ninguém</span>'
+           : (cabe ? 'cabe' : 'faltam ' + cpNum(itens - capacidade)))
+      + '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  box.innerHTML = h;
+}
+
+function mdQuadroDaTela(){
+  var out = {};
+  MD_STATUS.forEach(function(x){
+    var s1 = document.getElementById('md-sem-' + x.chave);
+    var d1 = document.getElementById('md-dias-' + x.chave);
+    var vS = s1 ? String(s1.value == null ? '' : s1.value).trim() : '';
+    var vD = d1 ? String(d1.value == null ? '' : d1.value).trim() : '';
+    // campo em branco = segue a cota geral; não guardo nada para ele
+    if (!vS && !vD) return;
+    var o = {};
+    if (vS) o.semana = Math.max(1, Math.round(+vS) || 1);
+    if (vD) o.dias   = Math.max(1, Math.min(7, Math.round(+vD) || 1));
+    out[x.chave] = o;
+  });
+  return out;
+}
+
 function mdAtividadesDaTela(nomes){
   var out = {};
   nomes.forEach(function(n, i){
@@ -13359,13 +13535,16 @@ function mdAtividadesDaTela(nomes){
 async function mdSalvarEquipe(){
   var nomes = mdPessoasDaTela();
   var qtd = Math.max(0, Math.round(+(document.getElementById('md-qtd-pessoas') || {}).value || 0));
+  var quadroAntes = mdQuadroDaTela();
   _mdCfg = {
     pessoas: nomes,
     qtdPessoas: qtd || nomes.length,
     atividades: mdAtividadesDaTela(nomes),
     cotaDia: Math.max(0, Math.round(+(document.getElementById('md-cota-dia') || {}).value || 0)),
     cotaSemana: Math.max(0, Math.round(+(document.getElementById('md-cota-semana') || {}).value || 0)),
-    dias: Math.max(1, Math.min(7, Math.round(+(document.getElementById('md-dias') || {}).value || 5)))
+    dias: Math.max(1, Math.min(7, Math.round(+(document.getElementById('md-dias') || {}).value || 5))),
+    porAtividade: Object.keys(quadroAntes).length ? quadroAntes : (_mdCfg.porAtividade || {}),
+    dataDist: String((document.getElementById('md-data-dist') || {}).value || '')
   };
   var av = document.getElementById('md-equipe-aviso');
   var semAtiv = nomes.filter(function(n){ return !(_mdCfg.atividades[n] || []).length; });
@@ -13377,6 +13556,7 @@ async function mdSalvarEquipe(){
     + ' pessoa(s) e escreveu ' + nomes.length + ' nome(s) — vou usar os ' + nomes.length + ' nomes.</span>';
   else msg = '<span style="color:var(--vd)">✓ Equipe salva: ' + nomes.length + ' comprador(es).</span>';
   if (av) av.innerHTML = msg;
+  mdPintarQuadro();
   await mdSalvarCfg();
   mdRender();
 }
@@ -14254,6 +14434,185 @@ function gpBaixarExcel(){
   } catch (e) { console.warn('gpBaixarExcel:', e); }
 }
 
+
+// ── CONTROLE DE ABRIR PATEC E DE NEGOCIAÇÃO ───────────────────────
+// A pergunta é sempre a mesma: do que eu distribuí, quanto já andou?
+// No Abrir PATEC quem responde é o MAPA — item que saiu do status está
+// concluído. Na negociação quem responde é a data que o comprador
+// digitou na Governança.
+var CTRL_PATEC = ['patecgm','pateciden'];
+var CTRL_NEG   = ['negociar','dpv'];
+
+function _ctrlDistSalva(data){
+  // a distribuição daquele dia, já em memória ou vinda do Firebase
+  if (_mdDist && _mdDist.data === data) return Promise.resolve(_mdDist);
+  return (async function(){
+    try {
+      var db = getDB(); if (!db) return null;
+      var doc = await db.collection(MD_COL).doc(data).get();
+      if (!doc || !doc.exists) return null;
+      var d = doc.data() || {};
+      return { data:d.data || data, pessoas:d.pessoas || [],
+               res: { lista: (d.distribuicao || []).map(function(p){
+                        return { nome:p.nome, n:+p.n || 0, itens:p.itens || [] }; }),
+                      fila: d.fila || [] },
+               geradoEm: d.geradoEm || '' };
+    } catch (e) { console.warn('_ctrlDistSalva:', e); return null; }
+  })();
+}
+
+// O que o MAPA de agora ainda traz nos status de abrir PATEC.
+function _ctrlAindaNoMapa(){
+  var vivos = {};
+  if (_mdBase && _mdBase.itens) {
+    _mdBase.itens.forEach(function(i){
+      if (CTRL_PATEC.indexOf(i.statusChave) !== -1) vivos[i.rc + '|' + i.seq] = i.statusChave;
+    });
+  }
+  return vivos;
+}
+
+function _ctrlLinhas(dist, chaves, feitoDe){
+  var porPessoa = {}, itens = [];
+  (((dist || {}).res || {}).lista || []).forEach(function(p){
+    (p.itens || []).forEach(function(i){
+      if (chaves.indexOf(i.statusChave) === -1) return;
+      if (!porPessoa[p.nome]) porPessoa[p.nome] = { nome:p.nome, recebido:0, feito:0, falta:0 };
+      var feito = !!feitoDe(i);
+      porPessoa[p.nome].recebido++;
+      if (feito) porPessoa[p.nome].feito++; else porPessoa[p.nome].falta++;
+      itens.push({ nome:p.nome, rc:i.rc, seq:i.seq, statusChave:i.statusChave,
+                   dia:i.dia || 0, sla:i.sla || 0, feito:feito });
+    });
+  });
+  var lista = Object.keys(porPessoa).map(function(k){ return porPessoa[k]; })
+    .sort(function(a, b){ return b.recebido - a.recebido || a.nome.localeCompare(b.nome); });
+  var tot = lista.reduce(function(m, p){
+    m.recebido += p.recebido; m.feito += p.feito; m.falta += p.falta; return m;
+  }, { recebido:0, feito:0, falta:0 });
+  return { lista:lista, itens:itens, total:tot };
+}
+
+function _ctrlHtml(r, dist, titulo, semDist){
+  if (!dist) return '<div style="font-size:12px;color:var(--am)">' + semDist + '</div>';
+  if (!r.total.recebido) {
+    return '<div style="font-size:12px;color:var(--tx2)">A distribuição de '
+      + cpDataBR(dist.data) + ' não tem itens de ' + cpEsc(titulo) + '.</div>';
+  }
+  var pct = r.total.recebido ? Math.round(r.total.feito * 100 / r.total.recebido) : 0;
+  var h = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:1rem">'
+    + '<div style="background:var(--cin);border:1.5px solid var(--brd);border-radius:12px;padding:.9rem;text-align:center">'
+    +   '<div style="font-size:26px;font-weight:800;color:var(--az)">' + cpNum(r.total.recebido) + '</div>'
+    +   '<div style="font-size:10.5px;font-weight:700;color:var(--tx2);margin-top:4px">DISTRIBUÍDOS</div></div>'
+    + '<div style="background:var(--vdc);border:1.5px solid var(--vd);border-radius:12px;padding:.9rem;text-align:center">'
+    +   '<div style="font-size:26px;font-weight:800;color:var(--vd)">' + cpNum(r.total.feito) + '</div>'
+    +   '<div style="font-size:10.5px;font-weight:700;color:var(--vd);margin-top:4px">CONCLUÍDOS</div></div>'
+    + '<div style="background:var(--amc);border:1.5px solid var(--am);border-radius:12px;padding:.9rem;text-align:center">'
+    +   '<div style="font-size:26px;font-weight:800;color:var(--am)">' + cpNum(r.total.falta) + '</div>'
+    +   '<div style="font-size:10.5px;font-weight:700;color:var(--am);margin-top:4px">EM ABERTO</div></div>'
+    + '<div style="background:var(--azc);border:1.5px solid var(--azm);border-radius:12px;padding:.9rem;text-align:center">'
+    +   '<div style="font-size:26px;font-weight:800;color:var(--azm)">' + pct + '%</div>'
+    +   '<div style="font-size:10.5px;font-weight:700;color:var(--azm);margin-top:4px">EVOLUÇÃO</div></div>'
+    + '</div>';
+  h += '<div style="overflow:auto"><table><thead><tr><th>Comprador</th>'
+    + '<th style="text-align:right">Distribuídos</th><th style="text-align:right">Concluídos</th>'
+    + '<th style="text-align:right">Em aberto</th><th style="text-align:right">%</th>'
+    + '<th style="width:140px">Evolução</th></tr></thead><tbody>';
+  r.lista.forEach(function(p){
+    var q = p.recebido ? Math.round(p.feito * 100 / p.recebido) : 0;
+    h += '<tr><td style="font-weight:600">' + cpEsc(p.nome) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + cpNum(p.recebido) + '</td>'
+      + '<td style="text-align:right;font-weight:700;color:var(--vd)">' + cpNum(p.feito) + '</td>'
+      + '<td style="text-align:right;color:' + (p.falta ? 'var(--am)' : 'var(--tx2)') + '">'
+      +   cpNum(p.falta) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + q + '%</td>'
+      + '<td>' + cpBarraSimples(p.feito, p.recebido || 1) + '</td></tr>';
+  });
+  h += '</tbody><tfoot><tr><td>Total da equipe</td>'
+    + '<td style="text-align:right;font-weight:800">' + cpNum(r.total.recebido) + '</td>'
+    + '<td style="text-align:right;font-weight:800;color:var(--vd)">' + cpNum(r.total.feito) + '</td>'
+    + '<td style="text-align:right;font-weight:800">' + cpNum(r.total.falta) + '</td>'
+    + '<td style="text-align:right;font-weight:800">' + pct + '%</td><td></td></tr></tfoot></table></div>';
+  return h;
+}
+
+// ── abrir PATEC ───────────────────────────────────────────────────
+var _ctpDados = null;
+function ctpDataSel(){
+  var el = document.getElementById('ctp-data');
+  return (el && el.value) ? el.value : (_mdCfg.dataDist || cpHojeISO());
+}
+async function ctpAbrir(){
+  var el = document.getElementById('ctp-data');
+  if (el && !el.value) el.value = _mdCfg.dataDist || cpHojeISO();
+  var box = document.getElementById('ctp-corpo');
+  if (box) box.innerHTML = '<div style="font-size:12px;color:var(--tx2)">⏳ Conferindo...</div>';
+  var dist = await _ctrlDistSalva(ctpDataSel());
+  var vivos = _ctrlAindaNoMapa();
+  var temMapa = !!(_mdBase && _mdBase.itens && _mdBase.itens.length);
+  var r = _ctrlLinhas(dist, CTRL_PATEC, function(i){
+    // saiu do status = concluído. Sem MAPA carregado não dá para dizer.
+    return temMapa && !vivos[i.rc + '|' + i.seq];
+  });
+  _ctpDados = { dist:dist, r:r };
+  if (box) {
+    box.innerHTML = (!temMapa
+        ? '<div style="font-size:12px;color:var(--am);margin-bottom:.8rem">⚠ Suba o MAPA de hoje na '
+          + 'Distribuição do MAPA — é ele que diz o que já saiu do status.</div>' : '')
+      + _ctrlHtml(r, dist, 'Abrir PATEC',
+          'Nenhuma distribuição guardada em ' + cpDataBR(ctpDataSel()) + '.');
+  }
+}
+function ctpBaixarExcel(){ _ctrlExcel(_ctpDados, 'Controle_AbrirPATEC_', ctpDataSel()); }
+
+// ── negociação ────────────────────────────────────────────────────
+var _ctnDados = null;
+function ctnDataSel(){
+  var el = document.getElementById('ctn-data');
+  return (el && el.value) ? el.value : (_mdCfg.dataDist || cpHojeISO());
+}
+async function ctnAbrir(){
+  var el = document.getElementById('ctn-data');
+  if (el && !el.value) el.value = _mdCfg.dataDist || cpHojeISO();
+  var box = document.getElementById('ctn-corpo');
+  if (box) box.innerHTML = '<div style="font-size:12px;color:var(--tx2)">⏳ Conferindo...</div>';
+  // a data de negociação mora na Governança
+  try {
+    var db = getDB();
+    if (db) {
+      var d1 = await db.collection('config').doc('governanca_negociacao').get();
+      if (d1 && d1.exists) _gpNeg = (d1.data() || {}).itens || {};
+    }
+  } catch (e) { console.warn('ctnAbrir:', e); }
+  var dist = await _ctrlDistSalva(ctnDataSel());
+  var r = _ctrlLinhas(dist, CTRL_NEG, function(i){
+    var m = _gpNeg[i.rc + '|' + i.seq];
+    return !!(m && m.data);
+  });
+  _ctnDados = { dist:dist, r:r };
+  var box2 = document.getElementById('ctn-corpo');
+  if (box2) box2.innerHTML = _ctrlHtml(r, dist, 'negociação',
+    'Nenhuma distribuição guardada em ' + cpDataBR(ctnDataSel()) + '.');
+}
+function ctnBaixarExcel(){ _ctrlExcel(_ctnDados, 'Controle_Negociacao_', ctnDataSel()); }
+
+function _ctrlExcel(dados, prefixo, data){
+  try {
+    if (!dados || !dados.r || !dados.r.itens.length) return;
+    var cab = ['Comprador','Atividade','RC','Item','Dia','SLA','Situação'];
+    var aoa = [cab];
+    dados.r.itens.forEach(function(i){
+      aoa.push([i.nome, mdStatusNome(i.statusChave), i.rc, i.seq,
+                i.dia ? 'Dia ' + i.dia : '', i.sla, i.feito ? 'Concluído' : 'Em aberto']);
+    });
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = cab.map(function(c){ return { wch: Math.max(10, Math.min(30, c.length + 6)) }; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Controle');
+    XLSX.writeFile(wb, prefixo + String(data || '').replace(/-/g, '') + '.xlsx');
+  } catch (e) { console.warn('_ctrlExcel:', e); }
+}
+
 // ── ITENS PRIORITÁRIOS ────────────────────────────────────────────
 // A prioridade que existia na Abertura de PATEC (os PID na frente) agora
 // vem de uma lista que ele sobe. Guardo por RC+item e também só por RC:
@@ -14706,7 +15065,8 @@ function mdEntraNaDistribuicao(it){
 function mdBlocos(itens){
   var mapa = {};
   (itens || []).forEach(function(it, i){
-    var k = it.op ? ('OP:' + it.op) : ('RC:' + (it.rc || ('~' + i)));
+    var k = it.statusChave === 'rejeitado' ? ('REJ:' + it.rc)
+          : (it.op ? ('OP:' + it.op) : ('RC:' + (it.rc || ('~' + i))));
     if (!mapa[k]) {
       mapa[k] = { id:k, itens:[], slaMax:0, porStatus:{}, statuses:[], tipoEmitir:'', prio:false };
       MD_STATUS.forEach(function(x){ mapa[k].porStatus[x.chave] = 0; });
@@ -14743,6 +15103,11 @@ function mdCalcular(itens, pessoas, atividades, cotaDia, cotaSemana, dias, itens
   var nDias  = Math.max(1, Math.min(7, Math.round(+dias || 5)));
   var cota   = Math.max(1, Math.round(+cotaDia || 1));
   var semana = Math.max(cota, Math.round(+cotaSemana || (cota * nDias)));
+  // cada atividade tem a sua cota semanal e os seus dias úteis
+  var cotaCh = function(ch){ var c = mdCotaAtv(ch); return c.semana || semana; };
+  var diasCh = function(ch){ var c = mdCotaAtv(ch); return c.dias || nDias; };
+  // a semana mais longa entre as atividades manda no tamanho do calendário
+  MD_STATUS.forEach(function(x){ if (diasCh(x.chave) > nDias) nDias = diasCh(x.chave); });
   var res = { pessoas:{}, fila:[], semAtividade:[], dias:nDias, cotaDia:cota, cotaSemana:semana,
               total:(itens || []).length, diasAcima:[], estourou:[], foraAtividade:[] };
   (pessoas || []).forEach(function(n){
@@ -14770,7 +15135,15 @@ function mdCalcular(itens, pessoas, atividades, cotaDia, cotaSemana, dias, itens
                                     res.semAtividade.push(it); });
       return;
     }
-    var cand = quemFaz.filter(function(n){ return res.pessoas[n].n < semana; });
+    // cabe se, nas atividades deste bloco que são dele, ainda há espaço
+    var cand = quemFaz.filter(function(n){
+      for (var i = 0; i < b.statuses.length; i++) {
+        var ch = b.statuses[i];
+        if ((atividades[n] || []).indexOf(ch) === -1) continue;
+        if ((res.pessoas[n].porStatus[ch] || 0) < cotaCh(ch)) return true;
+      }
+      return false;
+    });
     if (!cand.length) {
       b.itens.forEach(function(it){ it.pessoa = ''; it.dia = 0; it.foraAtividade = false;
                                     res.fila.push(it); });
@@ -14859,9 +15232,13 @@ function mdCalcular(itens, pessoas, atividades, cotaDia, cotaSemana, dias, itens
     if (!p.blocos.length) return;
     var alvo = Math.max(1, Math.ceil(p.n / nDias));
     p.blocos.forEach(function(b){
+      // o bloco só pode cair dentro dos dias úteis da atividade dele
+      var limite = nDias;
+      (b.statuses || []).forEach(function(ch){ var dd = diasCh(ch); if (dd < limite) limite = dd; });
+      if (!limite) limite = nDias;
       var d = -1, i;
-      for (i = 0; i < nDias; i++) if (p.porDia[i] + b.n <= alvo) { d = i; break; }
-      if (d === -1) { d = 0; for (i = 1; i < nDias; i++) if (p.porDia[i] < p.porDia[d]) d = i; }
+      for (i = 0; i < limite; i++) if (p.porDia[i] + b.n <= alvo) { d = i; break; }
+      if (d === -1) { d = 0; for (i = 1; i < limite; i++) if (p.porDia[i] < p.porDia[d]) d = i; }
       b.itens.forEach(function(it){ it.dia = d + 1; });
       p.porDia[d] += b.n;
     });
@@ -14885,7 +15262,7 @@ async function mdDistribuir(){
   var st = document.getElementById('md-status');
   var temMapa = !!(_mdBase && _mdBase.itens.length);
   var temReap = !!(_mdrBase && _mdrBase.itens.length);
-  if (!temMapa && !temReap) {
+  if (!temMapa && !temReap && !(_gpRej && _gpRej.itens && _gpRej.itens.length)) {
     if (st) st.innerHTML = '<span style="color:var(--am)">Suba o MAPA do dia ou o MAPA de reap antes de distribuir.</span>';
     return;
   }
@@ -14902,12 +15279,16 @@ async function mdDistribuir(){
     return;
   }
   var itensMapa = temMapa ? _mdBase.itens.filter(mdEntraNaDistribuicao) : [];
+  // os rejeitados da Governança entram como mais uma atividade
+  var temRej = !!(_gpRej && _gpRej.itens && _gpRej.itens.length);
+  if (temRej) itensMapa = itensMapa.concat(mdItensRejeitados());
   var itensReap = temReap ? _mdrBase.itens : [];
   itensMapa.forEach(function(it){ if (!it.origem) it.origem = 'mapa'; });
   var res = mdCalcular(itensMapa, _mdCfg.pessoas, _mdCfg.atividades,
                        _mdCfg.cotaDia, _mdCfg.cotaSemana, _mdCfg.dias, itensReap);
   _mdDist = {
-    data: mdDataSel(), arquivo: (temMapa ? _mdBase.arquivo : ''),
+    data: (_mdCfg.dataDist || mdDataSel()), arquivo: (temMapa ? _mdBase.arquivo : ''),
+    dataMapa: mdDataSel(), totalRejeitados: temRej ? _gpRej.itens.length : 0,
     arquivoReap: temReap ? _mdrBase.arquivo : '',
     pessoas: _mdCfg.pessoas.slice(), atividades: _mdCfg.atividades,
     cotaDia: _mdCfg.cotaDia, cotaSemana: _mdCfg.cotaSemana, dias: res.dias,
@@ -15245,6 +15626,7 @@ async function mdSalvarCfg(){
     await db.collection('config').doc('distribuicao_mapa_cfg').set({
       pessoas:_mdCfg.pessoas || [], qtdPessoas:+_mdCfg.qtdPessoas || 0,
       atividades:_mdCfg.atividades || {},
+      porAtividade:_mdCfg.porAtividade || {}, dataDist:_mdCfg.dataDist || '',
       cotaDia:+_mdCfg.cotaDia || 0, cotaSemana:+_mdCfg.cotaSemana || 0, dias:+_mdCfg.dias || 5,
       atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem()
     });
@@ -15259,6 +15641,7 @@ async function mdCarregarCfg(){
     if (doc && doc.exists) {
       var d = doc.data() || {};
       _mdCfg = { pessoas:d.pessoas||[], qtdPessoas:+d.qtdPessoas||0, atividades:d.atividades||{},
+                 porAtividade:d.porAtividade||{}, dataDist:d.dataDist||'',
                  cotaDia:+d.cotaDia||0, cotaSemana:+d.cotaSemana||0, dias:+d.dias||5 };
     }
   } catch (e) { console.warn('mdCarregarCfg:', e); }
@@ -15349,9 +15732,11 @@ function mdPintarCfg(){
   poe('md-cota-dia', _mdCfg.cotaDia || '');
   poe('md-cota-semana', _mdCfg.cotaSemana || '');
   poe('md-dias', _mdCfg.dias || 5);
+  poe('md-data-dist', _mdCfg.dataDist || cpHojeISO());
   var t = document.getElementById('md-nomes');
   if (t && !t.value) t.value = (_mdCfg.pessoas || []).join('\n');
   mdPintarAtividades();
+  mdPintarQuadro();
 }
 
 
