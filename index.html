@@ -40613,15 +40613,35 @@ function _fcIniciar(){
   _fcVarrer(false);
 }
 
-// fechar o dropdown ao clicar fora, rolar ou apertar Esc
+// fechar o dropdown ao clicar fora, rolar a página ou apertar Esc.
+// O "rolar" não pode valer para a lista de dentro do próprio menu: com
+// muitos valores ela ganha barra, e rolar para achar um item fechava
+// tudo antes de dar para marcar.
+function _fcDentroDoMenu(alvo){
+  if (!alvo) return false;
+  if (alvo === _FC_MENU) return true;
+  if (alvo.closest) return !!alvo.closest('[data-fc-menu]');
+  return false;
+}
 document.addEventListener('click', function(ev){
   if (!_FC_MENU) return;
   if (ev.target.closest && (ev.target.closest('[data-fc-menu]') || ev.target.closest('[data-fc-btn]'))) return;
   _fcFechar();
 }, true);
 document.addEventListener('keydown', function(ev){ if (ev.key === 'Escape') _fcFechar(); });
-window.addEventListener('scroll', function(){ _fcFechar(); }, true);
-window.addEventListener('resize', function(){ _fcFechar(); });
+window.addEventListener('scroll', function(ev){
+  if (!_FC_MENU) return;
+  if (_fcDentroDoMenu(ev.target)) return;
+  _fcFechar();
+}, true);
+// o teclado do celular dispara resize ao focar a busca — só fecho quando
+// a largura muda de verdade
+var _FC_LARG = window.innerWidth;
+window.addEventListener('resize', function(){
+  if (window.innerWidth === _FC_LARG) return;
+  _FC_LARG = window.innerWidth;
+  _fcFechar();
+});
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _fcIniciar);
 else setTimeout(_fcIniciar, 0);
