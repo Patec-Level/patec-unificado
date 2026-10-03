@@ -724,7 +724,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           em <strong>Negociar preço</strong> e <strong>DPV</strong>, a data que o comprador digitar
           conta <strong>2 dias úteis</strong> e o item passa para <strong>Emitir pedido</strong> ·
           em <strong>PATEC</strong> e <strong>PATEC manual</strong>, quem dá a data é a coluna
-          <strong>NEGOCIACAO</strong> do levelboard.
+          <strong>NEGOCIACAO</strong> do levelboard · os dois de <strong>Abrir PATEC</strong> não têm
+          negociação: eles ainda percorrem o fluxo do PATEC e só viram pedido quando voltarem
+          no MAPA como Emitir Pedido PATEC.
         </div>
       </div>
       <div id="gp-detalhe"></div>
@@ -13695,9 +13697,20 @@ function gpMaisDiasUteis(iso, n){
 
 function gpChave(it){ return String(it.rc || '') + '|' + String(it.seq || ''); }
 
+// Abrir PATEC não passa por negociação: o item ainda vai percorrer o
+// fluxo do PATEC e só fica apto a pedido quando reaparecer no MAPA como
+// Emitir Pedido PATEC. Então aqui não há data, não há prazo e nada migra.
+var GOV_SEM_NEGOCIACAO = ['patecgm','pateciden'];
+function gpSemNegociacao(ch){ return GOV_SEM_NEGOCIACAO.indexOf(ch) !== -1; }
+
 // O estado de um item: onde ele cai hoje e por quê.
 function gpEstado(it){
   var k = gpChave(it);
+  if (gpSemNegociacao(it.statusChave)) {
+    return { chave:k, origem:it.statusChave, card:it.statusChave,
+             comentario:'', dataNeg:'', libera:'', liberado:false, fonte:'',
+             fornecedor:'', nmPedido:'' };
+  }
   var man = _gpNeg[k] || {};
   var lb  = (_gpLb.itens || {})[k] || {};
   var ch  = it.statusChave;
@@ -13836,6 +13849,7 @@ function gpRenderDetalhe(){
   });
   var editavel = (_gpCard === 'negociar' || _gpCard === 'dpv');
   var dePatec  = (_gpCard === 'patec' || _gpCard === 'patecman');
+  var semNeg   = gpSemNegociacao(_gpCard);
 
   var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between">'
     + '<span>' + cpEsc(govNomeCard(_gpCard)) + ' — ' + cpNum(lista.length) + ' RC(s)</span>'
@@ -13852,9 +13866,9 @@ function gpRenderDetalhe(){
     + '<th>RC</th><th>Item</th><th>Oportunidade</th><th>Item op.</th>'
     + '<th style="text-align:right">SLA</th><th>Segmento</th>'
     + (dePatec ? '<th>Fornecedor ganhador</th><th>NM do pedido</th>' : '')
-    + '<th>Data da negociação</th><th>Apto a pedido</th>'
+    + (semNeg ? '' : '<th>Data da negociação</th><th>Apto a pedido</th>')
     + (editavel ? '<th>Comentário</th>' : '')
-    + '<th>Situação</th></tr></thead><tbody>';
+    + (semNeg ? '' : '<th>Situação</th>') + '</tr></thead><tbody>';
   lista.forEach(function(x){
     var it = x.it, e = x.e;
     h += '<tr>'
@@ -13868,18 +13882,20 @@ function gpRenderDetalhe(){
       h += '<td>' + cpEsc(e.fornecedor || '—') + '</td>'
         +  '<td>' + cpEsc(e.nmPedido || '—') + '</td>';
     }
-    h += '<td>' + (editavel
-        ? '<input type="date" value="' + cpEsc(e.dataNeg) + '" onchange="gpTrocarDataNeg(\'' + cpEsc(e.chave) + '\', this.value)" '
-          + 'style="font-size:10.5px;padding:3px 5px;border:1px solid var(--brd);border-radius:5px">'
-        : (e.dataNeg ? cpDataBR(e.dataNeg) : '—')) + '</td>'
-      + '<td style="font-size:10.5px;font-weight:600;color:' + (e.liberado ? 'var(--vd)' : 'var(--tx2)') + '">'
-      +   (e.libera ? cpDataBR(e.libera) : '—') + '</td>';
+    if (!semNeg) {
+      h += '<td>' + (editavel
+          ? '<input type="date" value="' + cpEsc(e.dataNeg) + '" onchange="gpTrocarDataNeg(\'' + cpEsc(e.chave) + '\', this.value)" '
+            + 'style="font-size:10.5px;padding:3px 5px;border:1px solid var(--brd);border-radius:5px">'
+          : (e.dataNeg ? cpDataBR(e.dataNeg) : '—')) + '</td>'
+        + '<td style="font-size:10.5px;font-weight:600;color:' + (e.liberado ? 'var(--vd)' : 'var(--tx2)') + '">'
+        +   (e.libera ? cpDataBR(e.libera) : '—') + '</td>';
+    }
     if (editavel) {
       h += '<td><input type="text" value="' + cpEsc(e.comentario) + '" placeholder="quem está tratando"'
         +  ' onchange="gpTrocarComentario(\'' + cpEsc(e.chave) + '\', this.value)"'
         +  ' style="font-size:10.5px;padding:3px 6px;border:1px solid var(--brd);border-radius:5px;width:160px"></td>';
     }
-    h += '<td style="font-size:10px">' + gpSelo(e) + '</td></tr>';
+    h += (semNeg ? '' : '<td style="font-size:10px">' + gpSelo(e) + '</td>') + '</tr>';
   });
   h += '</tbody></table></div>';
   if (editavel) {
@@ -13887,6 +13903,13 @@ function gpRenderDetalhe(){
       + 'Digite a data em que negociou. Dois dias úteis depois, o item sai deste card e '
       + 'aparece em <strong>Emitir pedido</strong>, mesmo que o MAPA do dia continue trazendo '
       + 'ele como negociação.</div>';
+  }
+  if (semNeg) {
+    h += '<div style="font-size:10.5px;color:var(--tx2);margin-top:8px">'
+      + 'Estes itens ainda vão percorrer o fluxo do PATEC. Eles só ficam aptos a pedido '
+      + 'quando reaparecerem no MAPA como <strong>Emitir Pedido PATEC</strong> ou '
+      + '<strong>Emitir Pedido PATEC Manual</strong> — por isso aqui não tem data de '
+      + 'negociação nem prazo.</div>';
   }
   h += '</div>';
   box.innerHTML = h;
