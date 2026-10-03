@@ -11043,7 +11043,7 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
             naData:0, semData:0, statusNaData:{}, elimNaData:{},
             linhasDoDia:[], cabecalhoCompleto:[], feitosBarrados:0,
             comCodigo:0, feitosComCodigo:0, cortouEliminados: !!cortarEliminados,
-            cockpit:[], cockpitTotal:0, cockpitEmLib:0,
+            cockpit:[], cockpitTotal:0, cockpitEmLib:0, memorizados:[], memorizadosTotal:0,
             cockFunil:{ lidas:0, st3:0, semElim:0, rlrt:0, emLib:0,
                         colGer:'', colPsmv:'', colSt:'', colElim:'',
                         gerentes:{}, psmv:{}, status:{} } };
@@ -11159,6 +11159,25 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
         }
         r.cockpitTotal++;
         if (iPsmv !== -1 && _cpEmLiberacao(lb[iPsmv])) r.cockpitEmLib++;
+      }
+
+      // ── Itens memorizados ────────────────────────────────────────
+      // Mesmo filtro da medição (status 2 e sem código de eliminação),
+      // só que sem recorte de data: a tela da Governança é que escolhe
+      // o período, e em branco mostra tudo que está memorizado.
+      if (iSt !== -1 && _cpStatusNum(lb[iSt]) === 2
+          && !(iEl !== -1 && _cpTemEliminacao(lb[iEl]))) {
+        r.memorizadosTotal++;
+        if (r.memorizados.length < 5000) {
+          var p2 = function(j){ return j === -1 ? '' : String(lb[j] == null ? '' : lb[j]).trim(); };
+          r.memorizados.push({
+            chave: p2(iCh), pedido: p2(iPd), rc: p2(iRc), item: p2(iIt),
+            comprador: nomeB, grupo: p2(iGrp), forn: p2(iForn),
+            psmv: p2(iPsmv), gerente: p2(iGer),
+            valor: iVal === -1 ? 0 : mdNum(lb[iVal]),
+            criacao: iDt === -1 ? '' : cpDataISO(lb[iDt])
+          });
+        }
       }
 
       // A data vem ANTES da eliminação: assim dá para dizer quantas linhas
@@ -11323,6 +11342,7 @@ async function cpHandleUpload(file){
     _cpLeituraCrua = { data:data, cabecalho: med.cabecalhoCompleto || [], linhas: med.linhasDoDia || [] };
     // o Cockpit não depende da data nem de a medição ter dado certo
     await gpSalvarCockpit(med, file.name);
+    await gpSalvarMemorizados(med, file.name);
 
     if (med.aviso && !med.compradores.length) {
       if (st) {
@@ -13186,7 +13206,8 @@ var GOV_CARDS = [
   { chave:'patecgm',  nome:'Abrir PATEC Grupo de Mercadoria Obrigatório', cor:'var(--vd)', fundo:'var(--vdc)' },
   { chave:'pateciden',nome:'Abrir PATEC idêntico não',      cor:'var(--azm)', fundo:'var(--azc)' },
   { chave:'rejeitados', nome:'Rejeitados',                  cor:'var(--vm)',  fundo:'var(--vmc)', proprio:true },
-  { chave:'cockpit',    nome:'Cockpit',                     cor:'var(--az)',  fundo:'var(--azc)', proprio:true }
+  { chave:'cockpit',    nome:'Cockpit',                     cor:'var(--az)',  fundo:'var(--azc)', proprio:true },
+  { chave:'memorizados',nome:'Itens memorizados',            cor:'var(--azm)', fundo:'var(--azc)', proprio:true }
 ];
 // Só estes grupos de compras entram na conta dos rejeitados.
 var GP_GRUPOS = ['L01','L02','L03','L04','L05','L06','L08','L09','L10','L11','L12','L13','L14',
@@ -13562,6 +13583,108 @@ var _gpCard  = '';
 var _gpRej   = { itens:[], arquivo:'', lidas:0, fora:0, atualizadoEm:'', atualizadoPor:'' };
 var _gpCock  = { itens:[], total:0, arquivo:'', atualizadoEm:'', atualizadoPor:'' };
 var _gpCockPsmv = cpNormCab('Em liberação');   // o card abre já nele
+
+// ── itens memorizados ─────────────────────────────────────────────
+// Vem da mesma medição de momento, com o mesmo filtro da contagem do
+// dia (status 2 e sem código de eliminação), só que sem recorte de data.
+var _gpMem = { itens:[], total:0, arquivo:'', atualizadoEm:'', atualizadoPor:'' };
+
+async function gpSalvarMemorizados(med, arquivo){
+  try {
+    if (!med || !med.memorizados) return false;
+    _gpMem = { itens: med.memorizados.slice(0, 5000), total: +med.memorizadosTotal || 0,
+               arquivo: arquivo || '', atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem() };
+    var db = getDB(); if (!db) return false;
+    await db.collection('config').doc('governanca_memorizados').set(_gpMem);
+    return true;
+  } catch (e) { console.warn('gpSalvarMemorizados:', e); return false; }
+}
+
+function gpMemPeriodo(){
+  var de = document.getElementById('gp-mem-de');
+  var ate = document.getElementById('gp-mem-ate');
+  return { de: String((de && de.value) || '').trim(), ate: String((ate && ate.value) || '').trim() };
+}
+function gpMemFiltrar(){ gpRenderDetalhe(); }
+function gpMemLimpar(){
+  ['gp-mem-de','gp-mem-ate'].forEach(function(id){
+    var e = document.getElementById(id); if (e) e.value = '';
+  });
+  gpRenderDetalhe();
+}
+function gpMemItens(){
+  var per = gpMemPeriodo();
+  var itens = ((_gpMem && _gpMem.itens) || []).slice();
+  if (per.de)  itens = itens.filter(function(i){ return i.criacao && i.criacao >= per.de; });
+  if (per.ate) itens = itens.filter(function(i){ return i.criacao && i.criacao <= per.ate; });
+  itens.sort(function(a, b){
+    if ((a.criacao || '') !== (b.criacao || '')) return String(a.criacao).localeCompare(String(b.criacao));
+    return String(a.comprador).localeCompare(String(b.comprador));
+  });
+  return itens;
+}
+
+function gpHtmlMemorizados(){
+  var per = gpMemPeriodo();
+  var itens = gpMemItens();
+  var todos = (_gpMem && _gpMem.itens) ? _gpMem.itens.length : 0;
+  var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between">'
+    + '<span>Itens memorizados — ' + cpNum(itens.length)
+    +   (itens.length !== todos ? ' de ' + cpNum(todos) : '') + '</span>'
+    + '<span style="display:flex;gap:8px">'
+    +   (itens.length ? '<button class="btn btn-s" onclick="gpCopiar()">📋 Copiar p/ equipe</button>'
+                      + '<button class="btn btn-s" onclick="gpBaixarExcel()">⬇ Baixar Excel</button>' : '')
+    +   '<button class="btn btn-s" onclick="gpAbrirCard(\'memorizados\')">✕ Fechar</button>'
+    + '</span></div>'
+    + '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:.8rem">'
+    +   '<div><label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px">DE</label>'
+    +     '<input type="date" id="gp-mem-de" value="' + cpEsc(per.de) + '" onchange="gpMemFiltrar()"'
+    +     ' style="font-size:12px;padding:5px 9px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600"></div>'
+    +   '<div><label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px">ATÉ</label>'
+    +     '<input type="date" id="gp-mem-ate" value="' + cpEsc(per.ate) + '" onchange="gpMemFiltrar()"'
+    +     ' style="font-size:12px;padding:5px 9px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600"></div>'
+    +   '<button class="btn btn-s" onclick="gpMemLimpar()">↺ Tudo</button>'
+    +   '<div style="font-size:10.5px;color:var(--tx2);max-width:420px;line-height:1.5">'
+    +     'Mesmo filtro da medição: <strong>status 2</strong> e <strong>sem código de eliminação</strong>. '
+    +     'Em branco, mostro tudo que está memorizado.</div>'
+    + '</div>';
+  if (_gpMem.arquivo) {
+    h += '<div style="font-size:10.5px;color:var(--tx2);margin-bottom:.6rem">Última medição: <strong>'
+      + cpEsc(_gpMem.arquivo) + '</strong>'
+      + (_gpMem.atualizadoEm ? ' — ' + cpDataBR(String(_gpMem.atualizadoEm).slice(0,10)) : '') + '.</div>';
+  }
+  if (!itens.length) {
+    h += '<div style="font-size:12px;color:var(--tx2)">'
+      + (todos ? 'Nenhum item memorizado nesse período.'
+               : 'Nada aqui ainda. Suba a medição de momento em <strong>Controle de Pedidos</strong>.')
+      + '</div></div>';
+    return h;
+  }
+  var porQuem = {};
+  itens.forEach(function(i){ porQuem[i.comprador || '(sem comprador)'] = (porQuem[i.comprador || '(sem comprador)'] || 0) + 1; });
+  h += '<div style="font-size:11px;color:var(--tx2);line-height:1.8;margin-bottom:.6rem">Por comprador: '
+    + Object.keys(porQuem).sort(function(a, b){ return porQuem[b] - porQuem[a]; })
+        .map(function(k){ return cpEsc(k) + ' <strong>' + porQuem[k] + '</strong>'; }).join(' · ')
+    + '</div>';
+  h += '<div style="overflow:auto;max-height:520px"><table><thead><tr>'
+    + '<th>Comprador</th><th>Chave</th><th>Pedido</th><th>RC</th><th>Item</th>'
+    + '<th>Grupo</th><th>Fornecedor</th><th>Memorizado em</th>'
+    + '<th style="text-align:right">Valor</th></tr></thead><tbody>';
+  itens.forEach(function(i){
+    h += '<tr>'
+      + '<td style="font-size:10.5px;font-weight:600">' + cpEsc(i.comprador || '—') + '</td>'
+      + '<td style="font-weight:700;color:var(--az)">' + cpEsc(i.chave || '—') + '</td>'
+      + '<td>' + cpEsc(i.pedido || '—') + '</td>'
+      + '<td style="font-weight:600">' + cpEsc(i.rc || '—') + '</td>'
+      + '<td>' + cpEsc(i.item || '—') + '</td>'
+      + '<td>' + cpEsc(i.grupo || '—') + '</td>'
+      + '<td style="font-size:10.5px">' + cpEsc(i.forn || '—') + '</td>'
+      + '<td>' + (i.criacao ? cpDataBR(i.criacao) : '—') + '</td>'
+      + '<td style="text-align:right">' + (i.valor ? mdDinheiro(i.valor) : '—') + '</td></tr>';
+  });
+  h += '</tbody></table></div></div>';
+  return h;
+}
 function gpCockFiltrar(v){ _gpCockPsmv = (v === _gpCockPsmv) ? '' : v; gpRenderDetalhe(); }
 
 // O Cockpit vem da medição de momento do Controle de Pedidos: toda vez
@@ -13745,6 +13868,7 @@ function gpContar(){
   });
   c.rejeitados = (_gpRej && _gpRej.itens) ? _gpRej.itens.length : 0;
   c.cockpit    = (_gpCock && _gpCock.emLib) ? _gpCock.emLib : 0;
+  c.memorizados = (_gpMem && _gpMem.itens) ? _gpMem.itens.length : 0;
   return { por:c, vindos:vindos, aguardando:aguardando, comData:comData, origem:origem };
 }
 
@@ -13810,6 +13934,11 @@ function gpRender(){
             + (_gpCock.total ? cpEsc(CP_COCKPIT.psmv) + ' · emitido · ' + cpEsc(CP_COCKPIT.gerente)
                              : 'suba a medição no Controle de Pedidos') + '</div>'
           : '')
+      + (x.chave === 'memorizados'
+          ? '<div style="font-size:10px;color:var(--tx2);margin-top:4px">'
+            + (n ? 'status 2 · sem eliminação · escolha o período'
+                 : 'suba a medição no Controle de Pedidos') + '</div>'
+          : '')
       + '</div>';
   });
   h += '</div>';
@@ -13838,6 +13967,7 @@ function gpRenderDetalhe(){
   if (!_gpCard) { box.innerHTML = ''; return; }
   if (_gpCard === 'rejeitados') { box.innerHTML = gpHtmlRejeitados(); return; }
   if (_gpCard === 'cockpit')    { box.innerHTML = gpHtmlCockpit();    return; }
+  if (_gpCard === 'memorizados'){ box.innerHTML = gpHtmlMemorizados(); return; }
   var lista = [];
   gpItens().forEach(function(it){
     var e = gpEstado(it);
@@ -14299,6 +14429,12 @@ async function gpAbrir(){
     if (db) {
       var d1 = await db.collection('config').doc('governanca_negociacao').get();
       if (d1 && d1.exists) _gpNeg = (d1.data() || {}).itens || {};
+      var d5 = await db.collection('config').doc('governanca_memorizados').get();
+      if (d5 && d5.exists) {
+        var M = d5.data() || {};
+        _gpMem = { itens:M.itens || [], total:+M.total || 0, arquivo:M.arquivo || '',
+                   atualizadoEm:M.atualizadoEm || '', atualizadoPor:M.atualizadoPor || '' };
+      }
       var d4 = await db.collection('config').doc('governanca_cockpit').get();
       if (d4 && d4.exists) {
         var C = d4.data() || {};
@@ -14352,6 +14488,31 @@ function gpCopiar(){
     cpCopiaTexto(t.join('\n'), 'Lista de rejeitados copiada.');
     return;
   }
+  if (_gpCard === 'memorizados') {
+    var itensM = gpMemItens();
+    var per = gpMemPeriodo();
+    var tm = ['PEDIDOS MEMORIZADOS — ' + cpNum(itensM.length)
+              + (itensM.length === 1 ? ' item' : ' itens')
+              + (per.de || per.ate
+                  ? ' (' + (per.de ? 'de ' + cpDataBR(per.de) : '') + (per.de && per.ate ? ' ' : '')
+                    + (per.ate ? 'até ' + cpDataBR(per.ate) : '') + ')' : '')];
+    var porQ = {};
+    itensM.forEach(function(i){ (porQ[i.comprador || '(sem comprador)'] = porQ[i.comprador || '(sem comprador)'] || []).push(i); });
+    Object.keys(porQ).sort().forEach(function(nome){
+      tm.push('');
+      tm.push(nome + ' (' + porQ[nome].length + '):');
+      porQ[nome].forEach(function(i){
+        var pp = [];
+        if (i.chave) pp.push(i.chave);
+        if (i.pedido) pp.push('Pedido ' + i.pedido);
+        if (i.rc) pp.push('RC ' + i.rc + (i.item ? '/' + i.item : ''));
+        if (i.criacao) pp.push(cpDataBR(i.criacao));
+        tm.push('  ' + pp.join(' · '));
+      });
+    });
+    cpCopiaTexto(tm.join('\n'), 'Lista de memorizados copiada — é só mandar para a equipe.');
+    return;
+  }
   if (_gpCard === 'cockpit') {
     var tc = ['COCKPIT — ' + cpNum(_gpCock.emLib || 0) + ' item(ns) em liberação ('
               + CP_COCKPIT.gerente + ')', ''];
@@ -14397,6 +14558,21 @@ function gpBaixarExcel(){
       var wbR = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wbR, wsR, 'Rejeitados');
       XLSX.writeFile(wbR, 'Rejeitados_' + String(gpDataSel()).replace(/-/g, '') + '.xlsx');
+      return;
+    }
+    if (_gpCard === 'memorizados') {
+      var cabM = ['Comprador','Chave','Pedido','RC','Item','Grupo comprador','Fornecedor',
+                  'Memorizado em','Valor'];
+      var aoaM = [cabM];
+      gpMemItens().forEach(function(i){
+        aoaM.push([i.comprador, i.chave, i.pedido, i.rc, i.item, i.grupo, i.forn,
+                   i.criacao ? cpDataBR(i.criacao) : '', +i.valor || 0]);
+      });
+      var wsM = XLSX.utils.aoa_to_sheet(aoaM);
+      wsM['!cols'] = cabM.map(function(c){ return { wch: Math.max(10, Math.min(30, c.length + 4)) }; });
+      var wbM = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wbM, wsM, 'Memorizados');
+      XLSX.writeFile(wbM, 'Memorizados_' + String(gpDataSel()).replace(/-/g, '') + '.xlsx');
       return;
     }
     if (_gpCard === 'cockpit') {
