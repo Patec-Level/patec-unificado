@@ -212,6 +212,16 @@ tfoot td{background:linear-gradient(180deg,#EEF3FA,#E8EFF8);font-weight:700;posi
 .stab:hover{background:rgba(255,255,255,.7);color:var(--tx)}
 .stab.active{background:#fff;color:var(--azm);font-weight:700;box-shadow:0 1px 6px rgba(13,35,71,.12)}
 
+/* ── GOVERNANÇA: linhas fixas de cards ──
+   O auto-fit decidia sozinho quantos cards cabiam por linha, e por isso os
+   dois Abrir PATEC caíam em linhas diferentes dependendo da largura da tela.
+   Agora cada linha tem o número de cards que o André pediu (--n), e só
+   quebra em telas estreitas. */
+.gov-linha{display:grid;gap:12px;grid-template-columns:repeat(var(--n,5),minmax(0,1fr))}
+.gov-linha + .gov-linha{margin-top:12px}
+@media (max-width:1250px){ .gov-linha{grid-template-columns:repeat(3,minmax(0,1fr))} }
+@media (max-width:760px){  .gov-linha{grid-template-columns:repeat(2,minmax(0,1fr))} }
+
 /* ── LNUM / MAPA MINI ── */
 .lnum{font-size:10px;font-weight:700;color:var(--azm);background:var(--azc);padding:2px 6px;border-radius:4px;white-space:nowrap}
 .mapa-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #F5F5F5}
@@ -13196,19 +13206,43 @@ function mdItensRejeitados(){
   });
   return out;
 }
-// Os cinco cards da Governança, na ordem que ele pediu.
+// Os cards da Governança. A ordem aqui é a ordem na tela, e GOV_LINHAS
+// diz onde cada linha termina: a primeira é o caminho do pedido (com o
+// Cockpit no fim), a segunda é o que não virou pedido ainda — os dois
+// Abrir PATEC lado a lado, como ele pediu.
 var GOV_CARDS = [
   { chave:'emitir',   nome:'Emitir pedido',                 cor:'var(--azm)', fundo:'var(--azc)' },
   { chave:'patec',    nome:'Emitir pedido PATEC',           cor:'var(--vd)',  fundo:'var(--vdc)' },
   { chave:'patecman', nome:'Emitir pedido PATEC manual',    cor:'var(--az)',  fundo:'var(--cin)' },
   { chave:'negociar', nome:'Negociar preço',                cor:'var(--am)',  fundo:'var(--amc)' },
   { chave:'dpv',      nome:'Negociar, acima do limite DPV', cor:'var(--vm)',  fundo:'var(--vmc)' },
-  { chave:'patecgm',  nome:'Abrir PATEC Grupo de Mercadoria Obrigatório', cor:'var(--vd)', fundo:'var(--vdc)' },
-  { chave:'pateciden',nome:'Abrir PATEC idêntico não',      cor:'var(--azm)', fundo:'var(--azc)' },
-  { chave:'rejeitados', nome:'Rejeitados',                  cor:'var(--vm)',  fundo:'var(--vmc)', proprio:true },
   { chave:'cockpit',    nome:'Cockpit',                     cor:'var(--az)',  fundo:'var(--azc)', proprio:true },
+  { chave:'pateciden',nome:'Abrir PATEC idêntico não',      cor:'var(--azm)', fundo:'var(--azc)' },
+  { chave:'patecgm',  nome:'Abrir PATEC Grupo de Mercadoria Obrigatório', cor:'var(--vd)', fundo:'var(--vdc)' },
+  { chave:'rejeitados', nome:'Rejeitados',                  cor:'var(--vm)',  fundo:'var(--vmc)', proprio:true },
+  { chave:'statusb',    nome:'Status B',                    cor:'var(--am)',  fundo:'var(--amc)', proprio:true },
   { chave:'memorizados',nome:'Itens memorizados',            cor:'var(--azm)', fundo:'var(--azc)', proprio:true }
 ];
+var GOV_LINHAS = [
+  ['emitir','patec','patecman','negociar','dpv','cockpit'],
+  ['pateciden','patecgm','rejeitados','statusb','memorizados']
+];
+function govLinhasDeCards(){
+  var achado = {}, linhas = [];
+  GOV_LINHAS.forEach(function(ln){
+    var fila = [];
+    ln.forEach(function(ch){
+      for (var i = 0; i < GOV_CARDS.length; i++) {
+        if (GOV_CARDS[i].chave === ch) { fila.push(GOV_CARDS[i]); achado[ch] = 1; return; }
+      }
+    });
+    if (fila.length) linhas.push(fila);
+  });
+  // card novo que ninguém pôs numa linha não desaparece da tela
+  var sobra = GOV_CARDS.filter(function(x){ return !achado[x.chave]; });
+  if (sobra.length) linhas.push(sobra);
+  return linhas;
+}
 // Só estes grupos de compras entram na conta dos rejeitados.
 var GP_GRUPOS = ['L01','L02','L03','L04','L05','L06','L08','L09','L10','L11','L12','L13','L14',
   'L15','L16','L17','L18','L19','L20','L21','L22','L23','L24','L25','L27','L28','L29','L31',
@@ -13584,6 +13618,51 @@ var _gpRej   = { itens:[], arquivo:'', lidas:0, fora:0, atualizadoEm:'', atualiz
 var _gpCock  = { itens:[], total:0, arquivo:'', atualizadoEm:'', atualizadoPor:'' };
 var _gpCockPsmv = cpNormCab('Em liberação');   // o card abre já nele
 
+// ── Status B ──────────────────────────────────────────────────────
+// Não tem upload próprio: lê o último dia que o André subiu a BU em
+// Controle de Pedidos › Status B. Pendente = ainda não foi marcado
+// como linha duplicada.
+var _gpSB = { itens:[], data:'', arquivo:'', lidas:0, emTratativa:0, statusB:0,
+              atualizadoEm:'', atualizadoPor:'' };
+
+function gpSBPendentes(){
+  return (_gpSB.itens || []).filter(function(i){ return !i.marcado; });
+}
+function gpSBMarcados(){
+  return (_gpSB.itens || []).filter(function(i){ return !!i.marcado; });
+}
+
+// O dia mais recente da coleção do Status B que tenha item.
+async function gpCarregarStatusB(){
+  try {
+    var db = getDB(); if (!db) return;
+    var snap = await db.collection(STB_COL).get();
+    var melhor = null;
+    snap.forEach(function(doc){
+      var d = doc.data() || {};
+      var dt = d.data || doc.id;
+      if (!(d.itens || []).length) return;
+      if (!melhor || String(dt) > String(melhor.data)) melhor = { data:dt, d:d };
+    });
+    if (!melhor) return;
+    var d = melhor.d;
+    _gpSB = { itens:d.itens || [], data:melhor.data, arquivo:d.arquivo || '',
+              lidas:+d.lidas || 0, emTratativa:+d.emTratativa || 0, statusB:+d.statusB || 0,
+              atualizadoEm:d.atualizadoEm || '', atualizadoPor:d.atualizadoPor || '' };
+  } catch (e) { console.warn('gpCarregarStatusB:', e); }
+}
+
+// Leva ele para a aba onde o Status B é tratado de verdade.
+function gpIrStatusB(){
+  var it = null;
+  Array.prototype.forEach.call(document.querySelectorAll('.sb-it'), function(e){
+    var a = e.getAttribute('onclick') || '';
+    if (a.indexOf("go('pedidos'") !== -1) it = e;
+  });
+  try { go('pedidos', it); } catch (e) { console.warn('gpIrStatusB:', e); }
+  setTimeout(function(){ try { cpSubTab('statusb', null); } catch (e) {} }, 60);
+}
+
 // ── itens memorizados ─────────────────────────────────────────────
 // Vem da mesma medição de momento, com o mesmo filtro da contagem do
 // dia (status 2 e sem código de eliminação), só que sem recorte de data.
@@ -13869,6 +13948,7 @@ function gpContar(){
   c.rejeitados = (_gpRej && _gpRej.itens) ? _gpRej.itens.length : 0;
   c.cockpit    = (_gpCock && _gpCock.emLib) ? _gpCock.emLib : 0;
   c.memorizados = (_gpMem && _gpMem.itens) ? _gpMem.itens.length : 0;
+  c.statusb     = gpSBPendentes().length;
   return { por:c, vindos:vindos, aguardando:aguardando, comData:comData, origem:origem };
 }
 
@@ -13907,8 +13987,10 @@ function gpRender(){
           })() : '');
   }
   var ct = gpContar();
-  var h = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">';
-  GOV_CARDS.forEach(function(x){
+  var h = '';
+  govLinhasDeCards().forEach(function(linha){
+  h += '<div class="gov-linha" style="--n:' + linha.length + '">';
+  linha.forEach(function(x){
     var n = ct.por[x.chave] || 0;
     var ag = ct.aguardando[x.chave] || 0;
     var sel = _gpCard === x.chave;
@@ -13939,9 +14021,17 @@ function gpRender(){
             + (n ? 'status 2 · sem eliminação · escolha o período'
                  : 'suba a medição no Controle de Pedidos') + '</div>'
           : '')
+      + (x.chave === 'statusb'
+          ? '<div style="font-size:10px;color:var(--tx2);margin-top:4px">'
+            + (_gpSB.data
+                ? 'a duplicar · BU de ' + cpDataBR(_gpSB.data)
+                  + (gpSBMarcados().length ? ' · ' + cpNum(gpSBMarcados().length) + ' já duplicada(s)' : '')
+                : 'suba a BU em Controle de Pedidos › Status B') + '</div>'
+          : '')
       + '</div>';
   });
   h += '</div>';
+  });
   if (ct.vindos) {
     h += '<div style="font-size:11px;color:var(--vd);margin-top:10px">'
       + '↗ ' + cpNum(ct.vindos) + ' item(ns) saíram de negociação e já estão em Emitir pedido '
@@ -13968,6 +14058,7 @@ function gpRenderDetalhe(){
   if (_gpCard === 'rejeitados') { box.innerHTML = gpHtmlRejeitados(); return; }
   if (_gpCard === 'cockpit')    { box.innerHTML = gpHtmlCockpit();    return; }
   if (_gpCard === 'memorizados'){ box.innerHTML = gpHtmlMemorizados(); return; }
+  if (_gpCard === 'statusb')    { box.innerHTML = gpHtmlStatusB();     return; }
   var lista = [];
   gpItens().forEach(function(it){
     var e = gpEstado(it);
@@ -14123,6 +14214,75 @@ function gpHtmlRejeitados(){
       + '<td style="font-size:10.5px">' + cpEsc(i.quem || '—') + '</td></tr>';
   });
   h += '</tbody></table></div></div>';
+  return h;
+}
+
+// Status B: a lista é só leitura aqui. Quem trata é a aba do Controle de
+// Pedidos — este card existe para o André ver o tamanho da fila.
+function gpHtmlStatusB(){
+  var pend = gpSBPendentes(), feitos = gpSBMarcados();
+  var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between">'
+    + '<span>Status B — ' + cpNum(pend.length) + ' item(ns) a duplicar</span>'
+    + '<span style="display:flex;gap:8px">'
+    +   (pend.length ? '<button class="btn btn-s" onclick="gpCopiar()">📋 Copiar</button>'
+                     + '<button class="btn btn-s" onclick="gpBaixarExcel()">⬇ Baixar Excel</button>' : '')
+    +   '<button class="btn btn-s" onclick="gpIrStatusB()">↗ Tratar na aba Status B</button>'
+    +   '<button class="btn btn-s" onclick="gpAbrirCard(\'statusb\')">✕ Fechar</button>'
+    + '</span></div>'
+    + '<div style="font-size:11px;color:var(--tx2);line-height:1.8;margin-bottom:.7rem">'
+    +   'Da BU do Controle de Pedidos: <strong>em tratativa</strong> · '
+    +   '<strong>STATUS_RC igual a B</strong> · '
+    +   '<strong>ANALISTA_AUTOMATICO Tratar Pedido Eliminado</strong>. '
+    +   'O número do card é o que ainda não foi marcado como linha duplicada.'
+    +   (_gpSB.data ? '<br>BU de <strong>' + cpDataBR(_gpSB.data) + '</strong>'
+        + (_gpSB.arquivo ? ' (' + cpEsc(_gpSB.arquivo) + ')' : '')
+        + ' · ' + cpNum(_gpSB.lidas) + ' linhas lidas · ' + cpNum((_gpSB.itens || []).length)
+        + ' no filtro · ' + cpNum(feitos.length) + ' já duplicada(s).' : '')
+    + '</div>';
+  if (!(_gpSB.itens || []).length) {
+    h += '<div style="font-size:12px;color:var(--tx2)">'
+      + 'Nada aqui ainda. Suba a BU em <strong>Controle de Pedidos › Status B</strong> '
+      + 'que esta lista se monta sozinha.</div></div>';
+    return h;
+  }
+  if (!pend.length) {
+    h += '<div style="font-size:12px;color:var(--vd);font-weight:600">'
+      + 'Fila zerada: todos os ' + cpNum(feitos.length) + ' itens já estão marcados como '
+      + 'linha duplicada.</div></div>';
+    return h;
+  }
+  var porNome = {};
+  pend.forEach(function(i){
+    var k = String(i.nome || '').trim() || '(sem nome)';
+    porNome[k] = (porNome[k] || 0) + 1;
+  });
+  h += '<div style="font-size:11px;color:var(--tx2);margin-bottom:.7rem">Por responsável: '
+    + Object.keys(porNome).sort(function(a, b){ return porNome[b] - porNome[a]; })
+        .map(function(k){ return cpEsc(k) + ' <strong>' + porNome[k] + '</strong>'; }).join(' · ')
+    + '</div>';
+  h += '<div style="overflow:auto;max-height:520px"><table><thead><tr>'
+    + '<th>RC</th><th>Item</th><th>Novo item</th><th>Pedido eliminado</th>'
+    + '<th>Nº acompanhamento</th><th>Responsável</th><th>Comentário</th>'
+    + '<th>Texto breve</th></tr></thead><tbody>';
+  pend.slice().sort(function(a, b){
+    return String(a.rc).localeCompare(String(b.rc)) || String(a.seq).localeCompare(String(b.seq));
+  }).forEach(function(i){
+    h += '<tr>'
+      + '<td style="font-weight:700;color:var(--az)">' + cpEsc(i.rc) + '</td>'
+      + '<td style="font-weight:600">' + cpEsc(i.seq) + '</td>'
+      + '<td style="font-weight:700;color:var(--vd)">' + cpEsc(i.novoItem || '—') + '</td>'
+      + '<td>' + cpEsc(i.pedido || '—') + '</td>'
+      + '<td style="font-size:10.5px">' + cpEsc(i.acomp || '—') + '</td>'
+      + '<td style="font-size:10.5px;font-weight:600">' + cpEsc(String(i.nome || '').trim() || '—') + '</td>'
+      + '<td style="font-size:10.5px">' + cpEsc(i.comentario || '—') + '</td>'
+      + '<td style="font-size:10px;color:var(--tx2);white-space:normal;min-width:240px">'
+      +   cpEsc(i.textoBreve || '—') + '</td></tr>';
+  });
+  h += '</tbody></table></div>'
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:8px">'
+    + 'Para marcar como duplicada, trocar o novo item ou exportar o arquivo do script, '
+    + 'use <strong>Controle de Pedidos › Status B</strong> — aqui é só a visão da fila.</div>'
+    + '</div>';
   return h;
 }
 
@@ -14457,6 +14617,7 @@ async function gpAbrir(){
       }
     }
   } catch (e) { console.warn('gpAbrir config:', e); }
+  await gpCarregarStatusB();
   await gpCarregarBase(gpDataSel());
   gpRender();
 }
@@ -14511,6 +14672,28 @@ function gpCopiar(){
       });
     });
     cpCopiaTexto(tm.join('\n'), 'Lista de memorizados copiada — é só mandar para a equipe.');
+    return;
+  }
+  if (_gpCard === 'statusb') {
+    var pendSB = gpSBPendentes();
+    var ts = ['STATUS B — ' + cpNum(pendSB.length) + ' item(ns) a duplicar'
+              + (_gpSB.data ? ' (BU de ' + cpDataBR(_gpSB.data) + ')' : '')];
+    var porNomeSB = {};
+    pendSB.forEach(function(i){
+      var k = String(i.nome || '').trim() || '(sem nome)';
+      (porNomeSB[k] = porNomeSB[k] || []).push(i);
+    });
+    Object.keys(porNomeSB).sort().forEach(function(nome){
+      ts.push('');
+      ts.push(nome + ' (' + porNomeSB[nome].length + '):');
+      porNomeSB[nome].forEach(function(i){
+        ts.push('  RC ' + i.rc + '/' + i.seq
+          + (i.novoItem ? ' → novo item ' + i.novoItem : '')
+          + (i.pedido ? ' · pedido eliminado ' + i.pedido : '')
+          + (i.comentario ? ' · ' + i.comentario : ''));
+      });
+    });
+    cpCopiaTexto(ts.join('\n'), 'Lista do Status B copiada — é só mandar para a equipe.');
     return;
   }
   if (_gpCard === 'cockpit') {
@@ -14573,6 +14756,22 @@ function gpBaixarExcel(){
       var wbM = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wbM, wsM, 'Memorizados');
       XLSX.writeFile(wbM, 'Memorizados_' + String(gpDataSel()).replace(/-/g, '') + '.xlsx');
+      return;
+    }
+    if (_gpCard === 'statusb') {
+      var cabS = ['RC','Item','Novo item','Pedido eliminado','Nº acompanhamento',
+                  'Grupo comprador','Responsável','Comentário','Texto breve','Texto do script'];
+      var aoaS = [cabS];
+      gpSBPendentes().forEach(function(i){
+        aoaS.push([i.rc, i.seq, i.novoItem, i.pedido, i.acomp, STB_GRUPO,
+                   i.nome || '', i.comentario || '', i.textoBreve || '',
+                   stbTextoDe(i.seq, i.novoItem)]);
+      });
+      var wsS = XLSX.utils.aoa_to_sheet(aoaS);
+      wsS['!cols'] = cabS.map(function(c){ return { wch: Math.max(10, Math.min(34, c.length + 4)) }; });
+      var wbS = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wbS, wsS, 'Status B');
+      XLSX.writeFile(wbS, 'StatusB_' + String(_gpSB.data || gpDataSel()).replace(/-/g, '') + '.xlsx');
       return;
     }
     if (_gpCard === 'cockpit') {
