@@ -15261,12 +15261,19 @@ function monSerie(){
     return Math.round(soma + ritmo * (i - ultimo));
   });
 
+  // Gap x gordura: o que a meta pedia até hoje contra o que a equipe fez.
+  // Conta os dias úteis já decorridos (hoje incluído), não a medição inteira.
+  var decorridos = dias.filter(function(d){ return d <= hoje; }).length;
+  var esperadoHoje = meta * decorridos;
+  var gap = feito - esperadoHoje;
+
   return { med:m, dias:dias, meta:meta, real:real, plan:plan,
            planAcum:planAcum, realAcum:realAcum, projecao:projecao,
            rolados:rolados, semMedicao:semMedicao, ultimo:ultimo,
            feito:feito, comDado:comDado, ritmo:ritmo,
            planTotal: meta * dias.length,
-           decorridos: dias.filter(function(d){ return d <= hoje; }).length,
+           decorridos: decorridos, esperadoHoje: esperadoHoje, gap: gap,
+           ultimoDecorrido: decorridos ? dias[decorridos - 1] : '',
            hoje:hoje, vazio:false };
 }
 
@@ -15583,6 +15590,22 @@ function monRenderResumo(){
         s.ritmo >= s.meta ? 'var(--vdc)' : 'var(--amc)')
     + monCard('% DA META', pctMeta + '%', 'do planejado da medição inteira',
         pctMeta >= 100 ? 'var(--vd)' : 'var(--tx2)', pctMeta >= 100 ? 'var(--vdc)' : 'var(--cin)')
+    + (function(){
+        if (!s.decorridos) {
+          return monCard('GAP ATÉ HOJE', '—', 'a medição ainda não começou');
+        }
+        var sobra = s.gap >= 0;
+        var falta = Math.max(0, s.planTotal - s.feito);
+        var restam = Math.max(0, s.dias.length - s.decorridos);
+        return monCard(sobra ? 'GORDURA ATÉ HOJE' : 'GAP ATÉ HOJE',
+          (sobra ? '+' : '−') + cpNum(Math.abs(s.gap)),
+          'meta pedia ' + cpNum(s.esperadoHoje) + ' em ' + cpNum(s.decorridos)
+            + ' dia(s) útil(eis) · feitos ' + cpNum(s.feito)
+            + (restam ? '<br>faltam ' + cpNum(falta) + ' em ' + cpNum(restam)
+                        + ' dia(s) = ' + cpNum(Math.ceil(falta / restam)) + '/dia'
+                      : '<br>último dia útil da medição'),
+          sobra ? 'var(--vd)' : 'var(--vm)', sobra ? 'var(--vdc)' : 'var(--vmc)');
+      })()
     + monCard('PROJEÇÃO NO FECHAMENTO', s.comDado ? cpNum(projFim) : '—',
         s.comDado ? (projFim >= s.planTotal ? 'bate a meta no ritmo atual'
                                             : 'faltariam ' + cpNum(s.planTotal - projFim)) : '',
