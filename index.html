@@ -1694,7 +1694,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               <label style="font-size:11px;color:var(--tx2);font-weight:500;display:flex;
                      align-items:center;gap:6px;cursor:pointer">
                 <input type="checkbox" id="mon-conv-tudo" onchange="monRenderConversao()">
-                tudo que está emitido, mesmo fora do período
+                tudo que a medição trouxe, mesmo fora do período
               </label>
             </div>
             <div id="mon-conversao"></div>
@@ -11080,6 +11080,16 @@ function cpDataISO(v){
 // o número do card é a contagem da coluna R em "Em liberação".
 // Guardo também os outros status de R, para dar para olhar ao lado.
 var CP_COCKPIT = { status:'3', gerente:'RLRT', psmv:'Em liberação' };
+// O detalhe de emitidos x convertidos guarda só os últimos CP_CONV_DIAS dias
+// de criação de pedido. Sem isso viriam anos de status 5 e o documento do
+// Firebase estouraria — e o monitoramento olha sempre o mês corrente.
+var CP_CONV_DIAS = 400;
+function _cpCorteConversao(){
+  var d = new Date();
+  d.setDate(d.getDate() - CP_CONV_DIAS);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+       + '-' + String(d.getDate()).padStart(2, '0');
+}
 // O arquivo às vezes vem com o acento quebrado ("EM LIBERA??O"), então
 // comparo pelo começo do texto, sem acento.
 function _cpEmLiberacao(v){
@@ -11155,7 +11165,8 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
             linhasDoDia:[], cabecalhoCompleto:[], feitosBarrados:0,
             comCodigo:0, feitosComCodigo:0, cortouEliminados: !!cortarEliminados,
             cockpit:[], cockpitTotal:0, cockpitEmLib:0, memorizados:[], memorizadosTotal:0,
-            convMapa:{}, convTotal:{ emi:0, lib:0, aguard:0, outro:0 },
+            convMapa:{}, convTotal:{ mem:0, emi:0, lib:0, aguard:0, rej:0, outro:0 },
+            convVelhas:0, convDesde:'',
             rejMed:{}, rejMedTotal:0, donoPedido:{},
             cockFunil:{ lidas:0, st3:0, semElim:0, rlrt:0, emLib:0,
                         colGer:'', colPsmv:'', colSt:'', colElim:'',
@@ -11204,6 +11215,8 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
   })();
   r.nomeColuna = function(j){ return j === -1 ? '—' : (r.cabecalhos[j] || ('coluna ' + (j + 1))); };
 
+  var _convCorte = _cpCorteConversao();
+  r.convDesde = _convCorte;
   var mapa = {};
   var pega = function(nome){
     var ch = String(nome || '').trim();
@@ -11294,23 +11307,36 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
         }
       }
 
-      // ── Emitidos x convertidos ───────────────────────────────────
-      // Status 3 (emitido) sem código de eliminação. Dentro disso o
-      // STATUS_PSMV separa o que já foi liberado (convertido) do que
-      // ainda está em liberação. Guardo por comprador e por dia de
-      // criação do pedido — é isso que deixa recortar pelo período.
-      if (iSt !== -1 && _cpStatusNum(lb[iSt]) === 3
-          && !(iEl !== -1 && _cpTemEliminacao(lb[iEl]))) {
+      // ── Feitos, emitidos e convertidos ───────────────────────────
+      // Cuidado com o status: o pedido emitido fica em 3 só enquanto está
+      // em processo. Assim que é liberado ele vira 5 — então contar só o 3
+      // jogava fora justamente o que deu certo. Aqui "emitido" é tudo que
+      // virou pedido (3 · 5 · 8) e o STATUS_PSMV diz o desfecho de cada um:
+      // liberado (convertido), em liberação (esperando) ou rejeitado.
+      // Status 2 é o memorizado — não é pedido ainda, fica à parte.
+      if (iSt !== -1 && !(iEl !== -1 && _cpTemEliminacao(lb[iEl]))) {
+        var stC = _cpStatusNum(lb[iSt]);
         var psC = iPsmv === -1 ? '' : String(lb[iPsmv] == null ? '' : lb[iPsmv]).trim();
-        var dtC = iDt === -1 ? '' : cpDataISO(lb[iDt]);
-        var kC  = cpNormNome(nomeB) + '|' + dtC;
-        var oC  = r.convMapa[kC];
-        if (!oC) oC = r.convMapa[kC] = { nome:nomeB, dia:dtC, emi:0, lib:0, aguard:0, outro:0 };
-        oC.emi++; r.convTotal.emi++;
-        if (_cpLiberado(psC)) { oC.lib++; r.convTotal.lib++; }
-        else if (_cpEmLiberacao(psC)) { oC.aguard++; r.convTotal.aguard++; }
-        else { oC.outro++; r.convTotal.outro++; }
-        if (iLib !== -1 && !oC.ultLib) oC.ultLib = cpDataISO(lb[iLib]);
+        var elimC = cpNormCab(psC) === 'ELIMINADO';
+        if (!elimC && (stC === 2 || stC === 3 || stC === 5 || stC === 8)) {
+          var dtC = iDt === -1 ? '' : cpDataISO(lb[iDt]);
+          if (dtC && dtC < _convCorte) { r.convVelhas++; }
+          else {
+          var kC  = cpNormNome(nomeB) + '|' + dtC;
+          var oC  = r.convMapa[kC];
+          if (!oC) oC = r.convMapa[kC] =
+            { nome:nomeB, dia:dtC, mem:0, emi:0, lib:0, aguard:0, rej:0, outro:0 };
+          if (stC === 2) { oC.mem++; r.convTotal.mem++; }
+          else {
+            oC.emi++; r.convTotal.emi++;
+            if (stC === 8 || cpNormCab(psC) === 'REJEITADO') { oC.rej++; r.convTotal.rej++; }
+            else if (_cpLiberado(psC)) { oC.lib++; r.convTotal.lib++; }
+            else if (_cpEmLiberacao(psC)) { oC.aguard++; r.convTotal.aguard++; }
+            else { oC.outro++; r.convTotal.outro++; }
+            if (iLib !== -1 && !oC.ultLib) oC.ultLib = cpDataISO(lb[iLib]);
+          }
+          }
+        }
       }
 
       // ── Rejeitados pelo SAP (status 8 / PSMV rejeitado) ──────────
@@ -11380,7 +11406,7 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
 
   r.total = r.memorizado + r.emitido;
   r.conv = Object.keys(r.convMapa).map(function(k){ return r.convMapa[k]; })
-    .sort(function(a, b){ return b.emi - a.emi; });
+    .sort(function(a, b){ return (b.emi + b.mem) - (a.emi + a.mem); });
   r.compradores = Object.keys(mapa).map(function(k2){ return mapa[k2]; })
     .filter(function(o){ return o.total > 0; })
     .sort(function(x, y){ return y.total - x.total || x.nome.localeCompare(y.nome); });
@@ -15152,7 +15178,7 @@ var MON_COL = 'pedidos_medicoes';
 var _monMeds = [];      // [{ inicio, fim, meta }]
 var _monSel  = '';      // o início da medição escolhida
 var _monVisao = 'dia';  // 'dia' | 'acum'
-var _monConv = { conv:[], total:{ emi:0, lib:0, aguard:0, outro:0 },
+var _monConv = { conv:[], total:{ mem:0, emi:0, lib:0, aguard:0, rej:0, outro:0 },
                  rejMed:{}, rejMedTotal:0, rejDonos:{}, arquivo:'', atualizadoEm:'' };
 var _monComb = null;    // { patec:{...}, neg:{...}, temMapa, dists }
 var _monChart = null;
@@ -15395,6 +15421,7 @@ async function monSalvarConversao(med, arquivo){
       if (p && med.donoPedido && med.donoPedido[p]) donos[p] = med.donoPedido[p];
     });
     _monConv = { conv:(med.conv || []).slice(0, 6000), total:med.convTotal || {},
+                 desde:med.convDesde || '',
                  rejMed:med.rejMed || {}, rejMedTotal:+med.rejMedTotal || 0,
                  rejDonos:donos, arquivo:arquivo || '',
                  atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem() };
@@ -15410,7 +15437,8 @@ async function monCarregarConversao(){
     var doc = await db.collection('config').doc('pedidos_conversao').get();
     if (!doc || !doc.exists) return;
     var d = doc.data() || {};
-    _monConv = { conv:d.conv || [], total:d.total || { emi:0, lib:0, aguard:0, outro:0 },
+    _monConv = { conv:d.conv || [], desde:d.desde || '',
+                 total:d.total || { mem:0, emi:0, lib:0, aguard:0, rej:0, outro:0 },
                  rejMed:d.rejMed || {}, rejMedTotal:+d.rejMedTotal || 0,
                  rejDonos:d.rejDonos || {}, arquivo:d.arquivo || '',
                  atualizadoEm:d.atualizadoEm || '' };
@@ -15802,15 +15830,17 @@ function monConvLinhas(){
   (_monConv.conv || []).forEach(function(c){
     if (!tudo && m && (!c.dia || c.dia < m.inicio || c.dia > m.fim)) return;
     if (cpEstaFora(c.nome)) return;
-    var o = por[c.nome] || (por[c.nome] = { nome:c.nome, emi:0, lib:0, aguard:0, outro:0 });
-    o.emi += +c.emi || 0; o.lib += +c.lib || 0;
-    o.aguard += +c.aguard || 0; o.outro += +c.outro || 0;
+    var o = por[c.nome] || (por[c.nome] =
+      { nome:c.nome, mem:0, emi:0, lib:0, aguard:0, rej:0, outro:0 });
+    o.mem += +c.mem || 0; o.emi += +c.emi || 0; o.lib += +c.lib || 0;
+    o.aguard += +c.aguard || 0; o.rej += +c.rej || 0; o.outro += +c.outro || 0;
   });
   var lista = Object.keys(por).map(function(k){ return por[k]; })
     .sort(function(a, b){ return b.emi - a.emi || a.nome.localeCompare(b.nome); });
   var tot = lista.reduce(function(t, p){
-    t.emi += p.emi; t.lib += p.lib; t.aguard += p.aguard; t.outro += p.outro; return t;
-  }, { emi:0, lib:0, aguard:0, outro:0 });
+    t.mem += p.mem; t.emi += p.emi; t.lib += p.lib;
+    t.aguard += p.aguard; t.rej += p.rej; t.outro += p.outro; return t;
+  }, { mem:0, emi:0, lib:0, aguard:0, rej:0, outro:0 });
   return { lista:lista, total:tot, tudo:!!tudo };
 }
 
@@ -15820,10 +15850,16 @@ function monRenderConversao(){
   var r = monConvLinhas();
   var m = monMedAtual();
   var cab = '<div style="font-size:11px;color:var(--tx2);line-height:1.7;margin-bottom:.8rem">'
-    + 'Da medição de momento: pedido <strong>emitido</strong> é status 3 sem código de eliminação. '
-    + 'Dentro dele, <strong>convertido</strong> é o que o STATUS_PSMV já mostra como liberado — '
-    + 'o resto está em liberação, esperando. '
-    + (r.tudo ? 'Mostrando <strong>tudo que está emitido</strong>.'
+    + 'Da medição de momento. <strong>Emitido</strong> é tudo que virou pedido — '
+    + 'STATUS_PROCESSO <strong>3, 5 ou 8</strong>, sem código de eliminação. O pedido fica em 3 só '
+    + 'enquanto está em processo: quando é liberado ele passa para 5, por isso contar só o 3 '
+    + 'deixaria de fora justamente o que deu certo. O desfecho vem do STATUS_PSMV: '
+    + '<strong>convertido</strong> (liberado), <strong>em liberação</strong> (esperando) ou '
+    + '<strong>rejeitado</strong>. O <strong>memorizado</strong> (status 2) ainda não é pedido e '
+    + 'por isso fica fora da conta da conversão. '
+    + (r.tudo ? 'Mostrando <strong>tudo que a medição trouxe</strong>'
+                + (_monConv.desde ? ' (pedidos criados de ' + cpDataBR(_monConv.desde)
+                                    + ' para cá)' : '') + '.'
              : (m ? 'Recorte pela data de criação do pedido, de ' + cpDataBR(m.inicio) + ' a '
                     + cpDataBR(m.fim) + '.' : ''))
     + (_monConv.arquivo ? '<br>Última medição: <strong>' + cpEsc(_monConv.arquivo) + '</strong>'
@@ -15838,34 +15874,46 @@ function monRenderConversao(){
     return;
   }
   var pctT = r.total.emi ? Math.round(r.total.lib * 100 / r.total.emi) : 0;
-  var h = cab + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));'
+  var h = cab + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(142px,1fr));'
     + 'gap:12px;margin-bottom:.9rem">'
-    + monCard('EMITIDOS', cpNum(r.total.emi), 'status 3, sem eliminação', 'var(--az)')
+    + monCard('FEITOS NO PERÍODO', cpNum(r.total.mem + r.total.emi),
+        cpNum(r.total.mem) + ' memorizados + ' + cpNum(r.total.emi) + ' emitidos')
+    + monCard('EMITIDOS', cpNum(r.total.emi), 'viraram pedido (3 · 5 · 8)', 'var(--az)')
     + monCard('CONVERTIDOS', cpNum(r.total.lib), 'já liberados', 'var(--vd)', 'var(--vdc)')
     + monCard('EM LIBERAÇÃO', cpNum(r.total.aguard), 'ainda esperando', 'var(--am)', 'var(--amc)')
+    + monCard('REJEITADOS', cpNum(r.total.rej), 'voltaram para o comprador',
+        r.total.rej ? 'var(--vm)' : 'var(--tx2)', r.total.rej ? 'var(--vmc)' : 'var(--cin)')
     + monCard('% CONVERTIDO', pctT + '%', 'do que foi emitido',
         pctT >= 80 ? 'var(--vd)' : (pctT >= 60 ? 'var(--am)' : 'var(--vm)'),
         pctT >= 80 ? 'var(--vdc)' : (pctT >= 60 ? 'var(--amc)' : 'var(--vmc)'))
     + '</div>';
   h += '<div style="overflow:auto;max-height:420px"><table><thead><tr><th>Comprador</th>'
+    + '<th style="text-align:right" title="Status 2 — ainda não virou pedido">Memorizados</th>'
     + '<th style="text-align:right">Emitidos</th><th style="text-align:right">Convertidos</th>'
-    + '<th style="text-align:right">Em liberação</th><th style="text-align:right">%</th>'
+    + '<th style="text-align:right">Em liberação</th><th style="text-align:right">Rejeitados</th>'
+    + '<th style="text-align:right">%</th>'
     + '<th style="width:130px">Conversão</th></tr></thead><tbody>';
   r.lista.forEach(function(p){
     var q = p.emi ? Math.round(p.lib * 100 / p.emi) : 0;
     var cor = q >= 80 ? 'var(--vd)' : (q >= 60 ? 'var(--am)' : 'var(--vm)');
-    h += '<tr' + (q < 60 ? ' style="background:var(--vmc)"' : '') + '>'
+    h += '<tr' + (p.emi && q < 60 ? ' style="background:var(--vmc)"' : '') + '>'
       + '<td style="font-weight:600">' + cpEsc(p.nome) + '</td>'
+      + '<td style="text-align:right;color:var(--tx2)">' + cpNum(p.mem) + '</td>'
       + '<td style="text-align:right;font-weight:700">' + cpNum(p.emi) + '</td>'
       + '<td style="text-align:right;font-weight:700;color:var(--vd)">' + cpNum(p.lib) + '</td>'
       + '<td style="text-align:right;color:var(--am)">' + cpNum(p.aguard) + '</td>'
-      + '<td style="text-align:right;font-weight:800;color:' + cor + '">' + q + '%</td>'
+      + '<td style="text-align:right;color:' + (p.rej ? 'var(--vm)' : 'var(--tx2)') + '">'
+      +   cpNum(p.rej) + '</td>'
+      + '<td style="text-align:right;font-weight:800;color:' + (p.emi ? cor : 'var(--tx2)') + '">'
+      +   (p.emi ? q + '%' : '—') + '</td>'
       + '<td>' + cpBarraSimples(p.lib, p.emi || 1) + '</td></tr>';
   });
   h += '</tbody><tfoot><tr><td>Total</td>'
+    + '<td style="text-align:right;font-weight:800">' + cpNum(r.total.mem) + '</td>'
     + '<td style="text-align:right;font-weight:800">' + cpNum(r.total.emi) + '</td>'
     + '<td style="text-align:right;font-weight:800;color:var(--vd)">' + cpNum(r.total.lib) + '</td>'
     + '<td style="text-align:right;font-weight:800;color:var(--am)">' + cpNum(r.total.aguard) + '</td>'
+    + '<td style="text-align:right;font-weight:800;color:var(--vm)">' + cpNum(r.total.rej) + '</td>'
     + '<td style="text-align:right;font-weight:800">' + pctT + '%</td><td></td>'
     + '</tr></tfoot></table></div>';
   box.innerHTML = h;
@@ -15919,7 +15967,9 @@ function monRenderRejeite(){
   var cab = '<div style="font-size:11px;color:var(--tx2);line-height:1.7;margin-bottom:.8rem">'
     + 'A planilha de rejeitados da Governança diz <strong>quais pedidos</strong> foram recusados; '
     + 'a medição de momento diz <strong>quem emitiu</strong> cada um. Cruzo os dois pelo número do '
-    + 'pedido. A coluna <strong>Status 8</strong> é o rejeite que a própria medição marca.'
+    + 'pedido. <strong>Parado há mais tempo</strong> é o rejeite mais antigo daquele comprador '
+    + 'que ainda não foi resolvido, em dias — sai da coluna Dias Rejeitado da planilha. '
+    + 'A coluna <strong>Status 8</strong> é o rejeite que a própria medição marca.'
     + (r.tudo ? ' Mostrando <strong>todos</strong> os rejeites da planilha.'
              : (m ? ' Recorte pela data da rejeição, de ' + cpDataBR(m.inicio) + ' a '
                     + cpDataBR(m.fim) + '.' : ''))
@@ -15943,7 +15993,10 @@ function monRenderRejeite(){
   }
   h += '<div style="overflow:auto;max-height:420px"><table><thead><tr><th>Comprador</th>'
     + '<th style="text-align:right">Pedidos rejeitados</th><th style="text-align:right">Itens</th>'
-    + '<th style="text-align:right">Dias médio</th><th style="text-align:right">Pior espera</th>'
+    + '<th style="text-align:right" title="Média da coluna Dias Rejeitado da planilha">'
+    +   'Média de dias parado</th>'
+    + '<th style="text-align:right" title="O rejeite mais antigo dele ainda sem resolver — '
+    +   'o maior valor da coluna Dias Rejeitado">Parado há mais tempo</th>'
     + '<th>Motivo mais comum</th><th style="text-align:right">Status 8 na medição</th>'
     + '</tr></thead><tbody>';
   r.lista.forEach(function(p){
@@ -16007,16 +16060,18 @@ function monBaixarExcel(){
     ws2['!cols'] = cab2.map(function(c){ return { wch: Math.max(11, Math.min(32, c.length + 6)) }; });
     XLSX.utils.book_append_sheet(wb, ws2, 'Combinado');
 
-    var cab3 = ['Comprador','Emitidos','Convertidos','Em liberação','% convertido'];
+    var cab3 = ['Comprador','Memorizados','Emitidos','Convertidos','Em liberação',
+                'Rejeitados','% convertido'];
     var aoa3 = [cab3];
     monConvLinhas().lista.forEach(function(p){
-      aoa3.push([p.nome, p.emi, p.lib, p.aguard, p.emi ? Math.round(p.lib * 100 / p.emi) : 0]);
+      aoa3.push([p.nome, p.mem, p.emi, p.lib, p.aguard, p.rej,
+                 p.emi ? Math.round(p.lib * 100 / p.emi) : 0]);
     });
     var ws3 = XLSX.utils.aoa_to_sheet(aoa3);
     ws3['!cols'] = cab3.map(function(c){ return { wch: Math.max(11, Math.min(32, c.length + 6)) }; });
     XLSX.utils.book_append_sheet(wb, ws3, 'Emitidos x convertidos');
 
-    var cab4 = ['Comprador','Pedidos rejeitados','Itens','Dias médio','Pior espera',
+    var cab4 = ['Comprador','Pedidos rejeitados','Itens','Média de dias parado','Parado há mais tempo',
                 'Motivo mais comum','Status 8 na medição'];
     var aoa4 = [cab4];
     monRejLinhas().lista.forEach(function(p){
