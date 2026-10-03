@@ -1331,6 +1331,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <button class="stab" id="cp-sub-btn-ctrlpatec" onclick="cpSubTab('ctrlpatec',this)">📈 Controle abrir PATEC</button>
           <button class="stab" id="cp-sub-btn-ctrlneg" onclick="cpSubTab('ctrlneg',this)">📉 Controle negociação</button>
           <button class="stab" id="cp-sub-btn-statusb" onclick="cpSubTab('statusb',this)">📋 Status B</button>
+          <button class="stab" id="cp-sub-btn-monitor" onclick="cpSubTab('monitor',this)">📡 Monitoramento</button>
         </div>
 
         <div id="cp-sub-pedidos">
@@ -1616,6 +1617,102 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
           <div id="stb-lista"></div>
         </div><!-- /cp-sub-statusb -->
+
+        <!-- ══ MONITORAMENTO ══════════════════════════════════════ -->
+        <div id="cp-sub-monitor" style="display:none">
+
+          <div class="cd" style="border-top:3px solid var(--azm)">
+            <div class="cd-t" style="justify-content:space-between">
+              <span>📡 Medição</span>
+              <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <select id="mon-escolha" onchange="monEscolher(this.value)"
+                  style="font-size:12.5px;padding:5px 9px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600"></select>
+                <button class="btn btn-p" onclick="monAbrirForm()">📅 Informar período da medição</button>
+                <button class="btn btn-s" onclick="monAtualizar()">↻ Atualizar</button>
+              </span>
+            </div>
+            <div id="mon-form" style="display:none;background:var(--cin);border:1px solid var(--brd);
+                 border-radius:9px;padding:11px 13px;margin-bottom:.9rem">
+              <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+                <div>
+                  <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">INÍCIO DA MEDIÇÃO</label>
+                  <input type="date" id="mon-ini"
+                    style="font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;color:var(--az);font-weight:600">
+                </div>
+                <div>
+                  <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">FIM DA MEDIÇÃO</label>
+                  <input type="date" id="mon-fim"
+                    style="font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;color:var(--az);font-weight:600">
+                </div>
+                <div>
+                  <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">META PLANEJADA (PEDIDOS/DIA)</label>
+                  <input type="number" id="mon-meta" min="1" step="1" placeholder="135"
+                    style="width:130px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
+                </div>
+                <button class="btn btn-p" onclick="monSalvarMedicao()">💾 Salvar medição</button>
+                <button class="btn btn-s" onclick="monFecharForm()">Cancelar</button>
+                <button class="btn btn-s" id="mon-btn-excluir" onclick="monExcluirMedicao()"
+                  style="color:var(--vm)">🗑 Excluir esta medição</button>
+              </div>
+              <div style="font-size:10.5px;color:var(--tx2);margin-top:8px;line-height:1.6">
+                Só dias úteis entram na conta — sábado, domingo e feriado ficam de fora.
+                Se a equipe produzir num fim de semana ou feriado, aquela produção é somada
+                no <strong>próximo dia útil</strong>.
+              </div>
+            </div>
+            <div id="mon-resumo"></div>
+            <div id="mon-aviso" style="font-size:12px"></div>
+          </div>
+
+          <div class="cd">
+            <div class="cd-t" style="justify-content:space-between">
+              <span>📈 Meta planejada x resultado da equipe</span>
+              <span style="display:flex;gap:8px;align-items:center">
+                <button class="btn btn-s" id="mon-v-dia" onclick="monVisao('dia')">Dia a dia</button>
+                <button class="btn btn-s" id="mon-v-acum" onclick="monVisao('acum')">Acumulado</button>
+                <button class="btn btn-s" onclick="monBaixarExcel()">⬇ Baixar Excel</button>
+              </span>
+            </div>
+            <div style="position:relative;height:330px"><canvas id="mon-grafico"></canvas></div>
+            <div id="mon-dias"></div>
+          </div>
+
+          <div class="cd">
+            <div class="cd-t">🎯 O combinado da distribuição — negociação e abrir PATEC</div>
+            <div style="font-size:11px;color:var(--tx2);line-height:1.7;margin-bottom:.8rem">
+              Junto todas as distribuições do período. Cada item ganha um prazo:
+              a data em que foi distribuído mais os <strong>dias úteis</strong> combinados
+              naquela atividade. Item em aberto depois do prazo é um item
+              <strong>fora do combinado</strong>.
+            </div>
+            <div id="mon-combinado"></div>
+          </div>
+
+          <div class="cd">
+            <div class="cd-t" style="justify-content:space-between">
+              <span>🔁 Emitidos x convertidos por comprador</span>
+              <label style="font-size:11px;color:var(--tx2);font-weight:500;display:flex;
+                     align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" id="mon-conv-tudo" onchange="monRenderConversao()">
+                tudo que está emitido, mesmo fora do período
+              </label>
+            </div>
+            <div id="mon-conversao"></div>
+          </div>
+
+          <div class="cd">
+            <div class="cd-t" style="justify-content:space-between">
+              <span>🚫 Rejeites por comprador</span>
+              <label style="font-size:11px;color:var(--tx2);font-weight:500;display:flex;
+                     align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" id="mon-rej-tudo" onchange="monRenderRejeite()">
+                todos os rejeites da planilha, mesmo fora do período
+              </label>
+            </div>
+            <div id="mon-rejeite"></div>
+          </div>
+
+        </div><!-- /cp-sub-monitor -->
 
 
       </div>
@@ -10988,6 +11085,10 @@ var CP_COCKPIT = { status:'3', gerente:'RLRT', psmv:'Em liberação' };
 function _cpEmLiberacao(v){
   return cpNormCab(v).indexOf('EM_LIBERA') === 0;
 }
+// Liberado = convertido. "EM LIBERAÇÃO" começa com EM, então não cai aqui.
+function _cpLiberado(v){
+  return cpNormCab(v).indexOf('LIBERAD') === 0;
+}
 // O status vem ora como "3", ora como "03", ora como 3,00 — dependendo
 // de como a extração foi salva. Comparo pelo número.
 function _cpStatusNum(v){
@@ -11054,6 +11155,8 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
             linhasDoDia:[], cabecalhoCompleto:[], feitosBarrados:0,
             comCodigo:0, feitosComCodigo:0, cortouEliminados: !!cortarEliminados,
             cockpit:[], cockpitTotal:0, cockpitEmLib:0, memorizados:[], memorizadosTotal:0,
+            convMapa:{}, convTotal:{ emi:0, lib:0, aguard:0, outro:0 },
+            rejMed:{}, rejMedTotal:0, donoPedido:{},
             cockFunil:{ lidas:0, st3:0, semElim:0, rlrt:0, emLib:0,
                         colGer:'', colPsmv:'', colSt:'', colElim:'',
                         gerentes:{}, psmv:{}, status:{} } };
@@ -11083,6 +11186,7 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
   var iForn = _cpAchaCol(cabs, ['NOME_FORNECEDOR']);
   var iGrp  = _cpAchaCol(cabs, ['GRUPO_COMPRADOR','GRUPO_COMPRADORES']);
   var iVal  = _cpAchaCol(cabs, ['VALOR_TOTAL_BRUTO_PEDIDO_SAP','VALOR_TOTAL_BRUTO_PEDIDO']);
+  var iLib  = _cpAchaCol(cabs, ['DATA_PRIMEIRA_LIBERACAO','DATA_1_LIBERACAO','DATA_LIBERACAO']);
   var iCh   = _cpAchaCol(cabs, ['CHAVE','CHAVE_PEDIDO']);
   var iPd   = _cpAchaCol(cabs, ['PEDIDO','NUMERO_PEDIDO','NUM_PEDIDO']);
   var iRc   = _cpAchaCol(cabs, ['REQUISICAO','RC','NUMERO_RC','NUM_RC','REQUISICAO_COMPRA','REQ']);
@@ -11190,6 +11294,39 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
         }
       }
 
+      // ── Emitidos x convertidos ───────────────────────────────────
+      // Status 3 (emitido) sem código de eliminação. Dentro disso o
+      // STATUS_PSMV separa o que já foi liberado (convertido) do que
+      // ainda está em liberação. Guardo por comprador e por dia de
+      // criação do pedido — é isso que deixa recortar pelo período.
+      if (iSt !== -1 && _cpStatusNum(lb[iSt]) === 3
+          && !(iEl !== -1 && _cpTemEliminacao(lb[iEl]))) {
+        var psC = iPsmv === -1 ? '' : String(lb[iPsmv] == null ? '' : lb[iPsmv]).trim();
+        var dtC = iDt === -1 ? '' : cpDataISO(lb[iDt]);
+        var kC  = cpNormNome(nomeB) + '|' + dtC;
+        var oC  = r.convMapa[kC];
+        if (!oC) oC = r.convMapa[kC] = { nome:nomeB, dia:dtC, emi:0, lib:0, aguard:0, outro:0 };
+        oC.emi++; r.convTotal.emi++;
+        if (_cpLiberado(psC)) { oC.lib++; r.convTotal.lib++; }
+        else if (_cpEmLiberacao(psC)) { oC.aguard++; r.convTotal.aguard++; }
+        else { oC.outro++; r.convTotal.outro++; }
+        if (iLib !== -1 && !oC.ultLib) oC.ultLib = cpDataISO(lb[iLib]);
+      }
+
+      // ── Rejeitados pelo SAP (status 8 / PSMV rejeitado) ──────────
+      if (iSt !== -1 && (_cpStatusNum(lb[iSt]) === 8
+          || cpNormCab(iPsmv === -1 ? '' : lb[iPsmv]) === 'REJEITADO')) {
+        r.rejMed[nomeB] = (r.rejMed[nomeB] || 0) + 1;
+        r.rejMedTotal++;
+      }
+
+      // Dono de cada pedido — só em memória, nunca gravado inteiro.
+      // É com ele que a planilha de rejeitados ganha o nome do comprador.
+      if (iPd !== -1) {
+        var pdD = String(lb[iPd] == null ? '' : lb[iPd]).trim().replace(/\.0+$/, '');
+        if (pdD && !r.donoPedido[pdD]) r.donoPedido[pdD] = nomeB;
+      }
+
       // A data vem ANTES da eliminação: assim dá para dizer quantas linhas
       // são do dia escolhido antes de qualquer outro corte — era isso que
       // faltava para enxergar por que o dia vinha zerado.
@@ -11242,6 +11379,8 @@ function cpLerMedicao(linhas, dataAlvo, cortarEliminados){
   }
 
   r.total = r.memorizado + r.emitido;
+  r.conv = Object.keys(r.convMapa).map(function(k){ return r.convMapa[k]; })
+    .sort(function(a, b){ return b.emi - a.emi; });
   r.compradores = Object.keys(mapa).map(function(k2){ return mapa[k2]; })
     .filter(function(o){ return o.total > 0; })
     .sort(function(x, y){ return y.total - x.total || x.nome.localeCompare(y.nome); });
@@ -11353,6 +11492,7 @@ async function cpHandleUpload(file){
     // o Cockpit não depende da data nem de a medição ter dado certo
     await gpSalvarCockpit(med, file.name);
     await gpSalvarMemorizados(med, file.name);
+    await monSalvarConversao(med, file.name);
 
     if (med.aviso && !med.compradores.length) {
       if (st) {
@@ -11879,7 +12019,7 @@ function apSubAtiva(){
   return el && el.style.display !== 'none';
 }
 function cpSubTab(qual, btn){
-  ['pedidos','mapa','ctrlpatec','ctrlneg','statusb'].forEach(function(k){
+  ['pedidos','mapa','ctrlpatec','ctrlneg','statusb','monitor'].forEach(function(k){
     var el = document.getElementById('cp-sub-' + k);
     if (el) el.style.display = (qual === k) ? 'block' : 'none';
     var b = document.getElementById('cp-sub-btn-' + k);
@@ -11898,6 +12038,7 @@ function cpSubTab(qual, btn){
   if (qual === 'ctrlpatec') ctpAbrir();
   if (qual === 'ctrlneg')   ctnAbrir();
   if (qual === 'statusb')   stbAbrir();
+  if (qual === 'monitor')   monAbrir();
 }
 
 function apDataSel(){
@@ -14989,6 +15130,882 @@ function _ctrlExcel(dados, prefixo, data){
     XLSX.utils.book_append_sheet(wb, ws, 'Controle');
     XLSX.writeFile(wb, prefixo + String(data || '').replace(/-/g, '') + '.xlsx');
   } catch (e) { console.warn('_ctrlExcel:', e); }
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// MONITORAMENTO
+//
+// Quatro perguntas numa tela só:
+//   1. a equipe está no ritmo da meta planejada da medição?
+//   2. quem está cumprindo o combinado da distribuição?
+//   3. o que é emitido está sendo liberado (convertido)?
+//   4. quem está tomando mais rejeite?
+//
+// A medição tem início e fim e conta só dias úteis. Produção de
+// sábado, domingo ou feriado é somada no próximo dia útil — foi isso
+// que ele pediu, e é o que o painel faz em monSerie().
+// ══════════════════════════════════════════════════════════════════
+
+var MON_META_PADRAO = 135;
+var MON_COL = 'pedidos_medicoes';
+var _monMeds = [];      // [{ inicio, fim, meta }]
+var _monSel  = '';      // o início da medição escolhida
+var _monVisao = 'dia';  // 'dia' | 'acum'
+var _monConv = { conv:[], total:{ emi:0, lib:0, aguard:0, outro:0 },
+                 rejMed:{}, rejMedTotal:0, rejDonos:{}, arquivo:'', atualizadoEm:'' };
+var _monComb = null;    // { patec:{...}, neg:{...}, temMapa, dists }
+var _monChart = null;
+
+// ── feriados e dias úteis ─────────────────────────────────────────
+function monEhFeriado(iso){
+  try { return GOV_FERIADOS.indexOf(iso) !== -1; } catch (e) { return false; }
+}
+function monEhUtil(iso){
+  if (!iso) return false;
+  var d = new Date(iso + 'T12:00:00');
+  if (isNaN(d.getTime())) return false;
+  var w = d.getDay();
+  if (w === 0 || w === 6) return false;
+  return !monEhFeriado(iso);
+}
+function monSomaDia(iso, n){
+  var d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+       + '-' + String(d.getDate()).padStart(2, '0');
+}
+// Todos os dias úteis entre as duas datas, inclusive.
+function monDiasUteis(ini, fim){
+  var out = [];
+  if (!ini || !fim || ini > fim) return out;
+  var d = ini, guarda = 0;
+  while (d <= fim && guarda++ < 400) {
+    if (monEhUtil(d)) out.push(d);
+    d = monSomaDia(d, 1);
+  }
+  return out;
+}
+// Fim de semana/feriado cai no próximo dia útil da lista. Se já passou
+// do fim da medição, fica no último dia útil dela.
+function monProxUtilNaLista(iso, dias){
+  for (var i = 0; i < dias.length; i++) if (dias[i] >= iso) return dias[i];
+  return dias.length ? dias[dias.length - 1] : null;
+}
+
+// ── a medição escolhida ───────────────────────────────────────────
+function monMedAtual(){
+  for (var i = 0; i < _monMeds.length; i++) if (_monMeds[i].inicio === _monSel) return _monMeds[i];
+  return _monMeds.length ? _monMeds[0] : null;
+}
+// A medição que contém hoje, senão a mais recente.
+function monMedDeHoje(){
+  var h = cpHojeISO();
+  for (var i = 0; i < _monMeds.length; i++) {
+    var m = _monMeds[i];
+    if (m.inicio <= h && h <= m.fim) return m;
+  }
+  return _monMeds.length ? _monMeds[0] : null;
+}
+function monEscolher(ini){
+  _monSel = ini || '';
+  monPintarForm();
+  monRender();
+}
+
+// ── a série do gráfico ────────────────────────────────────────────
+// Devolve números puros: é por aqui que o teste confere a regra, sem
+// depender do Chart.js.
+function monSerie(){
+  var m = monMedAtual();
+  if (!m) return null;
+  var dias = monDiasUteis(m.inicio, m.fim);
+  if (!dias.length) return { med:m, dias:[], vazio:true };
+  var idx = {};
+  dias.forEach(function(d, i){ idx[d] = i; });
+  var meta = Math.max(1, Math.round(+m.meta || MON_META_PADRAO));
+  var real = dias.map(function(){ return null; });
+  var rolados = [], hoje = cpHojeISO();
+
+  (_cpHist || []).forEach(function(h){
+    if (!h.data || h.data < m.inicio || h.data > m.fim) return;
+    var alvo = h.data;
+    if (idx[alvo] === undefined) {           // sábado, domingo ou feriado
+      alvo = monProxUtilNaLista(h.data, dias);
+      if (alvo === null) return;
+      if (+h.total) rolados.push({ de:h.data, para:alvo, n:+h.total || 0 });
+    }
+    var i = idx[alvo];
+    real[i] = (real[i] === null ? 0 : real[i]) + (+h.total || 0);
+  });
+
+  var semMedicao = [];
+  dias.forEach(function(d, i){
+    if (d <= hoje && real[i] === null) semMedicao.push(d);
+  });
+
+  // último dia com número — depois dele a linha do real não é traçada
+  var ultimo = -1;
+  for (var k = dias.length - 1; k >= 0; k--) if (real[k] !== null) { ultimo = k; break; }
+
+  var plan = dias.map(function(){ return meta; });
+  var planAcum = dias.map(function(_, i){ return meta * (i + 1); });
+  var realAcum = [], soma = 0, comDado = 0, feito = 0;
+  dias.forEach(function(_, i){
+    if (real[i] !== null) { soma += real[i]; comDado++; feito += real[i]; }
+    realAcum.push(i <= ultimo ? soma : null);
+  });
+  var ritmo = comDado ? feito / comDado : 0;
+  var projecao = dias.map(function(_, i){
+    if (ultimo < 0 || i < ultimo) return null;
+    return Math.round(soma + ritmo * (i - ultimo));
+  });
+
+  return { med:m, dias:dias, meta:meta, real:real, plan:plan,
+           planAcum:planAcum, realAcum:realAcum, projecao:projecao,
+           rolados:rolados, semMedicao:semMedicao, ultimo:ultimo,
+           feito:feito, comDado:comDado, ritmo:ritmo,
+           planTotal: meta * dias.length,
+           decorridos: dias.filter(function(d){ return d <= hoje; }).length,
+           hoje:hoje, vazio:false };
+}
+
+// ── gravação da medição ───────────────────────────────────────────
+async function monSalvarLista(){
+  try {
+    var db = getDB(); if (!db) return _cpGravou(false, 'sem conexão com o Firebase');
+    await db.collection('config').doc(MON_COL).set({
+      lista: _monMeds.map(function(m){
+        return { inicio:m.inicio, fim:m.fim, meta:Math.round(+m.meta || MON_META_PADRAO) };
+      }),
+      atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem()
+    });
+    return _cpGravou(true);
+  } catch (e) { console.warn('monSalvarLista:', e); return _cpGravou(false, String(e && e.message || e)); }
+}
+
+async function monCarregarLista(){
+  try {
+    var db = getDB(); if (!db) return;
+    var doc = await db.collection('config').doc(MON_COL).get();
+    if (!doc || !doc.exists) return;
+    var l = (doc.data() || {}).lista || [];
+    _monMeds = l.filter(function(m){ return m && m.inicio && m.fim; })
+      .map(function(m){ return { inicio:m.inicio, fim:m.fim, meta:Math.round(+m.meta || MON_META_PADRAO) }; })
+      .sort(function(a, b){ return a.inicio < b.inicio ? 1 : (a.inicio > b.inicio ? -1 : 0); });
+  } catch (e) { console.warn('monCarregarLista:', e); }
+}
+
+function monAbrirForm(){
+  var f = document.getElementById('mon-form');
+  if (f) f.style.display = 'block';
+  monPintarForm();
+}
+function monFecharForm(){
+  var f = document.getElementById('mon-form');
+  if (f) f.style.display = 'none';
+}
+// Com nada salvo, sugere o ciclo do dia 26 ao 25 — foi o exemplo dele.
+function monPintarForm(){
+  var m = monMedAtual();
+  var ei = document.getElementById('mon-ini'), ef = document.getElementById('mon-fim'),
+      em = document.getElementById('mon-meta'), ex = document.getElementById('mon-btn-excluir');
+  if (!ei || !ef || !em) return;
+  if (m) { ei.value = m.inicio; ef.value = m.fim; em.value = m.meta || MON_META_PADRAO; }
+  else {
+    var h = new Date(), a = h.getFullYear(), mes = h.getMonth();
+    var ini = new Date(a, h.getDate() >= 26 ? mes : mes - 1, 26);
+    var fim = new Date(ini.getFullYear(), ini.getMonth() + 1, 25);
+    var fmt = function(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0')
+                                + '-' + String(d.getDate()).padStart(2,'0'); };
+    ei.value = fmt(ini); ef.value = fmt(fim); em.value = MON_META_PADRAO;
+  }
+  if (ex) ex.style.display = m ? '' : 'none';
+}
+
+async function monSalvarMedicao(){
+  var ei = document.getElementById('mon-ini'), ef = document.getElementById('mon-fim'),
+      em = document.getElementById('mon-meta'), av = document.getElementById('mon-aviso');
+  var ini = ei && ei.value, fim = ef && ef.value;
+  var meta = Math.round(+((em && em.value) || MON_META_PADRAO));
+  if (!ini || !fim) {
+    if (av) av.innerHTML = '<span style="color:var(--vm)">✗ Informe o início e o fim da medição.</span>';
+    return;
+  }
+  if (fim < ini) {
+    if (av) av.innerHTML = '<span style="color:var(--vm)">✗ O fim não pode ser antes do início.</span>';
+    return;
+  }
+  if (!monDiasUteis(ini, fim).length) {
+    if (av) av.innerHTML = '<span style="color:var(--vm)">✗ Esse período não tem nenhum dia útil.</span>';
+    return;
+  }
+  var achou = false;
+  _monMeds = _monMeds.map(function(m){
+    if (m.inicio === ini || m.inicio === _monSel) { achou = true; return { inicio:ini, fim:fim, meta:meta }; }
+    return m;
+  });
+  if (!achou) _monMeds.push({ inicio:ini, fim:fim, meta:meta });
+  _monMeds.sort(function(a, b){ return a.inicio < b.inicio ? 1 : (a.inicio > b.inicio ? -1 : 0); });
+  _monSel = ini;
+  monFecharForm();
+  var ok = await monSalvarLista();
+  if (av) av.innerHTML = ok
+    ? '<span style="color:var(--vd)">✓ Medição de ' + cpDataBR(ini) + ' a ' + cpDataBR(fim)
+      + ' salva, meta de ' + cpNum(meta) + ' pedidos por dia útil.</span>'
+    : '<span style="color:var(--vm)">✗ Medição aplicada na tela, mas não gravada: '
+      + cpEsc((_cpUltimaGravacao || {}).motivo || 'erro desconhecido') + '</span>';
+  await monAtualizar();
+}
+
+async function monExcluirMedicao(){
+  var m = monMedAtual(); if (!m) return;
+  _monMeds = _monMeds.filter(function(x){ return x.inicio !== m.inicio; });
+  _monSel = _monMeds.length ? _monMeds[0].inicio : '';
+  monFecharForm();
+  await monSalvarLista();
+  await monAtualizar();
+}
+
+// ── conversão: gravada no upload da medição ───────────────────────
+async function monSalvarConversao(med, arquivo){
+  try {
+    if (!med) return false;
+    // os donos dos pedidos que estão na planilha de rejeitados
+    var donos = {};
+    var rej = (_gpRej && _gpRej.itens && _gpRej.itens.length) ? _gpRej.itens : null;
+    if (!rej) {
+      try {
+        var db0 = getDB();
+        if (db0) {
+          var dr = await db0.collection('config').doc('governanca_rejeitados').get();
+          if (dr && dr.exists) rej = (dr.data() || {}).itens || null;
+        }
+      } catch (e0) {}
+    }
+    (rej || []).forEach(function(i){
+      var p = String(i.pedido || '').trim().replace(/\.0+$/, '');
+      if (p && med.donoPedido && med.donoPedido[p]) donos[p] = med.donoPedido[p];
+    });
+    _monConv = { conv:(med.conv || []).slice(0, 6000), total:med.convTotal || {},
+                 rejMed:med.rejMed || {}, rejMedTotal:+med.rejMedTotal || 0,
+                 rejDonos:donos, arquivo:arquivo || '',
+                 atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem() };
+    var db = getDB(); if (!db) return false;
+    await db.collection('config').doc('pedidos_conversao').set(_monConv);
+    return true;
+  } catch (e) { console.warn('monSalvarConversao:', e); return false; }
+}
+
+async function monCarregarConversao(){
+  try {
+    var db = getDB(); if (!db) return;
+    var doc = await db.collection('config').doc('pedidos_conversao').get();
+    if (!doc || !doc.exists) return;
+    var d = doc.data() || {};
+    _monConv = { conv:d.conv || [], total:d.total || { emi:0, lib:0, aguard:0, outro:0 },
+                 rejMed:d.rejMed || {}, rejMedTotal:+d.rejMedTotal || 0,
+                 rejDonos:d.rejDonos || {}, arquivo:d.arquivo || '',
+                 atualizadoEm:d.atualizadoEm || '' };
+  } catch (e) { console.warn('monCarregarConversao:', e); }
+}
+
+// ── o combinado da distribuição no período ────────────────────────
+// Varre as distribuições do período e pergunta, item por item, se já
+// foi feito e se ainda está no prazo combinado daquela atividade.
+async function monMontarCombinado(){
+  var m = monMedAtual();
+  _monComb = null;
+  if (!m) return;
+  var dists = [];
+  try {
+    var db = getDB(); if (!db) return;
+    var snap = await db.collection(MD_COL).get();
+    snap.forEach(function(doc){
+      var d = doc.data() || {};
+      var dt = d.data || doc.id;
+      if (dt < m.inicio || dt > m.fim) return;
+      dists.push({ data:dt, lista:(d.distribuicao || []).map(function(p){
+        return { nome:p.nome, itens:p.itens || [] }; }) });
+    });
+    var d1 = await db.collection('config').doc('governanca_negociacao').get();
+    if (d1 && d1.exists) _gpNeg = (d1.data() || {}).itens || {};
+  } catch (e) { console.warn('monMontarCombinado:', e); }
+  dists.sort(function(a, b){ return a.data < b.data ? -1 : 1; });
+
+  var vivos = _ctrlAindaNoMapa();
+  var temMapa = !!(_mdBase && _mdBase.itens && _mdBase.itens.length);
+  var hoje = cpHojeISO();
+
+  var monta = function(chaves, feitoDe){
+    var pessoas = {}, porDia = {}, itens = [];
+    dists.forEach(function(ds){
+      ds.lista.forEach(function(p){
+        if (cpEstaFora(p.nome)) return;
+        (p.itens || []).forEach(function(i){
+          if (chaves.indexOf(i.statusChave) === -1) return;
+          var cota = mdCotaAtv(i.statusChave);
+          var prazo = gpMaisDiasUteis(ds.data, cota.dias);
+          var feito = !!feitoDe(i);
+          var vencido = !feito && !!prazo && prazo < hoje;
+          var o = pessoas[p.nome] || (pessoas[p.nome] =
+            { nome:p.nome, recebido:0, feito:0, falta:0, vencido:0 });
+          o.recebido++; if (feito) o.feito++; else { o.falta++; if (vencido) o.vencido++; }
+          var dd = porDia[ds.data] || (porDia[ds.data] =
+            { data:ds.data, recebido:0, feito:0, vencido:0 });
+          dd.recebido++; if (feito) dd.feito++; else if (vencido) dd.vencido++;
+          itens.push({ nome:p.nome, data:ds.data, rc:i.rc, seq:i.seq,
+                       statusChave:i.statusChave, prazo:prazo, dias:cota.dias,
+                       feito:feito, vencido:vencido });
+        });
+      });
+    });
+    var lista = Object.keys(pessoas).map(function(k){ return pessoas[k]; })
+      .sort(function(a, b){ return b.vencido - a.vencido || b.recebido - a.recebido
+                                 || a.nome.localeCompare(b.nome); });
+    var tot = lista.reduce(function(t, p){
+      t.recebido += p.recebido; t.feito += p.feito; t.falta += p.falta; t.vencido += p.vencido;
+      return t; }, { recebido:0, feito:0, falta:0, vencido:0 });
+    return { lista:lista, dias:Object.keys(porDia).sort().map(function(k){ return porDia[k]; }),
+             itens:itens, total:tot };
+  };
+
+  _monComb = {
+    temMapa: temMapa, dists: dists.length,
+    patec: monta(CTRL_PATEC, function(i){ return temMapa && !vivos[i.rc + '|' + i.seq]; }),
+    neg:   monta(CTRL_NEG,   function(i){ var x = _gpNeg[i.rc + '|' + i.seq]; return !!(x && x.data); })
+  };
+}
+
+// ── abrir, atualizar e desenhar ───────────────────────────────────
+async function monAbrir(){
+  await monCarregarLista();
+  if (!_monSel) { var m0 = monMedDeHoje(); _monSel = m0 ? m0.inicio : ''; }
+  await monAtualizar();
+  if (!_monMeds.length) monAbrirForm();
+}
+
+async function monAtualizar(){
+  var av = document.getElementById('mon-aviso');
+  if (av && !av.innerHTML) av.innerHTML = '<span style="color:var(--tx2)">⏳ Juntando os números...</span>';
+  await cpCarregarFora();
+  await cpCarregarHistorico();
+  await monCarregarConversao();
+  try {
+    var db = getDB();
+    if (db) {
+      var dr = await db.collection('config').doc('governanca_rejeitados').get();
+      if (dr && dr.exists) {
+        var R = dr.data() || {};
+        _gpRej = { itens:R.itens || [], arquivo:R.arquivo || '', aba:R.aba || '',
+                   lidas:+R.lidas || 0, fora:+R.fora || 0, grupos:R.grupos || {},
+                   atualizadoEm:R.atualizadoEm || '', atualizadoPor:R.atualizadoPor || '' };
+      }
+    }
+  } catch (e) { console.warn('monAtualizar rejeitados:', e); }
+  await monMontarCombinado();
+  if (av) av.innerHTML = '';
+  monRender();
+}
+
+function monVisao(v){
+  _monVisao = (v === 'acum') ? 'acum' : 'dia';
+  monRender();
+}
+
+function monRender(){
+  monPintarEscolha();
+  monRenderResumo();
+  monRenderGrafico();
+  monRenderDias();
+  monRenderCombinado();
+  monRenderConversao();
+  monRenderRejeite();
+}
+
+function monPintarEscolha(){
+  var sel = document.getElementById('mon-escolha');
+  if (!sel) return;
+  if (!_monMeds.length) {
+    sel.innerHTML = '<option value="">nenhuma medição informada</option>';
+    return;
+  }
+  var atual = monMedAtual();
+  sel.innerHTML = _monMeds.map(function(m){
+    return '<option value="' + m.inicio + '"' + (atual && m.inicio === atual.inicio ? ' selected' : '') + '>'
+      + cpDataBR(m.inicio) + ' a ' + cpDataBR(m.fim) + ' · meta ' + cpNum(m.meta) + '/dia</option>';
+  }).join('');
+  ['dia','acum'].forEach(function(v){
+    var b = document.getElementById('mon-v-' + v);
+    if (b) b.className = 'btn ' + (_monVisao === v ? 'btn-p' : 'btn-s');
+  });
+}
+
+function monCard(rot, val, sub, cor, fundo){
+  return '<div style="background:' + (fundo || 'var(--cin)') + ';border:1.5px solid '
+    + (cor || 'var(--brd)') + ';border-radius:12px;padding:.9rem;text-align:center">'
+    + '<div style="font-size:26px;font-weight:800;color:' + (cor || 'var(--az)') + ';line-height:1.1">'
+    +   val + '</div>'
+    + '<div style="font-size:10px;font-weight:700;color:' + (cor || 'var(--tx2)') + ';margin-top:4px;'
+    +   'letter-spacing:.2px">' + cpEsc(rot) + '</div>'
+    + (sub ? '<div style="font-size:10px;color:var(--tx2);margin-top:3px">' + sub + '</div>' : '')
+    + '</div>';
+}
+
+function monRenderResumo(){
+  var box = document.getElementById('mon-resumo');
+  if (!box) return;
+  var s = monSerie();
+  if (!s) {
+    box.innerHTML = '<div style="font-size:12px;color:var(--am);padding:.3rem 0">'
+      + 'Nenhuma medição informada ainda. Clique em <strong>Informar período da medição</strong> '
+      + 'e diga o início, o fim e a meta por dia.</div>';
+    return;
+  }
+  if (s.vazio) {
+    box.innerHTML = '<div style="font-size:12px;color:var(--vm)">Esse período não tem dia útil.</div>';
+    return;
+  }
+  var faltam = Math.max(0, s.dias.length - s.decorridos);
+  var pctMeta = s.planTotal ? Math.round(s.feito * 100 / s.planTotal) : 0;
+  var projFim = s.comDado ? Math.round(s.feito + s.ritmo * faltam) : 0;
+  box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));'
+    + 'gap:12px;margin-bottom:.9rem">'
+    + monCard('DIAS ÚTEIS DA MEDIÇÃO', cpNum(s.dias.length),
+        cpNum(s.decorridos) + ' já passaram · ' + cpNum(faltam) + ' a vir')
+    + monCard('META DA MEDIÇÃO', cpNum(s.planTotal),
+        cpNum(s.meta) + '/dia × ' + cpNum(s.dias.length) + ' dias', 'var(--azm)', 'var(--azc)')
+    + monCard('FEITOS ATÉ AGORA', cpNum(s.feito),
+        cpNum(s.comDado) + ' dia(s) com medição', 'var(--vd)', 'var(--vdc)')
+    + monCard('RITMO POR DIA', s.comDado ? cpNum(Math.round(s.ritmo)) : '—',
+        s.comDado ? (s.ritmo >= s.meta ? 'acima da meta' : 'abaixo da meta') : 'sem medição ainda',
+        s.ritmo >= s.meta ? 'var(--vd)' : 'var(--am)',
+        s.ritmo >= s.meta ? 'var(--vdc)' : 'var(--amc)')
+    + monCard('% DA META', pctMeta + '%', 'do planejado da medição inteira',
+        pctMeta >= 100 ? 'var(--vd)' : 'var(--tx2)', pctMeta >= 100 ? 'var(--vdc)' : 'var(--cin)')
+    + monCard('PROJEÇÃO NO FECHAMENTO', s.comDado ? cpNum(projFim) : '—',
+        s.comDado ? (projFim >= s.planTotal ? 'bate a meta no ritmo atual'
+                                            : 'faltariam ' + cpNum(s.planTotal - projFim)) : '',
+        projFim >= s.planTotal ? 'var(--vd)' : 'var(--vm)',
+        projFim >= s.planTotal ? 'var(--vdc)' : 'var(--vmc)')
+    + '</div>';
+  var recados = [];
+  if (s.rolados.length) {
+    recados.push('<div style="color:var(--azm)">↪ '
+      + s.rolados.map(function(r){
+          return cpNum(r.n) + ' de ' + cpDataBR(r.de) + ' (' + (monEhFeriado(r.de) ? 'feriado' : 'fim de semana')
+               + ') contados em ' + cpDataBR(r.para);
+        }).join(' · ') + '</div>');
+  }
+  if (s.semMedicao.length) {
+    recados.push('<div style="color:var(--am)">⚠ ' + cpNum(s.semMedicao.length)
+      + ' dia(s) útil(eis) do período ainda sem medição subida: '
+      + s.semMedicao.slice(0, 8).map(cpDataBR).join(', ')
+      + (s.semMedicao.length > 8 ? ' e mais ' + (s.semMedicao.length - 8) : '') + '.</div>');
+  }
+  if (recados.length) {
+    box.innerHTML += '<div style="font-size:11px;line-height:1.8;margin-bottom:.4rem">'
+      + recados.join('') + '</div>';
+  }
+}
+
+function monRenderGrafico(){
+  var el = document.getElementById('mon-grafico');
+  if (!el) return;
+  var s = monSerie();
+  if (_monChart) { try { _monChart.destroy(); } catch (e) {} _monChart = null; }
+  if (!s || s.vazio || typeof Chart === 'undefined') return;
+  var rot = s.dias.map(function(d){ return cpDataBR(d).slice(0, 5); });
+  var dados = (_monVisao === 'acum')
+    ? [ { label:'Planejado acumulado (' + s.meta + '/dia)', data:s.planAcum,
+          borderColor:'#1A4A8A', backgroundColor:'rgba(26,74,138,.08)',
+          borderWidth:2, pointRadius:0, tension:0, fill:false },
+        { label:'Realizado acumulado', data:s.realAcum,
+          borderColor:'#0E9E6A', backgroundColor:'rgba(14,158,106,.12)',
+          borderWidth:3, pointRadius:3, tension:.25, fill:true, spanGaps:true },
+        { label:'Projeção no ritmo atual', data:s.projecao,
+          borderColor:'#C98A00', borderDash:[6,4], borderWidth:2,
+          pointRadius:0, tension:0, fill:false, spanGaps:true } ]
+    : [ { label:'Meta planejada (' + s.meta + '/dia)', data:s.plan,
+          borderColor:'#1A4A8A', borderWidth:2, borderDash:[6,4],
+          pointRadius:0, tension:0, fill:false },
+        { label:'Feitos no dia', data:s.real,
+          borderColor:'#0E9E6A', backgroundColor:'rgba(14,158,106,.14)',
+          borderWidth:3, pointRadius:3, tension:.25, fill:true, spanGaps:true } ];
+  try {
+    _monChart = new Chart(el, {
+      type:'line',
+      data:{ labels:rot, datasets:dados },
+      options:{ responsive:true, maintainAspectRatio:false,
+        interaction:{ mode:'index', intersect:false },
+        plugins:{ legend:{ display:true, position:'bottom',
+                    labels:{ boxWidth:12, font:{ size:11 } } } },
+        scales:{ y:{ beginAtZero:true, ticks:{ font:{ size:10 } } },
+                 x:{ ticks:{ font:{ size:9 }, maxRotation:0, autoSkipPadding:8 } } } }
+    });
+  } catch (e) { console.warn('monRenderGrafico:', e); }
+}
+
+function monRenderDias(){
+  var box = document.getElementById('mon-dias');
+  if (!box) return;
+  var s = monSerie();
+  if (!s || s.vazio) { box.innerHTML = ''; return; }
+  var rolPara = {};
+  s.rolados.forEach(function(r){ (rolPara[r.para] = rolPara[r.para] || []).push(r); });
+  var acum = 0;
+  var h = '<div style="overflow:auto;max-height:330px;margin-top:1rem"><table><thead><tr>'
+    + '<th>Dia útil</th><th style="text-align:right">Meta</th>'
+    + '<th style="text-align:right">Feitos</th><th style="text-align:right">Saldo</th>'
+    + '<th style="text-align:right">Acumulado</th><th style="text-align:right">Meta acum.</th>'
+    + '<th>Observação</th></tr></thead><tbody>';
+  s.dias.forEach(function(d, i){
+    var v = s.real[i];
+    if (v !== null) acum += v;
+    var saldo = v === null ? null : v - s.meta;
+    var futuro = d > s.hoje;
+    h += '<tr' + (d === s.hoje ? ' style="background:var(--azc)"' : '') + '>'
+      + '<td style="font-weight:600">' + cpDataBR(d) + '</td>'
+      + '<td style="text-align:right">' + cpNum(s.meta) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + (v === null ? '—' : cpNum(v)) + '</td>'
+      + '<td style="text-align:right;font-weight:600;color:'
+      +   (saldo === null ? 'var(--tx2)' : (saldo >= 0 ? 'var(--vd)' : 'var(--vm)')) + '">'
+      +   (saldo === null ? '—' : (saldo > 0 ? '+' : '') + cpNum(saldo)) + '</td>'
+      + '<td style="text-align:right">' + (v === null && d > s.hoje ? '—' : cpNum(acum)) + '</td>'
+      + '<td style="text-align:right;color:var(--tx2)">' + cpNum(s.meta * (i + 1)) + '</td>'
+      + '<td style="font-size:10.5px;color:var(--tx2)">'
+      +   (rolPara[d] ? '↪ inclui ' + rolPara[d].map(function(r){
+              return cpNum(r.n) + ' de ' + cpDataBR(r.de); }).join(' e ') : '')
+      +   (v === null ? (futuro ? 'ainda não chegou' : 'sem medição subida') : '')
+      + '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  box.innerHTML = h;
+}
+
+// ── o combinado ───────────────────────────────────────────────────
+function monSelo(p){
+  if (p.vencido) return '<span class="pl pl-b">Fora do combinado</span>';
+  if (!p.falta)  return '<span class="pl pl-ok">Tudo em dia</span>';
+  var q = p.recebido ? Math.round(p.feito * 100 / p.recebido) : 0;
+  if (q >= 90) return '<span class="pl pl-ok">Em dia</span>';
+  if (q >= 60) return '<span class="pl pl-w">Em andamento</span>';
+  return '<span class="pl pl-w">Atenção</span>';
+}
+
+function monBlocoCombinado(r, titulo, aviso){
+  if (!r.total.recebido) {
+    return '<div style="font-size:12px;color:var(--tx2);margin-bottom:1rem">'
+      + '<strong>' + cpEsc(titulo) + '</strong> — nenhuma distribuição do período tem itens desta frente.</div>';
+  }
+  var pct = Math.round(r.total.feito * 100 / r.total.recebido);
+  var h = '<div style="font-weight:700;font-size:13px;margin:.4rem 0 .6rem">' + cpEsc(titulo)
+    + ' <span style="font-weight:500;color:var(--tx2)">· ' + cpNum(r.total.recebido)
+    + ' distribuídos · ' + cpNum(r.total.feito) + ' concluídos (' + pct + '%) · '
+    + '<span style="color:' + (r.total.vencido ? 'var(--vm)' : 'var(--vd)') + '">'
+    + cpNum(r.total.vencido) + ' fora do prazo combinado</span></span></div>';
+  if (aviso) h += '<div style="font-size:11px;color:var(--am);margin-bottom:.6rem">' + aviso + '</div>';
+  h += '<div style="overflow:auto"><table><thead><tr><th>Comprador</th>'
+    + '<th style="text-align:right">Distribuídos</th><th style="text-align:right">Concluídos</th>'
+    + '<th style="text-align:right">Em aberto</th><th style="text-align:right">Vencidos</th>'
+    + '<th style="text-align:right">%</th><th style="width:130px">Evolução</th>'
+    + '<th>Combinado</th></tr></thead><tbody>';
+  r.lista.forEach(function(p){
+    var q = p.recebido ? Math.round(p.feito * 100 / p.recebido) : 0;
+    h += '<tr' + (p.vencido ? ' style="background:var(--vmc)"' : '') + '>'
+      + '<td style="font-weight:600">' + cpEsc(p.nome) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + cpNum(p.recebido) + '</td>'
+      + '<td style="text-align:right;font-weight:700;color:var(--vd)">' + cpNum(p.feito) + '</td>'
+      + '<td style="text-align:right;color:' + (p.falta ? 'var(--am)' : 'var(--tx2)') + '">'
+      +   cpNum(p.falta) + '</td>'
+      + '<td style="text-align:right;font-weight:700;color:'
+      +   (p.vencido ? 'var(--vm)' : 'var(--tx2)') + '">' + cpNum(p.vencido) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + q + '%</td>'
+      + '<td>' + cpBarraSimples(p.feito, p.recebido || 1) + '</td>'
+      + '<td>' + monSelo(p) + '</td></tr>';
+  });
+  h += '</tbody><tfoot><tr><td>Total da equipe</td>'
+    + '<td style="text-align:right;font-weight:800">' + cpNum(r.total.recebido) + '</td>'
+    + '<td style="text-align:right;font-weight:800;color:var(--vd)">' + cpNum(r.total.feito) + '</td>'
+    + '<td style="text-align:right;font-weight:800">' + cpNum(r.total.falta) + '</td>'
+    + '<td style="text-align:right;font-weight:800;color:var(--vm)">' + cpNum(r.total.vencido) + '</td>'
+    + '<td style="text-align:right;font-weight:800">' + pct + '%</td><td></td><td></td>'
+    + '</tr></tfoot></table></div>';
+  if (r.dias.length > 1) {
+    h += '<div style="overflow:auto;max-height:200px;margin-top:.7rem"><table><thead><tr>'
+      + '<th>Distribuição de</th><th style="text-align:right">Distribuídos</th>'
+      + '<th style="text-align:right">Concluídos</th><th style="text-align:right">Vencidos</th>'
+      + '<th style="text-align:right">%</th></tr></thead><tbody>';
+    r.dias.forEach(function(d){
+      var q = d.recebido ? Math.round(d.feito * 100 / d.recebido) : 0;
+      h += '<tr><td>' + cpDataBR(d.data) + '</td>'
+        + '<td style="text-align:right">' + cpNum(d.recebido) + '</td>'
+        + '<td style="text-align:right;color:var(--vd)">' + cpNum(d.feito) + '</td>'
+        + '<td style="text-align:right;color:' + (d.vencido ? 'var(--vm)' : 'var(--tx2)') + '">'
+        +   cpNum(d.vencido) + '</td>'
+        + '<td style="text-align:right;font-weight:600">' + q + '%</td></tr>';
+    });
+    h += '</tbody></table></div>';
+  }
+  return '<div style="margin-bottom:1.4rem">' + h + '</div>';
+}
+
+function monRenderCombinado(){
+  var box = document.getElementById('mon-combinado');
+  if (!box) return;
+  if (!monMedAtual()) { box.innerHTML = '<div style="font-size:12px;color:var(--tx2)">'
+    + 'Informe o período da medição para eu juntar as distribuições.</div>'; return; }
+  if (!_monComb) { box.innerHTML = '<div style="font-size:12px;color:var(--tx2)">⏳ Conferindo...</div>'; return; }
+  if (!_monComb.dists) {
+    box.innerHTML = '<div style="font-size:12px;color:var(--am)">'
+      + 'Nenhuma distribuição guardada dentro deste período.</div>';
+    return;
+  }
+  box.innerHTML = monBlocoCombinado(_monComb.neg, 'Negociação (preço excessivo e acima do limite DPV)', '')
+    + monBlocoCombinado(_monComb.patec, 'Abrir PATEC (grupo de mercadoria obrigatório e idêntico não)',
+        _monComb.temMapa ? '' : '⚠ Suba o MAPA de hoje na Distribuição do MAPA — é ele que diz o que '
+          + 'já saiu do status de abrir PATEC. Sem ele, nada aparece como concluído.')
+    + '<div style="font-size:10.5px;color:var(--tx2)">'
+    + 'Na negociação conta como feito o item com <strong>data de negociação</strong> preenchida na '
+    + 'Governança. No abrir PATEC conta como feito o item que <strong>não aparece mais</strong> nos '
+    + 'status de abrir PATEC do MAPA de hoje. Quem está fora da equipe não entra.</div>';
+}
+
+// ── emitidos x convertidos ────────────────────────────────────────
+function monConvLinhas(){
+  var m = monMedAtual();
+  var tudo = (document.getElementById('mon-conv-tudo') || {}).checked;
+  var por = {};
+  (_monConv.conv || []).forEach(function(c){
+    if (!tudo && m && (!c.dia || c.dia < m.inicio || c.dia > m.fim)) return;
+    if (cpEstaFora(c.nome)) return;
+    var o = por[c.nome] || (por[c.nome] = { nome:c.nome, emi:0, lib:0, aguard:0, outro:0 });
+    o.emi += +c.emi || 0; o.lib += +c.lib || 0;
+    o.aguard += +c.aguard || 0; o.outro += +c.outro || 0;
+  });
+  var lista = Object.keys(por).map(function(k){ return por[k]; })
+    .sort(function(a, b){ return b.emi - a.emi || a.nome.localeCompare(b.nome); });
+  var tot = lista.reduce(function(t, p){
+    t.emi += p.emi; t.lib += p.lib; t.aguard += p.aguard; t.outro += p.outro; return t;
+  }, { emi:0, lib:0, aguard:0, outro:0 });
+  return { lista:lista, total:tot, tudo:!!tudo };
+}
+
+function monRenderConversao(){
+  var box = document.getElementById('mon-conversao');
+  if (!box) return;
+  var r = monConvLinhas();
+  var m = monMedAtual();
+  var cab = '<div style="font-size:11px;color:var(--tx2);line-height:1.7;margin-bottom:.8rem">'
+    + 'Da medição de momento: pedido <strong>emitido</strong> é status 3 sem código de eliminação. '
+    + 'Dentro dele, <strong>convertido</strong> é o que o STATUS_PSMV já mostra como liberado — '
+    + 'o resto está em liberação, esperando. '
+    + (r.tudo ? 'Mostrando <strong>tudo que está emitido</strong>.'
+             : (m ? 'Recorte pela data de criação do pedido, de ' + cpDataBR(m.inicio) + ' a '
+                    + cpDataBR(m.fim) + '.' : ''))
+    + (_monConv.arquivo ? '<br>Última medição: <strong>' + cpEsc(_monConv.arquivo) + '</strong>'
+        + (_monConv.atualizadoEm ? ' — ' + cpDataBR(String(_monConv.atualizadoEm).slice(0, 10)) : '') + '.' : '')
+    + '</div>';
+  if (!r.lista.length) {
+    box.innerHTML = cab + '<div style="font-size:12px;color:var(--tx2)">'
+      + (_monConv.arquivo
+          ? 'Nenhum pedido emitido neste recorte. Marque a chave acima para ver tudo que está emitido.'
+          : 'Nada aqui ainda. Suba a medição de momento em <strong>Controle de Pedidos</strong> '
+            + 'que esta tabela se monta sozinha.') + '</div>';
+    return;
+  }
+  var pctT = r.total.emi ? Math.round(r.total.lib * 100 / r.total.emi) : 0;
+  var h = cab + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));'
+    + 'gap:12px;margin-bottom:.9rem">'
+    + monCard('EMITIDOS', cpNum(r.total.emi), 'status 3, sem eliminação', 'var(--az)')
+    + monCard('CONVERTIDOS', cpNum(r.total.lib), 'já liberados', 'var(--vd)', 'var(--vdc)')
+    + monCard('EM LIBERAÇÃO', cpNum(r.total.aguard), 'ainda esperando', 'var(--am)', 'var(--amc)')
+    + monCard('% CONVERTIDO', pctT + '%', 'do que foi emitido',
+        pctT >= 80 ? 'var(--vd)' : (pctT >= 60 ? 'var(--am)' : 'var(--vm)'),
+        pctT >= 80 ? 'var(--vdc)' : (pctT >= 60 ? 'var(--amc)' : 'var(--vmc)'))
+    + '</div>';
+  h += '<div style="overflow:auto;max-height:420px"><table><thead><tr><th>Comprador</th>'
+    + '<th style="text-align:right">Emitidos</th><th style="text-align:right">Convertidos</th>'
+    + '<th style="text-align:right">Em liberação</th><th style="text-align:right">%</th>'
+    + '<th style="width:130px">Conversão</th></tr></thead><tbody>';
+  r.lista.forEach(function(p){
+    var q = p.emi ? Math.round(p.lib * 100 / p.emi) : 0;
+    var cor = q >= 80 ? 'var(--vd)' : (q >= 60 ? 'var(--am)' : 'var(--vm)');
+    h += '<tr' + (q < 60 ? ' style="background:var(--vmc)"' : '') + '>'
+      + '<td style="font-weight:600">' + cpEsc(p.nome) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + cpNum(p.emi) + '</td>'
+      + '<td style="text-align:right;font-weight:700;color:var(--vd)">' + cpNum(p.lib) + '</td>'
+      + '<td style="text-align:right;color:var(--am)">' + cpNum(p.aguard) + '</td>'
+      + '<td style="text-align:right;font-weight:800;color:' + cor + '">' + q + '%</td>'
+      + '<td>' + cpBarraSimples(p.lib, p.emi || 1) + '</td></tr>';
+  });
+  h += '</tbody><tfoot><tr><td>Total</td>'
+    + '<td style="text-align:right;font-weight:800">' + cpNum(r.total.emi) + '</td>'
+    + '<td style="text-align:right;font-weight:800;color:var(--vd)">' + cpNum(r.total.lib) + '</td>'
+    + '<td style="text-align:right;font-weight:800;color:var(--am)">' + cpNum(r.total.aguard) + '</td>'
+    + '<td style="text-align:right;font-weight:800">' + pctT + '%</td><td></td>'
+    + '</tr></tfoot></table></div>';
+  box.innerHTML = h;
+}
+
+// ── rejeites por comprador ───────────────────────────────────────
+function monRejLinhas(){
+  var m = monMedAtual();
+  var tudo = (document.getElementById('mon-rej-tudo') || {}).checked;
+  var donos = _monConv.rejDonos || {};
+  var por = {}, semDono = 0, usados = 0;
+  ((_gpRej && _gpRej.itens) || []).forEach(function(i){
+    if (!tudo && m && (!i.dataRej || i.dataRej < m.inicio || i.dataRej > m.fim)) return;
+    var p = String(i.pedido || '').trim().replace(/\.0+$/, '');
+    var nome = donos[p] || '';
+    if (!nome) { semDono++; nome = '(comprador não identificado)'; }
+    if (nome !== '(comprador não identificado)' && cpEstaFora(nome)) return;
+    usados++;
+    var o = por[nome] || (por[nome] =
+      { nome:nome, pedidos:0, itens:0 , somaDias:0, pior:0, motivos:{} });
+    o.pedidos++; o.itens += +i.nItens || 0;
+    o.somaDias += +i.dias || 0;
+    if ((+i.dias || 0) > o.pior) o.pior = +i.dias || 0;
+    var mo = i.motivo || '(sem motivo)';
+    o.motivos[mo] = (o.motivos[mo] || 0) + 1;
+  });
+  var lista = Object.keys(por).map(function(k){
+    var o = por[k];
+    o.media = o.pedidos ? Math.round(o.somaDias / o.pedidos) : 0;
+    o.motivo = Object.keys(o.motivos).sort(function(a, b){ return o.motivos[b] - o.motivos[a]; })[0] || '';
+    o.st8 = (function(){
+      var alvo = cpNormNome(o.nome), n = 0;
+      Object.keys(_monConv.rejMed || {}).forEach(function(q){
+        if (cpNormNome(q) === alvo) n += +_monConv.rejMed[q] || 0;
+      });
+      return n;
+    })();
+    return o;
+  }).sort(function(a, b){ return b.pedidos - a.pedidos || a.nome.localeCompare(b.nome); });
+  var tot = lista.reduce(function(t, p){
+    t.pedidos += p.pedidos; t.itens += p.itens; t.st8 += p.st8; return t;
+  }, { pedidos:0, itens:0, st8:0 });
+  return { lista:lista, total:tot, semDono:semDono, usados:usados, tudo:!!tudo };
+}
+
+function monRenderRejeite(){
+  var box = document.getElementById('mon-rejeite');
+  if (!box) return;
+  var r = monRejLinhas();
+  var m = monMedAtual();
+  var cab = '<div style="font-size:11px;color:var(--tx2);line-height:1.7;margin-bottom:.8rem">'
+    + 'A planilha de rejeitados da Governança diz <strong>quais pedidos</strong> foram recusados; '
+    + 'a medição de momento diz <strong>quem emitiu</strong> cada um. Cruzo os dois pelo número do '
+    + 'pedido. A coluna <strong>Status 8</strong> é o rejeite que a própria medição marca.'
+    + (r.tudo ? ' Mostrando <strong>todos</strong> os rejeites da planilha.'
+             : (m ? ' Recorte pela data da rejeição, de ' + cpDataBR(m.inicio) + ' a '
+                    + cpDataBR(m.fim) + '.' : ''))
+    + '</div>';
+  if (!((_gpRej && _gpRej.itens) || []).length) {
+    box.innerHTML = cab + '<div style="font-size:12px;color:var(--tx2)">'
+      + 'Nenhuma planilha de rejeitados guardada. Suba uma no card <strong>Rejeitados</strong> '
+      + 'da Governança.</div>';
+    return;
+  }
+  if (!r.lista.length) {
+    box.innerHTML = cab + '<div style="font-size:12px;color:var(--vd);font-weight:600">'
+      + 'Nenhum rejeite neste recorte.</div>';
+    return;
+  }
+  var h = cab;
+  if (r.semDono) {
+    h += '<div style="font-size:11px;color:var(--am);margin-bottom:.6rem">⚠ ' + cpNum(r.semDono)
+      + ' pedido(s) rejeitado(s) sem comprador identificado — suba a medição de momento para o '
+      + 'cruzamento pegar esses também.</div>';
+  }
+  h += '<div style="overflow:auto;max-height:420px"><table><thead><tr><th>Comprador</th>'
+    + '<th style="text-align:right">Pedidos rejeitados</th><th style="text-align:right">Itens</th>'
+    + '<th style="text-align:right">Dias médio</th><th style="text-align:right">Pior espera</th>'
+    + '<th>Motivo mais comum</th><th style="text-align:right">Status 8 na medição</th>'
+    + '</tr></thead><tbody>';
+  r.lista.forEach(function(p){
+    var feio = p.pedidos >= 10 || p.pior >= 5;
+    h += '<tr' + (feio ? ' style="background:var(--vmc)"' : '') + '>'
+      + '<td style="font-weight:600">' + cpEsc(p.nome) + '</td>'
+      + '<td style="text-align:right;font-weight:800;color:' + (feio ? 'var(--vm)' : 'var(--tx)') + '">'
+      +   cpNum(p.pedidos) + '</td>'
+      + '<td style="text-align:right">' + cpNum(p.itens) + '</td>'
+      + '<td style="text-align:right">' + cpNum(p.media) + '</td>'
+      + '<td style="text-align:right;font-weight:600;color:'
+      +   (p.pior >= 5 ? 'var(--vm)' : 'var(--tx2)') + '">' + cpNum(p.pior) + '</td>'
+      + '<td style="font-size:10.5px">' + cpEsc(p.motivo || '—') + '</td>'
+      + '<td style="text-align:right;color:var(--tx2)">' + cpNum(p.st8) + '</td></tr>';
+  });
+  h += '</tbody><tfoot><tr><td>Total</td>'
+    + '<td style="text-align:right;font-weight:800">' + cpNum(r.total.pedidos) + '</td>'
+    + '<td style="text-align:right;font-weight:800">' + cpNum(r.total.itens) + '</td>'
+    + '<td></td><td></td><td></td>'
+    + '<td style="text-align:right;font-weight:800">' + cpNum(r.total.st8) + '</td>'
+    + '</tr></tfoot></table></div>';
+  box.innerHTML = h;
+}
+
+// ── exportação ────────────────────────────────────────────────────
+function monBaixarExcel(){
+  try {
+    var s = monSerie();
+    if (!s || s.vazio) return;
+    var wb = XLSX.utils.book_new();
+
+    var cab1 = ['Dia útil','Meta do dia','Feitos','Saldo','Acumulado','Meta acumulada','Observação'];
+    var aoa1 = [cab1], acum = 0;
+    var rolPara = {};
+    s.rolados.forEach(function(r){ (rolPara[r.para] = rolPara[r.para] || []).push(r); });
+    s.dias.forEach(function(d, i){
+      var v = s.real[i];
+      if (v !== null) acum += v;
+      aoa1.push([cpDataBR(d), s.meta, v === null ? '' : v,
+                 v === null ? '' : v - s.meta, v === null && d > s.hoje ? '' : acum,
+                 s.meta * (i + 1),
+                 (rolPara[d] ? 'inclui ' + rolPara[d].map(function(r){
+                     return r.n + ' de ' + cpDataBR(r.de); }).join(' e ') + '. ' : '')
+                 + (v === null ? (d > s.hoje ? 'ainda não chegou' : 'sem medição subida') : '')]);
+    });
+    var ws1 = XLSX.utils.aoa_to_sheet(aoa1);
+    ws1['!cols'] = cab1.map(function(c){ return { wch: Math.max(11, Math.min(40, c.length + 6)) }; });
+    XLSX.utils.book_append_sheet(wb, ws1, 'Medicao');
+
+    var cab2 = ['Frente','Comprador','Distribuídos','Concluídos','Em aberto','Vencidos','%'];
+    var aoa2 = [cab2];
+    if (_monComb) {
+      [['Negociação', _monComb.neg], ['Abrir PATEC', _monComb.patec]].forEach(function(par){
+        par[1].lista.forEach(function(p){
+          aoa2.push([par[0], p.nome, p.recebido, p.feito, p.falta, p.vencido,
+                     p.recebido ? Math.round(p.feito * 100 / p.recebido) : 0]);
+        });
+      });
+    }
+    var ws2 = XLSX.utils.aoa_to_sheet(aoa2);
+    ws2['!cols'] = cab2.map(function(c){ return { wch: Math.max(11, Math.min(32, c.length + 6)) }; });
+    XLSX.utils.book_append_sheet(wb, ws2, 'Combinado');
+
+    var cab3 = ['Comprador','Emitidos','Convertidos','Em liberação','% convertido'];
+    var aoa3 = [cab3];
+    monConvLinhas().lista.forEach(function(p){
+      aoa3.push([p.nome, p.emi, p.lib, p.aguard, p.emi ? Math.round(p.lib * 100 / p.emi) : 0]);
+    });
+    var ws3 = XLSX.utils.aoa_to_sheet(aoa3);
+    ws3['!cols'] = cab3.map(function(c){ return { wch: Math.max(11, Math.min(32, c.length + 6)) }; });
+    XLSX.utils.book_append_sheet(wb, ws3, 'Emitidos x convertidos');
+
+    var cab4 = ['Comprador','Pedidos rejeitados','Itens','Dias médio','Pior espera',
+                'Motivo mais comum','Status 8 na medição'];
+    var aoa4 = [cab4];
+    monRejLinhas().lista.forEach(function(p){
+      aoa4.push([p.nome, p.pedidos, p.itens, p.media, p.pior, p.motivo, p.st8]);
+    });
+    var ws4 = XLSX.utils.aoa_to_sheet(aoa4);
+    ws4['!cols'] = cab4.map(function(c){ return { wch: Math.max(11, Math.min(32, c.length + 6)) }; });
+    XLSX.utils.book_append_sheet(wb, ws4, 'Rejeites');
+
+    XLSX.writeFile(wb, 'Monitoramento_' + String(s.med.inicio).replace(/-/g, '')
+      + '_' + String(s.med.fim).replace(/-/g, '') + '.xlsx');
+  } catch (e) { console.warn('monBaixarExcel:', e); }
 }
 
 // ── ITENS PRIORITÁRIOS ────────────────────────────────────────────
