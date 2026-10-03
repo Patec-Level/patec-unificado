@@ -1391,8 +1391,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
                   style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px;font-family:inherit;resize:vertical"></textarea>
               </div>
               <div>
-                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">PADRÃO: ITENS/SEMANA</label>
-                <input type="number" id="md-cota-semana" min="1" step="1" placeholder="50" onchange="mdPintarAtividades()"
+                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">PADRÃO: ITENS POR DIA</label>
+                <input type="number" id="md-cota-dia" min="1" step="1" placeholder="10" onchange="mdPintarAtividades()"
                   style="width:120px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
                 <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin:10px 0 4px;letter-spacing:.2px">PADRÃO: DIAS ÚTEIS</label>
                 <input type="number" id="md-dias" min="1" max="7" step="1" placeholder="5" onchange="mdPintarAtividades()"
@@ -13201,14 +13201,16 @@ var _mdCfg  = { pessoas:[], atividades:{}, cotaDia:0, cotaSemana:0, dias:5, porA
 // Cada atividade tem a sua conta: quantos itens por pessoa na semana e em
 // quantos dias úteis. Abrir PATEC e negociação aguentam volume maior que
 // emissão, e era isso que a cota única não deixava fazer.
+// O comprador faz X itens por dia, durante Y dias úteis. A cota da
+// semana é a multiplicação dos dois — não é um número que ele digita.
 function mdCotaAtv(ch){
   var c = (_mdCfg.porAtividade || {})[ch] || {};
-  var proprio = { semana: Math.round(+c.semana || 0) > 0, dias: Math.round(+c.dias || 0) > 0 };
-  var geral = Math.round(+_mdCfg.cotaSemana || 0);
-  var semana = proprio.semana ? Math.round(+c.semana) : (geral > 0 ? geral : 50);
+  var proprio = { porDia: Math.round(+c.porDia || 0) > 0, dias: Math.round(+c.dias || 0) > 0 };
+  var padraoDia = Math.round(+_mdCfg.cotaDia || 0);
+  var porDia = proprio.porDia ? Math.round(+c.porDia) : (padraoDia > 0 ? padraoDia : 10);
   var dias = proprio.dias ? Math.max(1, Math.min(7, Math.round(+c.dias)))
                           : Math.max(1, Math.min(7, Math.round(+_mdCfg.dias || 5)));
-  return { semana: semana, dias: dias, proprio: proprio };
+  return { porDia: porDia, dias: dias, semana: porDia * dias, proprio: proprio };
 }
 function mdPessoasDaAtividade(ch){
   var out = [];
@@ -13424,9 +13426,10 @@ function mdPintarAtividades(){
     + '<th style="text-align:right">Itens</th>';
   nomes.forEach(function(n){ h += '<th style="text-align:center;font-size:10px">' + cpEsc(n) + '</th>'; });
   h += '<th style="text-align:right">Pessoas</th>'
-    + '<th style="text-align:right">Itens por pessoa</th>'
-    + '<th style="text-align:right">Itens/semana</th>'
-    + '<th style="text-align:right">Dias úteis</th>'
+    + '<th style="text-align:right" title="Total de itens dividido pelas pessoas marcadas">Cabe a cada um</th>'
+    + '<th style="text-align:right" title="Quantos itens cada pessoa faz por dia — você preenche">Itens/dia</th>'
+    + '<th style="text-align:right" title="Em quantos dias úteis essa quantidade tem de ser feita">Dias úteis</th>'
+    + '<th style="text-align:right" title="Itens/dia × dias úteis">Dá para fazer</th>'
     + '<th>Cabe?</th></tr></thead><tbody>';
 
   MD_STATUS.forEach(function(x){
@@ -13439,8 +13442,9 @@ function mdPintarAtividades(){
         : true;   // comprador novo começa atuando em tudo
       if (marcado) quem.push(n);
     });
-    var porPessoa = quem.length ? Math.ceil(itens / quem.length) : 0;
-    var capacidade = quem.length * cota.semana;
+    var porPessoa = quem.length ? Math.ceil(itens / quem.length) : 0;   // o que cabe a cada um
+    var capacidadePessoa = cota.semana;                                 // o que cada um dá conta
+    var capacidade = quem.length * capacidadePessoa;
     var cabe = itens <= capacidade;
     h += '<tr>'
       + '<td style="font-weight:600;color:' + x.cor + ';font-size:11px">' + cpEsc(x.nome) + '</td>'
@@ -13453,16 +13457,19 @@ function mdPintarAtividades(){
         + ' style="width:16px;height:16px;cursor:pointer"></td>';
     });
     h += '<td style="text-align:right;font-weight:700">' + cpNum(quem.length) + '</td>'
-      + '<td style="text-align:right;font-weight:800;color:' + (quem.length ? 'var(--az)' : 'var(--vm)') + '">'
+      + '<td style="text-align:right;font-weight:800;font-size:13px;color:'
+      +   (quem.length ? (porPessoa > capacidadePessoa ? 'var(--vm)' : 'var(--az)') : 'var(--tx2)') + '">'
       +   (quem.length ? cpNum(porPessoa) : '—') + '</td>'
-      + '<td style="text-align:right"><input type="number" min="1" step="1" id="md-sem-' + x.chave + '"'
-      +   ' value="' + (cota.proprio.semana ? cota.semana : '') + '" placeholder="' + cota.semana + '"'
-      +   ' title="Em branco usa o padrão (' + cota.semana + ')" onchange="mdSalvarEquipe()"'
-      +   ' style="width:70px;font-size:12px;padding:3px 6px;border:1px solid var(--brd);border-radius:6px;text-align:right"></td>'
+      + '<td style="text-align:right"><input type="number" min="1" step="1" id="md-dia-' + x.chave + '"'
+      +   ' value="' + (cota.proprio.porDia ? cota.porDia : '') + '" placeholder="' + cota.porDia + '"'
+      +   ' title="Em branco usa o padrão (' + cota.porDia + ' por dia)" onchange="mdSalvarEquipe()"'
+      +   ' style="width:66px;font-size:12px;padding:3px 6px;border:1px solid var(--brd);border-radius:6px;text-align:right"></td>'
       + '<td style="text-align:right"><input type="number" min="1" max="7" step="1" id="md-dias-' + x.chave + '"'
       +   ' value="' + (cota.proprio.dias ? cota.dias : '') + '" placeholder="' + cota.dias + '"'
-      +   ' title="Em branco usa o padrão (' + cota.dias + ')" onchange="mdSalvarEquipe()"'
+      +   ' title="Em branco usa o padrão (' + cota.dias + ' dia(s))" onchange="mdSalvarEquipe()"'
       +   ' style="width:60px;font-size:12px;padding:3px 6px;border:1px solid var(--brd);border-radius:6px;text-align:right"></td>'
+      + '<td style="text-align:right;font-weight:700;color:var(--tx2)" title="'
+      +   cota.porDia + ' por dia × ' + cota.dias + ' dia(s)">' + cpNum(capacidadePessoa) + '</td>'
       + '<td style="font-size:10.5px;font-weight:700;color:' + (cabe ? 'var(--vd)' : 'var(--am)') + '">'
       +   (!quem.length ? (itens ? '<span style="color:var(--vm)">sem ninguém</span>' : '—')
            : (cabe ? 'cabe' : 'faltam ' + cpNum(itens - capacidade)))
@@ -13475,14 +13482,14 @@ function mdPintarAtividades(){
 function mdQuadroDaTela(){
   var out = {};
   MD_STATUS.forEach(function(x){
-    var s1 = document.getElementById('md-sem-' + x.chave);
+    var s1 = document.getElementById('md-dia-' + x.chave);
     var d1 = document.getElementById('md-dias-' + x.chave);
     var vS = s1 ? String(s1.value == null ? '' : s1.value).trim() : '';
     var vD = d1 ? String(d1.value == null ? '' : d1.value).trim() : '';
-    // campo em branco = segue a cota geral; não guardo nada para ele
+    // campo em branco = segue o padrão; não guardo nada para ele
     if (!vS && !vD) return;
     var o = {};
-    if (vS) o.semana = Math.max(1, Math.round(+vS) || 1);
+    if (vS) o.porDia = Math.max(1, Math.round(+vS) || 1);
     if (vD) o.dias   = Math.max(1, Math.min(7, Math.round(+vD) || 1));
     out[x.chave] = o;
   });
@@ -13510,12 +13517,13 @@ async function mdSalvarEquipe(){
     pessoas: nomes,
     qtdPessoas: qtd || nomes.length,
     atividades: mdAtividadesDaTela(nomes),
-    cotaDia: 0,
-    cotaSemana: Math.max(0, Math.round(+(document.getElementById('md-cota-semana') || {}).value || 0)),
+    cotaDia: Math.max(0, Math.round(+(document.getElementById('md-cota-dia') || {}).value || 0)),
+    cotaSemana: 0,   // deixou de ser digitada: é itens/dia × dias úteis
     dias: Math.max(1, Math.min(7, Math.round(+(document.getElementById('md-dias') || {}).value || 5))),
     porAtividade: Object.keys(quadroAntes).length ? quadroAntes : (_mdCfg.porAtividade || {}),
     dataDist: mdDataSel()
   };
+  _mdCfg.cotaSemana = (_mdCfg.cotaDia || 10) * (_mdCfg.dias || 5);
   var av = document.getElementById('md-equipe-aviso');
   var semAtiv = nomes.filter(function(n){ return !(_mdCfg.atividades[n] || []).length; });
   var msg;
@@ -15699,7 +15707,7 @@ async function mdTrocarData(){
 
 function mdPintarCfg(){
   var poe = function(id, v){ var e = document.getElementById(id); if (e && !e.value) e.value = v || ''; };
-  poe('md-cota-semana', _mdCfg.cotaSemana || '');
+  poe('md-cota-dia', _mdCfg.cotaDia || '');
   poe('md-dias', _mdCfg.dias || 5);
   var t = document.getElementById('md-nomes');
   if (t && !t.value) t.value = (_mdCfg.pessoas || []).join('\n');
