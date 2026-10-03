@@ -1378,64 +1378,42 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         <div id="cp-sub-mapa" style="display:none">
 
           <div class="cd" style="border-top:3px solid var(--azm)">
-            <div class="cd-t">👥 Equipe, atividades e cota</div>
-            <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
+            <div class="cd-t">👥 Equipe e distribuição</div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
               <div>
-                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">SEMANA (1º DIA)</label>
+                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">DATA DA DISTRIBUIÇÃO</label>
                 <input type="date" id="md-data" onchange="mdTrocarData()"
                   style="font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;color:var(--az);font-weight:600">
               </div>
-              <div>
-                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">DATA DA DISTRIBUIÇÃO</label>
-                <input type="date" id="md-data-dist" onchange="mdSalvarEquipe()"
-                  style="font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
-              </div>
-              <div>
-                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">QUANTAS PESSOAS</label>
-                <input type="number" id="md-qtd-pessoas" min="1" step="1" placeholder="4"
-                  style="width:110px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
-              </div>
-              <div>
-                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">ITENS POR PESSOA / DIA</label>
-                <input type="number" id="md-cota-dia" min="1" step="1" placeholder="15"
-                  style="width:130px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
-              </div>
-              <div>
-                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">ITENS POR PESSOA / SEMANA</label>
-                <input type="number" id="md-cota-semana" min="1" step="1" placeholder="75"
-                  style="width:150px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
-              </div>
-              <div>
-                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">DIAS ÚTEIS</label>
-                <input type="number" id="md-dias" min="1" max="7" step="1" placeholder="5"
-                  style="width:100px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
-              </div>
-              <div style="flex:1;min-width:260px">
-                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">NOMES DOS COMPRADORES (um por linha)</label>
-                <textarea id="md-nomes" rows="4" oninput="mdPintarAtividades()" placeholder="Lory&#10;Ludy&#10;Wanessa"
+              <div style="flex:1;min-width:280px">
+                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">COMPRADORES (um por linha)</label>
+                <textarea id="md-nomes" rows="3" oninput="mdPintarAtividades()" placeholder="Amanda&#10;Palloma&#10;João"
                   style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px;font-family:inherit;resize:vertical"></textarea>
+              </div>
+              <div>
+                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin-bottom:4px;letter-spacing:.2px">PADRÃO: ITENS/SEMANA</label>
+                <input type="number" id="md-cota-semana" min="1" step="1" placeholder="50" onchange="mdPintarAtividades()"
+                  style="width:120px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
+                <label style="display:block;font-size:10px;color:var(--tx2);font-weight:600;margin:10px 0 4px;letter-spacing:.2px">PADRÃO: DIAS ÚTEIS</label>
+                <input type="number" id="md-dias" min="1" max="7" step="1" placeholder="5" onchange="mdPintarAtividades()"
+                  style="width:120px;font-size:13px;padding:6px 10px;border:1.5px solid var(--brd);border-radius:7px;font-weight:600">
+                <div style="font-size:10px;color:var(--tx2);margin-top:5px;max-width:130px;line-height:1.5">
+                  Valem para as atividades que você não ajustar na tabela.
+                </div>
               </div>
             </div>
 
-            <div style="margin-top:1rem">
+            <div style="margin-top:1.1rem">
               <div style="font-size:11px;font-weight:700;color:var(--tx);margin-bottom:6px">
-                Em que cada comprador atua
-                <span style="font-weight:500;color:var(--tx2)">— marque uma ou mais atividades</span>
+                Uma linha por atividade
+                <span style="font-weight:500;color:var(--tx2)">— marque quem atua e veja na hora
+                quanto cai para cada um; se não couber, ponha mais gente ou estique a semana</span>
               </div>
               <div id="md-atividades"></div>
             </div>
 
-            <div style="margin-top:1.2rem">
-              <div style="font-size:11px;font-weight:700;color:var(--tx);margin-bottom:6px">
-                Quanto dá para cada um, atividade por atividade
-                <span style="font-weight:500;color:var(--tx2)">— mexa nos itens por semana e nos dias
-                úteis até o número por pessoa ficar do tamanho da equipe</span>
-              </div>
-              <div id="md-quadro"></div>
-            </div>
-
             <div style="display:flex;gap:8px;margin-top:.9rem;flex-wrap:wrap;align-items:center">
-              <button class="btn btn-p" onclick="mdSalvarEquipe()">💾 Salvar equipe e cota</button>
+              <button class="btn btn-p" onclick="mdSalvarEquipe()">💾 Salvar</button>
               <span id="md-equipe-aviso" style="font-size:11.5px"></span>
             </div>
           </div>
@@ -13412,7 +13390,7 @@ async function mdUpload(file){
     _mdBase = r;
     _mdDist = null;
     await gpSalvarBase(r, mdDataSel());
-    mdPintarQuadro();
+    mdPintarAtividades();
     if (st) st.innerHTML = '<span style="color:var(--vd)">✓ <strong>' + cpEsc(file.name) + '</strong> — aba '
       + cpEsc(r.aba) + ', ' + cpNum(r.lidas) + ' linhas lidas, ' + cpNum(r.total)
       + ' para a equipe.</span>';
@@ -13430,71 +13408,63 @@ function mdPessoasDaTela(){
     .map(function(x){ return x.trim(); }).filter(function(x){ return !!x; });
 }
 
+// Uma linha por atividade: quem atua, quantos itens tem, quanto cai para
+// cada um e em quantos dias. Era isso espalhado em três lugares antes.
 function mdPintarAtividades(){
   var box = document.getElementById('md-atividades');
   if (!box) return;
   var nomes = mdPessoasDaTela();
   if (!nomes.length) {
-    box.innerHTML = '<div style="font-size:11.5px;color:var(--tx2)">Escreva os nomes acima para marcar as atividades.</div>';
+    box.innerHTML = '<div style="font-size:11.5px;color:var(--tx2)">Escreva os nomes dos compradores '
+      + 'acima para montar a tabela.</div>';
     return;
   }
-  var h = '<div style="overflow:auto"><table><thead><tr><th>Comprador</th>';
-  MD_STATUS.forEach(function(x){ h += '<th style="text-align:center">' + cpEsc(x.nome) + '</th>'; });
-  h += '</tr></thead><tbody>';
-  nomes.forEach(function(n, i){
-    h += '<tr><td style="font-weight:600">' + cpEsc(n) + '</td>';
-    MD_STATUS.forEach(function(x){
-      var marcado = (_mdCfg.atividades && _mdCfg.atividades[n])
-        ? _mdCfg.atividades[n].indexOf(x.chave) !== -1
-        : true;   // por padrão o comprador atua em tudo
-      h += '<td style="text-align:center"><input type="checkbox" id="md-at-' + i + '-' + x.chave + '"'
-        + (marcado ? ' checked' : '') + ' style="width:16px;height:16px;cursor:pointer"></td>';
-    });
-    h += '</tr>';
-  });
-  h += '</tbody></table></div>';
-  box.innerHTML = h;
-}
-
-// Quadro por atividade: itens, quem atua, quanto cai para cada um e em
-// quantos dias. É aqui que ele decide se põe mais gente ou se estica a
-// semana, antes de mandar distribuir.
-function mdPintarQuadro(){
-  var box = document.getElementById('md-quadro');
-  if (!box) return;
   var h = '<div style="overflow:auto"><table><thead><tr>'
-    + '<th>Atividade</th><th style="text-align:right">Itens</th>'
-    + '<th style="text-align:right">Pessoas</th><th>Quem atua</th>'
+    + '<th style="min-width:180px">Atividade</th>'
+    + '<th style="text-align:right">Itens</th>';
+  nomes.forEach(function(n){ h += '<th style="text-align:center;font-size:10px">' + cpEsc(n) + '</th>'; });
+  h += '<th style="text-align:right">Pessoas</th>'
     + '<th style="text-align:right">Itens por pessoa</th>'
-    + '<th style="text-align:right">Itens/semana</th><th style="text-align:right">Dias úteis</th>'
-    + '<th style="text-align:right">Por pessoa/dia</th><th>Cabe?</th>'
-    + '</tr></thead><tbody>';
+    + '<th style="text-align:right">Itens/semana</th>'
+    + '<th style="text-align:right">Dias úteis</th>'
+    + '<th>Cabe?</th></tr></thead><tbody>';
+
   MD_STATUS.forEach(function(x){
     var itens = mdItensDaAtividade(x.chave);
-    var quem  = mdPessoasDaAtividade(x.chave);
     var cota  = mdCotaAtv(x.chave);
+    var quem  = [];
+    nomes.forEach(function(n){
+      var marcado = (_mdCfg.atividades && _mdCfg.atividades[n])
+        ? _mdCfg.atividades[n].indexOf(x.chave) !== -1
+        : true;   // comprador novo começa atuando em tudo
+      if (marcado) quem.push(n);
+    });
     var porPessoa = quem.length ? Math.ceil(itens / quem.length) : 0;
-    var porDia    = cota.dias ? Math.ceil(cota.semana / cota.dias) : 0;
     var capacidade = quem.length * cota.semana;
     var cabe = itens <= capacidade;
     h += '<tr>'
-      + '<td style="font-weight:600;color:' + x.cor + '">' + cpEsc(x.nome) + '</td>'
-      + '<td style="text-align:right;font-weight:700">' + cpNum(itens) + '</td>'
-      + '<td style="text-align:right;font-weight:700">' + cpNum(quem.length) + '</td>'
-      + '<td style="font-size:10.5px;color:var(--tx2)">' + cpEsc(quem.join(', ') || '— ninguém marcado') + '</td>'
-      + '<td style="text-align:right;font-weight:700;color:' + (quem.length ? 'var(--az)' : 'var(--vm)') + '">'
+      + '<td style="font-weight:600;color:' + x.cor + ';font-size:11px">' + cpEsc(x.nome) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + cpNum(itens) + '</td>';
+    nomes.forEach(function(n, i2){
+      var marcado = (_mdCfg.atividades && _mdCfg.atividades[n])
+        ? _mdCfg.atividades[n].indexOf(x.chave) !== -1 : true;
+      h += '<td style="text-align:center"><input type="checkbox" id="md-at-' + i2 + '-' + x.chave + '"'
+        + (marcado ? ' checked' : '') + ' onchange="mdSalvarEquipe()"'
+        + ' style="width:16px;height:16px;cursor:pointer"></td>';
+    });
+    h += '<td style="text-align:right;font-weight:700">' + cpNum(quem.length) + '</td>'
+      + '<td style="text-align:right;font-weight:800;color:' + (quem.length ? 'var(--az)' : 'var(--vm)') + '">'
       +   (quem.length ? cpNum(porPessoa) : '—') + '</td>'
       + '<td style="text-align:right"><input type="number" min="1" step="1" id="md-sem-' + x.chave + '"'
       +   ' value="' + (cota.proprio.semana ? cota.semana : '') + '" placeholder="' + cota.semana + '"'
-      +   ' title="Em branco segue a cota geral (' + cota.semana + ')" onchange="mdSalvarEquipe()"'
-      +   ' style="width:72px;font-size:12px;padding:3px 6px;border:1px solid var(--brd);border-radius:6px;text-align:right"></td>'
+      +   ' title="Em branco usa o padrão (' + cota.semana + ')" onchange="mdSalvarEquipe()"'
+      +   ' style="width:70px;font-size:12px;padding:3px 6px;border:1px solid var(--brd);border-radius:6px;text-align:right"></td>'
       + '<td style="text-align:right"><input type="number" min="1" max="7" step="1" id="md-dias-' + x.chave + '"'
       +   ' value="' + (cota.proprio.dias ? cota.dias : '') + '" placeholder="' + cota.dias + '"'
-      +   ' title="Em branco segue os dias gerais (' + cota.dias + ')" onchange="mdSalvarEquipe()"'
+      +   ' title="Em branco usa o padrão (' + cota.dias + ')" onchange="mdSalvarEquipe()"'
       +   ' style="width:60px;font-size:12px;padding:3px 6px;border:1px solid var(--brd);border-radius:6px;text-align:right"></td>'
-      + '<td style="text-align:right">' + cpNum(porDia) + '</td>'
       + '<td style="font-size:10.5px;font-weight:700;color:' + (cabe ? 'var(--vd)' : 'var(--am)') + '">'
-      +   (!quem.length ? '<span style="color:var(--vm)">sem ninguém</span>'
+      +   (!quem.length ? (itens ? '<span style="color:var(--vm)">sem ninguém</span>' : '—')
            : (cabe ? 'cabe' : 'faltam ' + cpNum(itens - capacidade)))
       + '</td></tr>';
   });
@@ -13534,17 +13504,17 @@ function mdAtividadesDaTela(nomes){
 
 async function mdSalvarEquipe(){
   var nomes = mdPessoasDaTela();
-  var qtd = Math.max(0, Math.round(+(document.getElementById('md-qtd-pessoas') || {}).value || 0));
+  var qtd = nomes.length;
   var quadroAntes = mdQuadroDaTela();
   _mdCfg = {
     pessoas: nomes,
     qtdPessoas: qtd || nomes.length,
     atividades: mdAtividadesDaTela(nomes),
-    cotaDia: Math.max(0, Math.round(+(document.getElementById('md-cota-dia') || {}).value || 0)),
+    cotaDia: 0,
     cotaSemana: Math.max(0, Math.round(+(document.getElementById('md-cota-semana') || {}).value || 0)),
     dias: Math.max(1, Math.min(7, Math.round(+(document.getElementById('md-dias') || {}).value || 5))),
     porAtividade: Object.keys(quadroAntes).length ? quadroAntes : (_mdCfg.porAtividade || {}),
-    dataDist: String((document.getElementById('md-data-dist') || {}).value || '')
+    dataDist: mdDataSel()
   };
   var av = document.getElementById('md-equipe-aviso');
   var semAtiv = nomes.filter(function(n){ return !(_mdCfg.atividades[n] || []).length; });
@@ -13556,7 +13526,7 @@ async function mdSalvarEquipe(){
     + ' pessoa(s) e escreveu ' + nomes.length + ' nome(s) — vou usar os ' + nomes.length + ' nomes.</span>';
   else msg = '<span style="color:var(--vd)">✓ Equipe salva: ' + nomes.length + ' comprador(es).</span>';
   if (av) av.innerHTML = msg;
-  mdPintarQuadro();
+  mdPintarAtividades();
   await mdSalvarCfg();
   mdRender();
 }
@@ -15274,8 +15244,9 @@ async function mdDistribuir(){
     }
     await mdSalvarEquipe();
   }
-  if (!_mdCfg.cotaDia) {
-    if (st) st.innerHTML = '<span style="color:var(--vm)">Informe quantos itens cada um faz por dia.</span>';
+  var temAlguem = MD_STATUS.some(function(x){ return mdPessoasDaAtividade(x.chave).length > 0; });
+  if (!temAlguem) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">Marque na tabela quem atua em cada atividade.</span>';
     return;
   }
   var itensMapa = temMapa ? _mdBase.itens.filter(mdEntraNaDistribuicao) : [];
@@ -15728,15 +15699,11 @@ async function mdTrocarData(){
 
 function mdPintarCfg(){
   var poe = function(id, v){ var e = document.getElementById(id); if (e && !e.value) e.value = v || ''; };
-  poe('md-qtd-pessoas', _mdCfg.qtdPessoas || (_mdCfg.pessoas || []).length || '');
-  poe('md-cota-dia', _mdCfg.cotaDia || '');
   poe('md-cota-semana', _mdCfg.cotaSemana || '');
   poe('md-dias', _mdCfg.dias || 5);
-  poe('md-data-dist', _mdCfg.dataDist || cpHojeISO());
   var t = document.getElementById('md-nomes');
   if (t && !t.value) t.value = (_mdCfg.pessoas || []).join('\n');
   mdPintarAtividades();
-  mdPintarQuadro();
 }
 
 
