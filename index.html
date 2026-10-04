@@ -32234,8 +32234,7 @@ var AAG_ARQUIVOS = [
   { chave:'trat',    nome:'RC em tratamento',  sub:'quem trata cada RC · acumula',           ico:'👤', preciso:false, guarda:true, soma:true },
   { chave:'mapa',    nome:'Mapa diário',       sub:'o STATUS MAPA de cada item',             ico:'🗺️', preciso:false },
   { chave:'pid',     nome:'PID',               sub:'as RCs novas entram na lista',           ico:'📌', preciso:false, guarda:true, soma:true },
-  { chave:'obrig',   nome:'PATEC obrigatório', sub:'grupo de mercadoria · fica guardado',    ico:'📋', preciso:false, guarda:true },
-  { chave:'familia', nome:'Família',           sub:'família → categoria · fica guardado',    ico:'🏷️', preciso:false, guarda:true }
+  { chave:'obrig',   nome:'PATEC obrigatório', sub:'classes de mercadoria · fica guardado',  ico:'📋', preciso:false, guarda:true }
 ];
 
 // As três tabelinhas de apoio quase não mudam, então ficam no Firebase:
@@ -32509,8 +32508,7 @@ function aagProcessar(){
     }, aviso, 'Levelboard');
     // Tabelinhas de apoio: grupo de mercadoria -> PATEC obrigatório,
     // família -> categoria, RC+SEQ -> PID.
-    var obrigPor  = aagDePara('obrig',   ['GRUPO_MERCADORIAS','GRUPO DE MERCADORIA','GRUPO'], 1, aviso, 'PATEC obrigatório');
-    var catPor    = aagDePara('familia', ['FAMILIA','FAMÍLIA'], 1, aviso, 'Família');
+    var obrigPor  = aagListaObrigatorio(aviso);
     var pidPor    = aagDeParaPid(aviso);
 
     // ── o backlog ──
@@ -32544,7 +32542,8 @@ function aagProcessar(){
       fabPb:   aagCol(bk.cab, ['FABRICANTE']),
       pnForn:  aagCol(bk.cab, ['PARTNUMBER_PETRO']),
       pnPb:    aagCol(bk.cab, ['NUMERO_PECA_FABRICANTE']),
-      urg:     aagCol(bk.cab, ['URGENCIA_NECESSIDADE'])
+      urg:     aagCol(bk.cab, ['URGENCIA_NECESSIDADE']),
+      grupoMerc: aagCol(bk.cab, ['GRUPO_MERCADORIAS'])
     };
     var obrig = ['rc','seq','op','iop','pos','forn'];
     var semCol = obrig.filter(function(k){ return c[k] === -1; });
@@ -32586,7 +32585,8 @@ function aagProcessar(){
         fabPb: c.fabPb === -1 ? '' : aagTxt(l[c.fabPb]),
         pnForn: c.pnForn === -1 ? '' : aagTxt(l[c.pnForn]),
         pnPb: c.pnPb === -1 ? '' : aagTxt(l[c.pnPb]),
-        urgencia: c.urg === -1 ? '' : aagUrgencia(l[c.urg])
+        urgencia: c.urg === -1 ? '' : aagUrgencia(l[c.urg]),
+        grupoMerc: c.grupoMerc === -1 ? '' : aagTxt(l[c.grupoMerc])
       });
     });
 
@@ -32656,7 +32656,7 @@ function aagProcessar(){
 
     // ── o Modelo completo: uma linha por ITEM, não por proposta ──
     var modelo = aagMontarModelo(grupos, levelPor, analistaPor, mapaPor,
-                                 obrigPor, catPor, pidPor);
+                                 obrigPor, pidPor);
 
     var por = {};
     itens.forEach(function(i){ por[i.aa] = (por[i.aa] || 0) + 1; });
@@ -32756,6 +32756,38 @@ function aagDePara(chaveArq, nomesChave, offsetValor, aviso, rotulo){
   return out;
 }
 
+// A classe de mercadoria vem com sufixo em algumas linhas (39111501A), e
+// às vezes como número. Normalizo os dois lados do mesmo jeito.
+function aagChaveGrupo(v){
+  var t = aagTxt(v).toUpperCase();
+  if (/^\d+(\.0+)?$/.test(t)) t = String(Math.round(parseFloat(t)));
+  return t;
+}
+
+// PATEC obrigatório não é de-para: estar na lista já quer dizer "Sim".
+// Se a planilha trouxer a coluna com Sim/Não, ela manda.
+function aagListaObrigatorio(aviso){
+  var out = {};
+  var d = _aagArq.obrig;
+  if (!d) return out;
+  var iG = aagCol(d.cab, ['GRUPO DE MERCADORIAS','GRUPO_MERCADORIAS','GRUPO DE MERCADORIA',
+                          'CLASSE DE MERCADORIA','GRUPO']);
+  if (iG === -1) iG = 0;
+  var iS = aagCol(d.cab, ['PATEC OBRIGATORIO','PATEC_OBRIGATORIO','OBRIGATORIO']);
+  d.linhas.forEach(function(l){
+    var k = aagChaveGrupo(l[iG]);
+    if (!k) return;
+    var sim = true;
+    if (iS !== -1) {
+      var v = cpNormCab(l[iS]);
+      if (v && v !== 'SIM') sim = false;
+    }
+    if (sim) out[k] = true;
+  });
+  if (!Object.keys(out).length) aviso.push('PATEC obrigatório: não achei nenhuma classe na lista.');
+  return out;
+}
+
 // O PID é por RC + SEQ (a planilha dele usa DOCUMENTO + ITEM).
 function aagDeParaPid(aviso){
   var out = {};
@@ -32806,7 +32838,7 @@ function aagValidade(dias){
 // ── o Modelo completo, que alimenta o Radar Estratégico ───────────
 // Uma linha por ITEM (RC + SEQ + oportunidade + item), não por proposta:
 // é assim que o Radar lê.
-function aagMontarModelo(grupos, levelPor, analistaPor, mapaPor, obrigPor, catPor, pidPor){
+function aagMontarModelo(grupos, levelPor, analistaPor, mapaPor, obrigPor, pidPor){
   var out = [];
   Object.keys(grupos).forEach(function(k){
     var i = grupos[k][0];
@@ -32819,7 +32851,7 @@ function aagMontarModelo(grupos, levelPor, analistaPor, mapaPor, obrigPor, catPo
     var sla = aagNum(lv.sla);
     var critico = (sla > 90 || validade === 'Próximo do vencimento' || validade === 'Vencida');
     var familia = lv.familia || '';
-    var grupoMerc = lv.grupoMerc || '';
+    var grupoMerc = lv.grupoMerc || i.grupoMerc || '';
     out.push({
       'Fechamento': encerra ? cpDataBR(encerra) : '',
       'hoje': cpDataBR(cpHojeISO()),
@@ -32838,8 +32870,8 @@ function aagMontarModelo(grupos, levelPor, analistaPor, mapaPor, obrigPor, catPo
       'CENTRO': lv.centro || i.centro || '',
       'URGENCIA': aagUrgencia(lv.urgNum),
       'GRUPO_MERCADORIAS': grupoMerc,
-      'Patec Obrigatorio ': obrigPor[cpNormCab(grupoMerc)] || 'não',
-      'CATEGORIA FAMILIA': lv.categoria || catPor[cpNormCab(familia)] || '',
+      'Patec Obrigatorio ': obrigPor[aagChaveGrupo(grupoMerc)] ? 'Sim' : 'não',
+      'CATEGORIA FAMILIA': lv.categoria || '',
       'PID': pidPor[i.rc + '|' + i.seq] || ''
     });
   });
