@@ -32591,6 +32591,12 @@ function aagProcessar(){
     // família -> categoria, RC+SEQ -> PID.
     var obrigPor  = aagListaObrigatorio(aviso);
     var pidPor    = aagDeParaPid(aviso);
+    if (!_aagArq.mapa) aviso.push('Sem o mapa diário eu não sei o STATUS MAPA de cada item, '
+      + 'então não filtrei nem a Governança nem o Analista Automático por status. '
+      + 'Suba o mapa diário para as duas regras valerem.');
+    if (!_aagArq.level) aviso.push('Sem o levelboard eu não sei a fila (STATUS_DESC) de cada '
+      + 'item, então não tirei do Analista Automático as filas de emitir pedido PATEC, '
+      + 'devolução e republicação.');
 
     // ── o backlog ──
     var bk = _aagArq.backlog;
@@ -32726,28 +32732,59 @@ function aagProcessar(){
       };
     });
 
-    // ── a planilha da plataforma: a mesma base com a coluna MAPA ──
-    var plataforma = itens.map(function(i, k){
+    // ── as peneiras de cada saída ─────────────────────────────────
+    // Fila e status são do ITEM, então o item inteiro entra ou fica fora —
+    // o que mantém a classificação do fornecedor intacta nos dois casos.
+    var foraFila = {}, foraStatus = {};
+    var dentroAA = [], linhasAA = [], plataforma = [];
+    itens.forEach(function(i, k){
+      var st = i._mapa || '';
+      var fila = (i._lv || {}).fila || '';
+      if (!aagEntraAnalista(st, fila)) {
+        if (cpNormCab(st) === cpNormCab(AAG_STATUS_DISTRIBUI)) {
+          foraFila[fila || '(sem fila)'] = (foraFila[fila || '(sem fila)'] || 0) + 1;
+        } else {
+          foraStatus[st || '(sem status no mapa diário)'] =
+            (foraStatus[st || '(sem status no mapa diário)'] || 0) + 1;
+        }
+        return;
+      }
+      dentroAA.push(i);
+      linhasAA.push(linhas[k]);
       var o = { 'Analista ': i._analista, 'MAPA': i._mapa };
       AAG_CAB.forEach(function(nome){
         if (nome === 'Analista ') return;
         o[nome] = linhas[k][nome];
       });
-      return o;
+      plataforma.push(o);
     });
+    linhas = linhasAA;
 
     // ── o Modelo completo: uma linha por ITEM, não por proposta ──
-    var modelo = aagMontarModelo(grupos, levelPor, analistaPor, mapaPor,
+    // Só os quatro status que a Governança enxerga.
+    var gruposGov = {}, foraGov = {};
+    Object.keys(grupos).forEach(function(k){
+      var i = grupos[k][0];
+      if (aagEntraGovernanca(i._mapa)) gruposGov[k] = grupos[k];
+      else foraGov[i._mapa || '(sem status no mapa diário)'] =
+             (foraGov[i._mapa || '(sem status no mapa diário)'] || 0) + 1;
+    });
+    var modelo = aagMontarModelo(gruposGov, levelPor, analistaPor, mapaPor,
                                  obrigPor, pidPor);
 
     var por = {};
-    itens.forEach(function(i){ por[i.aa] = (por[i.aa] || 0) + 1; });
+    dentroAA.forEach(function(i){ por[i.aa] = (por[i.aa] || 0) + 1; });
+    var itensAA = {};
+    dentroAA.forEach(function(i){ itensAA[i.chave] = 1; });
     _aagBase = { linhas: linhas, plataforma: plataforma, modelo: modelo,
                  por: por, geradoEm: new Date().toISOString(),
-                 itens: Object.keys(grupos).length,
-                 semPatec: itens.filter(function(i){ return aagTxt(i.aprovado) === ''; }).length,
-                 impedidos: itens.filter(function(i){ return aagIgual(i.q18, 'Impedido'); }).length,
-                 liberar: Object.keys(situacao).filter(function(k){ return situacao[k] === 'LIBERAR ITEM'; }).length,
+                 itens: Object.keys(itensAA).length,
+                 itensBase: Object.keys(grupos).length,
+                 propostas: itens.length,
+                 foraFila: foraFila, foraStatus: foraStatus, foraGov: foraGov,
+                 semPatec: dentroAA.filter(function(i){ return aagTxt(i.aprovado) === ''; }).length,
+                 impedidos: dentroAA.filter(function(i){ return aagIgual(i.q18, 'Impedido'); }).length,
+                 liberar: Object.keys(itensAA).filter(function(k){ return situacao[k] === 'LIBERAR ITEM'; }).length,
                  aviso: aviso };
     if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Base montada: '
       + cpNum(linhas.length) + ' linhas em ' + cpNum(_aagBase.itens) + ' itens.</span>';
@@ -33092,12 +33129,82 @@ function aagPintarContaSemAnalista(){
   el.style.color = n ? 'var(--am)' : 'var(--vd)';
 }
 
-function aagSemAnalista(){
+// A distribuição é só do que está em PATEC finalizado — é o que a coluna A
+// do mapa diário diz e é o mesmo item que a Governança coloca no MAPA com
+// AG. TRATAMENTO. Os outros status não precisam de analista.
+var AAG_STATUS_DISTRIBUI = 'Analisar PATEC Finalizado';
+
+// ── quem entra em cada saída ──────────────────────────────────────
+// A Governança só enxerga estes quatro status do mapa diário. O resto do
+// backlog existe, mas não é assunto dela.
+var AAG_GOV_STATUS = [
+  'Aguardar PATEC ser Finalizado',
+  'Analisar PATEC Finalizado',
+  'Analisar PATEC Cancelado',
+  'PATEC Finalizado sem fornecedores aprovados'
+];
+function aagEntraGovernanca(st){
+  // Sem o mapa diário eu não tenho como aplicar a regra — então não aplico,
+  // em vez de zerar a Governança. O aviso na tela diz isso.
+  if (!_aagArq.mapa) return true;
+  var n = cpNormCab(st);
+  if (!n) return false;
+  return AAG_GOV_STATUS.some(function(x){ return cpNormCab(x) === n; });
+}
+
+// O Analista Automático é mais estreito ainda: só o que está em Analisar
+// PATEC Finalizado E cuja fila do levelboard (STATUS_DESC) não seja de
+// emissão de pedido, de devolução nem de republicação — essas três já
+// saíram do fluxo de análise.
+var AAG_AA_FILA_FORA = ['EMITIR_PEDIDO_PATEC', 'DEVOLUCAO', 'REPUBLICACAO'];
+function aagFilaForaDoAA(fila){
+  var n = cpNormCab(fila);
+  if (!n) return false;
+  return AAG_AA_FILA_FORA.some(function(x){ return n.indexOf(x) !== -1; });
+}
+function aagEntraAnalista(st, fila){
+  // Cada metade da regra só vale se o arquivo que ela lê estiver aqui.
+  if (_aagArq.mapa && cpNormCab(st) !== cpNormCab(AAG_STATUS_DISTRIBUI)) return false;
+  if (_aagArq.level && aagFilaForaDoAA(fila)) return false;
+  return true;
+}
+
+// Distribuo analista para o mesmo universo do Analista Automático: é lá que
+// o analista trabalha o item. Item em fila de pedido, devolução ou
+// republicação já saiu do fluxo de análise.
+function aagPrecisaDistribuir(m){
+  return aagEntraAnalista(m['STATUS MAPA '], m['Fila ( esteira) ']);
+}
+
+function aagChaveItem(m){
+  return [m.RC, m.SEQ, m.OPORTUNIDADE, m.Item].join('|');
+}
+
+function aagParaDistribuir(){
   if (!_aagBase || !_aagBase.modelo) return [];
-  return _aagBase.modelo.filter(function(m){
-    var k = [m.RC, m.SEQ, m.OPORTUNIDADE, m.Item].join('|');
-    return !aagTxt(m['Analista PATEC']) && !_aagEscolhas[k];
+  return _aagBase.modelo.filter(aagPrecisaDistribuir);
+}
+
+function aagSemAnalista(){
+  return aagParaDistribuir().filter(function(m){
+    return !aagTxt(m['Analista PATEC']) && !_aagEscolhas[aagChaveItem(m)];
   });
+}
+
+// Quantos itens há em cada status do mapa — serve para ele ver o que ficou
+// de fora da distribuição e por quê.
+function aagPorStatusMapa(){
+  var out = {};
+  if (!_aagBase || !_aagBase.modelo) return out;
+  _aagBase.modelo.forEach(function(m){
+    if (aagPrecisaDistribuir(m)) return;
+    var st = aagTxt(m['STATUS MAPA ']) || '(sem status no mapa diário)';
+    if (cpNormCab(st) === cpNormCab(AAG_STATUS_DISTRIBUI)) {
+      st = st + ' — fila ' + (aagTxt(m['Fila ( esteira) ']) || '(vazia)');
+    }
+    out[st] = (out[st] || 0) + 1;
+  });
+  return out;
 }
 
 function aagPagina(d){
@@ -33115,19 +33222,47 @@ function aagRenderAnalistas(){
   var tot = Math.ceil(faltam.length / POR) || 1;
   if (_aagSemAnalistaPag >= tot) _aagSemAnalistaPag = tot - 1;
   var pag = faltam.slice(_aagSemAnalistaPag * POR, (_aagSemAnalistaPag + 1) * POR);
+  var distribuir = aagParaDistribuir();
+  var porStatus = aagPorStatusMapa();
+  var temMapa = !!_aagArq.mapa;
   var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between;flex-wrap:wrap;gap:8px">'
-    + '<span>👤 Quem trata cada RC</span>'
+    + '<span>👤 Distribuição — quem trata cada item</span>'
     + '<span id="aag-sem-conta" style="font-size:12px;font-weight:600;color:'
     +   (faltam.length ? 'var(--am)' : 'var(--vd)') + '">'
     +   (faltam.length ? cpNum(faltam.length) + ' sem analista' : 'todas com analista') + '</span>'
     + '</div>'
     + '<div style="font-size:11px;color:var(--tx2);line-height:1.7;margin-bottom:.8rem">'
-    + 'O que você escolher aqui fica guardado e vale para os próximos dias — não precisa '
-    + 'escolher de novo. A planilha de RC em tratamento continua valendo: ela entra primeiro, '
-    + 'e esta lista só mostra o que sobrou sem ninguém.</div>';
+    + 'Distribuo só o que está em <strong>' + cpEsc(AAG_STATUS_DISTRIBUI) + '</strong> na coluna A '
+    + 'do mapa diário e cuja fila do levelboard (STATUS_DESC) não seja de '
+    + '<strong>emitir pedido PATEC, devolução ou republicação</strong> — esses três já saíram '
+    + 'do fluxo de análise. A chave é '
+    + '<strong>RC + item da RC + oportunidade + item da oportunidade</strong>: uma linha por chave '
+    + 'aqui e na Governança, e no Analista Automático as várias propostas da mesma chave herdam '
+    + 'o mesmo analista. O que você escolher fica guardado para os próximos dias.</div>';
+  if (!temMapa) {
+    h += '<div style="font-size:12px;color:var(--am);font-weight:600">'
+      + '⚠ Sem o mapa diário eu não sei quais itens estão em ' + cpEsc(AAG_STATUS_DISTRIBUI)
+      + '. Suba o mapa diário para a distribuição aparecer aqui.</div></div>';
+    box.innerHTML = h; return;
+  }
+  // o que ficou de fora, e por qual motivo (status do mapa ou fila)
+  var fora = Object.keys(porStatus);
+  if (fora.length) {
+    h += '<div style="font-size:10.5px;color:var(--tx2);margin-bottom:.8rem;line-height:1.8">'
+      + '<strong style="color:var(--tx)">' + cpNum(distribuir.length) + '</strong> item(ns) entram '
+      + 'na distribuição. Fora dela: '
+      + fora.sort(function(a, b){ return porStatus[b] - porStatus[a]; })
+            .map(function(k){ return cpEsc(k) + ' <strong>' + cpNum(porStatus[k]) + '</strong>'; })
+            .join(' · ') + '.</div>';
+  }
+  if (!distribuir.length) {
+    h += '<div style="font-size:12px;color:var(--am);font-weight:600">'
+      + 'Nenhum item em ' + cpEsc(AAG_STATUS_DISTRIBUI) + ' nesta base.</div></div>';
+    box.innerHTML = h; return;
+  }
   if (!faltam.length) {
     h += '<div style="font-size:12px;color:var(--vd);font-weight:600">'
-      + 'Toda RC da base já tem analista.</div></div>';
+      + 'Os ' + cpNum(distribuir.length) + ' itens da distribuição já têm analista.</div></div>';
     box.innerHTML = h; return;
   }
   var opcoes = '<option value="">—</option>' + nomes.map(function(n){
@@ -33174,10 +33309,12 @@ function aagRenderPassos(){
     { n:2, t:'Clique em Montar tudo',
       d:'O dash cruza tudo e calcula a regra do Analista Automático.',
       ok: !!_aagBase },
-    { n:3, t:'Escolha o analista das RCs novas',
-      d:'Só aparecem as que ainda não têm ninguém. A escolha fica guardada.',
-      ok: !!_aagBase && !aagSemAnalista().length,
-      aviso: _aagBase && aagSemAnalista().length ? cpNum(aagSemAnalista().length) + ' sem analista' : '' },
+    { n:3, t:'Distribua os itens em PATEC finalizado',
+      d:'Só entram os que a coluna A do mapa diário marca como ' + AAG_STATUS_DISTRIBUI
+        + ', e só os que ainda não têm analista. A escolha fica guardada.',
+      ok: !!_aagBase && !!_aagArq.mapa && !aagSemAnalista().length,
+      aviso: !_aagBase ? '' : (!_aagArq.mapa ? 'falta o mapa diário'
+             : (aagSemAnalista().length ? cpNum(aagSemAnalista().length) + ' sem analista' : '')) },
     { n:4, t:'Mande para as três telas',
       d:'Radar Estratégico, Analista Completo e Upload Backlog (que alimenta o Tirar do Fluxo).',
       ok: false }
@@ -33275,12 +33412,35 @@ function aagRender(){
     +   '<button class="btn btn-s" onclick="aagExportarModelo()">⬇ Modelo completo</button>'
     + '</span></div>'
     + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(142px,1fr));gap:12px;margin-bottom:.9rem">'
-    + card('LINHAS', cpNum(b.linhas.length), 'uma por proposta')
-    + card('ITENS', cpNum(b.itens), 'RC + SEQ + oportunidade', 'var(--azm)', 'var(--azc)')
+    + card('LINHAS', cpNum(b.linhas.length), 'propostas no Analista Automático')
+    + card('ITENS', cpNum(b.itens), 'RC + SEQ + oportunidade + item', 'var(--azm)', 'var(--azc)')
+    + card('NA GOVERNANÇA', cpNum((b.modelo || []).length), 'os quatro status do PATEC',
+        'var(--az)', 'var(--azc)')
     + card('NÃO ANALISAR', cpNum(naoAnalisar), 'barrados por alguma regra', 'var(--vm)', 'var(--vmc)')
     + card('SEM APROVAÇÃO', cpNum(b.semPatec), 'faltou no PATEC finalizado', 'var(--am)', 'var(--amc)')
     + card('NA Q18', cpNum(b.impedidos), 'fornecedor impedido', 'var(--am)', 'var(--amc)')
     + card('LIBERAR ITEM', cpNum(b.liberar), 'nenhum fornecedor analisável', 'var(--vd)', 'var(--vdc)')
+    + '</div>';
+  var somaDe = function(o){ return Object.keys(o || {}).reduce(function(n, k){ return n + o[k]; }, 0); };
+  var listaDe = function(o){
+    return Object.keys(o || {}).sort(function(a, c){ return o[c] - o[a]; })
+      .map(function(k){ return cpEsc(k) + ' <strong>' + cpNum(o[k]) + '</strong>'; }).join(' · ');
+  };
+  h += '<div style="font-size:10.5px;color:var(--tx2);line-height:1.9;margin-bottom:.8rem;'
+    + 'background:var(--cin);border:1px solid var(--brd);border-radius:8px;padding:9px 11px">'
+    + '<div><strong style="color:var(--tx)">De ' + cpNum(b.propostas) + ' propostas em '
+    +   cpNum(b.itensBase) + ' itens do backlog:</strong></div>'
+    + '<div>→ <strong>' + cpNum(b.linhas.length) + '</strong> propostas em '
+    +   cpNum(b.itens) + ' itens no <strong>Analista Automático</strong> — só '
+    +   cpEsc(AAG_STATUS_DISTRIBUI) + ' e fora das filas de pedido, devolução e republicação.</div>'
+    + (somaDe(b.foraStatus) ? '<div style="padding-left:12px">fora por status: '
+        + listaDe(b.foraStatus) + '</div>' : '')
+    + (somaDe(b.foraFila) ? '<div style="padding-left:12px">fora por fila: '
+        + listaDe(b.foraFila) + '</div>' : '')
+    + '<div>→ <strong>' + cpNum((b.modelo || []).length) + '</strong> itens na '
+    +   '<strong>Governança</strong> — os quatro status do PATEC.</div>'
+    + (somaDe(b.foraGov) ? '<div style="padding-left:12px">fora da Governança: '
+        + listaDe(b.foraGov) + '</div>' : '')
     + '</div>';
   if (b.aviso && b.aviso.length) {
     h += '<div style="font-size:11px;color:var(--am);line-height:1.7;margin-bottom:.7rem">'
