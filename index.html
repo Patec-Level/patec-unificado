@@ -485,15 +485,22 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 #patec-modulo-overlay .modulo-card.card-frente .ico{font-size:19px;margin-bottom:5px}
 #patec-modulo-overlay .modulo-card.card-frente .nome{font-size:12.5px}
 #patec-modulo-overlay .modulo-card.card-frente .desc{font-size:9.5px;line-height:1.35}
-#patec-modulo-overlay .modulo-card.sem-base{cursor:default;background:#F1F3F7;border-style:dashed}
-#patec-modulo-overlay .modulo-card.sem-base:hover{transform:none;border-color:#DDE3EE;background:#F1F3F7}
+#patec-modulo-overlay .modulo-card.sem-base,
+#patec-modulo-overlay .modulo-card.sem-tela{cursor:default;background:#F1F3F7;border-style:dashed}
+#patec-modulo-overlay .modulo-card.sem-base:hover,
+#patec-modulo-overlay .modulo-card.sem-tela:hover{transform:none;border-color:#DDE3EE;background:#F1F3F7}
 #patec-modulo-overlay .modulo-card.sem-base .ico,
-#patec-modulo-overlay .modulo-card.sem-base .nome{opacity:.55}
-#patec-modulo-overlay .modulo-card.sem-base .desc{display:none}
+#patec-modulo-overlay .modulo-card.sem-base .nome,
+#patec-modulo-overlay .modulo-card.sem-tela .ico,
+#patec-modulo-overlay .modulo-card.sem-tela .nome{opacity:.55}
+#patec-modulo-overlay .modulo-card.sem-base .desc,
+#patec-modulo-overlay .modulo-card.sem-tela .desc{display:none}
 #patec-modulo-overlay .modulo-card .tag-breve{display:none}
-#patec-modulo-overlay .modulo-card.sem-base .tag-breve{display:inline-block}
+#patec-modulo-overlay .modulo-card.sem-base .tag-breve,
+#patec-modulo-overlay .modulo-card.sem-tela .tag-breve{display:inline-block}
 #patec-modulo-overlay .modulo-card.bloqueado .tag-breve{display:none}
 #patec-modulo-overlay .modulo-card.bloqueado.sem-base .desc{display:none}
+#patec-modulo-overlay .modulo-card.sem-tela .tag-breve{color:#2A4D77;background:#E4EDF9}
 #patec-modulo-overlay .modulo-card .tag-breve{
   font-size:8.5px;font-weight:700;letter-spacing:.4px;
   color:#7A6A3A;background:#F6EBCB;border-radius:20px;padding:1px 7px;margin-top:5px;
@@ -7016,15 +7023,78 @@ var FIREBASE_MODULOS = {
   'adlv':              FIREBASE_CONFIG_ADLV,       // PATEC do ADLV
   'fast':              FIREBASE_CONFIG_FAST,       // PATEC do FAST
   'pedidos':           FIREBASE_CONFIG_PEDIDOS,    // Pedidos do ADLV
-  // a construir — cada uma com o seu projeto
-  'adlv_pcp':          _fbVazio(),
-  'adlv_republicacao': _fbVazio(),
-  'adlv_devolucao':    _fbVazio(),
-  'fast_pcp':          _fbVazio(),
-  'fast_republicacao': _fbVazio(),
-  'fast_pedidos':      _fbVazio(),
-  'fast_devolucao':    _fbVazio()
+  // criadas em 04/10 — projeto próprio para cada frente
+  // PCP do ADLV
+  'adlv_pcp': {
+    apiKey: "AIzaSyDvy0Tm0aTdODM8Z-ATM3vYBV1uXDyRi2c",
+    authDomain: "patec-adlv-pcp.firebaseapp.com",
+    projectId: "patec-adlv-pcp",
+    storageBucket: "patec-adlv-pcp.firebasestorage.app",
+    messagingSenderId: "950774545951",
+    appId: "1:950774545951:web:0148a64445466027701f2a"
+  },
+  // Republicação do ADLV
+  'adlv_republicacao': {
+    apiKey: "AIzaSyDYj9Wd_iJjDaYPr5d74z9EHD2BmA4ksVM",
+    authDomain: "patec-adlv-republicacao.firebaseapp.com",
+    projectId: "patec-adlv-republicacao",
+    storageBucket: "patec-adlv-republicacao.firebasestorage.app",
+    messagingSenderId: "737209478740",
+    appId: "1:737209478740:web:2ba32174a7c9b9263e47c1"
+  },
+  // Devolução do ADLV
+  'adlv_devolucao': {
+    apiKey: "AIzaSyA6NwQEQuVE-YwTSlZ2NKxP-JaYhAWpitI",
+    authDomain: "patec-adlv-devolucao.firebaseapp.com",
+    projectId: "patec-adlv-devolucao",
+    storageBucket: "patec-adlv-devolucao.firebasestorage.app",
+    messagingSenderId: "249468911292",
+    appId: "1:249468911292:web:d0c8a885c5bc6b9d085ab9"
+  },
+  // PCP do FAST
+  'fast_pcp': {
+    apiKey: "AIzaSyCEUpJlIaY04dsrNBDQppvaKyYfVJute18",
+    authDomain: "patec-fast-pcp.firebaseapp.com",
+    projectId: "patec-fast-pcp",
+    storageBucket: "patec-fast-pcp.firebasestorage.app",
+    messagingSenderId: "187173070594",
+    appId: "1:187173070594:web:4b73efffbca16346ee841b"
+  },
+  // Republicação do FAST
+  'fast_republicacao': {
+    apiKey: "AIzaSyA-FhfX35cDSDLS4GKIk7hXD0KzgJAXR54",
+    authDomain: "patec-fast-republicacao.firebaseapp.com",
+    projectId: "patec-fast-republicacao",
+    storageBucket: "patec-fast-republicacao.firebasestorage.app",
+    messagingSenderId: "289515743069",
+    appId: "1:289515743069:web:31fd851bd52f609447aab4"
+  },
+  // Pedidos do FAST
+  'fast_pedidos': {
+    apiKey: "AIzaSyCLbqjskkpd6xk25AL26gZ88fTsqi5c6Dg",
+    authDomain: "patec-fast-pedidos.firebaseapp.com",
+    projectId: "patec-fast-pedidos",
+    storageBucket: "patec-fast-pedidos.firebasestorage.app",
+    messagingSenderId: "780258258411",
+    appId: "1:780258258411:web:231575cdbcf0b86c7c7dae"
+  },
+  // Devolução do FAST
+  'fast_devolucao': {
+    apiKey: "AIzaSyC8fZWk1tGk64tRFrkjPfUeyyYzofTBEmc",
+    authDomain: "patec-fast-devolucao.firebaseapp.com",
+    projectId: "patec-fast-devolucao",
+    storageBucket: "patec-fast-devolucao.firebasestorage.app",
+    messagingSenderId: "425635620422",
+    appId: "1:425635620422:web:6ff961b3bffcc70c7b0c47"
+  }
 };
+
+// Frentes que já têm tela construída. Enquanto uma frente não entrar
+// nesta lista, o card dela não deixa entrar no app, mesmo com o Firebase
+// já criado: entrar sem tela própria mostraria as telas do PATEC gravando
+// na base errada.
+var FRENTES_COM_TELA = ['adlv', 'fast', 'pedidos'];
+function modTemTela(m){ return FRENTES_COM_TELA.indexOf(m) !== -1; }
 
 function modExiste(m){
   return !!m && Object.prototype.hasOwnProperty.call(FIREBASE_MODULOS, m);
@@ -34158,10 +34228,14 @@ function _atualizarLockCardsModulo(){
     const card = document.getElementById('modulo-card-' + m);
     if(!card) return;
     const pronta = modConfigPronta(m);
+    const temTela = modTemTela(m);
     card.classList.toggle('bloqueado', !permitidos.includes(m));
     // Frente sem Firebase não é falta de permissão: é obra que ainda não
     // começou. O aviso tem de ser outro, senão parece erro de acesso.
     card.classList.toggle('sem-base', permitidos.includes(m) && !pronta);
+    card.classList.toggle('sem-tela', permitidos.includes(m) && pronta && !temTela);
+    const tag = card.querySelector('.tag-breve');
+    if(tag) tag.textContent = pronta ? '🚧 Telas a construir' : '⚙ Firebase pendente';
   });
   const instrucao = document.querySelector('#patec-modulo-overlay .modulo-instrucao');
   if(instrucao){
@@ -34330,6 +34404,18 @@ async function selecionarModulo(mod){
       alert(txt + '\n\nFalta colar as 6 chaves do projeto novo em FIREBASE_MODULOS[\''
         + mod + '\'], no início do arquivo.');
     }
+    return;
+  }
+  // Base criada mas telas ainda não: não entra. É a trava que impede
+  // abrir uma frente nova e cair nas telas de outra.
+  if(!modTemTela(mod)){
+    const recado2 = document.getElementById('modulo-recado');
+    const txt2 = modNome(mod) + ' já tem o Firebase criado, mas as telas dela '
+               + 'ainda não foram construídas.';
+    if(recado2){
+      recado2.innerHTML = '<span style="color:#2A4D77;font-weight:600">' + txt2 + '</span> '
+        + 'A base fica esperando, vazia e separada das outras.';
+    } else { alert(txt2); }
     return;
   }
   // O PATEC do ADLV é o projeto do próprio login. Toda outra frente tem
