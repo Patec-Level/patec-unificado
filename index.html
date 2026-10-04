@@ -32254,10 +32254,10 @@ var AAG_ARQUIVOS = [
   { chave:'backlog', nome:'Backlog',           sub:'semanal · a base de tudo',               ico:'📘', preciso:true },
   { chave:'patec',   nome:'PATEC finalizado',  sub:'diário · aprovação por fornecedor',      ico:'✅', preciso:true },
   { chave:'q18',     nome:'Q18',               sub:'fornecedores impedidos',                 ico:'🚫', preciso:true },
-  { chave:'level',   nome:'Levelboard',        sub:'fila, família, SLA, centro e datas',     ico:'📊', preciso:false },
-  { chave:'trat',    nome:'RC em tratamento',  sub:'quem trata cada RC · acumula',           ico:'👤', preciso:false, guarda:true, soma:true },
-  { chave:'mapa',    nome:'Mapa diário',       sub:'o STATUS MAPA de cada item',             ico:'🗺️', preciso:false },
-  { chave:'pid',     nome:'PID',               sub:'as RCs novas entram na lista',           ico:'📌', preciso:false, guarda:true, soma:true },
+  { chave:'level',   nome:'Levelboard',        sub:'fila, família, SLA, centro e datas',     ico:'📊', preciso:false, chave4:true },
+  { chave:'trat',    nome:'RC em tratamento',  sub:'quem trata cada RC · acumula',           ico:'👤', preciso:false, guarda:true, soma:true, chave4:true },
+  { chave:'mapa',    nome:'Mapa diário',       sub:'o STATUS MAPA de cada item',             ico:'🗺️', preciso:false, chave4:true },
+  { chave:'pid',     nome:'PID',               sub:'as RCs novas entram na lista',           ico:'📌', preciso:false, guarda:true, soma:true, chave2:true },
   { chave:'obrig',   nome:'PATEC obrigatório', sub:'classes de mercadoria · fica guardado',  ico:'📋', preciso:false, guarda:true }
 ];
 
@@ -32318,6 +32318,10 @@ function aagPintarUploads(){
       + '<div style="font-size:12.5px;font-weight:700;margin-top:3px">' + cpEsc(a.nome)
       +   (a.preciso ? '' : ' <span style="font-weight:500;color:var(--tx2)">(opcional)</span>') + '</div>'
       + '<div style="font-size:10px;color:var(--tx2);margin-top:2px">' + cpEsc(a.sub) + '</div>'
+      + (a.chave4 || a.chave2
+          ? '<div style="font-size:9.5px;color:var(--tx2);margin-top:3px;opacity:.85">🔑 '
+            + (a.chave4 ? 'RC + SEQ + oportunidade + item' : 'RC + SEQ') + '</div>'
+          : '')
       + '<div style="font-size:10.5px;margin-top:6px;font-weight:600;color:'
       +   (d ? 'var(--vd)' : 'var(--tx2)') + '">'
       +   (d ? '✓ ' + cpEsc(d.nome) + '<br>' + cpNum(d.linhas.length) + ' linhas'
@@ -32566,12 +32570,16 @@ function aagProcessar(){
 
     // ── índices opcionais ──
     // O analista vem da aba "rc em tratamento", onde ele escolhe quem trata.
+    // Coluna A da aba "rc em tratamento": =C&D&E&F — chave de 4.
     var analistaPor = aagIndiceOpcional('trat',
-      ['ANALISTA PATEC','ANALISTA','RESPONSAVEL','COMPRADOR'], aviso, 'RC em tratamento');
+      ['ANALISTA PATEC','ANALISTA','RESPONSAVEL','COMPRADOR'], aviso, 'RC em tratamento',
+      AAG_CHAVE4);
     // O STATUS MAPA vem do mapa diário — é o que o Radar chama de STATUS MAPA
     // e a planilha da plataforma chama de MAPA.
+    // Coluna A da aba "mapa diario": =C&D&E&F — chave de 4.
     var mapaPor = aagIndiceOpcional('mapa',
-      ['ANALISTA_AUTOMATICO','STATUS MAPA','ANALISTA AUTOMATICO'], aviso, 'Mapa diário');
+      ['ANALISTA_AUTOMATICO','STATUS MAPA','ANALISTA AUTOMATICO'], aviso, 'Mapa diário',
+      AAG_CHAVE4);
     // O levelboard é a fonte de quase tudo que não está no backlog. Os nomes
     // abaixo são exatamente os cabeçalhos do levelboard dele.
     var levelPor = aagIndiceOpcionalMulti('level', {
@@ -32586,7 +32594,7 @@ function aagProcessar(){
       sla:         ['SLA_DIAS','SLA DIAS'],
       idas:        ['QTD_IDAS_LEVEL','QTD IDAS LEVEL'],
       encerra:     ['DATA_ENCERRAMENTO_OPORTUNIDADE']
-    }, aviso, 'Levelboard');
+    }, aviso, 'Levelboard', AAG_CHAVE4);
     // Tabelinhas de apoio: grupo de mercadoria -> PATEC obrigatório,
     // família -> categoria, RC+SEQ -> PID.
     var obrigPor  = aagListaObrigatorio(aviso);
@@ -32706,11 +32714,10 @@ function aagProcessar(){
 
     // ── a base final, no formato que o Analista Completo já lê ──
     var linhas = itens.map(function(i){
-      var lv = levelPor[i.chave] || levelPor[i.rc + '|' + i.seq] || {};
+      var lv = aagBusca(levelPor, i) || {};
       i._lv = lv;
-      i._analista = analistaPor[i.chave] || analistaPor[i.rc + '|' + i.seq] || analistaPor[i.rc]
-                 || _aagEscolhas[i.chave] || '';
-      i._mapa = mapaPor[i.chave] || mapaPor[i.rc + '|' + i.seq] || '';
+      i._analista = aagBusca(analistaPor, i) || _aagEscolhas[i.chave] || '';
+      i._mapa = aagBusca(mapaPor, i) || '';
       return {
         'Analista ': i._analista,
         'Fila ': lv.fila || '',
@@ -32806,21 +32813,41 @@ function aagChavesDoArquivo(d){
   };
   return i;
 }
-function aagChavesDaLinha(l, i){
+// Na planilha dele existem duas chaves, em colunas diferentes, e cada
+// PROCV usa uma delas — não dá para misturar:
+//
+//   chave de 4   = RC & SEQ & OPORTUNIDADE & ITEM DA OPORTUNIDADE
+//                  (Modelo coluna A, Analista Automático coluna A)
+//                  usada pelo levelboard, pelo mapa diário e pela
+//                  RC em tratamento
+//   chave de 2   = RC & SEQ        (Modelo coluna B)
+//                  usada só pelo PID
+//
+// Se eu deixar uma cair na outra, o analista de uma oportunidade vaza
+// para outra oportunidade da mesma RC. Então aqui a forma é declarada e
+// não tem desempate.
+var AAG_CHAVE4 = 4, AAG_CHAVE2 = 2;
+function aagFormaPossivel(i){
+  if (i.rc === -1) return 0;
+  if (i.op === -1 || i.iop === -1) return i.seq === -1 ? 0 : AAG_CHAVE2;
+  return AAG_CHAVE4;
+}
+function aagChaveDaLinha(l, i, forma){
   var rc = i.rc === -1 ? '' : aagTxt(l[i.rc]);
-  if (!rc) return [];
+  if (!rc) return '';
   var seq = i.seq === -1 ? '' : aagTxt(l[i.seq]);
+  if (forma === AAG_CHAVE2) return rc + '|' + seq;
   var op  = i.op  === -1 ? '' : aagTxt(l[i.op]);
   var iop = i.iop === -1 ? '' : aagTxt(l[i.iop]);
-  var out = [];
-  if (op) out.push(rc + '|' + seq + '|' + op + '|' + iop);
-  if (seq) out.push(rc + '|' + seq);
-  out.push(rc);
-  return out;
+  if (!op) return '';
+  return rc + '|' + seq + '|' + op + '|' + iop;
 }
+function aagChave4(i){ return i.rc + '|' + i.seq + '|' + i.op + '|' + i.iop; }
+function aagChave2(i){ return i.rc + '|' + i.seq; }
 
-function aagIndiceOpcional(chaveArq, nomes, aviso, rotulo){
+function aagIndiceOpcional(chaveArq, nomes, aviso, rotulo, forma){
   var out = {};
+  out._forma = forma || AAG_CHAVE4;
   var d = _aagArq[chaveArq];
   if (!d) return out;
   var i = aagChavesDoArquivo(d);
@@ -32829,16 +32856,26 @@ function aagIndiceOpcional(chaveArq, nomes, aviso, rotulo){
     aviso.push(rotulo + ': não achei ' + (i.rc === -1 ? 'a coluna RC' : nomes[0]) + ' — coluna ficou vazia.');
     return out;
   }
+  var pode = aagFormaPossivel(i);
+  if (!pode) { aviso.push(rotulo + ': sem RC e SEQ eu não consigo montar a chave.'); return out; }
+  if (pode < out._forma) {
+    aviso.push(rotulo + ': a chave desse arquivo é RC + SEQ, não RC + SEQ + oportunidade + item. '
+      + 'Cruzei pela chave curta — se a mesma RC tiver mais de uma oportunidade, o valor pode vir '
+      + 'da oportunidade errada. Inclua OPORTUNIDADE e ITEM no arquivo.');
+    out._forma = pode;
+  }
   d.linhas.forEach(function(l){
     var v = aagTxt(l[col]);
     if (!v) return;
-    aagChavesDaLinha(l, i).forEach(function(k){ if (out[k] === undefined) out[k] = v; });
+    var k = aagChaveDaLinha(l, i, out._forma);
+    if (k && out[k] === undefined) out[k] = v;
   });
   return out;
 }
 
-function aagIndiceOpcionalMulti(chaveArq, campos, aviso, rotulo){
+function aagIndiceOpcionalMulti(chaveArq, campos, aviso, rotulo, forma){
   var out = {};
+  out._forma = forma || AAG_CHAVE4;
   var d = _aagArq[chaveArq];
   if (!d) return out;
   var i = aagChavesDoArquivo(d);
@@ -32849,12 +32886,27 @@ function aagIndiceOpcionalMulti(chaveArq, campos, aviso, rotulo){
     if (cols[k] !== -1) achou = true;
   });
   if (!achou) { aviso.push(rotulo + ': não achei fila, família nem tipo de família.'); return out; }
+  var pode = aagFormaPossivel(i);
+  if (!pode) { aviso.push(rotulo + ': sem RC e SEQ eu não consigo montar a chave.'); return out; }
+  if (pode < out._forma) {
+    aviso.push(rotulo + ': a chave desse arquivo é RC + SEQ, não RC + SEQ + oportunidade + item. '
+      + 'Cruzei pela chave curta — se a mesma RC tiver mais de uma oportunidade, os dados podem vir '
+      + 'da oportunidade errada. Inclua NUMERO_OPORTUNIDADE e ITEM_OPORTUNIDADE no arquivo.');
+    out._forma = pode;
+  }
   d.linhas.forEach(function(l){
     var o = {};
     Object.keys(cols).forEach(function(k){ if (cols[k] !== -1) o[k] = aagTxt(l[cols[k]]); });
-    aagChavesDaLinha(l, i).forEach(function(k){ if (out[k] === undefined) out[k] = o; });
+    var k = aagChaveDaLinha(l, i, out._forma);
+    if (k && out[k] === undefined) out[k] = o;
   });
   return out;
+}
+
+// Um índice só aceita a chave da forma com que foi montado.
+function aagBusca(idx, i){
+  if (!idx) return undefined;
+  return idx[idx._forma === AAG_CHAVE2 ? aagChave2(i) : aagChave4(i)];
 }
 
 
@@ -32968,9 +33020,8 @@ function aagMontarModelo(grupos, levelPor, analistaPor, mapaPor, obrigPor, pidPo
   var out = [];
   Object.keys(grupos).forEach(function(k){
     var i = grupos[k][0];
-    var lv = levelPor[k] || levelPor[i.rc + '|' + i.seq] || {};
-    var quem = analistaPor[k] || analistaPor[i.rc + '|' + i.seq] || analistaPor[i.rc]
-            || _aagEscolhas[k] || '';
+    var lv = aagBusca(levelPor, i) || {};
+    var quem = aagBusca(analistaPor, i) || _aagEscolhas[k] || '';
     var encerra = aagDataISO(lv.encerra);
     var prazo = aagDiasAte(encerra);
     var validade = aagValidade(prazo);
@@ -32982,7 +33033,7 @@ function aagMontarModelo(grupos, levelPor, analistaPor, mapaPor, obrigPor, pidPo
       'Fechamento': encerra ? cpDataBR(encerra) : '',
       'hoje': cpDataBR(cpHojeISO()),
       'PRAZO ': prazo === '' ? '' : prazo,
-      'STATUS MAPA ': mapaPor[k] || mapaPor[i.rc + '|' + i.seq] || '',
+      'STATUS MAPA ': aagBusca(mapaPor, i) || '',
       'Analista PATEC': quem,
       'Fila ( esteira) ': lv.fila || '',
       'IDAS AO MERCADO': lv.idas || '',
@@ -32998,7 +33049,8 @@ function aagMontarModelo(grupos, levelPor, analistaPor, mapaPor, obrigPor, pidPo
       'GRUPO_MERCADORIAS': grupoMerc,
       'Patec Obrigatorio ': obrigPor[aagChaveGrupo(grupoMerc)] ? 'Sim' : 'não',
       'CATEGORIA FAMILIA': lv.categoria || '',
-      'PID': pidPor[i.rc + '|' + i.seq] || ''
+      // Coluna Y do Modelo: =PROCV(B;PID!A1:D199999;4;0) — chave de 2 (RC+SEQ).
+      'PID': pidPor[aagChave2(i)] || ''
     });
   });
   return out;
