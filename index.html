@@ -4789,7 +4789,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             Analista Automático sair completa. O <strong>levelboard</strong> preenche família,
             fila, SLA, centro e prazos; o <strong>RC em tratamento</strong> traz o analista; o
             <strong>mapa diário</strong> traz o STATUS MAPA. Sem o levelboard e o mapa diário o
-            Modelo completo sai pela metade.
+            Modelo completo sai pela metade.<br>
+            Arquivo com <strong>rótulo de confidencialidade</strong> vem criptografado e o
+            navegador não abre. Nesse caso use o <strong>⬇ baixar modelo</strong> do cartão:
+            ele traz os cabeçalhos certos, você cola o conteúdo dentro e sobe.
           </div>
 
           <div id="aag-passos" style="margin-bottom:1.1rem"></div>
@@ -11671,10 +11674,31 @@ var _cpArquivoPendente = null;
 // Lê a planilha sem deixar o SheetJS adivinhar datas em arquivo de texto.
 // xlsx/xlsb/xls (binários) continuam como antes — neles a data é um número
 // e não tem ambiguidade. CSV/TXT vem como texto puro.
+// Arquivo com rótulo de confidencialidade (IRM/DRM) vem num container OLE
+// com os fluxos EncryptedPackage/DataSpaces. O conteúdo está cifrado: só o
+// Excel com a credencial da pessoa abre. Melhor dizer isso do que deixar o
+// SheetJS estourar um erro que não ajuda ninguém.
+function _arquivoProtegido(u8){
+  try {
+    var n = Math.min(u8.length, 8192);
+    var txt = '';
+    for (var i = 0; i < n; i++) {
+      var c = u8[i];
+      if (c >= 32 && c < 127) txt += String.fromCharCode(c);
+    }
+    return /EncryptedPackage|DRMEncryptedTransform|DataSpaces/.test(txt);
+  } catch (e) { return false; }
+}
+
 function _lerWorkbookBR(buf, nome){
   var u8 = new Uint8Array(buf);
   var ehZip = u8.length > 1 && u8[0] === 0x50 && u8[1] === 0x4B;          // PK — xlsx/xlsb
   var ehOle = u8.length > 7 && u8[0] === 0xD0 && u8[1] === 0xCF;          // xls antigo
+  if (ehOle && _arquivoProtegido(u8)) {
+    var e = new Error('ARQUIVO_PROTEGIDO');
+    e.protegido = true;
+    throw e;
+  }
   if (ehZip || ehOle) return XLSX.read(buf, { type:'array', cellDates:true });
   // O que sobra é texto — mesmo que o nome termine em .xlsx.
   var txt = '';
@@ -32301,8 +32325,51 @@ function aagPintarUploads(){
             : 'arraste ou clique') + '</div>'
       + '<input type="file" id="aag-in-' + a.chave + '" accept=".xlsx,.xlsb,.xls,.csv" style="display:none"'
       + ' onchange="aagUpload(\'' + a.chave + '\', this.files[0]); this.value=\'\';">'
+      + (AAG_MODELOS[a.chave]
+          ? '<div style="margin-top:7px"><span onclick="aagBaixarModelo(event,\'' + a.chave + '\')"'
+            + ' style="font-size:10px;font-weight:600;color:var(--azm);text-decoration:underline;'
+            + 'cursor:pointer">⬇ baixar modelo</span></div>'
+          : '')
       + '</div>';
   }).join('');
+}
+
+// O modelo de cada upload. Serve para dois casos: o arquivo original vir
+// com rótulo de confidencialidade (o navegador não abre) e o arquivo vir num
+// formato diferente do que o dash espera. Ele baixa a planilha com os
+// cabeçalhos certos, cola o conteúdo dentro e sobe.
+var AAG_MODELOS = {
+  backlog: { aba:'Backlog', cab:['RC','SEQ','NUMERO_OPORTUNIDADE','ITEM_OPORTUNIDADE','CENTRO',
+    'FATURAMENTO_MINIMO','VALOR_PEDIDOFINAL','VALOR_TOTAL_JULGAMENTO','ID_SAP_FORNECEDOR',
+    'POSICAO_FORNECEDOR','CNPJ','NOME_FORNECEDOR','NM_MATERIAL','TEXTO_BREVE_1',
+    'MATERIAL_IDENTICO','FABRICANTE_PETRO','FABRICANTE','PARTNUMBER_PETRO',
+    'NUMERO_PECA_FABRICANTE','URGENCIA_NECESSIDADE','GRUPO_MERCADORIAS'] },
+  patec:   { aba:'PATEC finalizado', cab:['OPORTUNIDADE','ITEM_OPORTUNIDADE','STATUS_PATEC',
+    'NOME_FORNECEDOR','RESULTADO_PATEC'] },
+  q18:     { aba:'Q18', cab:['COD SAP AJUST','RAZÃO SOCIAL EMPRESA','JUSTIFICATIVA'] },
+  level:   { aba:'Levelboard', cab:['RC','SEQ','NUMERO_OPORTUNIDADE','ITEM_OPORTUNIDADE',
+    'FAMILIA','SEGMENTO_FAMILIA','TIPO_FAMILIA','CATEGORIA_FAMILIA','CENTRO',
+    'GRUPO_MERCADORIAS','URGENCIA_NECESSIDADE','DATA_ENCERRAMENTO_OPORTUNIDADE',
+    'QTD_IDAS_LEVEL','Status_Desc','SLA_Dias'] },
+  trat:    { aba:'RC em tratamento', cab:['Analista PATEC','RC','SEQ','OPORTUNIDADE','Item'] },
+  mapa:    { aba:'Mapa diario', cab:['ANALISTA_AUTOMATICO','RC','SEQ','NUMERO_OPORTUNIDADE',
+    'ITEM_OPORTUNIDADE'] },
+  pid:     { aba:'PID', cab:['DOCUMENTO','ITEM','PID'] },
+  obrig:   { aba:'PATEC obrigatorio', cab:['Grupo de Mercadorias','Patec Obrigatorio',
+    'Denominação do Grupo de mercadoria'] }
+};
+
+function aagBaixarModelo(ev, chave){
+  if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+  try {
+    var m = AAG_MODELOS[chave];
+    if (!m) return;
+    var ws = XLSX.utils.aoa_to_sheet([m.cab]);
+    ws['!cols'] = m.cab.map(function(c){ return { wch: Math.max(12, Math.min(34, c.length + 4)) }; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, m.aba.slice(0, 31));
+    XLSX.writeFile(wb, 'Modelo_' + chave + '.xlsx');
+  } catch (e) { console.warn('aagBaixarModelo:', e); }
 }
 
 function aagSoltar(ev, chave){
@@ -32350,7 +32417,15 @@ async function aagUpload(chave, file){
       + cpNum(_aagArq[chave].linhas.length) + ' linhas na aba <strong>'
       + cpEsc(melhor.aba) + '</strong>.</span>';
   } catch (e) {
-    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Não consegui ler: ' + cpEsc(e.message) + '</span>';
+    if (st) {
+      st.innerHTML = e && e.protegido
+        ? '<span style="color:var(--vm)">🔒 <strong>' + cpEsc(file.name) + '</strong> está com '
+          + 'rótulo de confidencialidade e o conteúdo vem criptografado — nem o navegador '
+          + 'nem o Excel de outra pessoa conseguem ler.<br>Abra no Excel, vá em '
+          + '<strong>Arquivo › Informações › Confidencialidade</strong> e tire o rótulo, ou '
+          + 'salve uma cópia como <strong>.csv</strong>. Aí este upload funciona.</span>'
+        : '<span style="color:var(--vm)">✗ Não consegui ler: ' + cpEsc(e.message) + '</span>';
+    }
   }
 }
 
@@ -32471,17 +32546,23 @@ function aagProcessar(){
 
     // ── índice da Q18 ──
     var q = _aagArq.q18;
-    var qCod = aagCol(q.cab, ['COD. SAP','COD_SAP','CODIGO_SAP','ID_SAP_FORNECEDOR','COD SAP']);
-    var qJus = aagCol(q.cab, ['JUSTIFICATIVA','SITUACAO','STATUS']);
-    if (qCod === -1) {
-      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ A Q18 precisa ter a coluna COD. SAP.</span>';
-      return;
-    }
-    var q18 = {};
+    // Coluna A: o código SAP ajustado é o que cruza com o ID_SAP_FORNECEDOR.
+    var qCod = aagCol(q.cab, ['COD SAP AJUST','COD. SAP AJUST','COD_SAP_AJUST','COD. SAP',
+                              'COD SAP','COD_SAP','CODIGO_SAP','ID_SAP_FORNECEDOR']);
+    var qJus = aagCol(q.cab, ['JUSTIFICATIVA','SITUACAO','STATUS','MOTIVO']);
+    if (qCod === -1) qCod = 0;   // sem cabeçalho reconhecido, a coluna A é o código
+    var q18 = {}, q18motivo = {}, nImped = 0;
     q.linhas.forEach(function(l){
-      var k = aagTxt(l[qCod]);
-      if (k && q18[k] === undefined) q18[k] = qJus === -1 ? 'Impedido' : aagTxt(l[qJus]);
+      var k = aagChaveSap(l[qCod]);
+      if (!k) return;
+      // Qualquer justificativa preenchida — Impedido, Colin Q18, o que for —
+      // significa impedido. O texto original fica guardado para a tela.
+      var motivo = qJus === -1 ? '' : aagTxt(l[qJus]);
+      var impedido = qJus === -1 ? true : !!motivo;
+      if (!impedido) return;
+      if (q18[k] === undefined) { q18[k] = 'Impedido'; q18motivo[k] = motivo || 'Impedido'; nImped++; }
     });
+    if (!nImped) aviso.push('Q18: não achei nenhum fornecedor com justificativa preenchida.');
 
     // ── índices opcionais ──
     // O analista vem da aba "rc em tratamento", onde ele escolhe quem trata.
@@ -32577,7 +32658,8 @@ function aagProcessar(){
         cnpj: c.cnpj === -1 ? '' : aagTxt(l[c.cnpj]),
         forn: forn,
         aprovado: resultadoPorForn[kItem + forn] || '',
-        q18: q18[idSap] || '',
+        q18: q18[aagChaveSap(idSap)] || '',
+        q18motivo: q18motivo[aagChaveSap(idSap)] || '',
         nm: c.nm === -1 ? '' : aagTxt(l[c.nm]),
         tb1: c.tb1 === -1 ? '' : aagTxt(l[c.tb1]),
         ident: c.ident === -1 ? '' : aagTxt(l[c.ident]),
@@ -32754,6 +32836,13 @@ function aagDePara(chaveArq, nomesChave, offsetValor, aviso, rotulo){
   });
   if (!Object.keys(out).length) aviso.push(rotulo + ': não consegui ler o de-para.');
   return out;
+}
+
+// O código SAP vem ora como texto, ora como número (10236805 e 10236805.0).
+function aagChaveSap(v){
+  var t = aagTxt(v);
+  if (/^\d+(\.0+)?$/.test(t)) t = String(Math.round(parseFloat(t)));
+  return t;
 }
 
 // A classe de mercadoria vem com sufixo em algumas linhas (39111501A), e
