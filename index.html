@@ -4534,6 +4534,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             style="font-size:12px;font-weight:600;padding:6px 16px;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;background:transparent;color:var(--tx2);cursor:pointer">
             🧬 Análise NM
           </button>
+          <button id="aa-tab-btn-base" onclick="aaSetTab('base')"
+            style="font-size:12px;font-weight:600;padding:6px 16px;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;background:transparent;color:var(--tx2);cursor:pointer">
+            ⚙️ Montar base
+          </button>
         </div>
       </div>
 
@@ -4768,6 +4772,42 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div class="tw" style="max-height:560px" id="aNmAA-tabela-wrap"></div>
         </div>
       </div><!-- /aa-tab-nm -->
+
+      <!-- ABA: MONTAR BASE ─────────────────────────────────────── -->
+      <div id="aa-tab-base" style="display:none">
+
+        <div class="cd" style="margin-bottom:1rem">
+          <div class="cd-t">⚙️ Montar a base do Analista Completo</div>
+          <div style="font-size:11.5px;color:var(--tx2);line-height:1.75;margin-bottom:1rem">
+            Suba os arquivos crus e o dash faz aqui o que as suas planilhas faziam no Excel:
+            cruza tudo e entrega as <strong>três saídas</strong> — o
+            <strong>Modelo completo</strong> do Radar Estratégico, a base do
+            <strong>Analista Automático</strong> e a planilha do
+            <strong>Analista plataforma</strong>. Nada de PROCV, nada de planilha de um milhão
+            de linhas.<br>
+            <strong>Backlog, PATEC finalizado e Q18 bastam</strong> para a classificação do
+            Analista Automático sair completa. O <strong>levelboard</strong> preenche família,
+            fila, SLA, centro e prazos; o <strong>RC em tratamento</strong> traz o analista; o
+            <strong>mapa diário</strong> traz o STATUS MAPA. Sem o levelboard e o mapa diário o
+            Modelo completo sai pela metade.
+          </div>
+
+          <div id="aag-passos" style="margin-bottom:1.1rem"></div>
+          <div id="aag-uploads" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px"></div>
+
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:1.1rem">
+            <button class="btn btn-p" onclick="aagProcessar()">⚙️ Montar tudo</button>
+            <button class="btn btn-s" onclick="aagExportar()">⬇ Analista Automático</button>
+            <button class="btn btn-s" onclick="aagLimpar()">✕ Limpar arquivos</button>
+            <div id="aag-status" style="font-size:12px;flex:1;min-width:200px"></div>
+          </div>
+        </div>
+
+        <div id="aag-analistas"></div>
+        <div id="aag-resumo"></div>
+        <div id="aag-previa"></div>
+
+      </div><!-- /aa-tab-base -->
 
     </div><!-- /p-analista-auto -->
 
@@ -11640,7 +11680,15 @@ function _lerWorkbookBR(buf, nome){
   var txt = '';
   try {
     txt = new TextDecoder('utf-8', { fatal:false }).decode(u8);
-    if (txt.indexOf('�') !== -1) txt = new TextDecoder('windows-1252').decode(u8);
+    // Um punhado de bytes ruins no meio de um arquivo grande não pode
+    // condenar o arquivo inteiro ao latin-1 — era o que acontecia antes, e
+    // "Não Aprovado" chegava como "NÃ£o Aprovado" em TODAS as linhas por
+    // causa de um caractere estranho em uma só. Arquivo realmente latin-1
+    // erra em quase todo acento, então a proporção separa bem os dois casos.
+    var _ruins = (txt.match(/\ufffd/g) || []).length;
+    if (_ruins && _ruins / Math.max(1, txt.length) > 0.0005) {
+      txt = new TextDecoder('windows-1252').decode(u8);
+    }
   } catch(e){
     try { txt = new TextDecoder('windows-1252').decode(u8); }
     catch(e2){ return XLSX.read(buf, { type:'array', cellDates:true }); }
@@ -32139,7 +32187,7 @@ function aNmExportar(){
 // ABAS ANALISTA AUTOMÁTICO
 // ════════════════════════════════════════════
 function aaSetTab(aba){
-  const tabs = ['pedido','completo','nm'];
+  const tabs = ['pedido','completo','nm','base'];
   tabs.forEach(t=>{
     const el = document.getElementById('aa-tab-'+t);
     const btn = document.getElementById('aa-tab-btn-'+t);
@@ -32151,7 +32199,1036 @@ function aaSetTab(aba){
   });
   if(aba==='completo' && !_aacDados.length) aaCompletoCarregar();
   if(aba==='nm') aNmAAAbrir();
+  if(aba==='base') aagAbrir();
   if(typeof _fcAgendarVarredura==='function') _fcAgendarVarredura();
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// MONTAR A BASE DO ANALISTA COMPLETO
+//
+// Substitui a planilha "DISTRIBUIÇÃO PRIMEIRA ETAPA" e a planilha
+// "distribuição". As duas eram só fórmula: a primeira cruzava backlog x
+// PATEC finalizado x Q18 por PROCV, a segunda classificava cada linha
+// com um IF aninhado de onze níveis sobre 1.007.600 linhas.
+//
+// Aqui o cruzamento vira índice e a classificação vira função. As regras
+// foram transcritas da coluna D da planilha dele, uma a uma, e conferidas
+// contra os números que a própria planilha calculou.
+// ══════════════════════════════════════════════════════════════════
+
+// A ordem e o nome das colunas são os mesmos da planilha que o Analista
+// Completo já lê hoje — por isso a base entra lá sem nenhuma conversão.
+var AAG_CAB = ['Analista ','Fila ','ANALISTA AUTOMATICO ','RC','SEQ','OPORTUNIDADE','ITEM OP',
+  'CENTRO','STATUS_PATEC','Familia ','TIPO_FAMILIA','FATURAMENTO_MINIMO','VALOR_PEDIDOFINAL',
+  'VALOR_TOTAL_JULGAMENTO','ID_SAP_FORNECEDOR','POSICAO_FORNECEDOR','CNPJ','NOME_FORNECEDOR',
+  'Aprovado/ Reprovado ','Q18','NM_MATERIAL','TEXTO_BREVE_1','MATERIAL_IDENTICO',
+  'FABRICANTE  ( Fornecedor)','FABRICANTE - ( Petrobras)','PARTNUMBER ( Fornecedor)',
+  'PARTNUMBER ( Petrobras)','URGENCIA_NECESSIDADE','CLASSIFICACAO','SITUACAO_ITEM'];
+
+var AAG_ARQUIVOS = [
+  { chave:'backlog', nome:'Backlog',           sub:'semanal · a base de tudo',               ico:'📘', preciso:true },
+  { chave:'patec',   nome:'PATEC finalizado',  sub:'diário · aprovação por fornecedor',      ico:'✅', preciso:true },
+  { chave:'q18',     nome:'Q18',               sub:'fornecedores impedidos',                 ico:'🚫', preciso:true },
+  { chave:'level',   nome:'Levelboard',        sub:'fila, família, SLA, centro e datas',     ico:'📊', preciso:false },
+  { chave:'trat',    nome:'RC em tratamento',  sub:'quem trata cada RC · acumula',           ico:'👤', preciso:false, guarda:true, soma:true },
+  { chave:'mapa',    nome:'Mapa diário',       sub:'o STATUS MAPA de cada item',             ico:'🗺️', preciso:false },
+  { chave:'pid',     nome:'PID',               sub:'as RCs novas entram na lista',           ico:'📌', preciso:false, guarda:true, soma:true },
+  { chave:'obrig',   nome:'PATEC obrigatório', sub:'grupo de mercadoria · fica guardado',    ico:'📋', preciso:false, guarda:true },
+  { chave:'familia', nome:'Família',           sub:'família → categoria · fica guardado',    ico:'🏷️', preciso:false, guarda:true }
+];
+
+// As três tabelinhas de apoio quase não mudam, então ficam no Firebase:
+// sobe uma vez e o dash lembra nos dias seguintes.
+var AAG_GUARDADAS = AAG_ARQUIVOS.filter(function(a){ return a.guarda; }).map(function(a){ return a.chave; });
+
+async function aagGuardar(chave){
+  try {
+    var d = _aagArq[chave]; if (!d) return;
+    var db = getDB(); if (!db) return;
+    await db.collection('config').doc('aag_' + chave).set({
+      nome:d.nome, cab:d.cab, linhas:d.linhas.slice(0, 20000),
+      atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem()
+    });
+  } catch (e) { console.warn('aagGuardar:', e); }
+}
+
+async function aagCarregarGuardadas(){
+  try {
+    var db = getDB(); if (!db) return;
+    for (var i = 0; i < AAG_GUARDADAS.length; i++) {
+      var k = AAG_GUARDADAS[i];
+      if (_aagArq[k]) continue;
+      var doc = await db.collection('config').doc('aag_' + k).get();
+      if (!doc || !doc.exists) continue;
+      var d = doc.data() || {};
+      if (!(d.linhas || []).length) continue;
+      _aagArq[k] = { nome:d.nome || '(guardado)', cab:d.cab || [], linhas:d.linhas, guardado:true };
+    }
+    aagPintarUploads();
+  } catch (e) { console.warn('aagCarregarGuardadas:', e); }
+}
+
+var _aagArq  = {};   // chave -> { nome, linhas:[[...]], cab:[], aviso }
+var _aagBase = null; // { linhas:[], por:{}, geradoEm, contagem }
+
+function aagAbrir(){
+  aagPintarUploads();
+  aagRenderPassos();
+  aagRender();
+  aagCarregarGuardadas();
+  aagCarregarEscolhas();
+}
+
+function aagPintarUploads(){
+  var box = document.getElementById('aag-uploads');
+  if (!box) return;
+  box.innerHTML = AAG_ARQUIVOS.map(function(a){
+    var d = _aagArq[a.chave];
+    var cor = d ? 'var(--vd)' : (a.preciso ? 'var(--brd)' : 'var(--brd)');
+    return '<div style="border:1.5px ' + (d ? 'solid' : 'dashed') + ' ' + cor + ';border-radius:11px;'
+      + 'padding:.85rem .8rem;text-align:center;cursor:pointer;background:'
+      + (d ? 'var(--vdc)' : 'var(--cin)') + '"'
+      + ' onclick="document.getElementById(\'aag-in-' + a.chave + '\').click()"'
+      + ' ondragover="event.preventDefault()" ondrop="aagSoltar(event,\'' + a.chave + '\')">'
+      + '<div style="font-size:20px">' + a.ico + '</div>'
+      + '<div style="font-size:12.5px;font-weight:700;margin-top:3px">' + cpEsc(a.nome)
+      +   (a.preciso ? '' : ' <span style="font-weight:500;color:var(--tx2)">(opcional)</span>') + '</div>'
+      + '<div style="font-size:10px;color:var(--tx2);margin-top:2px">' + cpEsc(a.sub) + '</div>'
+      + '<div style="font-size:10.5px;margin-top:6px;font-weight:600;color:'
+      +   (d ? 'var(--vd)' : 'var(--tx2)') + '">'
+      +   (d ? '✓ ' + cpEsc(d.nome) + '<br>' + cpNum(d.linhas.length) + ' linhas'
+              + (d.guardado ? ' <span style="color:var(--tx2);font-weight:500">(guardado)</span>' : '')
+            : 'arraste ou clique') + '</div>'
+      + '<input type="file" id="aag-in-' + a.chave + '" accept=".xlsx,.xlsb,.xls,.csv" style="display:none"'
+      + ' onchange="aagUpload(\'' + a.chave + '\', this.files[0]); this.value=\'\';">'
+      + '</div>';
+  }).join('');
+}
+
+function aagSoltar(ev, chave){
+  ev.preventDefault();
+  var f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
+  if (f) aagUpload(chave, f);
+}
+
+async function aagUpload(chave, file){
+  if (!file) return;
+  var st = document.getElementById('aag-status');
+  if (st) st.innerHTML = '⏳ Lendo ' + cpEsc(file.name) + '...';
+  try {
+    var buf = await file.arrayBuffer();
+    var wb = _lerWorkbookBR(buf, file.name);
+    // fica com a aba que tiver mais linhas
+    var melhor = null;
+    (wb.SheetNames || []).forEach(function(n){
+      var l = XLSX.utils.sheet_to_json(wb.Sheets[n], { header:1, defval:'', raw:true, blankrows:false });
+      if (!melhor || l.length > melhor.linhas.length) melhor = { aba:n, linhas:l };
+    });
+    if (!melhor || !melhor.linhas.length) {
+      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ ' + cpEsc(file.name) + ' veio vazio.</span>';
+      return;
+    }
+    var iCab = aagAchaCabecalho(melhor.linhas);
+    var novo = { nome:file.name, aba:melhor.aba,
+                 cab:(melhor.linhas[iCab] || []).map(function(x){ return String(x == null ? '' : x).trim(); }),
+                 linhas:melhor.linhas.slice(iCab + 1) };
+    // Arquivos que SOMAM (RC em tratamento e PID): o que já estava guardado
+    // continua valendo e o novo entra por cima. É por isso que ele pode subir
+    // só as RCs novas, sem remontar a lista inteira.
+    var antes = _aagArq[chave];
+    var meta = AAG_ARQUIVOS.filter(function(a){ return a.chave === chave; })[0] || {};
+    if (meta.soma && antes && antes.linhas && antes.linhas.length
+        && antes.cab.join('|') === novo.cab.join('|')) {
+      novo.linhas = antes.linhas.concat(novo.linhas);
+      novo.somou = (antes.linhas || []).length;
+    }
+    _aagArq[chave] = novo;
+    aagPintarUploads();
+    aagRenderPassos();
+    if (AAG_GUARDADAS.indexOf(chave) !== -1) aagGuardar(chave);
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ ' + cpEsc(file.name) + ' — '
+      + cpNum(_aagArq[chave].linhas.length) + ' linhas na aba <strong>'
+      + cpEsc(melhor.aba) + '</strong>.</span>';
+  } catch (e) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Não consegui ler: ' + cpEsc(e.message) + '</span>';
+  }
+}
+
+// O cabeçalho costuma ser a 1a linha, mas o arquivo pode vir com título.
+function aagAchaCabecalho(linhas){
+  for (var i = 0; i < Math.min(linhas.length, 12); i++) {
+    var c = (linhas[i] || []).map(cpNormCab);
+    var cheios = c.filter(function(x){ return x; }).length;
+    if (cheios >= 3) return i;
+  }
+  return 0;
+}
+
+function aagLimpar(){
+  _aagArq = {}; _aagBase = null;
+  aagPintarUploads(); aagRender();
+  var st = document.getElementById('aag-status');
+  if (st) st.innerHTML = '';
+}
+
+// ── achar coluna pelo nome, com os apelidos de cada extração ──────
+function aagCol(cab, nomes, ultima){
+  var alvo = nomes.map(cpNormCab);
+  var achado = -1;
+  for (var i = 0; i < cab.length; i++) {
+    if (alvo.indexOf(cpNormCab(cab[i])) !== -1) {
+      achado = i;
+      if (!ultima) return achado;   // ultima=true pega a última ocorrência
+    }
+  }
+  return achado;
+}
+
+function aagTxt(v){ return String(v == null ? '' : v).trim(); }
+function aagNum(v){
+  var t = aagTxt(v).replace(/\./g, '').replace(',', '.');
+  if (t === '') return 0;
+  var n = parseFloat(t);
+  return isFinite(n) ? n : 0;
+}
+// O Excel compara texto sem ligar para maiúscula nem acento.
+function aagIgual(a, b){ return cpNormCab(a) === cpNormCab(b); }
+
+// A régua de urgência, igual à da coluna AA da planilha.
+function aagUrgencia(v){
+  var t = aagTxt(v);
+  if (t === '') return '';
+  var n = parseFloat(t.replace(',', '.'));
+  if (!isFinite(n) || n === 0) return '';
+  if (n <= 3) return 'baixo';
+  if (n === 4 || n === 10 || n === 11) return 'alto';
+  if (n === 99) return 'muito alto';
+  if (n === 53 || n === 54 || n === 55) return 'baixo';
+  return '';
+}
+
+// ── a classificação: a coluna D da planilha final, regra por regra ──
+function aagClassificar(r, ae){
+  var T = r.aprovado, U = r.q18;
+  var M = aagNum(r.fatMin), N = aagNum(r.vlrPedido);
+  var Q = aagNum(r.posicao);
+  var mesmoFab = aagIgual(r.fabForn, r.fabPb);
+  var mesmoPn  = aagIgual(r.pnForn, r.pnPb);
+  if (aagIgual(T, 'Não Aprovado')) return 'NÃO ANALISAR-Reprovado em PATEC';
+  if (aagIgual(T, 'Cancelado'))    return 'NÃO ANALISAR-PATEC Cancelado';
+  if (aagTxt(T) === '')            return 'VERIFICAR APROVAÇÃO-COLUNA S';
+  if (aagIgual(U, 'Impedido'))     return 'NÃO ANALISAR-Fornecedor na Q18';
+  if (N > 92500)                   return 'NÃO ANALISAR-Valor acima do limite DPV';
+  if (M > N)                       return 'NÃO ANALISAR-Faturamento mínimo';
+  if (Q === 1) {
+    if (mesmoFab && mesmoPn) return '1º MELHOR FORNECEDOR APTO-SEGUIR PARA PEDIDO-' + ae;
+    if (!mesmoFab)           return '1º CLASSIFICADO-DESVIO FABRICANTE';
+    if (!mesmoPn)            return '1º CLASSIFICADO-DESVIO PN';
+    return '1º CLASSIFICADO-ANALISAR MATERIAL';
+  }
+  if (mesmoFab && mesmoPn) return 'FORNECEDOR APTO-CLASSIFICAÇÃO ' + ae + '-MATERIAL IDÊNTICO';
+  if (!mesmoFab)           return 'CLASSIFICAÇÃO ' + ae + '-DESVIO FABRICANTE DIFERENTE';
+  if (!mesmoPn)            return 'CLASSIFICAÇÃO ' + ae + '-DESVIO CÓDIGO FABRICANTE DIFERENTE';
+  return 'FORNECEDOR APTO-CLASSIFICAÇÃO ' + ae + '-MATERIAL NÃO IDÊNTICO';
+}
+
+function aagEhNaoAnalisar(d){
+  return cpNormCab(d).indexOf('NAO_ANALISAR') === 0;
+}
+
+// ── o processamento ───────────────────────────────────────────────
+function aagProcessar(){
+  var st = document.getElementById('aag-status');
+  var faltam = AAG_ARQUIVOS.filter(function(a){ return a.preciso && !_aagArq[a.chave]; });
+  if (faltam.length) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Falta subir: '
+      + faltam.map(function(a){ return a.nome; }).join(', ') + '.</span>';
+    return;
+  }
+  if (st) st.innerHTML = '⏳ Montando a base...';
+  try {
+    var aviso = [];
+
+    // ── índices do PATEC finalizado ──
+    var bp = _aagArq.patec;
+    var cOp   = aagCol(bp.cab, ['OPORTUNIDADE','NUMERO_OPORTUNIDADE']);
+    var cIop  = aagCol(bp.cab, ['ITEM_OPORTUNIDADE','ITEM OP']);
+    var cStat = aagCol(bp.cab, ['STATUS_PATEC']);
+    var cForn = aagCol(bp.cab, ['NOME_FORNECEDOR','FORNECEDOR']);
+    var cRes  = aagCol(bp.cab, ['RESULTADO_PATEC','RESULTADO']);
+    if (cOp === -1 || cIop === -1 || cRes === -1) {
+      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ O PATEC finalizado precisa ter '
+        + 'OPORTUNIDADE, ITEM_OPORTUNIDADE e RESULTADO_PATEC.</span>';
+      return;
+    }
+    var statusPorItem = {}, resultadoPorForn = {};
+    bp.linhas.forEach(function(l){
+      var k1 = aagTxt(l[cOp]) + aagTxt(l[cIop]);
+      if (k1 && statusPorItem[k1] === undefined) statusPorItem[k1] = cStat === -1 ? '' : aagTxt(l[cStat]);
+      var k2 = k1 + (cForn === -1 ? '' : aagTxt(l[cForn]));
+      if (k2 && resultadoPorForn[k2] === undefined) resultadoPorForn[k2] = aagTxt(l[cRes]);
+    });
+
+    // ── índice da Q18 ──
+    var q = _aagArq.q18;
+    var qCod = aagCol(q.cab, ['COD. SAP','COD_SAP','CODIGO_SAP','ID_SAP_FORNECEDOR','COD SAP']);
+    var qJus = aagCol(q.cab, ['JUSTIFICATIVA','SITUACAO','STATUS']);
+    if (qCod === -1) {
+      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ A Q18 precisa ter a coluna COD. SAP.</span>';
+      return;
+    }
+    var q18 = {};
+    q.linhas.forEach(function(l){
+      var k = aagTxt(l[qCod]);
+      if (k && q18[k] === undefined) q18[k] = qJus === -1 ? 'Impedido' : aagTxt(l[qJus]);
+    });
+
+    // ── índices opcionais ──
+    // O analista vem da aba "rc em tratamento", onde ele escolhe quem trata.
+    var analistaPor = aagIndiceOpcional('trat',
+      ['ANALISTA PATEC','ANALISTA','RESPONSAVEL','COMPRADOR'], aviso, 'RC em tratamento');
+    // O STATUS MAPA vem do mapa diário — é o que o Radar chama de STATUS MAPA
+    // e a planilha da plataforma chama de MAPA.
+    var mapaPor = aagIndiceOpcional('mapa',
+      ['ANALISTA_AUTOMATICO','STATUS MAPA','ANALISTA AUTOMATICO'], aviso, 'Mapa diário');
+    // O levelboard é a fonte de quase tudo que não está no backlog. Os nomes
+    // abaixo são exatamente os cabeçalhos do levelboard dele.
+    var levelPor = aagIndiceOpcionalMulti('level', {
+      fila:        ['STATUS_DESC','STATUS DESC'],
+      familia:     ['FAMILIA','FAMÍLIA'],
+      segmento:    ['SEGMENTO_FAMILIA'],
+      tipo:        ['TIPO_FAMILIA'],
+      categoria:   ['CATEGORIA_FAMILIA'],
+      centro:      ['CENTRO'],
+      grupoMerc:   ['GRUPO_MERCADORIAS'],
+      urgNum:      ['URGENCIA_NECESSIDADE'],
+      sla:         ['SLA_DIAS','SLA DIAS'],
+      idas:        ['QTD_IDAS_LEVEL','QTD IDAS LEVEL'],
+      encerra:     ['DATA_ENCERRAMENTO_OPORTUNIDADE']
+    }, aviso, 'Levelboard');
+    // Tabelinhas de apoio: grupo de mercadoria -> PATEC obrigatório,
+    // família -> categoria, RC+SEQ -> PID.
+    var obrigPor  = aagDePara('obrig',   ['GRUPO_MERCADORIAS','GRUPO DE MERCADORIA','GRUPO'], 1, aviso, 'PATEC obrigatório');
+    var catPor    = aagDePara('familia', ['FAMILIA','FAMÍLIA'], 1, aviso, 'Família');
+    var pidPor    = aagDeParaPid(aviso);
+
+    // ── o backlog ──
+    var bk = _aagArq.backlog;
+    var c = {
+      rc:      aagCol(bk.cab, ['RC']),
+      seq:     aagCol(bk.cab, ['SEQ']),
+      op:      aagCol(bk.cab, ['NUMERO_OPORTUNIDADE']),
+      iop:     aagCol(bk.cab, ['ITEM_OPORTUNIDADE']),
+      centro:  aagCol(bk.cab, ['CENTRO']),
+      fatMin:  aagCol(bk.cab, ['FATURAMENTO_MINIMO']),
+      vpf:     aagCol(bk.cab, ['VALOR_PEDIDOFINAL','VALOR_PEDIDO_RELATORIO','VALOR_PEDIDO_FINAL']),
+      vtj:     aagCol(bk.cab, ['VALOR_TOTAL_JULGAMENTO']),
+      idSap:   aagCol(bk.cab, ['ID_SAP_FORNECEDOR']),
+      pos:     aagCol(bk.cab, ['POSICAO_FORNECEDOR']),
+      cnpj:    aagCol(bk.cab, ['CNPJ']),
+      forn:    aagCol(bk.cab, ['NOME_FORNECEDOR']),
+      nm:      aagCol(bk.cab, ['NM_MATERIAL']),
+      // TEXTO_BREVE aparece duas vezes no backlog: a segunda é o TEXTO_BREVE_1
+      tb1:     (function(){
+                 var i = aagCol(bk.cab, ['TEXTO_BREVE_1']);
+                 if (i !== -1) return i;
+                 return aagCol(bk.cab, ['TEXTO_BREVE'], true);
+               })(),
+      ident:   aagCol(bk.cab, ['MATERIAL_IDENTICO']),
+      // Cuidado: no backlog os nomes enganam. A coluna FABRICANTE_PETRO traz
+      // o fabricante DO FORNECEDOR (muda a cada proposta) e a coluna
+      // FABRICANTE traz o da Petrobras (é o mesmo no item inteiro). Conferido
+      // na base real antes de escrever isto.
+      fabForn: aagCol(bk.cab, ['FABRICANTE_PETRO']),
+      fabPb:   aagCol(bk.cab, ['FABRICANTE']),
+      pnForn:  aagCol(bk.cab, ['PARTNUMBER_PETRO']),
+      pnPb:    aagCol(bk.cab, ['NUMERO_PECA_FABRICANTE']),
+      urg:     aagCol(bk.cab, ['URGENCIA_NECESSIDADE'])
+    };
+    var obrig = ['rc','seq','op','iop','pos','forn'];
+    var semCol = obrig.filter(function(k){ return c[k] === -1; });
+    if (semCol.length) {
+      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ O backlog não tem as colunas: '
+        + semCol.join(', ') + '.</span>';
+      return;
+    }
+
+    var itens = [];
+    bk.linhas.forEach(function(l){
+      var rc = aagTxt(l[c.rc]);
+      if (!rc) return;
+      var op = aagTxt(l[c.op]), iop = aagTxt(l[c.iop]);
+      var forn = aagTxt(l[c.forn]);
+      var idSap = aagTxt(l[c.idSap]);
+      var kItem = op + iop;
+      // o VALOR_PEDIDOFINAL vem em centavos na extração
+      var vpf = c.vpf === -1 ? '' : aagNum(l[c.vpf]) / 100;
+      var chave = rc + '|' + aagTxt(l[c.seq]) + '|' + op + '|' + iop;
+      itens.push({
+        chave: chave,
+        rc: rc, seq: aagTxt(l[c.seq]), op: op, iop: iop,
+        centro: c.centro === -1 ? '' : aagTxt(l[c.centro]),
+        statusPatec: statusPorItem[kItem] || '',
+        fatMin: c.fatMin === -1 ? '' : aagTxt(l[c.fatMin]),
+        vlrPedido: vpf,
+        vlrTotal: c.vtj === -1 ? '' : aagTxt(l[c.vtj]),
+        idSap: idSap,
+        posicao: aagTxt(l[c.pos]),
+        cnpj: c.cnpj === -1 ? '' : aagTxt(l[c.cnpj]),
+        forn: forn,
+        aprovado: resultadoPorForn[kItem + forn] || '',
+        q18: q18[idSap] || '',
+        nm: c.nm === -1 ? '' : aagTxt(l[c.nm]),
+        tb1: c.tb1 === -1 ? '' : aagTxt(l[c.tb1]),
+        ident: c.ident === -1 ? '' : aagTxt(l[c.ident]),
+        fabForn: c.fabForn === -1 ? '' : aagTxt(l[c.fabForn]),
+        fabPb: c.fabPb === -1 ? '' : aagTxt(l[c.fabPb]),
+        pnForn: c.pnForn === -1 ? '' : aagTxt(l[c.pnForn]),
+        pnPb: c.pnPb === -1 ? '' : aagTxt(l[c.pnPb]),
+        urgencia: c.urg === -1 ? '' : aagUrgencia(l[c.urg])
+      });
+    });
+
+    // ── a classificação do fornecedor dentro do item (coluna AE) ──
+    // Conta quantos fornecedores elegíveis estão à frente dele na posição.
+    var grupos = {};
+    itens.forEach(function(i){ (grupos[i.chave] = grupos[i.chave] || []).push(i); });
+    itens.forEach(function(i){
+      var elegivel = !aagIgual(i.aprovado, 'Não Aprovado')
+                  && !aagIgual(i.q18, 'Impedido')
+                  && aagNum(i.fatMin) <= aagNum(i.vlrTotal);
+      if (!elegivel) { i.ae = ''; return; }
+      var minha = aagNum(i.posicao), n = 0;
+      grupos[i.chave].forEach(function(o){
+        if (aagNum(o.posicao) < minha
+            && !aagIgual(o.aprovado, 'Não Aprovado')
+            && !aagIgual(o.q18, 'Impedido')) n++;
+      });
+      i.ae = n + 1;
+    });
+
+    // ── a regra de cada linha e a situação do item ──
+    itens.forEach(function(i){ i.aa = aagClassificar(i, i.ae); });
+    var situacao = {};
+    Object.keys(grupos).forEach(function(k){
+      var temAnalisavel = grupos[k].some(function(o){ return !aagEhNaoAnalisar(o.aa); });
+      situacao[k] = temAnalisavel ? 'MANTER EM ANÁLISE' : 'LIBERAR ITEM';
+    });
+
+    // ── a base final, no formato que o Analista Completo já lê ──
+    var linhas = itens.map(function(i){
+      var lv = levelPor[i.chave] || levelPor[i.rc + '|' + i.seq] || {};
+      i._lv = lv;
+      i._analista = analistaPor[i.chave] || analistaPor[i.rc + '|' + i.seq] || analistaPor[i.rc]
+                 || _aagEscolhas[i.chave] || '';
+      i._mapa = mapaPor[i.chave] || mapaPor[i.rc + '|' + i.seq] || '';
+      return {
+        'Analista ': i._analista,
+        'Fila ': lv.fila || '',
+        'ANALISTA AUTOMATICO ': i.aa,
+        'RC': i.rc, 'SEQ': i.seq, 'OPORTUNIDADE': i.op, 'ITEM OP': i.iop,
+        'CENTRO': i.centro, 'STATUS_PATEC': i.statusPatec,
+        'Familia ': lv.familia || '', 'TIPO_FAMILIA': lv.tipo || '',
+        'FATURAMENTO_MINIMO': i.fatMin, 'VALOR_PEDIDOFINAL': i.vlrPedido,
+        'VALOR_TOTAL_JULGAMENTO': i.vlrTotal,
+        'ID_SAP_FORNECEDOR': i.idSap, 'POSICAO_FORNECEDOR': i.posicao,
+        'CNPJ': i.cnpj, 'NOME_FORNECEDOR': i.forn,
+        'Aprovado/ Reprovado ': i.aprovado, 'Q18': i.q18,
+        'NM_MATERIAL': i.nm, 'TEXTO_BREVE_1': i.tb1, 'MATERIAL_IDENTICO': i.ident,
+        'FABRICANTE  ( Fornecedor)': i.fabForn, 'FABRICANTE - ( Petrobras)': i.fabPb,
+        'PARTNUMBER ( Fornecedor)': i.pnForn, 'PARTNUMBER ( Petrobras)': i.pnPb,
+        'URGENCIA_NECESSIDADE': i.urgencia,
+        'CLASSIFICACAO': i.ae === '' ? '' : i.ae,
+        'SITUACAO_ITEM': situacao[i.chave]
+      };
+    });
+
+    // ── a planilha da plataforma: a mesma base com a coluna MAPA ──
+    var plataforma = itens.map(function(i, k){
+      var o = { 'Analista ': i._analista, 'MAPA': i._mapa };
+      AAG_CAB.forEach(function(nome){
+        if (nome === 'Analista ') return;
+        o[nome] = linhas[k][nome];
+      });
+      return o;
+    });
+
+    // ── o Modelo completo: uma linha por ITEM, não por proposta ──
+    var modelo = aagMontarModelo(grupos, levelPor, analistaPor, mapaPor,
+                                 obrigPor, catPor, pidPor);
+
+    var por = {};
+    itens.forEach(function(i){ por[i.aa] = (por[i.aa] || 0) + 1; });
+    _aagBase = { linhas: linhas, plataforma: plataforma, modelo: modelo,
+                 por: por, geradoEm: new Date().toISOString(),
+                 itens: Object.keys(grupos).length,
+                 semPatec: itens.filter(function(i){ return aagTxt(i.aprovado) === ''; }).length,
+                 impedidos: itens.filter(function(i){ return aagIgual(i.q18, 'Impedido'); }).length,
+                 liberar: Object.keys(situacao).filter(function(k){ return situacao[k] === 'LIBERAR ITEM'; }).length,
+                 aviso: aviso };
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Base montada: '
+      + cpNum(linhas.length) + ' linhas em ' + cpNum(_aagBase.itens) + ' itens.</span>';
+    aagRender();
+  } catch (e) {
+    console.warn('aagProcessar:', e);
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Erro ao montar: ' + cpEsc(e.message) + '</span>';
+  }
+}
+
+// Índices dos dois arquivos opcionais. Eles não têm formato fixo, então
+// procuro a chave pelo que existir: RC+SEQ+OP+item, RC+SEQ ou só a RC.
+function aagChavesDoArquivo(d){
+  var i = {
+    rc:  aagCol(d.cab, ['RC']),
+    seq: aagCol(d.cab, ['SEQ','ITEM_RC','LINHAREQUISICAO']),
+    op:  aagCol(d.cab, ['NUMERO_OPORTUNIDADE','OPORTUNIDADE']),
+    iop: aagCol(d.cab, ['ITEM_OPORTUNIDADE','ITEM OP','ITEM'])
+  };
+  return i;
+}
+function aagChavesDaLinha(l, i){
+  var rc = i.rc === -1 ? '' : aagTxt(l[i.rc]);
+  if (!rc) return [];
+  var seq = i.seq === -1 ? '' : aagTxt(l[i.seq]);
+  var op  = i.op  === -1 ? '' : aagTxt(l[i.op]);
+  var iop = i.iop === -1 ? '' : aagTxt(l[i.iop]);
+  var out = [];
+  if (op) out.push(rc + '|' + seq + '|' + op + '|' + iop);
+  if (seq) out.push(rc + '|' + seq);
+  out.push(rc);
+  return out;
+}
+
+function aagIndiceOpcional(chaveArq, nomes, aviso, rotulo){
+  var out = {};
+  var d = _aagArq[chaveArq];
+  if (!d) return out;
+  var i = aagChavesDoArquivo(d);
+  var col = aagCol(d.cab, nomes);
+  if (i.rc === -1 || col === -1) {
+    aviso.push(rotulo + ': não achei ' + (i.rc === -1 ? 'a coluna RC' : nomes[0]) + ' — coluna ficou vazia.');
+    return out;
+  }
+  d.linhas.forEach(function(l){
+    var v = aagTxt(l[col]);
+    if (!v) return;
+    aagChavesDaLinha(l, i).forEach(function(k){ if (out[k] === undefined) out[k] = v; });
+  });
+  return out;
+}
+
+function aagIndiceOpcionalMulti(chaveArq, campos, aviso, rotulo){
+  var out = {};
+  var d = _aagArq[chaveArq];
+  if (!d) return out;
+  var i = aagChavesDoArquivo(d);
+  if (i.rc === -1) { aviso.push(rotulo + ': não achei a coluna RC — colunas ficaram vazias.'); return out; }
+  var cols = {}, achou = false;
+  Object.keys(campos).forEach(function(k){
+    cols[k] = aagCol(d.cab, campos[k]);
+    if (cols[k] !== -1) achou = true;
+  });
+  if (!achou) { aviso.push(rotulo + ': não achei fila, família nem tipo de família.'); return out; }
+  d.linhas.forEach(function(l){
+    var o = {};
+    Object.keys(cols).forEach(function(k){ if (cols[k] !== -1) o[k] = aagTxt(l[cols[k]]); });
+    aagChavesDaLinha(l, i).forEach(function(k){ if (out[k] === undefined) out[k] = o; });
+  });
+  return out;
+}
+
+
+// ── de-para simples: primeira coluna é a chave, a outra é o valor ──
+function aagDePara(chaveArq, nomesChave, offsetValor, aviso, rotulo){
+  var out = {};
+  var d = _aagArq[chaveArq];
+  if (!d) return out;
+  var iK = aagCol(d.cab, nomesChave);
+  if (iK === -1) iK = 0;                       // sem cabeçalho reconhecido: coluna A
+  var iV = iK + (offsetValor || 1);
+  d.linhas.forEach(function(l){
+    var k = cpNormCab(aagTxt(l[iK]));
+    if (!k) return;
+    if (out[k] === undefined) out[k] = aagTxt(l[iV]);
+  });
+  if (!Object.keys(out).length) aviso.push(rotulo + ': não consegui ler o de-para.');
+  return out;
+}
+
+// O PID é por RC + SEQ (a planilha dele usa DOCUMENTO + ITEM).
+function aagDeParaPid(aviso){
+  var out = {};
+  var d = _aagArq.pid;
+  if (!d) return out;
+  var iRc = aagCol(d.cab, ['DOCUMENTO','RC']);
+  var iIt = aagCol(d.cab, ['ITEM','SEQ']);
+  var iV  = aagCol(d.cab, ['PID']);
+  if (iRc === -1 || iIt === -1) { aviso.push('PID: não achei DOCUMENTO e ITEM.'); return out; }
+  d.linhas.forEach(function(l){
+    var k = aagTxt(l[iRc]) + '|' + aagTxt(l[iIt]);
+    var v = iV === -1 ? 'PID' : (aagTxt(l[iV]) || 'PID');
+    if (out[k] === undefined) out[k] = v;
+  });
+  return out;
+}
+
+// ── datas e prazos do Modelo completo ─────────────────────────────
+// O levelboard traz a data como número de série do Excel ou como texto.
+function aagDataISO(v){
+  var t = aagTxt(v);
+  if (!t) return '';
+  if (/^\d+(\.\d+)?$/.test(t)) {
+    var n = parseFloat(t);
+    if (n > 20000 && n < 90000) {
+      var d = new Date(Date.UTC(1899, 11, 30) + n * 86400000);
+      return d.toISOString().slice(0, 10);
+    }
+  }
+  var iso = cpDataISO(v);
+  return iso || '';
+}
+function aagDiasAte(iso){
+  if (!iso) return '';
+  var d = new Date(iso + 'T12:00:00');
+  if (isNaN(d.getTime())) return '';
+  var hoje = new Date(cpHojeISO() + 'T12:00:00');
+  return Math.round((hoje - d) / 86400000);
+}
+// A régua da coluna J: válido até 59 dias, atenção de 60 a 90, vencida de 91.
+function aagValidade(dias){
+  if (dias === '' || dias === null) return '';
+  if (dias <= 59) return 'Válido';
+  if (dias <= 90) return 'Próximo do vencimento';
+  return 'Vencida';
+}
+
+// ── o Modelo completo, que alimenta o Radar Estratégico ───────────
+// Uma linha por ITEM (RC + SEQ + oportunidade + item), não por proposta:
+// é assim que o Radar lê.
+function aagMontarModelo(grupos, levelPor, analistaPor, mapaPor, obrigPor, catPor, pidPor){
+  var out = [];
+  Object.keys(grupos).forEach(function(k){
+    var i = grupos[k][0];
+    var lv = levelPor[k] || levelPor[i.rc + '|' + i.seq] || {};
+    var quem = analistaPor[k] || analistaPor[i.rc + '|' + i.seq] || analistaPor[i.rc]
+            || _aagEscolhas[k] || '';
+    var encerra = aagDataISO(lv.encerra);
+    var prazo = aagDiasAte(encerra);
+    var validade = aagValidade(prazo);
+    var sla = aagNum(lv.sla);
+    var critico = (sla > 90 || validade === 'Próximo do vencimento' || validade === 'Vencida');
+    var familia = lv.familia || '';
+    var grupoMerc = lv.grupoMerc || '';
+    out.push({
+      'Fechamento': encerra ? cpDataBR(encerra) : '',
+      'hoje': cpDataBR(cpHojeISO()),
+      'PRAZO ': prazo === '' ? '' : prazo,
+      'STATUS MAPA ': mapaPor[k] || mapaPor[i.rc + '|' + i.seq] || '',
+      'Analista PATEC': quem,
+      'Fila ( esteira) ': lv.fila || '',
+      'IDAS AO MERCADO': lv.idas || '',
+      'Validade da Proposta ': validade,
+      'SLA': lv.sla || '',
+      'Status de Controle': critico ? 'CRÍTICO' : 'OK',
+      'RC': i.rc, 'SEQ': i.seq, 'OPORTUNIDADE': i.op, 'Item': i.iop,
+      'Familia': familia,
+      'Seguimento': lv.segmento || '',
+      'FAMILIA L ou Q': lv.tipo || '',
+      'CENTRO': lv.centro || i.centro || '',
+      'URGENCIA': aagUrgencia(lv.urgNum),
+      'GRUPO_MERCADORIAS': grupoMerc,
+      'Patec Obrigatorio ': obrigPor[cpNormCab(grupoMerc)] || 'não',
+      'CATEGORIA FAMILIA': lv.categoria || catPor[cpNormCab(familia)] || '',
+      'PID': pidPor[i.rc + '|' + i.seq] || ''
+    });
+  });
+  return out;
+}
+
+var AAG_CAB_MODELO = ['Fechamento','hoje','PRAZO ','STATUS MAPA ','Analista PATEC',
+  'Fila ( esteira) ','IDAS AO MERCADO','Validade da Proposta ','SLA','Status de Controle',
+  'RC','SEQ','OPORTUNIDADE','Item','Familia','Seguimento','FAMILIA L ou Q','CENTRO',
+  'URGENCIA','GRUPO_MERCADORIAS','Patec Obrigatorio ','CATEGORIA FAMILIA','PID'];
+
+// ── mandar o Modelo completo para o Radar ─────────────────────────
+// Monta o mesmo arquivo que ele subia na mão e entrega para o
+// radarOnFile() que já existe — assim o Radar grava, sincroniza o MAPA e
+// atualiza o backlog exatamente como num upload normal.
+async function aagEnviarRadar(){
+  if (!_aagBase || !(_aagBase.modelo || []).length) return;
+  var st = document.getElementById('aag-status');
+  if (!confirm('Enviar ' + _aagBase.modelo.length + ' itens para o Radar Estratégico?\n\n'
+      + 'É o mesmo que subir o Dashboard_Dados.xlsx lá.')) return;
+  if (st) st.innerHTML = '⏳ Enviando para o Radar...';
+  try {
+    var aoa = [AAG_CAB_MODELO];
+    _aagBase.modelo.forEach(function(r){
+      aoa.push(AAG_CAB_MODELO.map(function(k){ return r[k]; }));
+    });
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'MODELO COMPLETO');
+    var buf = XLSX.write(wb, { bookType:'xlsx', type:'array' });
+    var arq = new File([buf], 'Dashboard_Dados_montado_'
+      + cpHojeISO().replace(/-/g, '') + '.xlsx',
+      { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    await radarOnFile(arq);
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Radar Estratégico atualizado com '
+      + cpNum(_aagBase.modelo.length) + ' itens.</span>';
+  } catch (e) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Não consegui enviar ao Radar: '
+      + cpEsc(e.message) + '</span>';
+  }
+}
+
+function aagExportarPlataforma(){
+  try {
+    if (!_aagBase || !(_aagBase.plataforma || []).length) return;
+    var cab = ['Analista ','MAPA'].concat(AAG_CAB.filter(function(k){ return k !== 'Analista '; }));
+    var aoa = [cab];
+    _aagBase.plataforma.forEach(function(r){ aoa.push(cab.map(function(k){ return r[k]; })); });
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = cab.map(function(k){ return { wch: Math.max(10, Math.min(32, k.length + 6)) }; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Analista plataforma');
+    XLSX.writeFile(wb, 'Analista_plataforma_' + cpHojeISO().replace(/-/g, '') + '.xlsx');
+  } catch (e) { console.warn('aagExportarPlataforma:', e); }
+}
+
+function aagExportarModelo(){
+  try {
+    if (!_aagBase || !(_aagBase.modelo || []).length) return;
+    var aoa = [AAG_CAB_MODELO];
+    _aagBase.modelo.forEach(function(r){ aoa.push(AAG_CAB_MODELO.map(function(k){ return r[k]; })); });
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = AAG_CAB_MODELO.map(function(k){ return { wch: Math.max(10, Math.min(30, k.length + 6)) }; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'MODELO COMPLETO');
+    XLSX.writeFile(wb, 'Modelo_completo_' + cpHojeISO().replace(/-/g, '') + '.xlsx');
+  } catch (e) { console.warn('aagExportarModelo:', e); }
+}
+
+
+// ── quem trata cada RC ────────────────────────────────────────────
+// A lista de analistas é uma base que vive no dash: o que já foi escolhido
+// fica guardado, e a tela mostra só as RCs que ainda não têm ninguém.
+var _aagAnalistas = [];      // nomes disponíveis no seletor
+var _aagEscolhas = {};       // 'RC|SEQ|OP|ITEM' -> analista escolhido aqui
+var _aagSemAnalistaPag = 0;
+
+function aagNomesAnalistas(){
+  var vistos = {}, out = [];
+  var d = _aagArq.trat;
+  if (d) {
+    var col = aagCol(d.cab, ['ANALISTA PATEC','ANALISTA','RESPONSAVEL','COMPRADOR']);
+    if (col !== -1) d.linhas.forEach(function(l){
+      var n = aagTxt(l[col]);
+      if (n && !vistos[cpNormNome(n)]) { vistos[cpNormNome(n)] = 1; out.push(n); }
+    });
+  }
+  Object.keys(_aagEscolhas).forEach(function(k){
+    var n = _aagEscolhas[k];
+    if (n && !vistos[cpNormNome(n)]) { vistos[cpNormNome(n)] = 1; out.push(n); }
+  });
+  try {
+    (typeof COLABS !== 'undefined' ? COLABS : []).forEach(function(c){
+      var n = typeof c === 'string' ? c : (c && c.nome);
+      if (n && !vistos[cpNormNome(n)]) { vistos[cpNormNome(n)] = 1; out.push(n); }
+    });
+  } catch (e) {}
+  return out.sort(function(a, b){ return a.localeCompare(b); });
+}
+
+async function aagCarregarEscolhas(){
+  try {
+    var db = getDB(); if (!db) return;
+    var doc = await db.collection('config').doc('aag_analistas').get();
+    if (doc && doc.exists) _aagEscolhas = (doc.data() || {}).escolhas || {};
+  } catch (e) { console.warn('aagCarregarEscolhas:', e); }
+}
+async function aagSalvarEscolhas(){
+  try {
+    var db = getDB(); if (!db) return;
+    await db.collection('config').doc('aag_analistas').set({
+      escolhas:_aagEscolhas, atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem() });
+  } catch (e) { console.warn('aagSalvarEscolhas:', e); }
+}
+
+function aagEscolherAnalista(chave, nome){
+  if (nome) _aagEscolhas[chave] = nome; else delete _aagEscolhas[chave];
+  aagSalvarEscolhas();
+  var linha = document.getElementById('aag-an-' + chave.replace(/\|/g, '_'));
+  if (linha) linha.style.background = nome ? 'var(--vdc)' : '';
+  aagPintarContaSemAnalista();
+}
+
+function aagPintarContaSemAnalista(){
+  var el = document.getElementById('aag-sem-conta');
+  if (!el || !_aagBase) return;
+  var n = aagSemAnalista().length;
+  el.textContent = n ? n + ' sem analista' : 'todas com analista';
+  el.style.color = n ? 'var(--am)' : 'var(--vd)';
+}
+
+function aagSemAnalista(){
+  if (!_aagBase || !_aagBase.modelo) return [];
+  return _aagBase.modelo.filter(function(m){
+    var k = [m.RC, m.SEQ, m.OPORTUNIDADE, m.Item].join('|');
+    return !aagTxt(m['Analista PATEC']) && !_aagEscolhas[k];
+  });
+}
+
+function aagPagina(d){
+  _aagSemAnalistaPag = Math.max(0, _aagSemAnalistaPag + d);
+  aagRenderAnalistas();
+}
+
+function aagRenderAnalistas(){
+  var box = document.getElementById('aag-analistas');
+  if (!box) return;
+  if (!_aagBase || !_aagBase.modelo) { box.innerHTML = ''; return; }
+  var faltam = aagSemAnalista();
+  var nomes = aagNomesAnalistas();
+  var POR = 50;
+  var tot = Math.ceil(faltam.length / POR) || 1;
+  if (_aagSemAnalistaPag >= tot) _aagSemAnalistaPag = tot - 1;
+  var pag = faltam.slice(_aagSemAnalistaPag * POR, (_aagSemAnalistaPag + 1) * POR);
+  var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between;flex-wrap:wrap;gap:8px">'
+    + '<span>👤 Quem trata cada RC</span>'
+    + '<span id="aag-sem-conta" style="font-size:12px;font-weight:600;color:'
+    +   (faltam.length ? 'var(--am)' : 'var(--vd)') + '">'
+    +   (faltam.length ? cpNum(faltam.length) + ' sem analista' : 'todas com analista') + '</span>'
+    + '</div>'
+    + '<div style="font-size:11px;color:var(--tx2);line-height:1.7;margin-bottom:.8rem">'
+    + 'O que você escolher aqui fica guardado e vale para os próximos dias — não precisa '
+    + 'escolher de novo. A planilha de RC em tratamento continua valendo: ela entra primeiro, '
+    + 'e esta lista só mostra o que sobrou sem ninguém.</div>';
+  if (!faltam.length) {
+    h += '<div style="font-size:12px;color:var(--vd);font-weight:600">'
+      + 'Toda RC da base já tem analista.</div></div>';
+    box.innerHTML = h; return;
+  }
+  var opcoes = '<option value="">—</option>' + nomes.map(function(n){
+    return '<option value="' + cpEsc(n) + '">' + cpEsc(n) + '</option>'; }).join('');
+  h += '<div style="overflow:auto;max-height:420px"><table><thead><tr>'
+    + '<th>RC</th><th>SEQ</th><th>Oportunidade</th><th>Item</th><th>Família</th>'
+    + '<th>Fila</th><th style="width:170px">Analista</th></tr></thead><tbody>';
+  pag.forEach(function(m){
+    var k = [m.RC, m.SEQ, m.OPORTUNIDADE, m.Item].join('|');
+    h += '<tr id="aag-an-' + cpEsc(k.replace(/\|/g, '_')) + '">'
+      + '<td style="font-weight:700;color:var(--az)">' + cpEsc(m.RC) + '</td>'
+      + '<td>' + cpEsc(m.SEQ) + '</td><td>' + cpEsc(m.OPORTUNIDADE) + '</td>'
+      + '<td>' + cpEsc(m.Item) + '</td>'
+      + '<td style="font-size:10.5px">' + cpEsc(m.Familia || '—') + '</td>'
+      + '<td style="font-size:10.5px">' + cpEsc(m['Fila ( esteira) '] || '—') + '</td>'
+      + '<td><select onchange="aagEscolherAnalista(\'' + cpEsc(k) + '\', this.value)" '
+      +   'style="font-size:11.5px;padding:3px 6px;border:1px solid var(--brd);border-radius:5px;width:100%">'
+      +   opcoes + '</select></td></tr>';
+  });
+  h += '</tbody></table></div>';
+  if (tot > 1) {
+    h += '<div style="display:flex;gap:8px;align-items:center;margin-top:.7rem;font-size:12px">'
+      + '<button class="btn btn-s" onclick="aagPagina(-1)">‹ Anterior</button>'
+      + '<span>página ' + (_aagSemAnalistaPag + 1) + ' de ' + tot + '</span>'
+      + '<button class="btn btn-s" onclick="aagPagina(1)">Próxima ›</button></div>';
+  }
+  h += '<div style="font-size:10.5px;color:var(--tx2);margin-top:.7rem">'
+    + 'Depois de escolher, clique de novo em <strong>Montar tudo</strong> para a escolha '
+    + 'entrar nas três saídas.</div></div>';
+  box.innerHTML = h;
+}
+
+// ── o passo a passo ───────────────────────────────────────────────
+function aagRenderPassos(){
+  var box = document.getElementById('aag-passos');
+  if (!box) return;
+  var tem = function(k){ return !!_aagArq[k]; };
+  var basicos = tem('backlog') && tem('patec') && tem('q18');
+  var completos = basicos && tem('level') && tem('mapa');
+  var passos = [
+    { n:1, t:'Suba os arquivos do dia',
+      d:'Backlog, PATEC finalizado e Q18 são o mínimo. Levelboard e mapa diário completam o Radar.',
+      ok: basicos, aviso: basicos && !completos ? 'falta o levelboard ou o mapa diário' : '' },
+    { n:2, t:'Clique em Montar tudo',
+      d:'O dash cruza tudo e calcula a regra do Analista Automático.',
+      ok: !!_aagBase },
+    { n:3, t:'Escolha o analista das RCs novas',
+      d:'Só aparecem as que ainda não têm ninguém. A escolha fica guardada.',
+      ok: !!_aagBase && !aagSemAnalista().length,
+      aviso: _aagBase && aagSemAnalista().length ? cpNum(aagSemAnalista().length) + ' sem analista' : '' },
+    { n:4, t:'Mande para as três telas',
+      d:'Radar Estratégico, Analista Completo e Upload Backlog (que alimenta o Tirar do Fluxo).',
+      ok: false }
+  ];
+  box.innerHTML = '<div style="display:grid;gap:8px">' + passos.map(function(p){
+    var cor = p.ok ? 'var(--vd)' : (p.aviso ? 'var(--am)' : 'var(--brd)');
+    var fundo = p.ok ? 'var(--vdc)' : (p.aviso ? 'var(--amc)' : 'var(--cin)');
+    return '<div style="display:flex;gap:11px;align-items:flex-start;border:1px solid ' + cor + ';'
+      + 'background:' + fundo + ';border-radius:9px;padding:9px 11px">'
+      + '<div style="width:24px;height:24px;border-radius:7px;background:' + (p.ok ? 'var(--vd)' : 'var(--az)')
+      +   ';color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center;flex:none">'
+      +   (p.ok ? '✓' : p.n) + '</div>'
+      + '<div style="min-width:0"><div style="font-size:12.5px;font-weight:700">' + cpEsc(p.t)
+      +   (p.aviso ? ' <span style="font-weight:600;color:var(--am)">· ' + cpEsc(p.aviso) + '</span>' : '')
+      +   '</div>'
+      + '<div style="font-size:11px;color:var(--tx2);margin-top:1px">' + p.d + '</div></div></div>';
+  }).join('') + '</div>';
+}
+
+// ── o Analista plataforma vira o Upload Backlog ───────────────────
+// As colunas saem na ordem que o Upload Backlog espera: ANALISTA, MAPA,
+// Fila, ANALISTA AUTOMATICO, RC... e o TIRAR DO FLUXO na coluna 31, que é
+// de onde a Planilha Crítica tira a aba Tirar do Fluxo.
+var AAG_CAB_BACKLOG = ['ANALISTA','MAPA','Fila ','ANALISTA AUTOMATICO ','RC','SEQ','OPORTUNIDADE',
+  'ITEM OP','CENTRO','STATUS_PATEC','Familia ','TIPO_FAMILIA','FATURAMENTO_MINIMO',
+  'VALOR_PEDIDOFINAL','VALOR_TOTAL_JULGAMENTO','ID_SAP_FORNECEDOR','POSICAO_FORNECEDOR','CNPJ',
+  'NOME_FORNECEDOR','Aprovado/ Reprovado ','Q18','NM_MATERIAL','TEXTO_BREVE_1','MATERIAL_IDENTICO',
+  'FABRICANTE  ( Fornecedor)','FABRICANTE - ( Petrobras)','PARTNUMBER ( Fornecedor)',
+  'PARTNUMBER ( Petrobras)','URGENCIA_NECESSIDADE','CLASSIFICACAO','TIRAR DO FLUXO'];
+
+function aagLinhasBacklog(){
+  if (!_aagBase || !_aagBase.plataforma) return [];
+  return _aagBase.plataforma.map(function(r){
+    return AAG_CAB_BACKLOG.map(function(k){
+      if (k === 'ANALISTA')       return r['Analista '] || '';
+      if (k === 'TIRAR DO FLUXO') return r['SITUACAO_ITEM'] || '';
+      return r[k] === undefined ? '' : r[k];
+    });
+  });
+}
+
+async function aagEnviarBacklog(){
+  var linhas = aagLinhasBacklog();
+  if (!linhas.length) return;
+  var st = document.getElementById('aag-status');
+  if (!confirm('Enviar ' + linhas.length + ' linhas para o Upload Backlog?\n\n'
+      + 'É o mesmo arquivo do Analista plataforma. Ele alimenta o Analista Pedido e '
+      + 'a aba Tirar do Fluxo da Planilha Crítica.')) return;
+  if (st) st.innerHTML = '⏳ Enviando para o Upload Backlog...';
+  try {
+    _bkDados = { headers: AAG_CAB_BACKLOG.slice(), rows: linhas,
+                 arquivo: 'Montado no dash — ' + cpDataBR(cpHojeISO()),
+                 dt: new Date().toISOString(),
+                 idxFluxo: AAG_CAB_BACKLOG.indexOf('TIRAR DO FLUXO') };
+    if (typeof aaVerificarDados === 'function') aaVerificarDados();
+    if (typeof aaProcessar === 'function') { try { aaProcessar(); } catch (e) {} }
+    await bkSalvarFirebase();
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Upload Backlog atualizado com '
+      + cpNum(linhas.length) + ' linhas · '
+      + cpNum(linhas.filter(function(l){ return /LIBERAR/i.test(l[AAG_CAB_BACKLOG.indexOf('TIRAR DO FLUXO')]); }).length)
+      + ' para tirar do fluxo.</span>';
+  } catch (e) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Não consegui enviar: ' + cpEsc(e.message) + '</span>';
+  }
+}
+
+// ── a tela do resultado ───────────────────────────────────────────
+function aagRender(){
+  aagRenderPassos();
+  aagRenderAnalistas();
+  var box = document.getElementById('aag-resumo');
+  var pre = document.getElementById('aag-previa');
+  if (!box || !pre) return;
+  if (!_aagBase) { box.innerHTML = ''; pre.innerHTML = ''; return; }
+  var b = _aagBase;
+  var naoAnalisar = Object.keys(b.por).filter(aagEhNaoAnalisar)
+    .reduce(function(n, k){ return n + b.por[k]; }, 0);
+  var card = function(rot, val, sub, cor, fundo){
+    return '<div style="background:' + (fundo || 'var(--cin)') + ';border:1.5px solid '
+      + (cor || 'var(--brd)') + ';border-radius:12px;padding:.9rem;text-align:center">'
+      + '<div style="font-size:25px;font-weight:800;color:' + (cor || 'var(--az)') + ';line-height:1.1">'
+      + val + '</div><div style="font-size:10px;font-weight:700;color:' + (cor || 'var(--tx2)')
+      + ';margin-top:4px;letter-spacing:.2px">' + cpEsc(rot) + '</div>'
+      + (sub ? '<div style="font-size:10px;color:var(--tx2);margin-top:3px">' + sub + '</div>' : '')
+      + '</div>';
+  };
+  var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between;flex-wrap:wrap;gap:8px">'
+    + '<span>📋 Base montada</span>'
+    + '<span style="display:flex;gap:8px;flex-wrap:wrap">'
+    +   '<button class="btn btn-p" onclick="aagEnviar()">➡ Analista Completo</button>'
+    +   '<button class="btn btn-p" onclick="aagEnviarRadar()">➡ Radar Estratégico ('
+    +     cpNum((b.modelo || []).length) + ')</button>'
+    +   '<button class="btn btn-p" onclick="aagEnviarBacklog()">➡ Upload Backlog</button>'
+    +   '<button class="btn btn-s" onclick="aagExportarPlataforma()">⬇ Analista plataforma</button>'
+    +   '<button class="btn btn-s" onclick="aagExportarModelo()">⬇ Modelo completo</button>'
+    + '</span></div>'
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(142px,1fr));gap:12px;margin-bottom:.9rem">'
+    + card('LINHAS', cpNum(b.linhas.length), 'uma por proposta')
+    + card('ITENS', cpNum(b.itens), 'RC + SEQ + oportunidade', 'var(--azm)', 'var(--azc)')
+    + card('NÃO ANALISAR', cpNum(naoAnalisar), 'barrados por alguma regra', 'var(--vm)', 'var(--vmc)')
+    + card('SEM APROVAÇÃO', cpNum(b.semPatec), 'faltou no PATEC finalizado', 'var(--am)', 'var(--amc)')
+    + card('NA Q18', cpNum(b.impedidos), 'fornecedor impedido', 'var(--am)', 'var(--amc)')
+    + card('LIBERAR ITEM', cpNum(b.liberar), 'nenhum fornecedor analisável', 'var(--vd)', 'var(--vdc)')
+    + '</div>';
+  if (b.aviso && b.aviso.length) {
+    h += '<div style="font-size:11px;color:var(--am);line-height:1.7;margin-bottom:.7rem">'
+      + b.aviso.map(function(a){ return '⚠ ' + cpEsc(a); }).join('<br>') + '</div>';
+  }
+  var chaves = Object.keys(b.por).sort(function(x, y){ return b.por[y] - b.por[x]; });
+  h += '<div style="overflow:auto;max-height:340px"><table><thead><tr>'
+    + '<th>Regra do Analista Automático</th><th style="text-align:right">Linhas</th>'
+    + '<th style="text-align:right">%</th></tr></thead><tbody>';
+  chaves.forEach(function(k){
+    var barrado = aagEhNaoAnalisar(k);
+    h += '<tr><td style="font-size:11px;color:' + (barrado ? 'var(--vm)' : 'var(--tx)') + '">'
+      + cpEsc(k) + '</td>'
+      + '<td style="text-align:right;font-weight:700">' + cpNum(b.por[k]) + '</td>'
+      + '<td style="text-align:right;color:var(--tx2)">'
+      + (b.por[k] * 100 / b.linhas.length).toFixed(1).replace('.', ',') + '%</td></tr>';
+  });
+  h += '</tbody></table></div></div>';
+  box.innerHTML = h;
+
+  var amostra = b.linhas.slice(0, 60);
+  var ph = '<div class="cd"><div class="cd-t">👀 Prévia — primeiras ' + amostra.length + ' linhas</div>'
+    + '<div style="overflow:auto;max-height:420px"><table><thead><tr>'
+    + AAG_CAB.map(function(k){ return '<th style="font-size:10px;white-space:nowrap">' + cpEsc(k.trim()) + '</th>'; }).join('')
+    + '</tr></thead><tbody>';
+  amostra.forEach(function(r){
+    ph += '<tr>' + AAG_CAB.map(function(k){
+      var v = r[k];
+      return '<td style="font-size:10px;white-space:nowrap;max-width:200px;overflow:hidden;'
+        + 'text-overflow:ellipsis">' + cpEsc(v === '' || v == null ? '—' : v) + '</td>';
+    }).join('') + '</tr>';
+  });
+  ph += '</tbody></table></div></div>';
+  pre.innerHTML = ph;
+}
+
+// ── entregar para o Analista Completo ─────────────────────────────
+async function aagEnviar(){
+  if (!_aagBase || !_aagBase.linhas.length) return;
+  var st = document.getElementById('aag-status');
+  if (!confirm('Enviar ' + _aagBase.linhas.length + ' linhas para o Analista Completo?\n\n'
+      + 'A base que está lá hoje é substituída.')) return;
+  _aaCompleto = { rows: _aagBase.linhas,
+                  arquivo: 'Montado no dash — ' + cpDataBR(cpHojeISO()),
+                  dt: new Date().toISOString() };
+  if (st) st.innerHTML = '⏳ Enviando para o Analista Completo...';
+  try {
+    await aaCompletoSalvar();
+    _aacDados = [];
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Base no Analista Completo. '
+      + 'Abra a aba <strong>Analista Completo</strong> para trabalhar nela.</span>';
+  } catch (e) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Não consegui enviar: ' + cpEsc(e.message) + '</span>';
+  }
+}
+
+function aagExportar(){
+  try {
+    if (!_aagBase || !_aagBase.linhas.length) return;
+    var aoa = [AAG_CAB];
+    _aagBase.linhas.forEach(function(r){
+      aoa.push(AAG_CAB.map(function(k){ return r[k]; }));
+    });
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = AAG_CAB.map(function(k){ return { wch: Math.max(10, Math.min(32, k.length + 6)) }; });
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Distribuicao');
+    XLSX.writeFile(wb, 'Base_AnalistaAutomatico_' + cpHojeISO().replace(/-/g, '') + '.xlsx');
+  } catch (e) { console.warn('aagExportar:', e); }
 }
 
 // ── Análise NM dentro do Analista Automático (mesma lógica/compute; superfície própria) ──
