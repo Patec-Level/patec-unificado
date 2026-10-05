@@ -4800,12 +4800,14 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:1.1rem">
             <button class="btn btn-p" onclick="aagProcessar()">⚙️ Montar tudo</button>
+            <button class="btn btn-s" onclick="aagConferir()">🔍 Conferir leitura</button>
             <button class="btn btn-s" onclick="aagExportar()">⬇ Analista Automático</button>
             <button class="btn btn-s" onclick="aagLimpar()">✕ Limpar arquivos</button>
             <div id="aag-status" style="font-size:12px;flex:1;min-width:200px"></div>
           </div>
         </div>
 
+        <div id="aag-conferencia"></div>
         <div id="aag-analistas"></div>
         <div id="aag-resumo"></div>
         <div id="aag-previa"></div>
@@ -32294,6 +32296,13 @@ async function aagCarregarGuardadas(){
 
 var _aagArq  = {};   // chave -> { nome, linhas:[[...]], cab:[], aviso }
 var _aagBase = null; // { linhas:[], por:{}, geradoEm, contagem }
+var _aagEscalas = null; // como cada coluna de dinheiro foi lida
+
+// O VALOR_TOTAL_JULGAMENTO da planilha dele está 100x maior do que o
+// arquivo cru (o Excel leu "30.90" como 3090 e a fórmula do ranking nunca
+// dividiu). Com 1 eu uso o valor certo; com 100 eu reproduzo a planilha.
+// Ele decide — e o número aparece na tela dos dois jeitos.
+var AAG_JULG_FATOR = 1;
 
 function aagAbrir(){
   aagPintarUploads();
@@ -32434,11 +32443,20 @@ async function aagUpload(chave, file){
 }
 
 // O cabeçalho costuma ser a 1a linha, mas o arquivo pode vir com título.
+// O cabeçalho é a primeira linha com pelo menos duas células com TEXTO.
+// Antes eu exigia três células preenchidas, e a aba PID — que tem só
+// DOCUMENTO e ITEM — caía na linha de baixo, lendo um dado como cabeçalho.
 function aagAchaCabecalho(linhas){
   for (var i = 0; i < Math.min(linhas.length, 12); i++) {
-    var c = (linhas[i] || []).map(cpNormCab);
-    var cheios = c.filter(function(x){ return x; }).length;
-    if (cheios >= 3) return i;
+    var l = linhas[i] || [], texto = 0, cheios = 0;
+    for (var j = 0; j < l.length; j++) {
+      var v = aagTxt(l[j]);
+      if (!v) continue;
+      cheios++;
+      if (!/^[-+]?[\d.,/ ]+$/.test(v)) texto++;   // número puro não é rótulo
+    }
+    if (texto >= 2) return i;
+    if (cheios >= 3 && texto >= 1) return i;
   }
   return 0;
 }
@@ -32464,11 +32482,72 @@ function aagCol(cab, nomes, ultima){
 }
 
 function aagTxt(v){ return String(v == null ? '' : v).trim(); }
+
+// Os arquivos dele vêm em três formatos de número, e eu já tinha errado um:
+//
+//   2738.63     extração crua (ponto é decimal)
+//   1.000,00    formato brasileiro (ponto é milhar, vírgula é decimal)
+//   2730453     a planilha dele, em centavos (inteiro)
+//
+// A regra que resolve os três: o separador DECIMAL é o último que aparece.
+// Um ponto sozinho com três casas depois (1.000) é milhar, como no Brasil.
 function aagNum(v){
-  var t = aagTxt(v).replace(/\./g, '').replace(',', '.');
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  var t = aagTxt(v);
   if (t === '') return 0;
+  t = t.replace(/\s/g, '').replace(/R\$/gi, '');
+  var neg = /^\(.*\)$/.test(t) || /^-/.test(t);
+  t = t.replace(/[()\-]/g, '');
+  var ult = Math.max(t.lastIndexOf(','), t.lastIndexOf('.'));
+  if (ult === -1) {
+    t = t.replace(/[^0-9]/g, '');
+  } else {
+    var dec = t.charAt(ult), casas = t.length - ult - 1;
+    var soUm = t.split(dec).length === 2;
+    // ponto único com 3 casas = milhar (1.000), não decimal
+    if (dec === '.' && soUm && casas === 3 && t.indexOf(',') === -1) {
+      t = t.replace(/[^0-9]/g, '');
+    } else {
+      t = t.slice(0, ult).replace(/[^0-9]/g, '') + '.' + t.slice(ult + 1).replace(/[^0-9]/g, '');
+    }
+  }
   var n = parseFloat(t);
-  return isFinite(n) ? n : 0;
+  if (!isFinite(n)) return 0;
+  return neg ? -n : n;
+}
+
+// Dinheiro em reais, com dois decimais — sem sobra de ponto flutuante.
+function aagReais(n){
+  if (n === '' || n == null) return '';
+  var v = typeof n === 'number' ? n : aagNum(n);
+  if (!isFinite(v)) return '';
+  return Math.round(v * 100) / 100;
+}
+
+// ── 2. reais ou centavos? ─────────────────────────────────────────
+// O VALOR_PEDIDOFINAL da planilha dele está em centavos (2730453) e por
+// isso a fórmula divide por 100. O arquivo cru traz o mesmo valor já em
+// reais (2738.63). Em vez de chutar, eu olho a coluna: se tiver casa
+// decimal em algum lugar, já está em reais.
+function aagEscalaColuna(linhas, i){
+  if (i === -1) return { div:1, formato:'(coluna ausente)' };
+  var vistos = 0, comDecimal = 0;
+  for (var n = 0; n < linhas.length && vistos < 3000; n++) {
+    var t = aagTxt((linhas[n] || [])[i]);
+    if (!t) continue;
+    vistos++;
+    var ult = Math.max(t.lastIndexOf(','), t.lastIndexOf('.'));
+    if (ult === -1) continue;
+    var casas = t.length - ult - 1;
+    var dec = t.charAt(ult);
+    if (casas >= 1 && casas <= 2) comDecimal++;
+    else if (dec === ',') comDecimal++;
+  }
+  if (!vistos) return { div:1, formato:'(coluna vazia)' };
+  var frac = comDecimal / vistos;
+  return frac >= 0.05
+    ? { div:1,   formato:'reais',    frac:frac, vistos:vistos }
+    : { div:100, formato:'centavos', frac:frac, vistos:vistos };
 }
 // O Excel compara texto sem ligar para maiúscula nem acento.
 function aagIgual(a, b){ return cpNormCab(a) === cpNormCab(b); }
@@ -32540,9 +32619,12 @@ function aagProcessar(){
         + 'OPORTUNIDADE, ITEM_OPORTUNIDADE e RESULTADO_PATEC.</span>';
       return;
     }
+    if (cForn === -1) aviso.push('PATEC finalizado: não achei NOME_FORNECEDOR. O Aprovado/Reprovado '
+      + 'é por FORNECEDOR, então sem essa coluna todos os fornecedores do item recebem o mesmo '
+      + 'resultado — e a classificação sai errada. Suba o arquivo com a coluna do fornecedor.');
     var statusPorItem = {}, resultadoPorForn = {};
     bp.linhas.forEach(function(l){
-      var k1 = aagTxt(l[cOp]) + aagTxt(l[cIop]);
+      var k1 = aagId(l[cOp]) + aagId(l[cIop]);
       if (k1 && statusPorItem[k1] === undefined) statusPorItem[k1] = cStat === -1 ? '' : aagTxt(l[cStat]);
       var k2 = k1 + (cForn === -1 ? '' : aagTxt(l[cForn]));
       if (k2 && resultadoPorForn[k2] === undefined) resultadoPorForn[k2] = aagTxt(l[cRes]);
@@ -32648,25 +32730,48 @@ function aagProcessar(){
       return;
     }
 
+    // ── tudo em moeda real ────────────────────────────────────────
+    // As três colunas de dinheiro passam pela mesma régua: se a coluna tem
+    // casa decimal, já está em reais; se é tudo inteiro, veio em centavos e
+    // eu divido por 100. Nenhum valor sai daqui em centavos.
+    var escPed = aagEscalaColuna(bk.linhas, c.vpf);
+    var escJul = aagEscalaColuna(bk.linhas, c.vtj);
+    var escFat = aagEscalaColuna(bk.linhas, c.fatMin);
+    _aagEscalas = { pedido:escPed, julgamento:escJul, faturamento:escFat,
+                    nomePed: c.vpf    === -1 ? '' : bk.cab[c.vpf],
+                    nomeJul: c.vtj    === -1 ? '' : bk.cab[c.vtj],
+                    nomeFat: c.fatMin === -1 ? '' : bk.cab[c.fatMin] };
+    [['pedido', escPed, _aagEscalas.nomePed],
+     ['julgamento', escJul, _aagEscalas.nomeJul],
+     ['faturamento mínimo', escFat, _aagEscalas.nomeFat]].forEach(function(x){
+      if (x[1].div === 100) aviso.push('Backlog: o ' + (x[2] || x[0])
+        + ' veio em centavos (nenhuma casa decimal na coluna), então dividi por 100 — '
+        + 'o dash trabalha tudo em reais.');
+    });
+
     var itens = [];
     bk.linhas.forEach(function(l){
-      var rc = aagTxt(l[c.rc]);
+      // Tiro o zero à esquerda: é a mesma RC que a planilha dele mostra
+      // sem zero, e é o que faz a chave bater com mapa, tratamento e level.
+      var rc = aagId(l[c.rc]);
       if (!rc) return;
-      var op = aagTxt(l[c.op]), iop = aagTxt(l[c.iop]);
+      var op = aagId(l[c.op]), iop = aagId(l[c.iop]);
       var forn = aagTxt(l[c.forn]);
       var idSap = aagTxt(l[c.idSap]);
       var kItem = op + iop;
-      // o VALOR_PEDIDOFINAL vem em centavos na extração
-      var vpf = c.vpf === -1 ? '' : aagNum(l[c.vpf]) / 100;
-      var chave = rc + '|' + aagTxt(l[c.seq]) + '|' + op + '|' + iop;
+      var vpf = c.vpf === -1 ? '' : aagReais(aagNum(l[c.vpf]) / escPed.div);
+      var vtj = c.vtj === -1 ? '' : aagReais(aagNum(l[c.vtj]) / escJul.div * AAG_JULG_FATOR);
+      var fat = c.fatMin === -1 ? '' : aagReais(aagNum(l[c.fatMin]) / escFat.div);
+      var seq = aagId(l[c.seq]);
+      var chave = rc + '|' + seq + '|' + op + '|' + iop;
       itens.push({
         chave: chave,
-        rc: rc, seq: aagTxt(l[c.seq]), op: op, iop: iop,
+        rc: rc, seq: seq, op: op, iop: iop,
         centro: c.centro === -1 ? '' : aagTxt(l[c.centro]),
         statusPatec: statusPorItem[kItem] || '',
-        fatMin: c.fatMin === -1 ? '' : aagTxt(l[c.fatMin]),
+        fatMin: fat,
         vlrPedido: vpf,
-        vlrTotal: c.vtj === -1 ? '' : aagTxt(l[c.vtj]),
+        vlrTotal: vtj,
         idSap: idSap,
         posicao: aagTxt(l[c.pos]),
         cnpj: c.cnpj === -1 ? '' : aagTxt(l[c.cnpj]),
@@ -32811,7 +32916,32 @@ function aagChavesDoArquivo(d){
     op:  aagCol(d.cab, ['NUMERO_OPORTUNIDADE','OPORTUNIDADE']),
     iop: aagCol(d.cab, ['ITEM_OPORTUNIDADE','ITEM OP','ITEM'])
   };
+  // As abas dele têm a chave já concatenada na coluna A (=C&D&E&F). Se o
+  // arquivo vier só com ela, eu uso ela — é o mesmo cruzamento.
+  i.pronta = aagCol(d.cab, ['CHAVE','RC+ITEM+OP+ITEM','RC+ITEM DA RC+OP+ITEM DA OP','C']);
+  if (i.pronta === -1 && i.rc === -1) {
+    // sem nome reconhecido: a primeira coluna só serve se for um número
+    // comprido, do tamanho de uma chave montada
+    var n = 0, bons = 0;
+    (d.linhas || []).forEach(function(l){
+      var v = aagTxt((l || [])[0]);
+      if (!v) return;
+      n++;
+      if (/^\d{12,}$/.test(v)) bons++;
+    });
+    if (n && bons / n >= 0.8) i.pronta = 0;
+  }
   return i;
+}
+
+// A chave pronta dele é a concatenação crua das células, sem separador.
+// Para bater com a minha eu tiro o zero à esquerda de cada parte.
+function aagSemZero(v){ return aagId(v); }
+function aagChaveColada(i){
+  return aagSemZero(i.rc) + aagSemZero(i.seq) + aagSemZero(i.op) + aagSemZero(i.iop);
+}
+function aagChaveProntaNorm(v){
+  return aagTxt(v).replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
 }
 // Na planilha dele existem duas chaves, em colunas diferentes, e cada
 // PROCV usa uma delas — não dá para misturar:
@@ -32827,18 +32957,24 @@ function aagChavesDoArquivo(d){
 // para outra oportunidade da mesma RC. Então aqui a forma é declarada e
 // não tem desempate.
 var AAG_CHAVE4 = 4, AAG_CHAVE2 = 2;
+var AAG_CHAVE_PRONTA = 9;
 function aagFormaPossivel(i){
+  if (i.rc === -1 || i.op === -1 || i.iop === -1) {
+    // sem as colunas separadas, a chave pronta ainda resolve a de 4
+    if (i.pronta !== undefined && i.pronta !== -1) return AAG_CHAVE_PRONTA;
+  }
   if (i.rc === -1) return 0;
   if (i.op === -1 || i.iop === -1) return i.seq === -1 ? 0 : AAG_CHAVE2;
   return AAG_CHAVE4;
 }
 function aagChaveDaLinha(l, i, forma){
-  var rc = i.rc === -1 ? '' : aagTxt(l[i.rc]);
+  if (forma === AAG_CHAVE_PRONTA) return aagChaveProntaNorm(l[i.pronta]);
+  var rc = i.rc === -1 ? '' : aagId(l[i.rc]);
   if (!rc) return '';
-  var seq = i.seq === -1 ? '' : aagTxt(l[i.seq]);
+  var seq = i.seq === -1 ? '' : aagId(l[i.seq]);
   if (forma === AAG_CHAVE2) return rc + '|' + seq;
-  var op  = i.op  === -1 ? '' : aagTxt(l[i.op]);
-  var iop = i.iop === -1 ? '' : aagTxt(l[i.iop]);
+  var op  = i.op  === -1 ? '' : aagId(l[i.op]);
+  var iop = i.iop === -1 ? '' : aagId(l[i.iop]);
   if (!op) return '';
   return rc + '|' + seq + '|' + op + '|' + iop;
 }
@@ -32852,13 +32988,16 @@ function aagIndiceOpcional(chaveArq, nomes, aviso, rotulo, forma){
   if (!d) return out;
   var i = aagChavesDoArquivo(d);
   var col = aagCol(d.cab, nomes);
-  if (i.rc === -1 || col === -1) {
-    aviso.push(rotulo + ': não achei ' + (i.rc === -1 ? 'a coluna RC' : nomes[0]) + ' — coluna ficou vazia.');
+  var temChave = i.rc !== -1 || (i.pronta !== undefined && i.pronta !== -1);
+  if (!temChave || col === -1) {
+    aviso.push(rotulo + ': não achei ' + (!temChave ? 'a coluna RC nem uma coluna de chave' : nomes[0])
+      + ' — coluna ficou vazia.');
     return out;
   }
   var pode = aagFormaPossivel(i);
   if (!pode) { aviso.push(rotulo + ': sem RC e SEQ eu não consigo montar a chave.'); return out; }
-  if (pode < out._forma) {
+  if (pode === AAG_CHAVE_PRONTA) { out._forma = pode; }
+  else if (pode < out._forma) {
     aviso.push(rotulo + ': a chave desse arquivo é RC + SEQ, não RC + SEQ + oportunidade + item. '
       + 'Cruzei pela chave curta — se a mesma RC tiver mais de uma oportunidade, o valor pode vir '
       + 'da oportunidade errada. Inclua OPORTUNIDADE e ITEM no arquivo.');
@@ -32879,7 +33018,10 @@ function aagIndiceOpcionalMulti(chaveArq, campos, aviso, rotulo, forma){
   var d = _aagArq[chaveArq];
   if (!d) return out;
   var i = aagChavesDoArquivo(d);
-  if (i.rc === -1) { aviso.push(rotulo + ': não achei a coluna RC — colunas ficaram vazias.'); return out; }
+  if (i.rc === -1 && (i.pronta === undefined || i.pronta === -1)) {
+    aviso.push(rotulo + ': não achei a coluna RC nem uma coluna de chave — colunas ficaram vazias.');
+    return out;
+  }
   var cols = {}, achou = false;
   Object.keys(campos).forEach(function(k){
     cols[k] = aagCol(d.cab, campos[k]);
@@ -32888,7 +33030,8 @@ function aagIndiceOpcionalMulti(chaveArq, campos, aviso, rotulo, forma){
   if (!achou) { aviso.push(rotulo + ': não achei fila, família nem tipo de família.'); return out; }
   var pode = aagFormaPossivel(i);
   if (!pode) { aviso.push(rotulo + ': sem RC e SEQ eu não consigo montar a chave.'); return out; }
-  if (pode < out._forma) {
+  if (pode === AAG_CHAVE_PRONTA) { out._forma = pode; }
+  else if (pode < out._forma) {
     aviso.push(rotulo + ': a chave desse arquivo é RC + SEQ, não RC + SEQ + oportunidade + item. '
       + 'Cruzei pela chave curta — se a mesma RC tiver mais de uma oportunidade, os dados podem vir '
       + 'da oportunidade errada. Inclua NUMERO_OPORTUNIDADE e ITEM_OPORTUNIDADE no arquivo.');
@@ -32906,7 +33049,9 @@ function aagIndiceOpcionalMulti(chaveArq, campos, aviso, rotulo, forma){
 // Um índice só aceita a chave da forma com que foi montado.
 function aagBusca(idx, i){
   if (!idx) return undefined;
-  return idx[idx._forma === AAG_CHAVE2 ? aagChave2(i) : aagChave4(i)];
+  if (idx._forma === AAG_CHAVE2)      return idx[aagChave2(i)];
+  if (idx._forma === AAG_CHAVE_PRONTA) return idx[aagChaveColada(i)];
+  return idx[aagChave4(i)];
 }
 
 
@@ -32928,6 +33073,17 @@ function aagDePara(chaveArq, nomesChave, offsetValor, aviso, rotulo){
 }
 
 // O código SAP vem ora como texto, ora como número (10236805 e 10236805.0).
+// A extração crua traz RC como "0036491758" e SEQ como "00010"; dentro da
+// planilha dele o Excel já converteu para número e virou 36491758 e 10. Os
+// dois são a mesma RC, então eu tiro o zero da frente dos dois lados antes
+// de qualquer cruzamento ou comparação.
+function aagId(v){
+  var t = aagTxt(v);
+  if (/^\d+$/.test(t)) return t.replace(/^0+(?=\d)/, '');
+  if (/^\d+\.0+$/.test(t)) return String(Math.round(parseFloat(t)));
+  return t;
+}
+
 function aagChaveSap(v){
   var t = aagTxt(v);
   if (/^\d+(\.0+)?$/.test(t)) t = String(Math.round(parseFloat(t)));
@@ -32976,7 +33132,7 @@ function aagDeParaPid(aviso){
   var iV  = aagCol(d.cab, ['PID']);
   if (iRc === -1 || iIt === -1) { aviso.push('PID: não achei DOCUMENTO e ITEM.'); return out; }
   d.linhas.forEach(function(l){
-    var k = aagTxt(l[iRc]) + '|' + aagTxt(l[iIt]);
+    var k = aagId(l[iRc]) + '|' + aagId(l[iIt]);
     var v = iV === -1 ? 'PID' : (aagTxt(l[iV]) || 'PID');
     if (out[k] === undefined) out[k] = v;
   });
@@ -33434,6 +33590,225 @@ async function aagEnviarBacklog(){
 }
 
 // ── a tela do resultado ───────────────────────────────────────────
+// ── Conferir leitura ──────────────────────────────────────────────
+// Para cada arquivo subido, mostra TODA coluna que o dash procura: se
+// achou, em que coluna caiu, o nome exato do cabeçalho dele, um exemplo de
+// valor e quantas linhas vêm preenchidas. É aqui que dá para bater
+// planilha por planilha sem adivinhar.
+var AAG_CONFERE = {
+  backlog: [
+    ['RC',                    ['RC'], true],
+    ['SEQ (item da RC)',      ['SEQ'], true],
+    ['NUMERO_OPORTUNIDADE',   ['NUMERO_OPORTUNIDADE'], true],
+    ['ITEM_OPORTUNIDADE',     ['ITEM_OPORTUNIDADE'], true],
+    ['CENTRO',                ['CENTRO']],
+    ['FATURAMENTO_MINIMO',    ['FATURAMENTO_MINIMO']],
+    ['VALOR_PEDIDOFINAL',     ['VALOR_PEDIDOFINAL','VALOR_PEDIDO_RELATORIO','VALOR_PEDIDO_FINAL'], true],
+    ['VALOR_TOTAL_JULGAMENTO',['VALOR_TOTAL_JULGAMENTO']],
+    ['ID_SAP_FORNECEDOR',     ['ID_SAP_FORNECEDOR'], true],
+    ['POSICAO_FORNECEDOR',    ['POSICAO_FORNECEDOR'], true],
+    ['CNPJ',                  ['CNPJ']],
+    ['NOME_FORNECEDOR',       ['NOME_FORNECEDOR'], true],
+    ['NM_MATERIAL',           ['NM_MATERIAL']],
+    ['TEXTO_BREVE_1',         ['TEXTO_BREVE_1','TEXTO_BREVE'], false, true],
+    ['MATERIAL_IDENTICO',     ['MATERIAL_IDENTICO']],
+    ['fabricante do fornecedor', ['FABRICANTE_PETRO'], true],
+    ['fabricante da Petrobras',  ['FABRICANTE'], true],
+    ['PN do fornecedor',      ['PARTNUMBER_PETRO'], true],
+    ['PN da Petrobras',       ['NUMERO_PECA_FABRICANTE'], true],
+    ['URGENCIA_NECESSIDADE',  ['URGENCIA_NECESSIDADE']],
+    ['GRUPO_MERCADORIAS',     ['GRUPO_MERCADORIAS']]
+  ],
+  patec: [
+    ['OPORTUNIDADE',      ['OPORTUNIDADE','NUMERO_OPORTUNIDADE'], true],
+    ['ITEM_OPORTUNIDADE', ['ITEM_OPORTUNIDADE','ITEM OP'], true],
+    ['STATUS_PATEC',      ['STATUS_PATEC']],
+    ['NOME_FORNECEDOR',   ['NOME_FORNECEDOR','FORNECEDOR'], true],
+    ['RESULTADO_PATEC',   ['RESULTADO_PATEC','RESULTADO'], true]
+  ],
+  q18: [
+    ['código (coluna A)', ['COD SAP AJUST','COD. SAP AJUST','COD_SAP_AJUST','COD. SAP','COD SAP','COD_SAP','CODIGO_SAP','ID_SAP_FORNECEDOR'], true],
+    ['razão social',      ['RAZÃO SOCIAL EMPRESA','RAZAO SOCIAL','RAZÃO SOCIAL','EMPRESA']],
+    ['justificativa',     ['JUSTIFICATIVA','SITUACAO','STATUS','MOTIVO'], true]
+  ],
+  level: [
+    ['RC',           ['RC'], true],
+    ['SEQ',          ['SEQ','ITEM_RC','LINHAREQUISICAO'], true],
+    ['oportunidade', ['NUMERO_OPORTUNIDADE','OPORTUNIDADE'], true],
+    ['item da op.',  ['ITEM_OPORTUNIDADE','ITEM OP','ITEM'], true],
+    ['fila (STATUS_DESC)', ['STATUS_DESC','STATUS DESC'], true],
+    ['FAMILIA',      ['FAMILIA','FAMÍLIA'], true],
+    ['SEGMENTO_FAMILIA',  ['SEGMENTO_FAMILIA']],
+    ['TIPO_FAMILIA',      ['TIPO_FAMILIA']],
+    ['CATEGORIA_FAMILIA', ['CATEGORIA_FAMILIA']],
+    ['CENTRO',            ['CENTRO']],
+    ['GRUPO_MERCADORIAS', ['GRUPO_MERCADORIAS']],
+    ['URGENCIA_NECESSIDADE', ['URGENCIA_NECESSIDADE']],
+    ['SLA_Dias',          ['SLA_DIAS','SLA DIAS']],
+    ['QTD_IDAS_LEVEL',    ['QTD_IDAS_LEVEL','QTD IDAS LEVEL']],
+    ['DATA_ENCERRAMENTO_OPORTUNIDADE', ['DATA_ENCERRAMENTO_OPORTUNIDADE'], true]
+  ],
+  trat: [
+    ['RC',           ['RC'], true],
+    ['SEQ',          ['SEQ','ITEM_RC','LINHAREQUISICAO'], true],
+    ['oportunidade', ['NUMERO_OPORTUNIDADE','OPORTUNIDADE'], true],
+    ['item da op.',  ['ITEM_OPORTUNIDADE','ITEM OP','ITEM'], true],
+    ['analista',     ['ANALISTA PATEC','ANALISTA','RESPONSAVEL','COMPRADOR'], true]
+  ],
+  mapa: [
+    ['RC',           ['RC'], true],
+    ['SEQ',          ['SEQ','ITEM_RC','LINHAREQUISICAO'], true],
+    ['oportunidade', ['NUMERO_OPORTUNIDADE','OPORTUNIDADE'], true],
+    ['item da op.',  ['ITEM_OPORTUNIDADE','ITEM OP','ITEM'], true],
+    ['STATUS MAPA',  ['ANALISTA_AUTOMATICO','STATUS MAPA','ANALISTA AUTOMATICO'], true]
+  ],
+  pid: [
+    ['DOCUMENTO (a RC)', ['DOCUMENTO','RC'], true],
+    ['ITEM (o SEQ)',     ['ITEM','SEQ'], true],
+    ['PID',              ['PID']]
+  ],
+  obrig: [
+    ['grupo de mercadorias', ['GRUPO DE MERCADORIAS','GRUPO_MERCADORIAS','CLASSE','CLASSE DE MERCADORIA','GRUPO'], true],
+    ['PATEC obrigatório',    ['PATEC OBRIGATORIO','OBRIGATORIO','PATEC']]
+  ]
+};
+
+function aagConferirArquivo(meta){
+  var d = _aagArq[meta.chave];
+  if (!d) return { subiu:false };
+  var linhas = d.linhas || [], cab = d.cab || [];
+  var itens = (AAG_CONFERE[meta.chave] || []).map(function(e){
+    var rot = e[0], nomes = e[1], critica = !!e[2], ultima = !!e[3];
+    var i = aagCol(cab, nomes, ultima);
+    if (i === -1) return { rot:rot, ok:false, critica:critica, procura:nomes };
+    var ex = '', cheios = 0, vistos = 0;
+    for (var n = 0; n < linhas.length; n++) {
+      var v = aagTxt((linhas[n] || [])[i]);
+      vistos++;
+      if (!v) continue;
+      cheios++;
+      if (!ex) ex = v;
+      if (cheios > 4000) break;
+    }
+    return { rot:rot, ok:true, critica:critica, col:i + 1, nome:cab[i] || '(sem nome)',
+             ex:ex, cheios:cheios, total:linhas.length,
+             pct: linhas.length ? Math.round(1000 * cheios / linhas.length) / 10 : 0 };
+  });
+  // a chave que esse arquivo consegue montar
+  var ch = aagChavesDoArquivo(d);
+  var forma = aagFormaPossivel(ch);
+  return { subiu:true, nome:d.nome, aba:d.aba, guardado:!!d.guardado,
+           nLinhas:linhas.length, nCols:cab.length, itens:itens, forma:forma,
+           cab:cab.slice(0, 80) };
+}
+
+function aagConferir(){
+  var box = document.getElementById('aag-conferencia');
+  if (!box) return;
+  if (box.getAttribute('data-aberto') === '1') {
+    box.innerHTML = ''; box.setAttribute('data-aberto', '0'); return;
+  }
+  box.setAttribute('data-aberto', '1');
+  var nomeForma = function(f){
+    if (f === AAG_CHAVE_PRONTA) return 'chave já concatenada na planilha';
+    if (f === AAG_CHAVE4) return 'RC + SEQ + oportunidade + item';
+    if (f === AAG_CHAVE2) return 'RC + SEQ';
+    return 'não consegui montar chave';
+  };
+  var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between;flex-wrap:wrap;gap:8px">'
+    + '<span>🔍 Conferir leitura — coluna por coluna</span>'
+    + '<span onclick="aagConferir()" style="font-size:11px;font-weight:600;color:var(--azm);'
+    + 'cursor:pointer;text-decoration:underline">fechar</span></div>'
+    + '<div style="font-size:11px;color:var(--tx2);line-height:1.7;margin-bottom:1rem">'
+    + 'Cada linha é uma coluna que eu procuro. <strong>✓</strong> achei e mostro em que coluna caiu, '
+    + 'com o nome que está no seu arquivo e um exemplo. <strong>✗</strong> não achei — aí os nomes que '
+    + 'eu procuro aparecem para você me dizer como a coluna se chama no seu arquivo. '
+    + 'A coluna <strong>preenchidas</strong> pega erro silencioso: se vier 0%, o nome bate mas o dado não vem.'
+    + '</div>';
+
+  AAG_ARQUIVOS.forEach(function(meta){
+    var r = aagConferirArquivo(meta);
+    h += '<div style="border:1px solid var(--brd);border-radius:10px;margin-bottom:12px;overflow:hidden">'
+      + '<div style="background:var(--cin);padding:.6rem .8rem;display:flex;justify-content:space-between;'
+      + 'flex-wrap:wrap;gap:6px;align-items:center">'
+      + '<span style="font-size:12.5px;font-weight:700">' + meta.ico + ' ' + cpEsc(meta.nome) + '</span>';
+    if (!r.subiu) {
+      h += '<span style="font-size:11px;color:var(--tx2)">não subiu'
+        + (meta.preciso ? ' <strong style="color:var(--vm)">(obrigatório)</strong>' : '') + '</span>'
+        + '</div></div>';
+      return;
+    }
+    var faltamCriticas = r.itens.filter(function(i){ return !i.ok && i.critica; }).length;
+    var faltam = r.itens.filter(function(i){ return !i.ok; }).length;
+    var vazias = r.itens.filter(function(i){ return i.ok && i.cheios === 0; }).length;
+    h += '<span style="font-size:10.5px;color:var(--tx2)">' + cpEsc(r.nome)
+      + (r.aba ? ' · aba <strong>' + cpEsc(r.aba) + '</strong>' : '')
+      + ' · ' + cpNum(r.nLinhas) + ' linhas · ' + r.nCols + ' colunas'
+      + (r.guardado ? ' · guardado' : '') + '</span></div>';
+    h += '<div style="padding:.5rem .8rem;font-size:10.5px;color:var(--tx2);'
+      + 'border-bottom:1px solid var(--brd)">🔑 cruza por: <strong>' + nomeForma(r.forma) + '</strong>'
+      + (faltamCriticas ? ' · <strong style="color:var(--vm)">' + faltamCriticas
+          + ' coluna(s) essencial(is) faltando</strong>' : '')
+      + (faltam - faltamCriticas ? ' · ' + (faltam - faltamCriticas) + ' opcional(is) faltando' : '')
+      + (vazias ? ' · <strong style="color:var(--am)">' + vazias + ' achada(s) mas vazia(s)</strong>' : '')
+      + '</div>';
+    h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:10.5px">'
+      + '<thead><tr style="background:var(--cin)">'
+      + ['o que procuro','','col','nome no seu arquivo','exemplo','preenchidas'].map(function(c, n){
+          return '<th style="text-align:' + (n >= 2 && n !== 3 && n !== 4 ? 'center' : 'left')
+            + ';padding:4px 7px;font-weight:700;white-space:nowrap">' + c + '</th>'; }).join('')
+      + '</tr></thead><tbody>';
+    r.itens.forEach(function(i){
+      var cor = !i.ok ? (i.critica ? 'var(--vm)' : 'var(--am)')
+              : (i.cheios === 0 ? 'var(--am)' : 'var(--vd)');
+      h += '<tr style="border-top:1px solid var(--brd)">'
+        + '<td style="padding:4px 7px">' + cpEsc(i.rot)
+        +   (i.critica ? ' <span style="color:var(--tx2)">·essencial</span>' : '') + '</td>'
+        + '<td style="padding:4px 7px;text-align:center;color:' + cor + ';font-weight:800">'
+        +   (i.ok ? '✓' : '✗') + '</td>';
+      if (!i.ok) {
+        h += '<td colspan="4" style="padding:4px 7px;color:var(--tx2)">procuro por: '
+          + i.procura.map(function(x){ return '<code>' + cpEsc(x) + '</code>'; }).join(', ') + '</td>';
+      } else {
+        h += '<td style="padding:4px 7px;text-align:center">' + i.col + '</td>'
+          + '<td style="padding:4px 7px"><strong>' + cpEsc(i.nome) + '</strong></td>'
+          + '<td style="padding:4px 7px;color:var(--tx2);max-width:210px;overflow:hidden;'
+          +   'text-overflow:ellipsis;white-space:nowrap">' + cpEsc(i.ex || '—') + '</td>'
+          + '<td style="padding:4px 7px;text-align:center;color:'
+          +   (i.cheios === 0 ? 'var(--am)' : 'var(--tx2)') + '">'
+          +   (i.cheios === 0 ? '<strong>0%</strong>' : i.pct + '%') + '</td>';
+      }
+      h += '</tr>';
+    });
+    h += '</tbody></table></div></div>';
+  });
+
+  // ── como os valores de dinheiro foram lidos ──
+  if (_aagEscalas) {
+    var e = _aagEscalas;
+    var linha = function(rot, nome, esc){
+      return '<div style="padding:3px 0">' + rot + ' — coluna <strong>' + cpEsc(nome || '(ausente)')
+        + '</strong>: lida como <strong>' + esc.formato + '</strong>'
+        + (esc.div === 100 ? ' (divido por 100)' : ' (uso como está)') + '</div>';
+    };
+    h += '<div style="border:1px solid var(--brd);border-radius:10px;padding:.7rem .85rem;'
+      + 'font-size:11px;color:var(--tx2);line-height:1.6">'
+      + '<div style="font-weight:700;color:var(--tx);margin-bottom:5px">💰 Como li os valores</div>'
+      + linha('Valor do pedido', e.nomePed, e.pedido)
+      + linha('Valor total do julgamento', e.nomeJul, e.julgamento)
+      + linha('Faturamento mínimo', e.nomeFat, e.faturamento || { formato:'(ausente)', div:1 })
+      + '<div style="padding-top:5px">As três saem daqui em <strong>reais</strong>. '
+      +   'Fator aplicado ao julgamento: <strong>' + AAG_JULG_FATOR + 'x</strong>'
+      +   (AAG_JULG_FATOR === 100
+            ? ' — reproduzindo a sua planilha, que ficou 100x maior.'
+            : ' — o valor certo do arquivo.') + '</div>'
+      + '</div>';
+  }
+  h += '</div>';
+  box.innerHTML = h;
+  box.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
 function aagRender(){
   aagRenderPassos();
   aagRenderAnalistas();
