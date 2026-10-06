@@ -32260,7 +32260,8 @@ var AAG_ARQUIVOS = [
   { chave:'trat',    nome:'RC em tratamento',  sub:'quem trata cada RC · acumula',           ico:'👤', preciso:false, guarda:true, soma:true, chave4:true },
   { chave:'mapa',    nome:'Mapa diário',       sub:'o STATUS MAPA de cada item',             ico:'🗺️', preciso:false, chave4:true },
   { chave:'pid',     nome:'PID',               sub:'as RCs novas entram na lista',           ico:'📌', preciso:false, guarda:true, soma:true, chave2:true },
-  { chave:'obrig',   nome:'PATEC obrigatório', sub:'classes de mercadoria · fica guardado',  ico:'📋', preciso:false, guarda:true }
+  { chave:'obrig',   nome:'PATEC obrigatório', sub:'classes de mercadoria · fica guardado',  ico:'📋', preciso:false, guarda:true },
+  { chave:'catfam',  nome:'Categoria família', sub:'família → categoria · fica guardado',     ico:'🏷️', preciso:false, guarda:true }
 ];
 
 // As três tabelinhas de apoio quase não mudam, então ficam no Firebase:
@@ -32369,7 +32370,8 @@ var AAG_MODELOS = {
     'ITEM_OPORTUNIDADE'] },
   pid:     { aba:'PID', cab:['DOCUMENTO','ITEM','PID'] },
   obrig:   { aba:'PATEC obrigatorio', cab:['Grupo de Mercadorias','Patec Obrigatorio',
-    'Denominação do Grupo de mercadoria'] }
+    'Denominação do Grupo de mercadoria'] },
+  catfam:  { aba:'Familia', cab:['FAMILIA','DESC_NIVEL 1'] }
 };
 
 function aagBaixarModelo(ev, chave){
@@ -32622,12 +32624,20 @@ function aagProcessar(){
     if (cForn === -1) aviso.push('PATEC finalizado: não achei NOME_FORNECEDOR. O Aprovado/Reprovado '
       + 'é por FORNECEDOR, então sem essa coluna todos os fornecedores do item recebem o mesmo '
       + 'resultado — e a classificação sai errada. Suba o arquivo com a coluna do fornecedor.');
+    // ── as duas chaves do PATEC finalizado ────────────────────────
+    // Na planilha dele a aba Base PATEC tem duas colunas de apoio:
+    //   B = OPORTUNIDADE & ITEM_OPORTUNIDADE                  -> STATUS_PATEC
+    //   C = OPORTUNIDADE & ITEM_OPORTUNIDADE & NOME_FORNECEDOR -> RESULTADO_PATEC
+    // O nome do fornecedor entra normalizado (sem acento, sem pontuação),
+    // porque o backlog às vezes escreve "LTDA." e a Base PATEC "LTDA".
+    // Conferido na base dele: normalizar junta 5 chaves e nenhuma delas tem
+    // resultado diferente, então não há risco de misturar fornecedor.
     var statusPorItem = {}, resultadoPorForn = {};
     bp.linhas.forEach(function(l){
       var k1 = aagId(l[cOp]) + aagId(l[cIop]);
       if (k1 && statusPorItem[k1] === undefined) statusPorItem[k1] = cStat === -1 ? '' : aagTxt(l[cStat]);
-      var k2 = k1 + (cForn === -1 ? '' : aagTxt(l[cForn]));
-      if (k2 && resultadoPorForn[k2] === undefined) resultadoPorForn[k2] = aagTxt(l[cRes]);
+      var k2 = k1 + '|' + (cForn === -1 ? '' : cpNormCab(l[cForn]));
+      if (k1 && resultadoPorForn[k2] === undefined) resultadoPorForn[k2] = aagTxt(l[cRes]);
     });
 
     // ── índice da Q18 ──
@@ -32681,6 +32691,11 @@ function aagProcessar(){
     // família -> categoria, RC+SEQ -> PID.
     var obrigPor  = aagListaObrigatorio(aviso);
     var pidPor    = aagDeParaPid(aviso);
+    var catPor    = aagDeParaCategoria(aviso);
+    if (!_aagArq.catfam) aviso.push('Sem a planilha de Categoria família eu usei a coluna '
+      + 'CATEGORIA_FAMILIA do levelboard, que não é a mesma coisa: ela traz "M-70 - SUPRIMENTO '
+      + 'PARA REGISTRO LOCAL" em vez de "ELÉTRICA E INSTRUMENTAÇÃO". Suba a planilha de '
+      + 'categoria (família → DESC_NIVEL 1) para a coluna sair certa.');
     if (!_aagArq.mapa) aviso.push('Sem o mapa diário eu não sei o STATUS MAPA de cada item, '
       + 'então não filtrei nem a Governança nem o Analista Automático por status. '
       + 'Suba o mapa diário para as duas regras valerem.');
@@ -32776,7 +32791,7 @@ function aagProcessar(){
         posicao: aagTxt(l[c.pos]),
         cnpj: c.cnpj === -1 ? '' : aagTxt(l[c.cnpj]),
         forn: forn,
-        aprovado: resultadoPorForn[kItem + forn] || '',
+        aprovado: resultadoPorForn[kItem + '|' + cpNormCab(forn)] || '',
         q18: q18[aagChaveSap(idSap)] || '',
         q18motivo: q18motivo[aagChaveSap(idSap)] || '',
         nm: c.nm === -1 ? '' : aagTxt(l[c.nm]),
@@ -32872,17 +32887,50 @@ function aagProcessar(){
     });
     linhas = linhasAA;
 
-    // ── o Modelo completo: uma linha por ITEM, não por proposta ──
+    // ── o Modelo: sai do MAPA DIÁRIO ──────────────────────────────
+    // O primeiro cruzamento dele é pegar o que está na aba "itens mapa
+    // diario" e levar para a aba modelo — o backlog é semanal e serve ao
+    // Analista Automático. Uma linha por chave RC+SEQ+oportunidade+item.
     // Só os quatro status que a Governança enxerga.
-    var gruposGov = {}, foraGov = {};
-    Object.keys(grupos).forEach(function(k){
-      var i = grupos[k][0];
-      if (aagEntraGovernanca(i._mapa)) gruposGov[k] = grupos[k];
-      else foraGov[i._mapa || '(sem status no mapa diário)'] =
-             (foraGov[i._mapa || '(sem status no mapa diário)'] || 0) + 1;
-    });
-    var modelo = aagMontarModelo(gruposGov, levelPor, analistaPor, mapaPor,
-                                 obrigPor, pidPor);
+    var doMapa = aagItensDoMapa(aviso);
+    var itensMod = [], foraGov = {}, modeloDe, soDoMapa = 0;
+    var contaFora = function(st){
+      var r = st || '(sem status no mapa diário)';
+      foraGov[r] = (foraGov[r] || 0) + 1;
+    };
+    // O Modelo leva TODOS os itens do mapa, com todos os status — é
+    // exatamente o que a Nova base dele tem (conferido: 2.461 linhas do
+    // mapa = 2.461 linhas da Nova base, mesmas chaves, 13 status).
+    // A regra dos quatro status não é peneira de arquivo: é o que entra na
+    // FILA DE TRABALHO da Governança (a distribuição de analista). Os
+    // outros status alimentam os cards — Abrir PATEC idêntico não, Grupo de
+    // Mercadoria Obrigatório, Negociar, Emitir Pedido, DPV. Filtrar aqui
+    // esvaziaria esses cards.
+    var naFila = 0;
+    if (doMapa) {
+      modeloDe = 'mapa diário';
+      doMapa.forEach(function(i){
+        if (aagEntraGovernanca(i.mapa)) naFila++; else contaFora(i.mapa);
+        // se o item também está no backlog, aproveito centro e grupo de
+        // mercadoria dele como reserva de quando o levelboard não trouxer
+        var b = (grupos[i.chave] || [])[0];
+        if (b) { i.centro = b.centro; i.grupoMerc = b.grupoMerc; }
+        else soDoMapa++;
+        itensMod.push(i);
+      });
+    } else {
+      // O mapa veio só com a chave pronta: monto do backlog, que dá o mesmo
+      // conjunto para os itens que estão nos dois.
+      modeloDe = 'backlog';
+      Object.keys(grupos).forEach(function(k){
+        var i = grupos[k][0];
+        i.mapa = i._mapa;
+        if (aagEntraGovernanca(i.mapa)) naFila++; else contaFora(i.mapa);
+        itensMod.push(i);
+      });
+    }
+    var modelo = aagMontarModelo(itensMod, levelPor, analistaPor, mapaPor,
+                                 obrigPor, pidPor, catPor);
 
     var por = {};
     dentroAA.forEach(function(i){ por[i.aa] = (por[i.aa] || 0) + 1; });
@@ -32894,6 +32942,9 @@ function aagProcessar(){
                  itensBase: Object.keys(grupos).length,
                  propostas: itens.length,
                  foraFila: foraFila, foraStatus: foraStatus, foraGov: foraGov,
+                 modeloDe: modeloDe, itensMapa: doMapa ? doMapa.length : 0,
+                 naFila: naFila,
+                 soDoMapa: soDoMapa,
                  semPatec: dentroAA.filter(function(i){ return aagTxt(i.aprovado) === ''; }).length,
                  impedidos: dentroAA.filter(function(i){ return aagIgual(i.q18, 'Impedido'); }).length,
                  liberar: Object.keys(itensAA).filter(function(k){ return situacao[k] === 'LIBERAR ITEM'; }).length,
@@ -33139,6 +33190,37 @@ function aagDeParaPid(aviso){
   return out;
 }
 
+// ── família → categoria ───────────────────────────────────────────
+// Na planilha dele a coluna X é =PROCV(Q; Familia!A:B; 2; 0), onde Q é a
+// FAMILIA que vem do levelboard (um código, tipo 98011516) e a aba Familia
+// tem FAMILIA na coluna A e DESC_NIVEL 1 na B — "ELÉTRICA E INSTRUMENTAÇÃO",
+// "CALDEIRARIA" e por aí. Isso NÃO é a coluna CATEGORIA_FAMILIA do
+// levelboard, que traz outra coisa ("M-70 - SUPRIMENTO PARA REGISTRO LOCAL").
+function aagChaveFamilia(v){
+  var t = aagTxt(v);
+  if (/^\d+(\.0+)?$/.test(t)) return String(Math.round(parseFloat(t)));
+  return cpNormCab(t);
+}
+function aagDeParaCategoria(aviso){
+  var out = {};
+  var d = _aagArq.catfam;
+  if (!d) return out;
+  var iF = aagCol(d.cab, ['FAMILIA','FAMÍLIA','COD_FAMILIA','CODIGO_FAMILIA']);
+  var iC = aagCol(d.cab, ['DESC_NIVEL 1','DESC_NIVEL1','DESC NIVEL 1','CATEGORIA',
+                          'CATEGORIA FAMILIA','CATEGORIA_FAMILIA','DESCRICAO']);
+  if (iF === -1) iF = 0;
+  if (iC === -1) iC = iF + 1;
+  d.linhas.forEach(function(l){
+    var k = aagChaveFamilia(l[iF]);
+    var v = aagTxt(l[iC]);
+    if (!k || !v || v === '0') return;
+    if (out[k] === undefined) out[k] = v;
+  });
+  if (!Object.keys(out).length) aviso.push('Categoria família: não achei nenhum par '
+    + 'família → categoria. A planilha precisa ter FAMILIA numa coluna e a categoria na outra.');
+  return out;
+}
+
 // ── datas e prazos do Modelo completo ─────────────────────────────
 // O levelboard traz a data como número de série do Excel ou como texto.
 function aagDataISO(v){
@@ -33172,10 +33254,44 @@ function aagValidade(dias){
 // ── o Modelo completo, que alimenta o Radar Estratégico ───────────
 // Uma linha por ITEM (RC + SEQ + oportunidade + item), não por proposta:
 // é assim que o Radar lê.
-function aagMontarModelo(grupos, levelPor, analistaPor, mapaPor, obrigPor, pidPor){
+// ── a aba modelo sai do MAPA DIÁRIO ──────────────────────────────
+// O primeiro cruzamento dele é: pegar o que está na aba "itens mapa diario"
+// e levar para a aba modelo. Só esses itens vão para a Governança — o
+// backlog é semanal e serve ao Analista Automático, não a esta aba.
+// Uma linha por chave RC+SEQ+oportunidade+item, como na Governança.
+function aagItensDoMapa(aviso){
+  var d = _aagArq.mapa;
+  if (!d) return null;
+  var i = aagChavesDoArquivo(d);
+  if (i.rc === -1 || i.op === -1 || i.iop === -1) {
+    if (aviso) aviso.push('Mapa diário: esse arquivo não traz RC, SEQ, oportunidade e item em '
+      + 'colunas separadas, só a chave pronta. Sem elas eu não consigo montar o Modelo a partir '
+      + 'do mapa, então montei do backlog e filtrei pelo status do mapa — o resultado é o mesmo '
+      + 'para os itens que estão nos dois.');
+    return null;
+  }
+  var col = aagCol(d.cab, ['ANALISTA_AUTOMATICO','STATUS MAPA','ANALISTA AUTOMATICO']);
+  var out = [], visto = {};
+  d.linhas.forEach(function(l){
+    var rc = aagId(l[i.rc]);
+    if (!rc) return;
+    var op = aagId(l[i.op]);
+    if (!op) return;
+    var it = { rc:rc, seq: i.seq === -1 ? '' : aagId(l[i.seq]),
+               op:op, iop: aagId(l[i.iop]) };
+    it.chave = aagChave4(it);
+    if (visto[it.chave]) return;
+    visto[it.chave] = 1;
+    it.mapa = col === -1 ? '' : aagTxt(l[col]);
+    out.push(it);
+  });
+  return out;
+}
+
+function aagMontarModelo(itensMod, levelPor, analistaPor, mapaPor, obrigPor, pidPor, catPor){
   var out = [];
-  Object.keys(grupos).forEach(function(k){
-    var i = grupos[k][0];
+  (itensMod || []).forEach(function(i){
+    var k = i.chave;
     var lv = aagBusca(levelPor, i) || {};
     var quem = aagBusca(analistaPor, i) || _aagEscolhas[k] || '';
     var encerra = aagDataISO(lv.encerra);
@@ -33189,7 +33305,7 @@ function aagMontarModelo(grupos, levelPor, analistaPor, mapaPor, obrigPor, pidPo
       'Fechamento': encerra ? cpDataBR(encerra) : '',
       'hoje': cpDataBR(cpHojeISO()),
       'PRAZO ': prazo === '' ? '' : prazo,
-      'STATUS MAPA ': aagBusca(mapaPor, i) || '',
+      'STATUS MAPA ': (i.mapa !== undefined ? i.mapa : aagBusca(mapaPor, i)) || '',
       'Analista PATEC': quem,
       'Fila ( esteira) ': lv.fila || '',
       'IDAS AO MERCADO': lv.idas || '',
@@ -33204,7 +33320,10 @@ function aagMontarModelo(grupos, levelPor, analistaPor, mapaPor, obrigPor, pidPo
       'URGENCIA': aagUrgencia(lv.urgNum),
       'GRUPO_MERCADORIAS': grupoMerc,
       'Patec Obrigatorio ': obrigPor[aagChaveGrupo(grupoMerc)] ? 'Sim' : 'não',
-      'CATEGORIA FAMILIA': lv.categoria || '',
+      // Coluna X dele: =PROCV(FAMILIA; Familia!A:B; 2; 0). Sem a planilha de
+      // categoria eu caio na coluna do levelboard, que é outra coisa — e o
+      // aviso na tela diz isso.
+      'CATEGORIA FAMILIA': (catPor && catPor[aagChaveFamilia(familia)]) || lv.categoria || '',
       // Coluna Y do Modelo: =PROCV(B;PID!A1:D199999;4;0) — chave de 2 (RC+SEQ).
       'PID': pidPor[aagChave2(i)] || ''
     });
@@ -33670,6 +33789,11 @@ var AAG_CONFERE = {
   obrig: [
     ['grupo de mercadorias', ['GRUPO DE MERCADORIAS','GRUPO_MERCADORIAS','CLASSE','CLASSE DE MERCADORIA','GRUPO'], true],
     ['PATEC obrigatório',    ['PATEC OBRIGATORIO','OBRIGATORIO','PATEC']]
+  ],
+  catfam: [
+    ['FAMILIA (o código)',   ['FAMILIA','FAMÍLIA','COD_FAMILIA','CODIGO_FAMILIA'], true],
+    ['categoria (DESC_NIVEL 1)', ['DESC_NIVEL 1','DESC_NIVEL1','DESC NIVEL 1','CATEGORIA',
+                                  'CATEGORIA FAMILIA','CATEGORIA_FAMILIA','DESCRICAO'], true]
   ]
 };
 
@@ -33865,9 +33989,18 @@ function aagRender(){
     + (somaDe(b.foraFila) ? '<div style="padding-left:12px">fora por fila: '
         + listaDe(b.foraFila) + '</div>' : '')
     + '<div>→ <strong>' + cpNum((b.modelo || []).length) + '</strong> itens na '
-    +   '<strong>Governança</strong> — os quatro status do PATEC.</div>'
-    + (somaDe(b.foraGov) ? '<div style="padding-left:12px">fora da Governança: '
+    +   '<strong>Governança</strong>, montados a partir do '
+    +   '<strong>' + cpEsc(b.modeloDe || 'backlog') + '</strong>'
+    +   (b.itensMapa ? ' (' + cpNum(b.itensMapa) + ' itens no mapa)' : '') + '.</div>'
+    + '<div style="padding-left:12px">desses, <strong>' + cpNum(b.naFila || 0)
+    +   '</strong> nos quatro status da fila de PATEC; os outros '
+    +   cpNum(Math.max(0, (b.modelo || []).length - (b.naFila || 0)))
+    +   ' alimentam os cards (Abrir PATEC, Negociar, Emitir Pedido, DPV).</div>'
+    + (somaDe(b.foraGov) ? '<div style="padding-left:12px">por status fora da fila: '
         + listaDe(b.foraGov) + '</div>' : '')
+    + (b.soDoMapa ? '<div style="padding-left:12px">desses, <strong>' + cpNum(b.soDoMapa)
+        + '</strong> está(ão) no mapa e ainda não no backlog da semana — entram do mesmo '
+        + 'jeito, porque a aba Modelo nasce do mapa.</div>' : '')
     + '</div>';
   if (b.aviso && b.aviso.length) {
     h += '<div style="font-size:11px;color:var(--am);line-height:1.7;margin-bottom:.7rem">'
