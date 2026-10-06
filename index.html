@@ -4807,6 +4807,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           </div>
         </div>
 
+        <div id="aag-panorama"></div>
         <div id="aag-conferencia"></div>
         <div id="aag-analistas"></div>
         <div id="aag-resumo"></div>
@@ -32253,29 +32254,45 @@ var AAG_CAB = ['Analista ','Fila ','ANALISTA AUTOMATICO ','RC','SEQ','OPORTUNIDA
   'PARTNUMBER ( Petrobras)','URGENCIA_NECESSIDADE','CLASSIFICACAO','SITUACAO_ITEM'];
 
 var AAG_ARQUIVOS = [
-  { chave:'backlog', nome:'Backlog',           sub:'semanal · a base de tudo',               ico:'📘', preciso:true },
-  { chave:'patec',   nome:'PATEC finalizado',  sub:'diário · aprovação por fornecedor',      ico:'✅', preciso:true },
-  { chave:'q18',     nome:'Q18',               sub:'fornecedores impedidos',                 ico:'🚫', preciso:true },
-  { chave:'level',   nome:'Levelboard',        sub:'fila, família, SLA, centro e datas',     ico:'📊', preciso:false, chave4:true },
-  { chave:'trat',    nome:'RC em tratamento',  sub:'quem trata cada RC · acumula',           ico:'👤', preciso:false, guarda:true, soma:true, chave4:true },
-  { chave:'mapa',    nome:'Mapa diário',       sub:'o STATUS MAPA de cada item',             ico:'🗺️', preciso:false, chave4:true },
-  { chave:'pid',     nome:'PID',               sub:'as RCs novas entram na lista',           ico:'📌', preciso:false, guarda:true, soma:true, chave2:true },
-  { chave:'obrig',   nome:'PATEC obrigatório', sub:'classes de mercadoria · fica guardado',  ico:'📋', preciso:false, guarda:true },
-  { chave:'catfam',  nome:'Categoria família', sub:'família → categoria · fica guardado',     ico:'🏷️', preciso:false, guarda:true }
+  { chave:'backlog', nome:'Backlog',           sub:'a base de tudo',                 ico:'📘', preciso:true,  guarda:true, quando:'1x por semana' },
+  { chave:'patec',   nome:'PATEC finalizado',  sub:'aprovação por fornecedor',       ico:'✅', preciso:true,  quando:'todo dia' },
+  { chave:'q18',     nome:'Q18',               sub:'fornecedores impedidos',         ico:'🚫', preciso:true,  guarda:true, quando:'1x por semana' },
+  { chave:'level',   nome:'Levelboard',        sub:'fila, família, SLA e datas',     ico:'📊', preciso:false, quando:'todo dia', chave4:true },
+  { chave:'mapa',    nome:'Mapa diário',       sub:'o STATUS MAPA de cada item',     ico:'🗺️', preciso:false, quando:'todo dia', chave4:true },
+  { chave:'trat',    nome:'RC em tratamento',  sub:'quem trata cada RC · acumula',   ico:'👤', preciso:false, guarda:true, soma:true, chave4:true, quando:'quando entram RCs novas' },
+  { chave:'pid',     nome:'PID',               sub:'as RCs novas entram na lista',   ico:'📌', preciso:false, guarda:true, soma:true, chave2:true, quando:'quando entram itens novos' },
+  { chave:'obrig',   nome:'PATEC obrigatório', sub:'classes de mercadoria',          ico:'📋', preciso:false, guarda:true, quando:'raramente muda' },
+  { chave:'catfam',  nome:'Categoria família', sub:'família → categoria',            ico:'🏷️', preciso:false, guarda:true, quando:'raramente muda' }
 ];
 
 // As três tabelinhas de apoio quase não mudam, então ficam no Firebase:
 // sobe uma vez e o dash lembra nos dias seguintes.
 var AAG_GUARDADAS = AAG_ARQUIVOS.filter(function(a){ return a.guarda; }).map(function(a){ return a.chave; });
 
+// Um documento do Firestore cabe 1 MB. As tabelinhas de apoio cabem
+// inteiras; o backlog tem 15 mil linhas e 44 colunas e não cabe — esse vai
+// em blocos, com um documento de índice dizendo quantos são.
+var AAG_BLOCO = 700;
+
 async function aagGuardar(chave){
   try {
     var d = _aagArq[chave]; if (!d) return;
     var db = getDB(); if (!db) return;
-    await db.collection('config').doc('aag_' + chave).set({
-      nome:d.nome, cab:d.cab, linhas:d.linhas.slice(0, 20000),
-      atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem()
-    });
+    var linhas = d.linhas || [];
+    var meta = { nome:d.nome, cab:d.cab, linhas:linhas.length,
+                 atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem() };
+    if (linhas.length <= AAG_BLOCO) {
+      meta.dados = linhas; meta.blocos = 0;
+      await db.collection('config').doc('aag_' + chave).set(meta);
+      return;
+    }
+    var n = Math.ceil(linhas.length / AAG_BLOCO);
+    meta.blocos = n;
+    for (var i = 0; i < n; i++) {
+      await db.collection('aag_blocos').doc(chave + '_' + i)
+        .set({ i:i, linhas: linhas.slice(i * AAG_BLOCO, (i + 1) * AAG_BLOCO) });
+    }
+    await db.collection('config').doc('aag_' + chave).set(meta);
   } catch (e) { console.warn('aagGuardar:', e); }
 }
 
@@ -32288,10 +32305,25 @@ async function aagCarregarGuardadas(){
       var doc = await db.collection('config').doc('aag_' + k).get();
       if (!doc || !doc.exists) continue;
       var d = doc.data() || {};
-      if (!(d.linhas || []).length) continue;
-      _aagArq[k] = { nome:d.nome || '(guardado)', cab:d.cab || [], linhas:d.linhas, guardado:true };
+      var linhas = d.dados || d.linhas;
+      // formato antigo: as linhas vinham direto no campo "linhas"
+      if (Array.isArray(linhas) && linhas.length) {
+        _aagArq[k] = { nome:d.nome || '(guardado)', cab:d.cab || [], linhas:linhas, guardado:true };
+        continue;
+      }
+      if (!d.blocos) continue;
+      var todas = [];
+      for (var b = 0; b < d.blocos; b++) {
+        var db2 = await db.collection('aag_blocos').doc(k + '_' + b).get();
+        if (db2 && db2.exists) todas = todas.concat((db2.data() || {}).linhas || []);
+      }
+      if (!todas.length) continue;
+      _aagArq[k] = { nome:d.nome || '(guardado)', cab:d.cab || [], linhas:todas,
+                     guardado:true, quando:d.atualizadoEm };
     }
     aagPintarUploads();
+    aagRenderPassos();
+    pnrRender();
   } catch (e) { console.warn('aagCarregarGuardadas:', e); }
 }
 
@@ -32311,6 +32343,7 @@ function aagAbrir(){
   aagRender();
   aagCarregarGuardadas();
   aagCarregarEscolhas();
+  aagCarregarEquipe().then(function(){ aagRenderAnalistas(); });
 }
 
 function aagPintarUploads(){
@@ -32328,6 +32361,10 @@ function aagPintarUploads(){
       + '<div style="font-size:12.5px;font-weight:700;margin-top:3px">' + cpEsc(a.nome)
       +   (a.preciso ? '' : ' <span style="font-weight:500;color:var(--tx2)">(opcional)</span>') + '</div>'
       + '<div style="font-size:10px;color:var(--tx2);margin-top:2px">' + cpEsc(a.sub) + '</div>'
+      + (a.quando
+          ? '<div style="font-size:9.5px;font-weight:700;margin-top:4px;color:'
+            + (a.quando === 'todo dia' ? 'var(--az)' : 'var(--tx2)') + '">🕗 ' + cpEsc(a.quando) + '</div>'
+          : '')
       + (a.chave4 || a.chave2
           ? '<div style="font-size:9.5px;color:var(--tx2);margin-top:3px;opacity:.85">🔑 '
             + (a.chave4 ? 'RC + SEQ + oportunidade + item' : 'RC + SEQ') + '</div>'
@@ -32427,6 +32464,7 @@ async function aagUpload(chave, file){
     _aagArq[chave] = novo;
     aagPintarUploads();
     aagRenderPassos();
+    if (chave === 'mapa') pnrRender();
     if (AAG_GUARDADAS.indexOf(chave) !== -1) aagGuardar(chave);
     if (st) st.innerHTML = '<span style="color:var(--vd)">✓ ' + cpEsc(file.name) + ' — '
       + cpNum(_aagArq[chave].linhas.length) + ' linhas na aba <strong>'
@@ -32952,6 +32990,7 @@ function aagProcessar(){
     if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Base montada: '
       + cpNum(linhas.length) + ' linhas em ' + cpNum(_aagBase.itens) + ' itens.</span>';
     aagRender();
+    pnrRender();
   } catch (e) {
     console.warn('aagProcessar:', e);
     if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Erro ao montar: ' + cpEsc(e.message) + '</span>';
@@ -33507,15 +33546,183 @@ function aagChaveItem(m){
   return [m.RC, m.SEQ, m.OPORTUNIDADE, m.Item].join('|');
 }
 
-function aagParaDistribuir(){
-  if (!_aagBase || !_aagBase.modelo) return [];
-  return _aagBase.modelo.filter(aagPrecisaDistribuir);
+// ── até onde vai a distribuição ───────────────────────────────────
+// Três alcances, do mais estreito ao mais largo. O do meio é o padrão:
+// é a fila de trabalho da Governança, os quatro status do PATEC.
+var AAG_ESCOPOS = [
+  { chave:'aa',    nome:'Analisar PATEC Finalizado',
+    dica:'só o que vai para o Analista Automático (fora das filas de pedido, devolução e republicação)' },
+  { chave:'fila',  nome:'Fila do PATEC',
+    dica:'os quatro status da Governança: Analisar, Aguardar, Cancelado e Finalizado sem fornecedores' },
+  { chave:'todos', nome:'Todos os status',
+    dica:'tudo que está no mapa diário, inclusive Abrir PATEC, Negociar e Emitir Pedido' }
+];
+var _aagEscopo = 'aa';
+
+function aagNoEscopo(m, escopo){
+  var e = escopo || _aagEscopo;
+  if (e === 'todos') return true;
+  if (e === 'aa')    return aagPrecisaDistribuir(m);
+  return aagEntraGovernanca(m['STATUS MAPA ']);
+}
+function aagTrocarEscopo(e){
+  _aagEscopo = e;
+  _aagSemAnalistaPag = 0;
+  aagRenderAnalistas();
 }
 
-function aagSemAnalista(){
-  return aagParaDistribuir().filter(function(m){
-    return !aagTxt(m['Analista PATEC']) && !_aagEscolhas[aagChaveItem(m)];
+function aagParaDistribuir(escopo){
+  if (!_aagBase || !_aagBase.modelo) return [];
+  return _aagBase.modelo.filter(function(m){ return aagNoEscopo(m, escopo); });
+}
+
+function aagAnalistaDe(m){
+  return aagTxt(m['Analista PATEC']) || _aagEscolhas[aagChaveItem(m)] || '';
+}
+
+function aagSemAnalista(escopo){
+  return aagParaDistribuir(escopo).filter(function(m){ return !aagAnalistaDe(m); });
+}
+
+// ── a equipe desta distribuição ───────────────────────────────────
+// Ele digita quem entra no rateio. Fica guardado, então amanhã já vem
+// preenchido — e só muda quando ele quiser tirar ou colocar alguém.
+var _aagEquipe = [];
+
+function aagLerEquipe(txt){
+  return String(txt == null ? '' : txt)
+    .split(/[,;\n\r\t]+/)
+    .map(function(x){ return x.trim(); })
+    .filter(function(x, i, a){
+      return x && a.findIndex(function(y){ return cpNormNome(y) === cpNormNome(x); }) === i;
+    });
+}
+async function aagCarregarEquipe(){
+  try {
+    var db = getDB(); if (!db) return;
+    var doc = await db.collection('config').doc('aag_equipe').get();
+    if (doc && doc.exists) _aagEquipe = (doc.data() || {}).nomes || [];
+  } catch (e) { console.warn('aagCarregarEquipe:', e); }
+}
+async function aagSalvarEquipe(){
+  try {
+    var db = getDB(); if (!db) return;
+    await db.collection('config').doc('aag_equipe').set({
+      nomes:_aagEquipe, atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem() });
+  } catch (e) { console.warn('aagSalvarEquipe:', e); }
+}
+function aagDefinirEquipe(txt){
+  _aagEquipe = aagLerEquipe(txt);
+  aagSalvarEquipe();
+  aagRenderAnalistas();
+}
+function aagEquipeDaPlanilha(){
+  var el = document.getElementById('aag-equipe');
+  if (el) el.value = aagNomesAnalistas().join(', ');
+  aagDefinirEquipe(el ? el.value : '');
+}
+// Quem de fato vai receber: a equipe digitada; se ele não digitou nada,
+// todo mundo que aparece na RC em tratamento.
+function aagEquipeAtiva(){
+  return _aagEquipe.length ? _aagEquipe.slice() : aagNomesAnalistas();
+}
+
+// ── quanto cada analista já tem na mão ────────────────────────────
+function aagCargaAnalistas(escopo){
+  var carga = {};
+  aagParaDistribuir(escopo).forEach(function(m){
+    var n = aagAnalistaDe(m);
+    if (n) carga[n] = (carga[n] || 0) + 1;
   });
+  return carga;
+}
+
+// ── o rateio: quem tem menos volume recebe primeiro ───────────────
+// Dá o próximo item sempre a quem está com o menor volume para tratar.
+// Empate resolve pelo nome, então o resultado é o mesmo toda vez que roda
+// e dá para conferir. Devolve o plano sem aplicar nada.
+function aagPlanoDistribuicao(){
+  var faltam = aagSemAnalista();
+  var nomes = aagEquipeAtiva();
+  if (!nomes.length || !faltam.length) return { plano:{}, recebe:{}, faltam:faltam, nomes:nomes };
+  var carga = aagCargaAnalistas();
+  var simulada = {}, recebe = {};
+  nomes.forEach(function(n){ simulada[n] = carga[n] || 0; recebe[n] = 0; });
+  var plano = {};
+  faltam.forEach(function(m){
+    var alvo = nomes.slice().sort(function(a, b){
+      return (simulada[a] - simulada[b]) || a.localeCompare(b);
+    })[0];
+    plano[aagChaveItem(m)] = alvo;
+    simulada[alvo]++; recebe[alvo]++;
+  });
+  return { plano:plano, recebe:recebe, faltam:faltam, nomes:nomes,
+           carga:carga, depois:simulada };
+}
+
+function aagDistribuirAuto(){
+  var r = aagPlanoDistribuicao();
+  if (!r.faltam.length) { alert('Todos os itens deste alcance já têm analista.'); return; }
+  if (!r.nomes.length) { alert('Digite no campo quem entra nesta distribuição.\n\n'
+    + 'Pode escrever os nomes separados por vírgula, ou clicar em "usar os da RC em tratamento".'); return; }
+  var resumo = r.nomes.map(function(n){
+    return '  ' + n + ': ' + (r.carga[n] || 0) + ' → ' + r.depois[n]
+      + ' (+' + r.recebe[n] + ')'; }).join('\n');
+  if (!confirm('Distribuir ' + cpNum(r.faltam.length) + ' item(ns) entre '
+      + r.nomes.length + ' analista(s)?\n\n' + resumo
+      + '\n\nQuem tem menos volume recebe primeiro. Você pode trocar item a item depois.')) return;
+  Object.keys(r.plano).forEach(function(k){ _aagEscolhas[k] = r.plano[k]; });
+  aagSalvarEscolhas();
+  aagRenderAnalistas();
+  var st = document.getElementById('aag-status');
+  if (st) st.innerHTML = '<span style="color:var(--vd)">✓ ' + cpNum(r.faltam.length)
+    + ' item(ns) distribuído(s). Clique em <strong>Montar tudo</strong> para entrar nas três saídas.</span>';
+}
+
+// ── dar o mesmo analista a todos os itens da página ───────────────
+function aagAplicarNaPagina(nome){
+  if (!nome) return;
+  var faltam = aagSemAnalista();
+  var POR = 50;
+  var pag = faltam.slice(_aagSemAnalistaPag * POR, (_aagSemAnalistaPag + 1) * POR);
+  if (!pag.length) return;
+  if (!confirm('Colocar ' + nome + ' nos ' + pag.length + ' item(ns) desta página?')) return;
+  pag.forEach(function(m){ _aagEscolhas[aagChaveItem(m)] = nome; });
+  aagSalvarEscolhas();
+  aagRenderAnalistas();
+}
+
+// ── baixar a RC em tratamento atualizada ──────────────────────────
+// O arquivo dele acumula: o que já estava mais o que foi escolhido aqui.
+// Serve para a planilha dele ficar igual ao dash, e como cópia de segurança.
+function aagBaixarTratamento(){
+  var linhas = [['Analista PATEC','RC','SEQ','OPORTUNIDADE','Item']];
+  var visto = {};
+  var d = _aagArq.trat;
+  if (d) {
+    var i = aagChavesDoArquivo(d);
+    var col = aagCol(d.cab, ['ANALISTA PATEC','ANALISTA','RESPONSAVEL','COMPRADOR']);
+    if (col !== -1 && i.rc !== -1) d.linhas.forEach(function(l){
+      var rc = aagId(l[i.rc]); if (!rc) return;
+      var seq = i.seq === -1 ? '' : aagId(l[i.seq]);
+      var op  = i.op  === -1 ? '' : aagId(l[i.op]);
+      var iop = i.iop === -1 ? '' : aagId(l[i.iop]);
+      var k = [rc, seq, op, iop].join('|');
+      if (visto[k]) return;
+      visto[k] = 1;
+      linhas.push([aagTxt(l[col]), rc, seq, op, iop]);
+    });
+  }
+  Object.keys(_aagEscolhas).forEach(function(k){
+    if (visto[k]) return;
+    visto[k] = 1;
+    var p = k.split('|');
+    linhas.push([_aagEscolhas[k], p[0], p[1], p[2], p[3]]);
+  });
+  var ws = XLSX.utils.aoa_to_sheet(linhas);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'RC em tratamento');
+  XLSX.writeFile(wb, 'RC_em_tratamento_' + cpHojeISO().replace(/-/g,'') + '.xlsx');
 }
 
 // Quantos itens há em cada status do mapa — serve para ele ver o que ficou
@@ -33550,7 +33757,6 @@ function aagRenderAnalistas(){
   if (_aagSemAnalistaPag >= tot) _aagSemAnalistaPag = tot - 1;
   var pag = faltam.slice(_aagSemAnalistaPag * POR, (_aagSemAnalistaPag + 1) * POR);
   var distribuir = aagParaDistribuir();
-  var porStatus = aagPorStatusMapa();
   var temMapa = !!_aagArq.mapa;
   var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between;flex-wrap:wrap;gap:8px">'
     + '<span>👤 Distribuição — quem trata cada item</span>'
@@ -33559,43 +33765,106 @@ function aagRenderAnalistas(){
     +   (faltam.length ? cpNum(faltam.length) + ' sem analista' : 'todas com analista') + '</span>'
     + '</div>'
     + '<div style="font-size:11px;color:var(--tx2);line-height:1.7;margin-bottom:.8rem">'
-    + 'Distribuo só o que está em <strong>' + cpEsc(AAG_STATUS_DISTRIBUI) + '</strong> na coluna A '
-    + 'do mapa diário e cuja fila do levelboard (STATUS_DESC) não seja de '
-    + '<strong>emitir pedido PATEC, devolução ou republicação</strong> — esses três já saíram '
-    + 'do fluxo de análise. A chave é '
-    + '<strong>RC + item da RC + oportunidade + item da oportunidade</strong>: uma linha por chave '
-    + 'aqui e na Governança, e no Analista Automático as várias propostas da mesma chave herdam '
-    + 'o mesmo analista. O que você escolher fica guardado para os próximos dias.</div>';
+    + 'A chave é <strong>RC + item da RC + oportunidade + item da oportunidade</strong>: uma linha '
+    + 'por chave aqui e na Governança, e no Analista Automático as várias propostas da mesma chave '
+    + 'herdam o mesmo analista. O que você escolher <strong>fica guardado</strong> — amanhã só '
+    + 'aparecem os itens novos.</div>';
   if (!temMapa) {
     h += '<div style="font-size:12px;color:var(--am);font-weight:600">'
-      + '⚠ Sem o mapa diário eu não sei quais itens estão em ' + cpEsc(AAG_STATUS_DISTRIBUI)
-      + '. Suba o mapa diário para a distribuição aparecer aqui.</div></div>';
+      + '⚠ Sem o mapa diário eu não sei quais itens estão na Governança. '
+      + 'Suba o mapa diário para a distribuição aparecer aqui.</div></div>';
     box.innerHTML = h; return;
   }
-  // o que ficou de fora, e por qual motivo (status do mapa ou fila)
-  var fora = Object.keys(porStatus);
-  if (fora.length) {
-    h += '<div style="font-size:10.5px;color:var(--tx2);margin-bottom:.8rem;line-height:1.8">'
-      + '<strong style="color:var(--tx)">' + cpNum(distribuir.length) + '</strong> item(ns) entram '
-      + 'na distribuição. Fora dela: '
-      + fora.sort(function(a, b){ return porStatus[b] - porStatus[a]; })
-            .map(function(k){ return cpEsc(k) + ' <strong>' + cpNum(porStatus[k]) + '</strong>'; })
-            .join(' · ') + '.</div>';
-  }
+
+  // ── até onde distribuir ─────────────────────────────────────────
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:.7rem">'
+    + '<span style="font-size:10.5px;font-weight:700;color:var(--tx2)">DISTRIBUIR:</span>'
+    + AAG_ESCOPOS.map(function(e){
+        var n = aagParaDistribuir(e.chave).length;
+        var at = e.chave === _aagEscopo;
+        return '<span onclick="aagTrocarEscopo(\'' + e.chave + '\')" title="' + cpEsc(e.dica) + '"'
+          + ' style="font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:20px;cursor:pointer;'
+          + 'border:1.5px solid ' + (at ? 'var(--az)' : 'var(--brd)') + ';'
+          + 'background:' + (at ? 'var(--azc)' : 'var(--cin)') + ';'
+          + 'color:' + (at ? 'var(--az)' : 'var(--tx2)') + '">'
+          + cpEsc(e.nome) + ' <strong>' + cpNum(n) + '</strong></span>';
+      }).join('')
+    + '</div>';
+
+
   if (!distribuir.length) {
     h += '<div style="font-size:12px;color:var(--am);font-weight:600">'
-      + 'Nenhum item em ' + cpEsc(AAG_STATUS_DISTRIBUI) + ' nesta base.</div></div>';
+      + 'Nenhum item neste alcance.</div></div>';
     box.innerHTML = h; return;
   }
   if (!faltam.length) {
-    h += '<div style="font-size:12px;color:var(--vd);font-weight:600">'
-      + 'Os ' + cpNum(distribuir.length) + ' itens da distribuição já têm analista.</div></div>';
+    h += '<div style="font-size:12px;color:var(--vd);font-weight:600">✓ Os '
+      + cpNum(distribuir.length) + ' itens deste alcance já têm analista.</div>'
+      + '<div style="margin-top:.7rem"><button class="btn btn-s" onclick="aagBaixarTratamento()">'
+      + '⬇ Baixar RC em tratamento</button></div></div>';
     box.innerHTML = h; return;
   }
   var opcoes = '<option value="">—</option>' + nomes.map(function(n){
     return '<option value="' + cpEsc(n) + '">' + cpEsc(n) + '</option>'; }).join('');
+
+  // ── quem entra no rateio, e quanto cada um receberia ────────────
+  var r = aagPlanoDistribuicao();
+  var maior = 1;
+  r.nomes.forEach(function(n){ maior = Math.max(maior, r.depois[n] || 0); });
+  h += '<div style="padding:.75rem .8rem;background:var(--cin);border:1px solid var(--brd);'
+    + 'border-radius:9px;margin-bottom:.8rem">'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:.6rem">'
+    +   '<span style="font-size:10.5px;font-weight:700;color:var(--tx2);white-space:nowrap">'
+    +     'ANALISTAS DESTA DISTRIBUIÇÃO:</span>'
+    +   '<input id="aag-equipe" type="text" value="' + cpEsc(_aagEquipe.join(', ')) + '"'
+    +     ' placeholder="digite os nomes separados por vírgula — ex: Aline, André, João"'
+    +     ' onchange="aagDefinirEquipe(this.value)"'
+    +     ' style="flex:1;min-width:250px;font-size:11.5px;padding:5px 8px;'
+    +     'border:1px solid var(--brd);border-radius:6px;background:var(--bg);color:var(--tx)">'
+    +   '<span onclick="aagEquipeDaPlanilha()" style="font-size:10.5px;font-weight:600;'
+    +     'color:var(--azm);cursor:pointer;text-decoration:underline;white-space:nowrap">'
+    +     'usar os da RC em tratamento</span>'
+    + '</div>';
+
+  if (!r.nomes.length) {
+    h += '<div style="font-size:11px;color:var(--am);font-weight:600">'
+      + '⚠ Digite acima quem entra nesta distribuição.</div>';
+  } else {
+    // a prévia: volume de hoje, quanto recebe e como fica
+    h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:.65rem">'
+      + r.nomes.slice().sort(function(a, b){ return (r.carga[a]||0) - (r.carga[b]||0); })
+          .map(function(n){
+            var tem = r.carga[n] || 0, ganha = r.recebe[n] || 0;
+            return '<span title="tem ' + tem + ', recebe ' + ganha + ', fica com ' + r.depois[n] + '"'
+              + ' style="font-size:10.5px;padding:4px 10px;border-radius:20px;'
+              + 'border:1px solid var(--brd);background:linear-gradient(90deg,var(--azc) '
+              + Math.round(100 * (r.depois[n] || 0) / maior) + '%,var(--bg) 0)">'
+              + cpEsc(n) + ' <strong>' + cpNum(tem) + '</strong>'
+              + (ganha ? ' <span style="color:var(--vd);font-weight:700">+' + cpNum(ganha)
+                         + '</span>' : '')
+              + '</span>';
+          }).join('')
+      + '</div>'
+      + '<div style="font-size:10.5px;color:var(--tx2);margin-bottom:.65rem">'
+      + 'O número é o volume que o analista já tem para tratar neste alcance. '
+      + 'O <strong style="color:var(--vd)">+</strong> é o que ele receberia agora — '
+      + 'quem tem menos recebe primeiro, até emparelhar.</div>';
+  }
+
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+    + '<button class="btn btn-p" style="font-size:11.5px;padding:5px 12px"'
+    +   (r.nomes.length ? '' : ' disabled')
+    +   ' onclick="aagDistribuirAuto()">⚖️ Distribuir os ' + cpNum(faltam.length) + '</button>'
+    + '<span style="flex:1"></span>'
+    + '<span style="font-size:10.5px;color:var(--tx2)">ou esta página toda para:</span>'
+    + '<select onchange="aagAplicarNaPagina(this.value); this.value=\'\';" '
+    +   'style="font-size:11px;padding:4px 6px">' + opcoes + '</select>'
+    + '<button class="btn btn-s" style="font-size:11.5px;padding:5px 12px" '
+    +   'onclick="aagBaixarTratamento()">⬇ Baixar RC em tratamento</button>'
+    + '</div></div>';
   h += '<div style="overflow:auto;max-height:420px"><table><thead><tr>'
-    + '<th>RC</th><th>SEQ</th><th>Oportunidade</th><th>Item</th><th>Família</th>'
+    + '<th>RC</th><th>SEQ</th><th>Oportunidade</th><th>Item</th>'
+    + '<th>Status do mapa</th><th>Família</th>'
     + '<th>Fila</th><th style="width:170px">Analista</th></tr></thead><tbody>';
   pag.forEach(function(m){
     var k = [m.RC, m.SEQ, m.OPORTUNIDADE, m.Item].join('|');
@@ -33603,6 +33872,7 @@ function aagRenderAnalistas(){
       + '<td style="font-weight:700;color:var(--az)">' + cpEsc(m.RC) + '</td>'
       + '<td>' + cpEsc(m.SEQ) + '</td><td>' + cpEsc(m.OPORTUNIDADE) + '</td>'
       + '<td>' + cpEsc(m.Item) + '</td>'
+      + '<td style="font-size:10.5px">' + cpEsc(m['STATUS MAPA '] || '—') + '</td>'
       + '<td style="font-size:10.5px">' + cpEsc(m.Familia || '—') + '</td>'
       + '<td style="font-size:10.5px">' + cpEsc(m['Fila ( esteira) '] || '—') + '</td>'
       + '<td><select onchange="aagEscolherAnalista(\'' + cpEsc(k) + '\', this.value)" '
@@ -33709,7 +33979,180 @@ async function aagEnviarBacklog(){
 }
 
 // ── a tela do resultado ───────────────────────────────────────────
-// ── Conferir leitura ──────────────────────────────────────────────
+// ── Panorama de hoje ──────────────────────────────────────────────
+// A soma do ANALISTA_AUTOMATICO do mapa diário, nas duas famílias que ele
+// acompanha: a fila do PATEC e a de Abrir PATEC. Sai assim que o mapa
+// sobe, antes de montar tudo — serve para conferir a carteira do dia e
+// ver o que andou desde ontem.
+var PNR_PATEC = [
+  { chave:'fin',    nome:'PATEC Finalizado',    status:'Analisar PATEC Finalizado' },
+  { chave:'agfin',  nome:'Ag. PATEC Finalizar',  status:'Aguardar PATEC ser Finalizado' },
+  { chave:'reprov', nome:'100% Reprovado',       status:'PATEC Finalizado sem fornecedores aprovados',
+                    cor:'var(--vd)' },
+  { chave:'canc',   nome:'PATEC Cancelado',      status:'Analisar PATEC Cancelado', cor:'var(--vd)' }
+];
+var PNR_ABRIR = [
+  { chave:'iden', nome:'Abrir ID Não',       status:'Abrir PATEC Idêntico Não',  cor:'var(--am)' },
+  { chave:'gm',   nome:'Abrir PATEC Obrig.', status:'Abrir PATEC Grupo de Mercadoria Obrigatório',
+                  cor:'var(--am)' }
+];
+var PNR_COL = 'aag_panorama';
+var PNR_DIAS = 120;
+var _pnrHist = null;   // { 'aaaa-mm-dd': {fin:..., agfin:...} }
+
+// Conta o mapa diário por status, agrupando pelos nomes acima.
+function pnrContar(){
+  var d = _aagArq.mapa;
+  if (!d) return null;
+  var col = aagCol(d.cab, ['ANALISTA_AUTOMATICO','STATUS MAPA','ANALISTA AUTOMATICO']);
+  if (col === -1) return null;
+  var i = aagChavesDoArquivo(d);
+  var alvo = {};
+  PNR_PATEC.concat(PNR_ABRIR).forEach(function(g){ alvo[cpNormCab(g.status)] = g.chave; });
+  var c = {}, visto = {}, total = 0, outros = {};
+  PNR_PATEC.concat(PNR_ABRIR).forEach(function(g){ c[g.chave] = 0; });
+  d.linhas.forEach(function(l){
+    // uma linha por item, igual à Governança
+    var k = (i.pronta !== undefined && i.pronta !== -1 && i.rc === -1)
+      ? aagChaveProntaNorm(l[i.pronta])
+      : aagChave4({ rc: i.rc === -1 ? '' : aagId(l[i.rc]),
+                    seq: i.seq === -1 ? '' : aagId(l[i.seq]),
+                    op:  i.op  === -1 ? '' : aagId(l[i.op]),
+                    iop: i.iop === -1 ? '' : aagId(l[i.iop]) });
+    if (!k || k === '|||') return;
+    if (visto[k]) return;
+    visto[k] = 1;
+    total++;
+    var st = aagTxt(l[col]);
+    var ch = alvo[cpNormCab(st)];
+    if (ch) c[ch]++;
+    else outros[st || '(sem status)'] = (outros[st || '(sem status)'] || 0) + 1;
+  });
+  c.totPatec = PNR_PATEC.reduce(function(n, g){ return n + c[g.chave]; }, 0);
+  c.totAbrir = PNR_ABRIR.reduce(function(n, g){ return n + c[g.chave]; }, 0);
+  c.totGeral = c.totPatec + c.totAbrir;
+  c._itensMapa = total;
+  c._outros = outros;
+  return c;
+}
+
+async function pnrCarregarHist(){
+  if (_pnrHist) return _pnrHist;
+  _pnrHist = {};
+  try {
+    var db = getDB(); if (!db) return _pnrHist;
+    var doc = await db.collection('config').doc(PNR_COL).get();
+    if (doc && doc.exists) _pnrHist = (doc.data() || {}).dias || {};
+  } catch (e) { console.warn('pnrCarregarHist:', e); }
+  return _pnrHist;
+}
+
+async function pnrGravar(c, dia){
+  try {
+    var db = getDB(); if (!db || !c) return;
+    await pnrCarregarHist();
+    var guarda = {};
+    PNR_PATEC.concat(PNR_ABRIR).forEach(function(g){ guarda[g.chave] = c[g.chave]; });
+    guarda.totPatec = c.totPatec; guarda.totAbrir = c.totAbrir; guarda.totGeral = c.totGeral;
+    guarda.itens = c._itensMapa;
+    _pnrHist[dia] = guarda;
+    // guarda só os últimos dias, para não crescer sem fim
+    var dias = Object.keys(_pnrHist).sort();
+    while (dias.length > PNR_DIAS) { delete _pnrHist[dias.shift()]; }
+    await db.collection('config').doc(PNR_COL).set({ dias:_pnrHist,
+      atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem() });
+  } catch (e) { console.warn('pnrGravar:', e); }
+}
+
+// o último dia guardado ANTES do dia de hoje
+function pnrDiaAnterior(hoje){
+  var dias = Object.keys(_pnrHist || {}).filter(function(d){ return d < hoje; }).sort();
+  return dias.length ? dias[dias.length - 1] : null;
+}
+
+function pnrDelta(agora, antes){
+  if (antes === undefined || antes === null) return null;
+  return agora - antes;
+}
+function pnrSeta(d){
+  if (d === null) return '<span style="color:var(--tx2)">— sem dia anterior</span>';
+  if (d === 0)    return '<span style="color:var(--tx2)">— igual ao dia ant.</span>';
+  var sobe = d > 0;
+  return '<span style="color:' + (sobe ? 'var(--vm)' : 'var(--vd)') + '">'
+    + (sobe ? '▲ +' : '▼ ') + cpNum(d) + ' vs dia ant.</span>';
+}
+
+async function pnrRender(){
+  var box = document.getElementById('aag-panorama');
+  if (!box) return;
+  var c = pnrContar();
+  if (!c) { box.innerHTML = ''; return; }
+  await pnrCarregarHist();
+  var hoje = cpHojeISO();
+  var ant = pnrDiaAnterior(hoje);
+  var a = ant ? _pnrHist[ant] : null;
+  var dl = function(ch){ return a ? pnrDelta(c[ch], a[ch]) : null; };
+
+  var card = function(g, grande){
+    var d = dl(g.chave);
+    var cor = g.cor || 'var(--az)';
+    return '<div style="border:1px solid var(--brd);border-radius:10px;padding:' 
+      + (grande ? '1rem .9rem' : '.7rem .6rem') + ';text-align:center;background:'
+      + (grande ? 'var(--azc)' : 'var(--cin)') + (grande ? ';border-color:var(--az);border-width:1.5px' : '') + '">'
+      + '<div style="font-size:' + (grande ? '11.5px' : '10.5px')
+      +   ';font-weight:700;color:var(--tx2);line-height:1.3">' + cpEsc(g.nome) + '</div>'
+      + '<div style="font-size:' + (grande ? '30px' : '23px') + ';font-weight:800;color:' + cor
+      +   ';line-height:1.15;margin-top:3px">' + cpNum(c[g.chave]) + '</div>'
+      + '<div style="font-size:9.5px;font-weight:600;margin-top:4px">' + pnrSeta(d) + '</div>'
+      + '</div>';
+  };
+
+  var dGeral = dl('totGeral');
+  var frase = 'Carteira em <strong>' + cpNum(c.totGeral) + '</strong> itens: '
+    + '<strong>' + cpNum(c.totPatec) + '</strong> em PATEC e '
+    + '<strong>' + cpNum(c.totAbrir) + '</strong> em Abrir PATEC.'
+    + (dGeral === null ? ' Primeiro dia guardado — amanhã já comparo.'
+       : dGeral === 0 ? ' Igual ao dia anterior.'
+       : ' ' + (dGeral < 0 ? 'Queda' : 'Alta') + ' de ' + cpNum(Math.abs(dGeral))
+         + ' itens vs o dia anterior.');
+
+  var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between;flex-wrap:wrap;gap:8px">'
+    + '<span>📊 Panorama de hoje</span>'
+    + '<span style="font-size:11px;font-weight:500;color:var(--tx2)">'
+    +   (ant ? 'comparando com ' + cpDataBR(ant) : 'sem dia anterior guardado') + '</span>'
+    + '</div>'
+    + '<div style="font-size:12px;color:var(--tx2);margin-bottom:.9rem">' + frase + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:stretch">'
+    + '<div style="display:flex;flex-direction:column;gap:10px">'
+    +   '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px">'
+    +     PNR_PATEC.map(function(g){ return card(g); }).join('')
+    +     card({ chave:'totPatec', nome:'Total PATEC' })
+    +   '</div>'
+    +   '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px">'
+    +     PNR_ABRIR.map(function(g){ return card(g); }).join('')
+    +     card({ chave:'totAbrir', nome:'Total Abrir PATEC', cor:'var(--am)' })
+    +   '</div>'
+    + '</div>'
+    + '<div style="min-width:150px;display:flex">'
+    +   card({ chave:'totGeral', nome:'Total Geral' }, true)
+    + '</div>'
+    + '</div>';
+
+  // o que ficou fora das duas famílias
+  var fora = Object.keys(c._outros || {}).sort(function(x, y){ return c._outros[y] - c._outros[x]; });
+  if (fora.length) {
+    h += '<div style="font-size:10.5px;color:var(--tx2);line-height:1.8;margin-top:.9rem;'
+      + 'border-top:1px solid var(--brd);padding-top:.7rem">'
+      + '<strong style="color:var(--tx)">' + cpNum(c._itensMapa - c.totGeral) + '</strong> '
+      + 'item(ns) do mapa fora destas duas famílias: '
+      + fora.map(function(k){ return cpEsc(k) + ' <strong>' + cpNum(c._outros[k]) + '</strong>'; })
+          .join(' · ') + '</div>';
+  }
+  h += '</div>';
+  box.innerHTML = h;
+  // guarda o dia depois de desenhar, para o delta de hoje não comparar consigo mesmo
+  pnrGravar(c, hoje);
+}
 // Para cada arquivo subido, mostra TODA coluna que o dash procura: se
 // achou, em que coluna caiu, o nome exato do cabeçalho dele, um exemplo de
 // valor e quantas linhas vêm preenchidas. É aqui que dá para bater
