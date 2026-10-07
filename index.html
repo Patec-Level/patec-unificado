@@ -32260,9 +32260,9 @@ var AAG_ARQUIVOS = [
   { chave:'level',   nome:'Levelboard',        sub:'fila, família, SLA e datas',     ico:'📊', preciso:false, quando:'todo dia', chave4:true },
   { chave:'mapa',    nome:'Mapa diário',       sub:'o STATUS MAPA de cada item',     ico:'🗺️', preciso:false, quando:'todo dia', chave4:true },
   { chave:'trat',    nome:'RC em tratamento',  sub:'quem trata cada RC · acumula',   ico:'👤', preciso:false, guarda:true, soma:true, chave4:true, quando:'quando entram RCs novas' },
-  { chave:'pid',     nome:'PID',               sub:'as RCs novas entram na lista',   ico:'📌', preciso:false, guarda:true, soma:true, chave2:true, quando:'quando entram itens novos' },
-  { chave:'obrig',   nome:'PATEC obrigatório', sub:'classes de mercadoria',          ico:'📋', preciso:false, guarda:true, quando:'raramente muda' },
-  { chave:'catfam',  nome:'Categoria família', sub:'família → categoria',            ico:'🏷️', preciso:false, guarda:true, quando:'raramente muda' }
+  { chave:'pid',     nome:'PID',               sub:'baixe a lista, acrescente e suba', ico:'📌', preciso:false, guarda:true, soma:true, chave2:true, quando:'quando entram itens novos' },
+  { chave:'obrig',   nome:'PATEC obrigatório', sub:'baixe a lista, acrescente e suba', ico:'📋', preciso:false, guarda:true, soma:true, quando:'raramente muda' },
+  { chave:'catfam',  nome:'Categoria família', sub:'baixe a lista, acrescente e suba', ico:'🏷️', preciso:false, guarda:true, soma:true, quando:'raramente muda' }
 ];
 
 // As três tabelinhas de apoio quase não mudam, então ficam no Firebase:
@@ -32376,13 +32376,95 @@ function aagPintarUploads(){
             : 'arraste ou clique') + '</div>'
       + '<input type="file" id="aag-in-' + a.chave + '" accept=".xlsx,.xlsb,.xls,.csv" style="display:none"'
       + ' onchange="aagUpload(\'' + a.chave + '\', this.files[0]); this.value=\'\';">'
-      + (AAG_MODELOS[a.chave]
-          ? '<div style="margin-top:7px"><span onclick="aagBaixarModelo(event,\'' + a.chave + '\')"'
+      + (function(){
+          var lista = AAG_BAIXA_LISTA.indexOf(a.chave) !== -1;
+          if (!lista && !AAG_MODELOS[a.chave]) return '';
+          var n = lista ? aagQuantasNaLista(a.chave) : 0;
+          var fn = lista ? 'aagBaixarLista' : 'aagBaixarModelo';
+          var rot = lista
+            ? (n ? '⬇ baixar lista (' + cpNum(n) + ')' : '⬇ baixar modelo vazio')
+            : '⬇ baixar modelo';
+          return '<div style="margin-top:7px"><span onclick="' + fn + '(event,\'' + a.chave + '\')"'
+            + ' title="' + (lista && n
+                ? 'Baixa tudo que já está salvo. Acrescente as linhas novas e suba de volta.'
+                : 'Baixa a planilha com os cabeçalhos certos.') + '"'
             + ' style="font-size:10px;font-weight:600;color:var(--azm);text-decoration:underline;'
-            + 'cursor:pointer">⬇ baixar modelo</span></div>'
-          : '')
+            + 'cursor:pointer">' + rot + '</span></div>';
+        })()
       + '</div>';
   }).join('');
+}
+
+// ── baixar a LISTA que já está salva ──────────────────────────────
+// Nas tabelas que acumulam, o modelo vazio não ajuda: ele precisa da base
+// inteira para só acrescentar as linhas novas e subir de volta. Então o
+// link desses cartões baixa o que está guardado, não um modelo em branco.
+// Sem nada guardado ainda, cai no modelo vazio e o arquivo serve igual.
+var AAG_BAIXA_LISTA = ['pid', 'obrig', 'catfam', 'trat'];
+
+// A chave que identifica uma linha em cada uma dessas tabelas, para não
+// baixar repetido quando o arquivo foi subido mais de uma vez.
+function aagChaveDaLista(chave, cab, l){
+  if (chave === 'pid') {
+    var iR = aagCol(cab, ['DOCUMENTO','RC']), iI = aagCol(cab, ['ITEM','SEQ']);
+    if (iR === -1) iR = 0;
+    if (iI === -1) iI = 1;
+    return aagId(l[iR]) + '|' + aagId(l[iI]);
+  }
+  if (chave === 'obrig') {
+    var iG = aagCol(cab, ['GRUPO DE MERCADORIAS','GRUPO_MERCADORIAS','GRUPO DE MERCADORIA',
+                          'CLASSE DE MERCADORIA','GRUPO']);
+    return aagChaveGrupo(l[iG === -1 ? 0 : iG]);
+  }
+  if (chave === 'catfam') {
+    var iF = aagCol(cab, ['FAMILIA','FAMÍLIA','COD_FAMILIA','CODIGO_FAMILIA']);
+    return aagChaveFamilia(l[iF === -1 ? 0 : iF]);
+  }
+  var i = { rc: aagCol(cab, ['RC']), seq: aagCol(cab, ['SEQ','ITEM_RC']),
+            op: aagCol(cab, ['OPORTUNIDADE','NUMERO_OPORTUNIDADE']),
+            iop: aagCol(cab, ['Item','ITEM_OPORTUNIDADE','ITEM OP']) };
+  return [i.rc, i.seq, i.op, i.iop].map(function(x){
+    return x === -1 ? '' : aagId(l[x]); }).join('|');
+}
+
+function aagQuantasNaLista(chave){
+  var d = _aagArq[chave];
+  if (!d || !(d.linhas || []).length) return 0;
+  var vistos = {}, n = 0;
+  d.linhas.forEach(function(l){
+    var k = aagChaveDaLista(chave, d.cab, l);
+    if (!k || k === '|||' || vistos[k]) return;
+    vistos[k] = 1; n++;
+  });
+  return n;
+}
+
+function aagBaixarLista(ev, chave){
+  if (ev) ev.stopPropagation();
+  var meta = AAG_ARQUIVOS.filter(function(a){ return a.chave === chave; })[0] || {};
+  var mod = AAG_MODELOS[chave] || {};
+  var d = _aagArq[chave];
+  var temDado = d && (d.linhas || []).length;
+  var cab = temDado && (d.cab || []).length ? d.cab.slice() : (mod.cab || []).slice();
+  var linhas = [cab], vistos = {};
+  if (temDado) d.linhas.forEach(function(l){
+    var k = aagChaveDaLista(chave, d.cab, l);
+    if (!k || k === '|||' || vistos[k]) return;
+    vistos[k] = 1;
+    linhas.push(cab.map(function(_, n){ return l[n] === undefined ? '' : l[n]; }));
+  });
+  var ws = XLSX.utils.aoa_to_sheet(linhas);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, (mod.aba || meta.nome || chave).slice(0, 31));
+  var nome = (temDado ? 'Lista_' : 'Modelo_') + chave + '_'
+    + cpHojeISO().replace(/-/g, '') + '.xlsx';
+  XLSX.writeFile(wb, nome);
+  var st = document.getElementById('aag-status');
+  if (st) st.innerHTML = temDado
+    ? '<span style="color:var(--vd)">✓ ' + cpNum(linhas.length - 1) + ' linha(s) baixada(s) — '
+      + 'tudo que está salvo. Acrescente as novas no fim e suba o arquivo de volta.</span>'
+    : '<span style="color:var(--tx2)">Nada guardado ainda nesse cartão: baixei o modelo '
+      + 'vazio, com os cabeçalhos certos.</span>';
 }
 
 // O modelo de cada upload. Serve para dois casos: o arquivo original vir
@@ -32452,14 +32534,78 @@ async function aagUpload(chave, file){
                  cab:(melhor.linhas[iCab] || []).map(function(x){ return String(x == null ? '' : x).trim(); }),
                  linhas:melhor.linhas.slice(iCab + 1) };
     // Arquivos que SOMAM (RC em tratamento e PID): o que já estava guardado
-    // continua valendo e o novo entra por cima. É por isso que ele pode subir
-    // só as RCs novas, sem remontar a lista inteira.
+    // continua valendo e o novo entra por cima — por chave, não empilhando.
+    // Assim funciona dos dois jeitos: subir só as linhas novas, ou baixar a
+    // lista inteira, acrescentar no fim e subir de volta sem duplicar nada.
     var antes = _aagArq[chave];
     var meta = AAG_ARQUIVOS.filter(function(a){ return a.chave === chave; })[0] || {};
+
+    // Repetido DENTRO do próprio arquivo: fico com a última ocorrência, que
+    // é a correção mais recente que ele digitou, e aviso quantas eram. Vale
+    // já no primeiro upload, quando ainda não há nada guardado para juntar.
+    if (meta.soma) {
+      var ondeA = {}, limpas = [], repetidas = 0;
+      novo.linhas.forEach(function(l){
+        var k = aagChaveDaLista(chave, novo.cab, l);
+        if (!k || k === '|||') { limpas.push(l); return; }
+        if (ondeA[k] !== undefined) { limpas[ondeA[k]] = l; repetidas++; return; }
+        ondeA[k] = limpas.length; limpas.push(l);
+      });
+      novo.linhas = limpas;
+      novo.repetidas = repetidas;
+    }
+
     if (meta.soma && antes && antes.linhas && antes.linhas.length
         && antes.cab.join('|') === novo.cab.join('|')) {
-      novo.linhas = antes.linhas.concat(novo.linhas);
-      novo.somou = (antes.linhas || []).length;
+      // Se o arquivo não traz tudo que já está guardado, não dá para saber
+      // sozinho se ele quis acrescentar ou refazer a lista. Então pergunto —
+      // e só pergunto nesse caso, que é o único ambíguo.
+      var tinha = {}, faltando = 0;
+      antes.linhas.forEach(function(l){
+        var k = aagChaveDaLista(chave, antes.cab, l);
+        if (k && k !== '|||') tinha[k] = 1;
+      });
+      novo.linhas.forEach(function(l){
+        var k = aagChaveDaLista(chave, novo.cab, l);
+        if (k && tinha[k]) delete tinha[k];
+      });
+      faltando = Object.keys(tinha).length;
+      if (faltando) {
+        var somar = confirm('O arquivo tem ' + cpNum(novo.linhas.length) + ' linha(s) e a lista '
+          + 'guardada tem ' + cpNum(antes.linhas.length) + '.\n'
+          + cpNum(faltando) + ' linha(s) que estão guardadas NÃO vieram nesse arquivo.\n\n'
+          + 'OK = somar: as ' + cpNum(faltando) + ' continuam, e as do arquivo entram por cima.\n'
+          + 'Cancelar = substituir: fica só o que está no arquivo, as outras saem.');
+        if (!somar) {
+          novo.trocouTudo = antes.linhas.length;
+          _aagArq[chave] = novo;
+          aagPintarUploads(); aagRenderPassos();
+          if (AAG_GUARDADAS.indexOf(chave) !== -1) aagGuardar(chave);
+          if (st) st.innerHTML = '<span style="color:var(--am)">✓ ' + cpEsc(file.name)
+            + ' — lista substituída: ' + cpNum(novo.linhas.length) + ' linha(s). '
+            + cpNum(faltando) + ' que estavam guardadas saíram.</span>';
+          aagRender();
+          return;
+        }
+      }
+      var onde = {}, juntas = [];
+      antes.linhas.forEach(function(l){
+        var k = aagChaveDaLista(chave, antes.cab, l);
+        if (!k || k === '|||') { juntas.push(l); return; }
+        if (onde[k] !== undefined) { juntas[onde[k]] = l; return; }
+        onde[k] = juntas.length; juntas.push(l);
+      });
+      var novas = 0, trocadas = 0;
+      novo.linhas.forEach(function(l){
+        var k = aagChaveDaLista(chave, novo.cab, l);
+        if (!k || k === '|||') { juntas.push(l); novas++; return; }
+        if (onde[k] !== undefined) { juntas[onde[k]] = l; trocadas++; return; }
+        onde[k] = juntas.length; juntas.push(l); novas++;
+      });
+      novo.linhas = juntas;
+      novo.somou = antes.linhas.length;
+      novo.novas = novas;
+      novo.trocadas = trocadas;
     }
     _aagArq[chave] = novo;
     if (chave === 'trat') aagLimparEscolhasDoArquivo(novo);
@@ -32469,7 +32615,15 @@ async function aagUpload(chave, file){
     if (AAG_GUARDADAS.indexOf(chave) !== -1) aagGuardar(chave);
     if (st) st.innerHTML = '<span style="color:var(--vd)">✓ ' + cpEsc(file.name) + ' — '
       + cpNum(_aagArq[chave].linhas.length) + ' linhas na aba <strong>'
-      + cpEsc(melhor.aba) + '</strong>.</span>';
+      + cpEsc(melhor.aba) + '</strong>'
+      + (novo.somou !== undefined
+          ? ' (' + cpNum(novo.novas) + ' nova(s), ' + cpNum(novo.trocadas)
+            + ' já existia(m), nada duplicado)'
+          : '')
+      + (novo.repetidas
+          ? ' <span style="color:var(--am)">⚠ ' + cpNum(novo.repetidas) + ' linha(s) vinham '
+            + 'repetidas no arquivo; fiquei com a última de cada uma.</span>'
+          : '') + '.</span>';
   } catch (e) {
     if (st) {
       st.innerHTML = e && e.protegido
