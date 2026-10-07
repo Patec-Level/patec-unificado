@@ -656,7 +656,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
   <div class="sb-logo"><h1>PATEC</h1><p>Sistema de Gestão de Compras</p></div>
 
   <!-- Mini Meta/Gap no sidebar -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:.625rem .75rem;border-bottom:1px solid rgba(255,255,255,.07)">
+  <div id="sb-cards-ciclo" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:.625rem .75rem;border-bottom:1px solid rgba(255,255,255,.07)">
     <div style="background:rgba(14,158,106,.15);border:1px solid rgba(14,158,106,.2);border-radius:7px;padding:6px 8px;text-align:center">
       <div style="font-size:7px;font-weight:600;color:rgba(255,255,255,.4);letter-spacing:.5px;text-transform:uppercase;margin-bottom:1px">META<br>OPERACIONAL</div>
       <div style="font-size:17px;font-weight:700;color:#fff;line-height:1" id="sb-meta">1.980</div>
@@ -681,8 +681,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
   <div class="sb-it" id="sb-aa-it" onclick="go('analista-auto',this)">🤖 Analista Automático</div>
   <div class="sb-it" id="sb-q18-it" onclick="go('consulta-q18',this)">🚫 Consulta Q18</div>
 
-  <!-- Gestão de Produção movida para ADM -->
-  <div class="sb-it" id="sb-pcp-it" onclick="go('pcp',this)" style="display:none">📋 PCP</div>
+  <!-- Gestão de Produção movida para ADM. O item do PCP é montado por
+       authMontarSidebar (PERMS_SIDEBAR.pcp), e só na frente ADLV · PCP. -->
   <div class="sb-it" onclick="go('fechamento-dia',this)">🔒 Fechamento do Dia</div>
   <div class="sb-it" onclick="go('pr-bancoferias',this)">🗓 Gestão de Jornada</div>
   <div class="sb-sec" id="sb-adm-sec" style="display:none">ADM</div>
@@ -720,7 +720,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       <button onclick="authLogout()" style="background:none;border:none;color:rgba(255,255,255,.6);cursor:pointer;font-size:16px;padding:0 0 0 4px;line-height:1" title="Sair">×</button>
     </div>
     <!-- DIR 1: META DO PROJETO -->
-    <div style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.13);border-radius:8px;padding:4px 12px;text-align:center;min-width:95px">
+    <div id="top-meta-proj-box" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.13);border-radius:8px;padding:4px 12px;text-align:center;min-width:95px">
       <div style="font-size:7px;font-weight:700;color:rgba(255,255,255,.45);letter-spacing:.7px;text-transform:uppercase;white-space:nowrap;margin-bottom:1px">META DO PROJETO</div>
       <div style="font-size:19px;font-weight:700;color:#fff;line-height:1" id="top-meta-proj">—</div>
       <div style="font-size:8px;color:rgba(255,255,255,.38)" id="top-meta-proj-label">itens · ciclo</div>
@@ -37658,6 +37658,8 @@ const PERMS_SIDEBAR = {
   // Só existem dentro do módulo Pedidos, que tem Firebase próprio
   'governanca-pedidos': { icon:'🏛️', label:'Governança',           mod:'EXECUÇÃO', soPedidos:true },
   'pedidos':        { icon:'📦', label:'Controle de Pedidos',      mod:'EXECUÇÃO', soPedidos:true },
+  // Só existe dentro da frente ADLV · PCP, que tem Firebase próprio
+  'pcp':            { icon:'📋', label:'PCP',                     mod:'EXECUÇÃO', soPcp:true },
 };
 
 // Variáveis globais de auth
@@ -38192,7 +38194,12 @@ function _entrarNoApp(){
     if(btnFast) btnFast.style.display = (_moduloAtivo==='fast') ? '' : 'none';
   });
 
-  rtIniciarListener();
+  // Numa frente que só tem PCP, nada do PATEC é carregado: todos esses
+  // carregadores passam por getDB(), que aqui aponta para o Firebase da
+  // frente. Rodar aqui encheria a base do PCP de coleções do PATEC.
+  const _soPcpApp = (typeof modSoPcp === 'function') && modSoPcp(_moduloAtivo);
+
+  if(!_soPcpApp) rtIniciarListener();
 
   // A tela inicial era Indicadores de Mercado, que foi para o ADM. Agora o
   // app abre no Direcionamento da Equipe, o primeiro item do menu — e no
@@ -38200,7 +38207,9 @@ function _entrarNoApp(){
   setTimeout(function(){
     try {
       if(document.getElementById('p-adm') && document.getElementById('p-adm').classList.contains('active')) return;
-      var alvo = (_moduloAtivo === 'pedidos') ? 'pedidos' : 'direcionamento';
+      var alvo = (_moduloAtivo === 'pedidos') ? 'pedidos'
+               : (((typeof modSoPcp === 'function') && modSoPcp(_moduloAtivo)) ? 'pcp'
+               : 'direcionamento');
       var it = [].slice.call(document.querySelectorAll('#sb .sb-it')).filter(function(x){
         return new RegExp("go\\('" + alvo + "'").test(x.getAttribute('onclick') || '');
       })[0];
@@ -38209,7 +38218,7 @@ function _entrarNoApp(){
   }, 250);
 
   // Todos os carregamentos Firebase centralizados aqui, só uma vez após login
-  if(!window._fbCarregadoUmaVez){
+  if(!window._fbCarregadoUmaVez && !_soPcpApp){
     window._fbCarregadoUmaVez = true;
     // Snapshot Mar/Abr pendente — segunda trava de segurança: só grava se o
     // módulo ativo CONFIRMADO (pós-seleção) for ADLV. Esse snapshot é dado
@@ -38253,8 +38262,11 @@ function _entrarNoApp(){
     }).catch(e=>console.warn('fbCarregarTudo:', e));
   }
 
-  const colab = _authPerfil?.colabNome || colabLogado;
-  if(colab){
+  // A trava de fechamento do dia também é do PATEC — não roda na frente PCP.
+  const colab = _soPcpApp ? '' : (_authPerfil?.colabNome || colabLogado);
+  if(_soPcpApp){
+    /* frente PCP: sem trava de fechamento */
+  } else if(colab){
     _fdiaLoginTravaCheck(colab);
   } else {
     // Login automático: o perfil (colabNome) pode ainda estar carregando do
@@ -38487,7 +38499,13 @@ function authMontarSidebar(emailParam){
   // Cobrança por Status, quem já tem acesso à Governança enxerga o tópico
   // (perfis antigos não têm 'reuniao' na lista de permissões salva).
   const PAGINAS_FAST_ONLY = ['reuniao'];
+  // Frente que só tem PCP: o menu mostra o PCP e mais nada. As telas do
+  // PATEC leriam e gravariam na base da frente, que é outro projeto do
+  // Firebase — misturar base é justamente o que não pode acontecer.
+  const _soPcp = (typeof modSoPcp === 'function') && modSoPcp(_moduloAtivo);
   Object.entries(PERMS_SIDEBAR).forEach(([key, cfg]) => {
+    // Cada frente com base própria mostra só as telas dela.
+    if(_soPcp !== !!cfg.soPcp) return;
     // No módulo Pedidos só existe o Controle de Pedidos; nos outros
     // módulos ele não aparece (a base dele é outra).
     if(_moduloAtivo === 'pedidos' && !cfg.soPedidos) return;
@@ -38515,7 +38533,7 @@ function authMontarSidebar(emailParam){
 
   // ADM aparece para ADM geral e para Admin do FAST — mas não no módulo
   // Pedidos: as telas de lá são do ADLV/FAST e leriam a base errada.
-  if(podeVerTudo && _moduloAtivo !== 'pedidos'){
+  if(podeVerTudo && _moduloAtivo !== 'pedidos' && !_soPcp){
     html += `<div class="sb-sec" style="padding:.7rem 1rem .2rem;font-size:9px;font-weight:600;color:rgba(255,255,255,.28);letter-spacing:1.2px;text-transform:uppercase;flex-shrink:0">ADM</div>`;
     html += `<div class="sb-it" onclick="go('adm',this)">🔐 Administração</div>`;
   }
@@ -38524,8 +38542,15 @@ function authMontarSidebar(emailParam){
   // Controlar ADM estático
   const _sa = document.getElementById('sb-adm-sec');
   const _ia = document.getElementById('sb-adm-it');
-  if(_sa) _sa.style.display = podeVerTudo ? '' : 'none';
-  if(_ia) _ia.style.display = podeVerTudo ? '' : 'none';
+  if(_sa) _sa.style.display = (podeVerTudo && !_soPcp) ? '' : 'none';
+  if(_ia) _ia.style.display = (podeVerTudo && !_soPcp) ? '' : 'none';
+  // Os cards de ciclo (Meta Operacional, PATEC Finalizado, Meta e Gap do
+  // Projeto) são números do PATEC. Numa frente de base própria eles ficariam
+  // mostrando dado de outro projeto, então somem.
+  ['sb-cards-ciclo','top-meta-proj-box','top-gap-proj-box'].forEach(function(id){
+    const el = document.getElementById(id);
+    if(el) el.style.display = _soPcp ? 'none' : '';
+  });
   // Aba "Usuários" dentro do ADM só aparece pro ADM geral (André) — Admin do
   // FAST vê todas as outras abas do ADM, mas precisa pedir pra André
   // cadastrar/liberar acesso de novos colaboradores.
@@ -48529,19 +48554,9 @@ function _cobAplicarModulo(){
     var it = document.getElementById(id);
     if (it) it.style.display = fast ? 'none' : '';
   });
-  // ── o PCP ────────────────────────────────────────────────────────
-  // Aparece no ADLV e, na frente adlv_pcp, é a única tela do menu.
-  var _mod = (typeof _moduloAtivo !== 'undefined') ? _moduloAtivo : 'adlv';
-  var soPcp = (typeof modSoPcp === 'function') && modSoPcp(_mod);
-  var itPcp = document.getElementById('sb-pcp-it');
-  if (itPcp) itPcp.style.display = (soPcp || _mod === 'adlv') ? '' : 'none';
-  if (soPcp) {
-    [].forEach.call(document.querySelectorAll('.sb-it'), function(it){
-      if (it.id !== 'sb-pcp-it' && it.id !== 'sb-adm-it') it.style.display = 'none';
-    });
-    [].forEach.call(document.querySelectorAll('.sb-mod'), function(x){ x.style.display = 'none'; });
-    if (itPcp && !document.querySelector('.page.active')) go('pcp', itPcp);
-  }
+  // O PCP não é tratado aqui. Quem monta o menu é authMontarSidebar, que
+  // apaga todos os .sb-it e remonta a partir de PERMS_SIDEBAR — qualquer
+  // ajuste feito neste ponto era desfeito logo em seguida.
   if (!fast) {
     var pgReu = document.getElementById('p-reuniao');
     if (pgReu) pgReu.classList.remove('active');
