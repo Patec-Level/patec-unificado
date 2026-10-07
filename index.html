@@ -682,6 +682,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
   <div class="sb-it" id="sb-q18-it" onclick="go('consulta-q18',this)">🚫 Consulta Q18</div>
 
   <!-- Gestão de Produção movida para ADM -->
+  <div class="sb-it" id="sb-pcp-it" onclick="go('pcp',this)" style="display:none">📋 PCP</div>
   <div class="sb-it" onclick="go('fechamento-dia',this)">🔒 Fechamento do Dia</div>
   <div class="sb-it" onclick="go('pr-bancoferias',this)">🗓 Gestão de Jornada</div>
   <div class="sb-sec" id="sb-adm-sec" style="display:none">ADM</div>
@@ -4514,6 +4515,25 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
     <!-- ══════════════════════════════════════════
          ANALISTA AUTOMÁTICO — PEDIDO DIRETO
     ══════════════════════════════════════════ -->
+    <div id="p-pcp" class="page">
+      <div class="cd">
+        <div class="cd-t" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <span>📋 PCP — Planejamento e Controle de Produção</span>
+          <span id="pcp-periodo-lbl" style="font-size:12px;font-weight:600;color:var(--tx2)"></span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:.9rem">
+          <button class="btn btn-p" onclick="pcpAbrirPeriodo()">📅 Período da medição</button>
+          <button class="btn btn-s" onclick="pcpPuxarDoDash()">⟳ Puxar do dashboard</button>
+          <button class="btn btn-s" onclick="pcpExportar()">⬇ Baixar a medição</button>
+          <button class="btn btn-s" onclick="pcpFechar()">🔒 Fechar medição</button>
+          <div id="pcp-status" style="font-size:12px;flex:1;min-width:200px"></div>
+        </div>
+        <div id="pcp-cards"></div>
+      </div>
+      <div id="pcp-grade"></div>
+      <div id="pcp-historico"></div>
+    </div>
+
     <div id="p-analista-auto" class="page">
       <!-- Header com abas -->
       <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--azm)">
@@ -7139,7 +7159,10 @@ var FIREBASE_MODULOS = {
 // nesta lista, o card dela não deixa entrar no app, mesmo com o Firebase
 // já criado: entrar sem tela própria mostraria as telas do PATEC gravando
 // na base errada.
-var FRENTES_COM_TELA = ['adlv', 'fast', 'pedidos'];
+var FRENTES_COM_TELA = ['adlv', 'fast', 'pedidos', 'adlv_pcp'];
+// Frentes que só têm a tela de PCP: o menu mostra só ela.
+var FRENTES_SO_PCP = ['adlv_pcp'];
+function modSoPcp(m){ return FRENTES_SO_PCP.indexOf(m) !== -1; }
 function modTemTela(m){ return FRENTES_COM_TELA.indexOf(m) !== -1; }
 
 function modExiste(m){
@@ -7813,6 +7836,7 @@ let ciclos_historico = JSON.parse(localStorage.getItem(_lsMod('patec_ciclos_hist
 // ══ NAVEGAÇÃO UNIFICADA ══
 
 function go(id, el) {
+  if (id === 'pcp' && typeof pcpAbrir === 'function') setTimeout(pcpAbrir, 60);
   // Sai da página do ADM → desliga o tempo real do Controle das Equipes.
   if(id!=='adm' && typeof _cePararRT==='function') _cePararRT();
   // Plano de Ação: liberado para ADLV e FAST (cada módulo usa sua própria
@@ -32231,6 +32255,637 @@ function aaSetTab(aba){
 }
 
 
+
+// ══════════════════════════════════════════════════════════════════
+// PCP — PLANEJAMENTO E CONTROLE DE PRODUÇÃO
+//
+// Substitui a aba "Painel" da planilha de Excel. A medição vai do dia 26
+// de um mês ao 25 do seguinte, e os dias úteis saem sozinhos da data de
+// início e fim — sábado, domingo e feriado ficam de fora. Conferido
+// contra a planilha de setembro dele: os 22 dias de 26/08 a 25/09 batem
+// um a um, inclusive o 07/09 que não entra.
+//
+// Cada bloco tem uma linha "Programado" (a meta de cada dia) e uma ou
+// mais linhas de "Realizado". O acumulado do plano vem SEMPRE da linha
+// Programado do bloco — na planilha dele metade dos blocos apontava para
+// a própria linha, o que fazia o % Real dar 100% sempre.
+// ══════════════════════════════════════════════════════════════════
+var PCP_COL  = 'pcp_medicoes';     // uma doc por medição, id = aaaa-mm-dd_aaaa-mm-dd
+var PCP_CFG  = 'pcp_atual';        // qual medição está aberta
+
+var PCP_BLOCOS = [
+  { chave:'receb', nome:'Recebimento de Itens', meta:500, linhas:[
+      { chave:'entrada', nome:'Entrada Itens Novos' },
+      { chave:'satre',   nome:'Itens SATRE' } ] },
+  { chave:'oport', nome:'Oportunidades', meta:260, linhas:[
+      { chave:'envio_eco',  nome:'Envio Ecotações' },
+      { chave:'receb_eco',  nome:'Recebido Ecotações' },
+      { chave:'pub_manual', nome:'Publicação Manual' },
+      { chave:'anexos',     nome:'Produtividade Anexos' },
+      { chave:'saneamento', nome:'Saneamento' } ] },
+  { chave:'devol', nome:'Devoluções', meta:100, linhas:[
+      { chave:'devolucoes', nome:'Devoluções' } ] },
+  { chave:'patec', nome:'PATEC', meta:90, linhas:[
+      { chave:'patec_fin',  nome:'PATEC Finalizado', auto:'patec_fin' },
+      { chave:'mdg_xgl',    nome:'MDG e XGL' },
+      { chave:'rc_pedidos', nome:'RCs para Pedidos' },
+      { chave:'rc_devol',   nome:'RCs para Devoluções' } ] },
+  { chave:'abertura', nome:'Abertura de PATEC', meta:50, linhas:[
+      { chave:'abertura', nome:'Abertura de PATEC' } ] },
+  { chave:'emissao', nome:'Emissão de Pedido', meta:135, linhas:[
+      { chave:'emissao', nome:'Emissão de Pedido', auto:'pedidos' } ] },
+  { chave:'negoc', nome:'Negociação', meta:0, linhas:[
+      { chave:'negociacao', nome:'Itens para Negociação (Preço Excessivo)' } ] }
+];
+
+function pcpLinhas(){
+  var out = [];
+  PCP_BLOCOS.forEach(function(b){ b.linhas.forEach(function(l){
+    out.push({ bloco:b, linha:l }); }); });
+  return out;
+}
+
+// ── a medição aberta ──────────────────────────────────────────────
+var _pcp = null;        // { inicio, fim, dias:[], plan:{}, real:{}, custo, fechada }
+var _pcpHist = [];      // as medições já fechadas
+
+function pcpNovaMedicao(ini, fim){
+  return { inicio:ini, fim:fim, dias:pcpDiasUteis(ini, fim),
+           plan:{}, real:{}, custo:0, fechada:false,
+           criadaEm:new Date().toISOString() };
+}
+
+// Dia útil: segunda a sexta, fora os feriados que o dash já conhece.
+function pcpDiasUteis(ini, fim){
+  var out = [];
+  if (!ini || !fim || ini > fim) return out;
+  var d = new Date(ini + 'T12:00:00'), f = new Date(fim + 'T12:00:00');
+  while (d <= f) {
+    var dw = d.getDay();
+    var iso = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0')
+            + '-' + String(d.getDate()).padStart(2,'0');
+    if (dw >= 1 && dw <= 5
+        && (typeof GOV_FERIADOS === 'undefined' || GOV_FERIADOS.indexOf(iso) === -1)) {
+      out.push(iso);
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
+// A medição do mês: do 26 ao 25 do mês seguinte.
+function pcpPeriodoPadrao(hoje){
+  var h = hoje || cpHojeISO();
+  var a = +h.slice(0,4), m = +h.slice(5,7), dia = +h.slice(8,10);
+  // antes do dia 26, a medição aberta começou no mês passado
+  if (dia < 26) { m -= 1; if (m < 1) { m = 12; a -= 1; } }
+  var ini = a + '-' + String(m).padStart(2,'0') + '-26';
+  var m2 = m + 1, a2 = a;
+  if (m2 > 12) { m2 = 1; a2 += 1; }
+  var fim = a2 + '-' + String(m2).padStart(2,'0') + '-25';
+  return { inicio:ini, fim:fim };
+}
+
+function pcpId(m){ return (m.inicio || '') + '_' + (m.fim || ''); }
+function pcpRotulo(m){
+  if (!m || !m.inicio) return '';
+  return cpDataBR(m.inicio) + ' a ' + cpDataBR(m.fim)
+    + ' · ' + cpNum((m.dias || []).length) + ' dias úteis';
+}
+
+// ── o valor de cada célula ────────────────────────────────────────
+function pcpPlanDia(bloco, dia){
+  var b = (_pcp.plan || {})[bloco];
+  if (b && b[dia] !== undefined && b[dia] !== '') return aagNum(b[dia]);
+  return 0;
+}
+function pcpRealDia(linha, dia){
+  var l = (_pcp.real || {})[linha];
+  if (l && l[dia] !== undefined && l[dia] !== '') return aagNum(l[dia]);
+  return 0;
+}
+function pcpPlanTotal(bloco){
+  return (_pcp.dias || []).reduce(function(n, d){ return n + pcpPlanDia(bloco, d); }, 0);
+}
+function pcpRealTotal(linha){
+  return (_pcp.dias || []).reduce(function(n, d){ return n + pcpRealDia(linha, d); }, 0);
+}
+
+function pcpSetPlan(bloco, dia, v){
+  if (!_pcp || _pcp.fechada) return;
+  _pcp.plan[bloco] = _pcp.plan[bloco] || {};
+  if (aagTxt(v) === '') delete _pcp.plan[bloco][dia];
+  else _pcp.plan[bloco][dia] = aagNum(v);
+  pcpPintarTotais();
+  pcpSalvar();
+}
+function pcpSetReal(linha, dia, v){
+  if (!_pcp || _pcp.fechada) return;
+  _pcp.real[linha] = _pcp.real[linha] || {};
+  if (aagTxt(v) === '') delete _pcp.real[linha][dia];
+  else _pcp.real[linha][dia] = aagNum(v);
+  pcpPintarTotais();
+  pcpSalvar();
+}
+// Preenche a meta de um bloco em todos os dias de uma vez.
+function pcpMetaEmTodos(bloco, v){
+  if (!_pcp || _pcp.fechada) return;
+  var n = aagNum(v);
+  _pcp.plan[bloco] = {};
+  if (n) (_pcp.dias || []).forEach(function(d){ _pcp.plan[bloco][d] = n; });
+  pcpRenderGrade();
+  pcpSalvar();
+}
+
+
+// ── guardar e buscar ──────────────────────────────────────────────
+var _pcpSalvarTimer = null;
+function pcpSalvar(){
+  if (!_pcp || _pcp.fechada) return;
+  if (_pcpSalvarTimer) clearTimeout(_pcpSalvarTimer);
+  _pcpSalvarTimer = setTimeout(pcpSalvarAgora, 900);
+}
+async function pcpSalvarAgora(forcar){
+  try {
+    if (!_pcp) return;
+    // medição fechada é só leitura: a única escrita permitida é a do
+    // próprio fechamento, que passa forcar=true
+    if (_pcp.fechada && !forcar) return;
+    var db = getDB(); if (!db) return;
+    await db.collection(PCP_COL).doc(pcpId(_pcp)).set({
+      inicio:_pcp.inicio, fim:_pcp.fim, dias:_pcp.dias,
+      plan:_pcp.plan, real:_pcp.real, custo:_pcp.custo || 0,
+      fechada:!!_pcp.fechada, criadaEm:_pcp.criadaEm,
+      atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem()
+    });
+    await db.collection('config').doc(PCP_CFG).set({ id:pcpId(_pcp),
+      inicio:_pcp.inicio, fim:_pcp.fim });
+    var st = document.getElementById('pcp-status');
+    if (st && !/Erro/.test(st.textContent)) st.innerHTML =
+      '<span style="color:var(--tx2)">salvo ' + new Date().toLocaleTimeString('pt-BR').slice(0,5) + '</span>';
+  } catch (e) {
+    console.warn('pcpSalvarAgora:', e);
+    var st2 = document.getElementById('pcp-status');
+    if (st2) st2.innerHTML = '<span style="color:var(--vm)">✗ não consegui salvar: '
+      + cpEsc(e.message) + '</span>';
+  }
+}
+
+async function pcpCarregar(){
+  try {
+    var db = getDB();
+    var alvo = pcpPeriodoPadrao();
+    if (db) {
+      var cfg = await db.collection('config').doc(PCP_CFG).get();
+      if (cfg && cfg.exists) {
+        var c = cfg.data() || {};
+        if (c.inicio && c.fim) alvo = { inicio:c.inicio, fim:c.fim };
+      }
+      var doc = await db.collection(PCP_COL).doc(alvo.inicio + '_' + alvo.fim).get();
+      if (doc && doc.exists) {
+        var d = doc.data() || {};
+        _pcp = { inicio:d.inicio, fim:d.fim,
+                 dias:(d.dias && d.dias.length) ? d.dias : pcpDiasUteis(d.inicio, d.fim),
+                 plan:d.plan || {}, real:d.real || {}, custo:d.custo || 0,
+                 fechada:!!d.fechada, criadaEm:d.criadaEm };
+      }
+    }
+    if (!_pcp) {
+      _pcp = pcpNovaMedicao(alvo.inicio, alvo.fim);
+      // a primeira vez já vem com as metas do modelo dele
+      PCP_BLOCOS.forEach(function(b){
+        if (!b.meta) return;
+        _pcp.plan[b.chave] = {};
+        _pcp.dias.forEach(function(dia){ _pcp.plan[b.chave][dia] = b.meta; });
+      });
+    }
+    await pcpCarregarHistorico();
+  } catch (e) {
+    console.warn('pcpCarregar:', e);
+    if (!_pcp) _pcp = pcpNovaMedicao(pcpPeriodoPadrao().inicio, pcpPeriodoPadrao().fim);
+  }
+  pcpRender();
+}
+
+async function pcpCarregarHistorico(){
+  _pcpHist = [];
+  try {
+    var db = getDB(); if (!db) return;
+    var snap = await db.collection(PCP_COL).get();
+    snap.forEach(function(doc){
+      var d = doc.data() || {};
+      if (d.fechada) _pcpHist.push(d);
+    });
+    _pcpHist.sort(function(a, b){ return a.inicio < b.inicio ? 1 : -1; });
+  } catch (e) { console.warn('pcpCarregarHistorico:', e); }
+}
+
+// ── o botão do período ────────────────────────────────────────────
+function pcpAbrirPeriodo(){
+  var pad = _pcp || pcpPeriodoPadrao();
+  var ini = prompt('Início da medição (aaaa-mm-dd):', pad.inicio || '');
+  if (!ini) return;
+  var fim = prompt('Fim da medição (aaaa-mm-dd):', pad.fim || '');
+  if (!fim) return;
+  ini = aagTxt(ini); fim = aagTxt(fim);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ini) || !/^\d{4}-\d{2}-\d{2}$/.test(fim)) {
+    alert('As datas precisam estar no formato aaaa-mm-dd. Ex.: 2026-09-26'); return;
+  }
+  if (ini > fim) { alert('O início não pode ser depois do fim.'); return; }
+  var dias = pcpDiasUteis(ini, fim);
+  if (!dias.length) { alert('Esse período não tem nenhum dia útil.'); return; }
+  if (_pcp && (_pcp.inicio !== ini || _pcp.fim !== fim)) {
+    var temDado = Object.keys(_pcp.real || {}).length;
+    if (temDado && !confirm('Trocar o período para ' + cpDataBR(ini) + ' a ' + cpDataBR(fim)
+        + ' (' + dias.length + ' dias úteis)?\n\nOs números que você já lançou ficam '
+        + 'guardados na medição ' + cpDataBR(_pcp.inicio) + ' a ' + cpDataBR(_pcp.fim)
+        + ' e voltam se você escolher esse período de novo.')) return;
+    pcpSalvarAgora();
+  }
+  pcpTrocarPeriodo(ini, fim);
+}
+
+async function pcpTrocarPeriodo(ini, fim){
+  var st = document.getElementById('pcp-status');
+  if (st) st.innerHTML = '⏳ Montando o período...';
+  var novo = null;
+  try {
+    var db = getDB();
+    if (db) {
+      var doc = await db.collection(PCP_COL).doc(ini + '_' + fim).get();
+      if (doc && doc.exists) {
+        var d = doc.data() || {};
+        novo = { inicio:d.inicio, fim:d.fim,
+                 dias:(d.dias && d.dias.length) ? d.dias : pcpDiasUteis(d.inicio, d.fim),
+                 plan:d.plan || {}, real:d.real || {}, custo:d.custo || 0,
+                 fechada:!!d.fechada, criadaEm:d.criadaEm };
+      }
+    }
+  } catch (e) { console.warn('pcpTrocarPeriodo:', e); }
+  if (!novo) {
+    novo = pcpNovaMedicao(ini, fim);
+    // as metas acompanham: o que estava valendo continua valendo
+    PCP_BLOCOS.forEach(function(b){
+      var anterior = _pcp && _pcp.plan && _pcp.plan[b.chave];
+      var valor = b.meta;
+      if (anterior) {
+        var vs = Object.keys(anterior).map(function(k){ return anterior[k]; });
+        if (vs.length) valor = vs[0];
+      }
+      if (!valor) return;
+      novo.plan[b.chave] = {};
+      novo.dias.forEach(function(dia){ novo.plan[b.chave][dia] = valor; });
+    });
+  }
+  _pcp = novo;
+  pcpRender();
+  pcpSalvarAgora();
+  if (st) st.innerHTML = '<span style="color:var(--vd)">✓ ' + pcpRotulo(_pcp) + '</span>';
+}
+
+
+// ── a tela ────────────────────────────────────────────────────────
+function pcpRender(){
+  pcpRenderCards();
+  pcpRenderGrade();
+  pcpRenderHistorico();
+  var lbl = document.getElementById('pcp-periodo-lbl');
+  if (lbl && _pcp) lbl.textContent = pcpRotulo(_pcp) + (_pcp.fechada ? ' · FECHADA' : '');
+}
+
+function pcpRenderCards(){
+  var box = document.getElementById('pcp-cards');
+  if (!box || !_pcp) return;
+  var dias = _pcp.dias || [];
+  var hoje = cpHojeISO();
+  var decorridos = dias.filter(function(d){ return d <= hoje; }).length;
+  var planTotal = 0, realTotal = 0, planAteHoje = 0;
+  PCP_BLOCOS.forEach(function(b){
+    planTotal += pcpPlanTotal(b.chave);
+    dias.forEach(function(d){ if (d <= hoje) planAteHoje += pcpPlanDia(b.chave, d); });
+    b.linhas.forEach(function(l){ realTotal += pcpRealTotal(l.chave); });
+  });
+  var card = function(rot, val, sub, cor){
+    return '<div style="background:var(--cin);border:1.5px solid ' + (cor || 'var(--brd)')
+      + ';border-radius:12px;padding:.85rem;text-align:center">'
+      + '<div style="font-size:24px;font-weight:800;color:' + (cor || 'var(--az)')
+      + ';line-height:1.1">' + val + '</div>'
+      + '<div style="font-size:10px;font-weight:700;color:var(--tx2);margin-top:4px">'
+      + cpEsc(rot) + '</div>'
+      + (sub ? '<div style="font-size:10px;color:var(--tx2);margin-top:3px">' + sub + '</div>' : '')
+      + '</div>';
+  };
+  var gap = realTotal - planAteHoje;
+  box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));'
+    + 'gap:11px;margin-bottom:1rem">'
+    + card('DIAS ÚTEIS', cpNum(dias.length), decorridos + ' já decorrido(s)')
+    + card('PLANEJADO', cpNum(planTotal), 'na medição inteira')
+    + card('REALIZADO', cpNum(realTotal), 'lançado até agora', 'var(--vd)')
+    + card('META ATÉ HOJE', cpNum(planAteHoje), decorridos + ' dia(s) × meta')
+    + card(gap < 0 ? 'GAP' : 'GORDURA', (gap < 0 ? '−' : '+') + cpNum(Math.abs(gap)),
+           'realizado − meta até hoje', gap < 0 ? 'var(--vm)' : 'var(--vd)')
+    + '</div>';
+}
+
+function pcpRenderGrade(){
+  var box = document.getElementById('pcp-grade');
+  if (!box || !_pcp) return;
+  var dias = _pcp.dias || [];
+  if (!dias.length) {
+    box.innerHTML = '<div class="cd"><div style="font-size:12px;color:var(--am)">'
+      + 'Nenhum dia útil nesse período. Clique em <strong>📅 Período da medição</strong>.</div></div>';
+    return;
+  }
+  var trava = _pcp.fechada ? ' disabled' : '';
+  var cabDia = dias.map(function(d){
+    var p = d.split('-');
+    var dow = ['dom','seg','ter','qua','qui','sex','sáb'][new Date(d + 'T12:00:00').getDay()];
+    var hoje = d === cpHojeISO();
+    return '<th style="text-align:center;padding:3px 4px;white-space:nowrap;font-size:9.5px;'
+      + (hoje ? 'background:var(--azc);color:var(--az);' : '')
+      + 'border-left:1px solid var(--brd)">' + p[2] + '/' + p[1]
+      + '<div style="font-weight:400;opacity:.7">' + dow + '</div></th>';
+  }).join('');
+
+  var h = '<div class="cd"><div class="cd-t">📊 Detalhamento da operação — dia a dia</div>'
+    + '<div style="font-size:11px;color:var(--tx2);line-height:1.7;margin-bottom:.8rem">'
+    + 'Os dias úteis saem sozinhos do período: sábado, domingo e feriado não entram. '
+    + 'A linha <strong>Programado</strong> é a meta de cada dia do bloco; as linhas de baixo '
+    + 'são o realizado. O <strong>% Real</strong> compara o realizado com o programado do bloco.'
+    + (_pcp.fechada ? ' <strong style="color:var(--am)">Esta medição está fechada — só leitura.</strong>' : '')
+    + '</div>'
+    + '<div style="overflow:auto;max-height:70vh"><table style="border-collapse:collapse;font-size:11px">'
+    + '<thead><tr style="position:sticky;top:0;background:var(--bg);z-index:2">'
+    + '<th style="text-align:left;padding:4px 8px;min-width:190px;position:sticky;left:0;'
+    +   'background:var(--bg);z-index:3">Operação</th>'
+    + '<th style="text-align:right;padding:4px 6px">Plan.</th>'
+    + '<th style="text-align:right;padding:4px 6px">Real.</th>'
+    + '<th style="text-align:right;padding:4px 6px">%</th>'
+    + '<th style="text-align:right;padding:4px 6px;border-right:1px solid var(--brd)">Gap</th>'
+    + cabDia + '</tr></thead><tbody>';
+
+  PCP_BLOCOS.forEach(function(b){
+    var planT = pcpPlanTotal(b.chave);
+    // a linha do Programado
+    h += '<tr style="background:var(--cin)">'
+      + '<td style="padding:5px 8px;font-weight:700;position:sticky;left:0;background:var(--cin);'
+      +   'border-top:2px solid var(--brd)">' + cpEsc(b.nome)
+      +   '<div style="font-size:9.5px;font-weight:500;color:var(--tx2)">Programado'
+      +   (_pcp.fechada ? '' : ' · <span onclick="pcpPerguntarMeta(\'' + b.chave + '\')" '
+          + 'style="color:var(--azm);cursor:pointer;text-decoration:underline">meta do bloco</span>')
+      +   '</div></td>'
+      + '<td style="text-align:right;padding:5px 6px;font-weight:700;border-top:2px solid var(--brd)" '
+      +   'id="pcp-pt-' + b.chave + '">' + cpNum(planT) + '</td>'
+      + '<td colspan="3" style="border-top:2px solid var(--brd);border-right:1px solid var(--brd)"></td>';
+    dias.forEach(function(d){
+      h += '<td style="padding:1px;border-left:1px solid var(--brd);border-top:2px solid var(--brd)">'
+        + '<input type="text" value="' + (pcpPlanDia(b.chave, d) || '') + '"' + trava
+        + ' onchange="pcpSetPlan(\'' + b.chave + '\',\'' + d + '\',this.value)"'
+        + ' style="width:42px;font-size:10.5px;padding:2px 3px;text-align:center;border:none;'
+        + 'background:transparent;color:var(--tx2);font-weight:600"></td>';
+    });
+    h += '</tr>';
+
+    b.linhas.forEach(function(l){
+      var realT = pcpRealTotal(l.chave);
+      var pct = planT ? realT / planT : 0;
+      h += '<tr id="pcp-lin-' + l.chave + '">'
+        + '<td style="padding:4px 8px;padding-left:22px;position:sticky;left:0;background:var(--bg)">'
+        +   cpEsc(l.nome)
+        +   (l.auto ? ' <span title="o dash preenche sozinho" style="font-size:9px;color:var(--azm);'
+             + 'font-weight:700">⟳</span>' : '') + '</td>'
+        + '<td style="text-align:right;padding:4px 6px;color:var(--tx2)" class="pcp-pl">'
+        +   cpNum(planT) + '</td>'
+        + '<td style="text-align:right;padding:4px 6px;font-weight:700" class="pcp-rt">'
+        +   cpNum(realT) + '</td>'
+        + '<td style="text-align:right;padding:4px 6px;color:'
+        +   (pct >= 1 ? 'var(--vd)' : pct >= 0.8 ? 'var(--am)' : 'var(--vm)')
+        +   '" class="pcp-pc">' + (planT ? Math.round(pct * 100) + '%' : '—') + '</td>'
+        + '<td style="text-align:right;padding:4px 6px;border-right:1px solid var(--brd)" '
+        +   'class="pcp-gp">' + cpNum(planT - realT) + '</td>';
+      dias.forEach(function(d){
+        var v = (_pcp.real[l.chave] || {})[d];
+        h += '<td style="padding:1px;border-left:1px solid var(--brd)">'
+          + '<input type="text" value="' + (v === undefined ? '' : v) + '"' + trava
+          + ' onchange="pcpSetReal(\'' + l.chave + '\',\'' + d + '\',this.value)"'
+          + ' style="width:42px;font-size:10.5px;padding:2px 3px;text-align:center;'
+          + 'border:1px solid transparent;border-radius:3px;background:transparent;color:var(--tx)"'
+          + ' onfocus="this.style.borderColor=\'var(--az)\'"'
+          + ' onblur="this.style.borderColor=\'transparent\'"></td>';
+      });
+      h += '</tr>';
+    });
+  });
+  h += '</tbody></table></div></div>';
+  box.innerHTML = h;
+}
+
+function pcpPerguntarMeta(bloco){
+  var b = PCP_BLOCOS.filter(function(x){ return x.chave === bloco; })[0];
+  if (!b) return;
+  var atual = pcpPlanDia(bloco, (_pcp.dias || [])[0]) || b.meta;
+  var v = prompt('Meta por dia de ' + b.nome + ':', atual);
+  if (v === null) return;
+  pcpMetaEmTodos(bloco, v);
+}
+
+// Repinta só os totais, sem redesenhar a grade inteira — assim o cursor
+// não sai do lugar enquanto ele digita.
+function pcpPintarTotais(){
+  if (!_pcp) return;
+  PCP_BLOCOS.forEach(function(b){
+    var planT = pcpPlanTotal(b.chave);
+    var el = document.getElementById('pcp-pt-' + b.chave);
+    if (el) el.textContent = cpNum(planT);
+    b.linhas.forEach(function(l){
+      var tr = document.getElementById('pcp-lin-' + l.chave);
+      if (!tr) return;
+      var realT = pcpRealTotal(l.chave);
+      var pct = planT ? realT / planT : 0;
+      var q = function(c){ return tr.querySelector('.' + c); };
+      if (q('pcp-pl')) q('pcp-pl').textContent = cpNum(planT);
+      if (q('pcp-rt')) q('pcp-rt').textContent = cpNum(realT);
+      if (q('pcp-pc')) {
+        q('pcp-pc').textContent = planT ? Math.round(pct * 100) + '%' : '—';
+        q('pcp-pc').style.color = pct >= 1 ? 'var(--vd)' : pct >= 0.8 ? 'var(--am)' : 'var(--vm)';
+      }
+      if (q('pcp-gp')) q('pcp-gp').textContent = cpNum(planT - realT);
+    });
+  });
+  pcpRenderCards();
+}
+
+
+// ── puxar o realizado do próprio dashboard ────────────────────────
+// Só preenche as linhas marcadas com auto, e só os dias que estão dentro
+// da medição. O que ele digitou na mão não é sobrescrito sem avisar.
+async function pcpPuxarDoDash(){
+  if (!_pcp) return;
+  if (_pcp.fechada) { alert('Esta medição está fechada.'); return; }
+  var st = document.getElementById('pcp-status');
+  if (st) st.innerHTML = '⏳ Buscando no dashboard...';
+  var achados = {};
+  try {
+    // Emissão de Pedido: o histórico diário do Controle de Pedidos
+    var porDia = {};
+    (typeof _cpHist !== 'undefined' ? (_cpHist || []) : []).forEach(function(h){
+      if (!h || !h.data) return;
+      porDia[h.data] = (porDia[h.data] || 0) + (+h.total || 0);
+    });
+    if (Object.keys(porDia).length) achados['pedidos'] = porDia;
+
+    // PATEC Finalizado: a data de finalização de cada RC da Governança
+    var db = getDB();
+    if (db) {
+      var fin = {};
+      var snap = await db.collection('gov_mapa').get();
+      snap.forEach(function(doc){
+        var d = doc.data() || {};
+        var dt = aagTxt(d.finalizado);
+        if (!dt) return;
+        var iso = /^\d{4}-\d{2}-\d{2}$/.test(dt) ? dt : cpDataISO(dt);
+        if (iso) fin[iso] = (fin[iso] || 0) + 1;
+      });
+      if (Object.keys(fin).length) achados['patec_fin'] = fin;
+    }
+  } catch (e) { console.warn('pcpPuxarDoDash:', e); }
+
+  var mudou = 0, sobrescritos = 0, linhas = [];
+  pcpLinhas().forEach(function(x){
+    var fonte = x.linha.auto && achados[x.linha.auto];
+    if (!fonte) return;
+    var n = 0, over = 0;
+    _pcp.dias.forEach(function(d){
+      var v = fonte[d];
+      if (v === undefined) return;
+      var atual = (_pcp.real[x.linha.chave] || {})[d];
+      if (atual !== undefined && aagNum(atual) !== v) over++;
+      _pcp.real[x.linha.chave] = _pcp.real[x.linha.chave] || {};
+      _pcp.real[x.linha.chave][d] = v;
+      n++;
+    });
+    if (n) { mudou += n; sobrescritos += over; linhas.push(x.linha.nome + ' (' + n + ')'); }
+  });
+
+  if (!mudou) {
+    if (st) st.innerHTML = '<span style="color:var(--am)">Nada encontrado no dashboard para '
+      + 'os dias desta medição. As linhas com ⟳ são as que eu consigo puxar.</span>';
+    return;
+  }
+  pcpRenderGrade();
+  pcpRenderCards();
+  pcpSalvarAgora();
+  if (st) st.innerHTML = '<span style="color:var(--vd)">✓ ' + cpNum(mudou) + ' dia(s) preenchido(s): '
+    + cpEsc(linhas.join(' · '))
+    + (sobrescritos ? ' · <span style="color:var(--am)">' + cpNum(sobrescritos)
+        + ' valor(es) que você tinha digitado foram substituídos pelo do dashboard</span>' : '')
+    + '</span>';
+}
+
+// ── fechar a medição e guardar no histórico ───────────────────────
+function pcpFechar(){
+  if (!_pcp) return;
+  if (_pcp.fechada) { alert('Esta medição já está fechada.'); return; }
+  var planTotal = 0, realTotal = 0;
+  PCP_BLOCOS.forEach(function(b){
+    planTotal += pcpPlanTotal(b.chave);
+    b.linhas.forEach(function(l){ realTotal += pcpRealTotal(l.chave); });
+  });
+  if (!confirm('Fechar a medição ' + cpDataBR(_pcp.inicio) + ' a ' + cpDataBR(_pcp.fim) + '?\n\n'
+      + '  ' + cpNum(_pcp.dias.length) + ' dias úteis\n'
+      + '  ' + cpNum(planTotal) + ' planejado\n'
+      + '  ' + cpNum(realTotal) + ' realizado\n\n'
+      + 'Ela passa a ser só leitura e vai para o histórico. A próxima medição '
+      + 'é criada em seguida, com as mesmas metas.')) return;
+  _pcp.fechada = true;
+  _pcp.fechadaEm = new Date().toISOString();
+  _pcp.fechadaPor = cpQuem() || 'dash';
+  pcpSalvarAgora(true);
+  // emenda a próxima: começa no dia seguinte ao fim desta
+  var d = new Date(_pcp.fim + 'T12:00:00');
+  d.setDate(d.getDate() + 1);
+  var ini = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0')
+          + '-' + String(d.getDate()).padStart(2,'0');
+  var f = new Date(d); f.setMonth(f.getMonth() + 1); f.setDate(f.getDate() - 1);
+  var fim = f.getFullYear() + '-' + String(f.getMonth()+1).padStart(2,'0')
+          + '-' + String(f.getDate()).padStart(2,'0');
+  pcpCarregarHistorico().then(function(){ pcpTrocarPeriodo(ini, fim); });
+}
+
+function pcpRenderHistorico(){
+  var box = document.getElementById('pcp-historico');
+  if (!box) return;
+  if (!_pcpHist.length) { box.innerHTML = ''; return; }
+  var h = '<div class="cd"><div class="cd-t">📚 Histórico de medições</div>'
+    + '<div style="font-size:11px;color:var(--tx2);margin-bottom:.7rem">'
+    + 'Medições fechadas. Clique para abrir em só leitura.</div>'
+    + '<table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr>'
+    + '<th style="text-align:left;padding:4px 8px">Período</th>'
+    + '<th style="text-align:right;padding:4px 8px">Dias</th>'
+    + '<th style="text-align:right;padding:4px 8px">Planejado</th>'
+    + '<th style="text-align:right;padding:4px 8px">Realizado</th>'
+    + '<th style="text-align:right;padding:4px 8px">%</th>'
+    + '<th style="text-align:right;padding:4px 8px">Fechada em</th></tr></thead><tbody>';
+  _pcpHist.forEach(function(m){
+    var dias = m.dias || [];
+    var planT = 0, realT = 0;
+    PCP_BLOCOS.forEach(function(b){
+      var p = (m.plan || {})[b.chave] || {};
+      dias.forEach(function(d){ planT += aagNum(p[d]); });
+      b.linhas.forEach(function(l){
+        var r = (m.real || {})[l.chave] || {};
+        dias.forEach(function(d){ realT += aagNum(r[d]); });
+      });
+    });
+    var pct = planT ? Math.round(100 * realT / planT) : 0;
+    h += '<tr style="border-top:1px solid var(--brd);cursor:pointer"'
+      + ' onclick="pcpTrocarPeriodo(\'' + m.inicio + '\',\'' + m.fim + '\')">'
+      + '<td style="padding:4px 8px;font-weight:600;color:var(--az)">'
+      +   cpDataBR(m.inicio) + ' a ' + cpDataBR(m.fim) + '</td>'
+      + '<td style="text-align:right;padding:4px 8px">' + cpNum(dias.length) + '</td>'
+      + '<td style="text-align:right;padding:4px 8px">' + cpNum(planT) + '</td>'
+      + '<td style="text-align:right;padding:4px 8px;font-weight:700">' + cpNum(realT) + '</td>'
+      + '<td style="text-align:right;padding:4px 8px;color:'
+      +   (pct >= 100 ? 'var(--vd)' : pct >= 80 ? 'var(--am)' : 'var(--vm)') + '">' + pct + '%</td>'
+      + '<td style="text-align:right;padding:4px 8px;color:var(--tx2)">'
+      +   (m.fechadaEm ? cpDataBR(m.fechadaEm.slice(0,10)) : '—') + '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  box.innerHTML = h;
+}
+
+// ── baixar a medição ──────────────────────────────────────────────
+function pcpExportar(){
+  if (!_pcp) return;
+  var dias = _pcp.dias || [];
+  var cab = ['Bloco', 'Operação', 'Linha', 'Plan.Acum', 'Rea.Acum', '% Real', 'Gap']
+    .concat(dias.map(function(d){ return cpDataBR(d); }));
+  var linhas = [cab];
+  PCP_BLOCOS.forEach(function(b){
+    var planT = pcpPlanTotal(b.chave);
+    linhas.push([b.nome, b.nome, 'Programado', planT, '', '', '']
+      .concat(dias.map(function(d){ return pcpPlanDia(b.chave, d) || ''; })));
+    b.linhas.forEach(function(l){
+      var realT = pcpRealTotal(l.chave);
+      linhas.push([b.nome, l.nome, 'Realizado', planT, realT,
+                   planT ? Math.round(100 * realT / planT) / 100 : '', planT - realT]
+        .concat(dias.map(function(d){
+          var v = (_pcp.real[l.chave] || {})[d];
+          return v === undefined ? '' : v; })));
+    });
+  });
+  var ws = XLSX.utils.aoa_to_sheet(linhas);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'PCP');
+  XLSX.writeFile(wb, 'PCP_' + _pcp.inicio.replace(/-/g,'') + '_a_'
+    + _pcp.fim.replace(/-/g,'') + '.xlsx');
+}
+
+function pcpAbrir(){
+  if (!_pcp) pcpCarregar();
+  else pcpRender();
+}
+
 // ══════════════════════════════════════════════════════════════════
 // MONTAR A BASE DO ANALISTA COMPLETO
 //
@@ -47874,6 +48529,19 @@ function _cobAplicarModulo(){
     var it = document.getElementById(id);
     if (it) it.style.display = fast ? 'none' : '';
   });
+  // ── o PCP ────────────────────────────────────────────────────────
+  // Aparece no ADLV e, na frente adlv_pcp, é a única tela do menu.
+  var _mod = (typeof _moduloAtivo !== 'undefined') ? _moduloAtivo : 'adlv';
+  var soPcp = (typeof modSoPcp === 'function') && modSoPcp(_mod);
+  var itPcp = document.getElementById('sb-pcp-it');
+  if (itPcp) itPcp.style.display = (soPcp || _mod === 'adlv') ? '' : 'none';
+  if (soPcp) {
+    [].forEach.call(document.querySelectorAll('.sb-it'), function(it){
+      if (it.id !== 'sb-pcp-it' && it.id !== 'sb-adm-it') it.style.display = 'none';
+    });
+    [].forEach.call(document.querySelectorAll('.sb-mod'), function(x){ x.style.display = 'none'; });
+    if (itPcp && !document.querySelector('.page.active')) go('pcp', itPcp);
+  }
   if (!fast) {
     var pgReu = document.getElementById('p-reuniao');
     if (pgReu) pgReu.classList.remove('active');
