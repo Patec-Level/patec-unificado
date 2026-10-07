@@ -32286,10 +32286,12 @@ var PCP_BLOCOS = [
   { chave:'devol', nome:'Devoluções', meta:100, linhas:[
       { chave:'devolucoes', nome:'Devoluções' } ] },
   { chave:'patec', nome:'PATEC', meta:90, linhas:[
-      { chave:'patec_fin',  nome:'PATEC Finalizado', auto:'patec_fin' },
-      { chave:'mdg_xgl',    nome:'MDG e XGL' },
-      { chave:'rc_pedidos', nome:'RCs para Pedidos' },
-      { chave:'rc_devol',   nome:'RCs para Devoluções' } ] },
+      { chave:'patec_fin',    nome:'PATEC Finalizado', auto:'patec_fin' },
+      { chave:'mdg',          nome:'MDG' },
+      { chave:'xgl',          nome:'XGL' },
+      { chave:'republicacao', nome:'Republicação' },
+      { chave:'patec_devol',  nome:'Devoluções' },
+      { chave:'patec_ped',    nome:'Pedidos' } ] },
   { chave:'abertura', nome:'Abertura de PATEC', meta:50, linhas:[
       { chave:'abertura', nome:'Abertura de PATEC' } ] },
   { chave:'emissao', nome:'Emissão de Pedido', meta:135, linhas:[
@@ -32351,6 +32353,34 @@ function pcpRotulo(m){
   if (!m || !m.inicio) return '';
   return cpDataBR(m.inicio) + ' a ' + cpDataBR(m.fim)
     + ' · ' + cpNum((m.dias || []).length) + ' dias úteis';
+}
+
+// ── linhas que mudaram de nome ────────────────────────────────────
+// O bloco PATEC tinha "MDG e XGL", "RCs para Pedidos" e "RCs para
+// Devoluções". Virou MDG, XGL, Republicação, Devoluções e Pedidos. O que
+// já tinha sido lançado nas chaves antigas vem para as novas, uma vez só,
+// e só se a nova ainda estiver vazia.
+var PCP_RENOMEADAS = { 'mdg_xgl':'mdg', 'rc_pedidos':'patec_ped', 'rc_devol':'patec_devol' };
+function pcpMigrarLinhas(real){
+  if (!real) return real;
+  Object.keys(PCP_RENOMEADAS).forEach(function(velha){
+    var nova = PCP_RENOMEADAS[velha];
+    if (!real[velha]) return;
+    if (!real[nova] || !Object.keys(real[nova]).length) real[nova] = real[velha];
+    delete real[velha];
+  });
+  return real;
+}
+
+// O % arredondado escondia o pouco que já foi feito: 14 de 4.940 virava
+// "0%". Abaixo de 10% mostra uma casa decimal, e só mostra zero quando o
+// realizado é mesmo zero.
+function pcpPct(real, plan){
+  if (!plan) return '—';
+  var p = 100 * real / plan;
+  if (p === 0) return '0%';
+  if (p < 10) return (Math.round(p * 10) / 10).toString().replace('.', ',') + '%';
+  return Math.round(p) + '%';
 }
 
 // ── o valor de cada célula ────────────────────────────────────────
@@ -32446,7 +32476,8 @@ async function pcpCarregar(){
         var d = doc.data() || {};
         _pcp = { inicio:d.inicio, fim:d.fim,
                  dias:(d.dias && d.dias.length) ? d.dias : pcpDiasUteis(d.inicio, d.fim),
-                 plan:d.plan || {}, real:d.real || {}, custo:d.custo || 0,
+                 plan:d.plan || {}, real:pcpMigrarLinhas(d.real || {}),
+                 custo:d.custo || 0,
                  fechada:!!d.fechada, criadaEm:d.criadaEm };
       }
     }
@@ -32517,7 +32548,8 @@ async function pcpTrocarPeriodo(ini, fim){
         var d = doc.data() || {};
         novo = { inicio:d.inicio, fim:d.fim,
                  dias:(d.dias && d.dias.length) ? d.dias : pcpDiasUteis(d.inicio, d.fim),
-                 plan:d.plan || {}, real:d.real || {}, custo:d.custo || 0,
+                 plan:d.plan || {}, real:pcpMigrarLinhas(d.real || {}),
+                 custo:d.custo || 0,
                  fechada:!!d.fechada, criadaEm:d.criadaEm };
       }
     }
@@ -32611,18 +32643,22 @@ function pcpRenderGrade(){
     + '<div style="font-size:11px;color:var(--tx2);line-height:1.7;margin-bottom:.8rem">'
     + 'Os dias úteis saem sozinhos do período: sábado, domingo e feriado não entram. '
     + 'A linha <strong>Programado</strong> é a meta de cada dia do bloco; as linhas de baixo '
-    + 'são o realizado. O <strong>% Real</strong> compara o realizado com o programado do bloco.'
+    + 'são o realizado. Depois do último dia da medição vêm o fechamento de cada linha: '
+    + '<strong>Real.</strong> é a soma dos dias daquela linha, <strong>%</strong> é Real. '
+    + 'dividido pelo Plan., e <strong>Gap</strong> é Plan. menos Real.'
     + (_pcp.fechada ? ' <strong style="color:var(--am)">Esta medição está fechada — só leitura.</strong>' : '')
     + '</div>'
     + '<div style="overflow:auto;max-height:70vh"><table style="border-collapse:collapse;font-size:11px">'
     + '<thead><tr style="position:sticky;top:0;background:var(--bg);z-index:2">'
     + '<th style="text-align:left;padding:4px 8px;min-width:190px;position:sticky;left:0;'
     +   'background:var(--bg);z-index:3">Operação</th>'
-    + '<th style="text-align:right;padding:4px 6px">Plan.</th>'
-    + '<th style="text-align:right;padding:4px 6px">Real.</th>'
+    + '<th style="text-align:right;padding:4px 6px;border-right:1px solid var(--brd)">Plan.</th>'
+    + cabDia
+    // o fechamento da linha fica depois do último dia da medição
+    + '<th style="text-align:right;padding:4px 8px;border-left:2px solid var(--brd)">Real.</th>'
     + '<th style="text-align:right;padding:4px 6px">%</th>'
-    + '<th style="text-align:right;padding:4px 6px;border-right:1px solid var(--brd)">Gap</th>'
-    + cabDia + '</tr></thead><tbody>';
+    + '<th style="text-align:right;padding:4px 8px">Gap</th>'
+    + '</tr></thead><tbody>';
 
   PCP_BLOCOS.forEach(function(b){
     var planT = pcpPlanTotal(b.chave);
@@ -32634,9 +32670,9 @@ function pcpRenderGrade(){
       +   (_pcp.fechada ? '' : ' · <span onclick="pcpPerguntarMeta(\'' + b.chave + '\')" '
           + 'style="color:var(--azm);cursor:pointer;text-decoration:underline">meta do bloco</span>')
       +   '</div></td>'
-      + '<td style="text-align:right;padding:5px 6px;font-weight:700;border-top:2px solid var(--brd)" '
-      +   'id="pcp-pt-' + b.chave + '">' + cpNum(planT) + '</td>'
-      + '<td colspan="3" style="border-top:2px solid var(--brd);border-right:1px solid var(--brd)"></td>';
+      + '<td style="text-align:right;padding:5px 6px;font-weight:700;border-top:2px solid var(--brd);'
+      +   'border-right:1px solid var(--brd)" '
+      +   'id="pcp-pt-' + b.chave + '">' + cpNum(planT) + '</td>';
     dias.forEach(function(d){
       h += '<td style="padding:1px;border-left:1px solid var(--brd);border-top:2px solid var(--brd)">'
         + '<input type="text" value="' + (pcpPlanDia(b.chave, d) || '') + '"' + trava
@@ -32644,7 +32680,8 @@ function pcpRenderGrade(){
         + ' style="width:42px;font-size:10.5px;padding:2px 3px;text-align:center;border:none;'
         + 'background:transparent;color:var(--tx2);font-weight:600"></td>';
     });
-    h += '</tr>';
+    h += '<td colspan="3" style="border-top:2px solid var(--brd);'
+      + 'border-left:2px solid var(--brd)"></td></tr>';
 
     b.linhas.forEach(function(l){
       var realT = pcpRealTotal(l.chave);
@@ -32654,15 +32691,9 @@ function pcpRenderGrade(){
         +   cpEsc(l.nome)
         +   (l.auto ? ' <span title="o dash preenche sozinho" style="font-size:9px;color:var(--azm);'
              + 'font-weight:700">⟳</span>' : '') + '</td>'
-        + '<td style="text-align:right;padding:4px 6px;color:var(--tx2)" class="pcp-pl">'
-        +   cpNum(planT) + '</td>'
-        + '<td style="text-align:right;padding:4px 6px;font-weight:700" class="pcp-rt">'
-        +   cpNum(realT) + '</td>'
-        + '<td style="text-align:right;padding:4px 6px;color:'
-        +   (pct >= 1 ? 'var(--vd)' : pct >= 0.8 ? 'var(--am)' : 'var(--vm)')
-        +   '" class="pcp-pc">' + (planT ? Math.round(pct * 100) + '%' : '—') + '</td>'
-        + '<td style="text-align:right;padding:4px 6px;border-right:1px solid var(--brd)" '
-        +   'class="pcp-gp">' + cpNum(planT - realT) + '</td>';
+        + '<td style="text-align:right;padding:4px 6px;color:var(--tx2);'
+        +   'border-right:1px solid var(--brd)" class="pcp-pl">'
+        +   cpNum(planT) + '</td>';
       dias.forEach(function(d){
         var v = (_pcp.real[l.chave] || {})[d];
         h += '<td style="padding:1px;border-left:1px solid var(--brd)">'
@@ -32673,7 +32704,15 @@ function pcpRenderGrade(){
           + ' onfocus="this.style.borderColor=\'var(--az)\'"'
           + ' onblur="this.style.borderColor=\'transparent\'"></td>';
       });
-      h += '</tr>';
+      // Real. = soma dos dias da linha · % = Real. ÷ Plan. · Gap = Plan. − Real.
+      h += '<td style="text-align:right;padding:4px 8px;font-weight:700;'
+        +   'border-left:2px solid var(--brd)" class="pcp-rt">' + cpNum(realT) + '</td>'
+        + '<td style="text-align:right;padding:4px 6px;color:'
+        +   (pct >= 1 ? 'var(--vd)' : pct >= 0.8 ? 'var(--am)' : 'var(--vm)')
+        +   '" class="pcp-pc">' + pcpPct(realT, planT) + '</td>'
+        + '<td style="text-align:right;padding:4px 8px" class="pcp-gp">'
+        +   cpNum(planT - realT) + '</td>'
+        + '</tr>';
     });
   });
   h += '</tbody></table></div></div>';
@@ -32706,7 +32745,7 @@ function pcpPintarTotais(){
       if (q('pcp-pl')) q('pcp-pl').textContent = cpNum(planT);
       if (q('pcp-rt')) q('pcp-rt').textContent = cpNum(realT);
       if (q('pcp-pc')) {
-        q('pcp-pc').textContent = planT ? Math.round(pct * 100) + '%' : '—';
+        q('pcp-pc').textContent = pcpPct(realT, planT);
         q('pcp-pc').style.color = pct >= 1 ? 'var(--vd)' : pct >= 0.8 ? 'var(--am)' : 'var(--vm)';
       }
       if (q('pcp-gp')) q('pcp-gp').textContent = cpNum(planT - realT);
@@ -32858,20 +32897,24 @@ function pcpRenderHistorico(){
 function pcpExportar(){
   if (!_pcp) return;
   var dias = _pcp.dias || [];
-  var cab = ['Bloco', 'Operação', 'Linha', 'Plan.Acum', 'Rea.Acum', '% Real', 'Gap']
-    .concat(dias.map(function(d){ return cpDataBR(d); }));
+  // a mesma ordem da tela: o fechamento depois do último dia
+  var cab = ['Bloco', 'Operação', 'Linha', 'Plan.Acum']
+    .concat(dias.map(function(d){ return cpDataBR(d); }))
+    .concat(['Rea.Acum', '% Real', 'Gap']);
   var linhas = [cab];
   PCP_BLOCOS.forEach(function(b){
     var planT = pcpPlanTotal(b.chave);
-    linhas.push([b.nome, b.nome, 'Programado', planT, '', '', '']
-      .concat(dias.map(function(d){ return pcpPlanDia(b.chave, d) || ''; })));
+    linhas.push([b.nome, b.nome, 'Programado', planT]
+      .concat(dias.map(function(d){ return pcpPlanDia(b.chave, d) || ''; }))
+      .concat(['', '', '']));
     b.linhas.forEach(function(l){
       var realT = pcpRealTotal(l.chave);
-      linhas.push([b.nome, l.nome, 'Realizado', planT, realT,
-                   planT ? Math.round(100 * realT / planT) / 100 : '', planT - realT]
+      linhas.push([b.nome, l.nome, 'Realizado', planT]
         .concat(dias.map(function(d){
           var v = (_pcp.real[l.chave] || {})[d];
-          return v === undefined ? '' : v; })));
+          return v === undefined ? '' : v; }))
+        .concat([realT, planT ? Math.round(100 * realT / planT) / 100 : '',
+                 planT - realT]));
     });
   });
   var ws = XLSX.utils.aoa_to_sheet(linhas);
