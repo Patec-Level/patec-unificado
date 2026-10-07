@@ -32462,6 +32462,7 @@ async function aagUpload(chave, file){
       novo.somou = (antes.linhas || []).length;
     }
     _aagArq[chave] = novo;
+    if (chave === 'trat') aagLimparEscolhasDoArquivo(novo);
     aagPintarUploads();
     aagRenderPassos();
     if (chave === 'mapa') pnrRender();
@@ -32874,7 +32875,7 @@ function aagProcessar(){
     var linhas = itens.map(function(i){
       var lv = aagBusca(levelPor, i) || {};
       i._lv = lv;
-      i._analista = aagBusca(analistaPor, i) || _aagEscolhas[i.chave] || '';
+      i._analista = _aagEscolhas[i.chave] || aagBusca(analistaPor, i) || '';
       i._mapa = aagBusca(mapaPor, i) || '';
       return {
         'Analista ': i._analista,
@@ -33000,6 +33001,7 @@ function aagProcessar(){
 // Índices dos dois arquivos opcionais. Eles não têm formato fixo, então
 // procuro a chave pelo que existir: RC+SEQ+OP+item, RC+SEQ ou só a RC.
 function aagChavesDoArquivo(d){
+  if (!d || !d.cab) return { rc:-1, seq:-1, op:-1, iop:-1, pronta:-1 };
   var i = {
     rc:  aagCol(d.cab, ['RC']),
     seq: aagCol(d.cab, ['SEQ','ITEM_RC','LINHAREQUISICAO']),
@@ -33332,7 +33334,7 @@ function aagMontarModelo(itensMod, levelPor, analistaPor, mapaPor, obrigPor, pid
   (itensMod || []).forEach(function(i){
     var k = i.chave;
     var lv = aagBusca(levelPor, i) || {};
-    var quem = aagBusca(analistaPor, i) || _aagEscolhas[k] || '';
+    var quem = _aagEscolhas[k] || aagBusca(analistaPor, i) || '';
     var encerra = aagDataISO(lv.encerra);
     var prazo = aagDiasAte(encerra);
     var validade = aagValidade(prazo);
@@ -33479,12 +33481,39 @@ async function aagSalvarEscolhas(){
   } catch (e) { console.warn('aagSalvarEscolhas:', e); }
 }
 
+// Escolher na mão arrasta a oportunidade inteira: é a mesma regra do
+// rateio automático, senão um clique partiria a oportunidade em dois donos.
 function aagEscolherAnalista(chave, nome){
   if (nome) _aagEscolhas[chave] = nome; else delete _aagEscolhas[chave];
+  var juntos = 0;
+  var op = (chave || '').split('|')[2];
+  if (nome && op) {
+    aagParaDistribuir().forEach(function(m){
+      if (aagTxt(m.OPORTUNIDADE) !== op) return;
+      var k = aagChaveItem(m);
+      if (k === chave) return;
+      if (aagAnalistaDe(m)) return;   // quem já tem analista eu não mexo
+      if (_aagEscolhas[k] === nome) return;
+      _aagEscolhas[k] = nome;
+      juntos++;
+      var l2 = document.getElementById('aag-an-' + k.replace(/\|/g, '_'));
+      if (l2) {
+        l2.style.background = 'var(--vdc)';
+        var sel = l2.querySelector('select');
+        if (sel) sel.value = nome;
+      }
+    });
+  }
   aagSalvarEscolhas();
   var linha = document.getElementById('aag-an-' + chave.replace(/\|/g, '_'));
   if (linha) linha.style.background = nome ? 'var(--vdc)' : '';
   aagPintarContaSemAnalista();
+  aagPintarBarraGravar();
+  if (juntos) {
+    var st = document.getElementById('aag-status');
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ ' + cpEsc(nome) + ' também ficou '
+      + 'com mais ' + cpNum(juntos) + ' item(ns) da oportunidade ' + cpEsc(op) + '.</span>';
+  }
 }
 
 function aagPintarContaSemAnalista(){
@@ -33576,8 +33605,11 @@ function aagParaDistribuir(escopo){
   return _aagBase.modelo.filter(function(m){ return aagNoEscopo(m, escopo); });
 }
 
+// A escolha feita aqui é mais nova que o arquivo subido, então ela manda.
+// Quando ele sobe uma RC em tratamento nova, as escolhas das chaves que
+// vierem nela são apagadas — o arquivo passa a ser a palavra final.
 function aagAnalistaDe(m){
-  return aagTxt(m['Analista PATEC']) || _aagEscolhas[aagChaveItem(m)] || '';
+  return _aagEscolhas[aagChaveItem(m)] || aagTxt(m['Analista PATEC']) || '';
 }
 
 function aagSemAnalista(escopo){
@@ -33611,8 +33643,20 @@ async function aagSalvarEquipe(){
       nomes:_aagEquipe, atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem() });
   } catch (e) { console.warn('aagSalvarEquipe:', e); }
 }
+var _aagEquipeTimer = null;
+// Salva enquanto ele digita (sem redesenhar, para não tirar o cursor do
+// campo) e só redesenha a prévia quando ele para de digitar.
+function aagDigitouEquipe(txt){
+  _aagEquipe = aagLerEquipe(txt);
+  if (_aagEquipeTimer) clearTimeout(_aagEquipeTimer);
+  _aagEquipeTimer = setTimeout(function(){
+    aagSalvarEquipe();
+    aagRenderAnalistas();
+  }, 700);
+}
 function aagDefinirEquipe(txt){
   _aagEquipe = aagLerEquipe(txt);
+  if (_aagEquipeTimer) { clearTimeout(_aagEquipeTimer); _aagEquipeTimer = null; }
   aagSalvarEquipe();
   aagRenderAnalistas();
 }
@@ -33641,42 +33685,156 @@ function aagCargaAnalistas(escopo){
 // Dá o próximo item sempre a quem está com o menor volume para tratar.
 // Empate resolve pelo nome, então o resultado é o mesmo toda vez que roda
 // e dá para conferir. Devolve o plano sem aplicar nada.
+// Quem já é dono da oportunidade: olho o Modelo inteiro, não só o alcance,
+// porque os outros itens da mesma oportunidade podem estar em outro status.
+// Se dois analistas já aparecem na mesma oportunidade, vale quem tem mais
+// itens nela; empate resolve pelo nome.
+// Quantos itens de cada analista em cada oportunidade. É a base tanto de
+// "quem é o dono" quanto de "esta oportunidade está partida".
+function aagContaPorOportunidade(){
+  var por = {};
+  ((_aagBase && _aagBase.modelo) || []).forEach(function(m){
+    var n = aagAnalistaDe(m); if (!n) return;
+    var op = aagTxt(m.OPORTUNIDADE); if (!op) return;
+    (por[op] = por[op] || {})[n] = (por[op][n] || 0) + 1;
+  });
+  return por;
+}
+
+function aagDonosPorOportunidade(){
+  var por = aagContaPorOportunidade();
+  var carga = aagCargaAnalistas('todos');
+  var out = {};
+  Object.keys(por).forEach(function(op){ out[op] = aagDonoJusto(por[op], carga); });
+  return out;
+}
+
+// Oportunidades que já estão com mais de um analista. Não mexo nelas
+// sozinho — são trabalho já distribuído —, mas mostro para ele decidir.
+// Quem deve ficar com a oportunidade quando ela está dividida:
+//   1) quem tem mais itens dentro dela;
+//   2) empatou (o caso clássico: uma RC para cada) → quem tem MENOS volume
+//      total, que é o mesmo critério do rateio;
+//   3) ainda empatou → pelo nome, para ser repetível.
+function aagDonoJusto(conta, carga){
+  return Object.keys(conta).sort(function(a, b){
+    return (conta[b] - conta[a])
+        || ((carga[a] || 0) - (carga[b] || 0))
+        || a.localeCompare(b);
+  })[0];
+}
+
+function aagOportunidadesPartidas(){
+  var por = aagContaPorOportunidade();
+  var carga = aagCargaAnalistas('todos');
+  var out = [];
+  Object.keys(por).forEach(function(op){
+    var nomes = Object.keys(por[op]);
+    if (nomes.length < 2) return;
+    var dono = aagDonoJusto(por[op], carga);
+    // os outros, em ordem, só para mostrar na tela
+    var resto = nomes.filter(function(n){ return n !== dono; }).sort();
+    out.push({ op:op, dono:dono, nomes:[dono].concat(resto), conta:por[op],
+               mexe: nomes.reduce(function(n, x){
+                 return n + (x === dono ? 0 : por[op][x]); }, 0),
+               empate: por[op][dono] === por[op][resto[0]] });
+  });
+  return out.sort(function(a, b){ return a.op < b.op ? -1 : 1; });
+}
+
+// ── o rateio é por OPORTUNIDADE, não por item ─────────────────────
+// Todos os itens da mesma oportunidade vão para o mesmo analista. Se a
+// oportunidade já tem dono, os itens novos dela seguem o dono; senão o
+// grupo inteiro vai para quem está com menos volume. As oportunidades
+// maiores são servidas primeiro, que é o que deixa a carga mais parelha.
 function aagPlanoDistribuicao(){
   var faltam = aagSemAnalista();
   var nomes = aagEquipeAtiva();
-  if (!nomes.length || !faltam.length) return { plano:{}, recebe:{}, faltam:faltam, nomes:nomes };
+  if (!nomes.length || !faltam.length) {
+    return { plano:{}, recebe:{}, faltam:faltam, nomes:nomes,
+             carga:aagCargaAnalistas(), depois:aagCargaAnalistas(),
+             grupos:0, herdados:0, novos:0, maiorGrupo:0, foraDaEquipe:{} };
+  }
   var carga = aagCargaAnalistas();
+  var donos = aagDonosPorOportunidade();
+
+  var grupos = {}, ordem = [];
+  faltam.forEach(function(m){
+    var op = aagTxt(m.OPORTUNIDADE);
+    // item sem oportunidade não agrupa com ninguém
+    var g = op || ('\u0000' + aagChaveItem(m));
+    if (!grupos[g]) { grupos[g] = []; ordem.push(g); }
+    grupos[g].push(m);
+  });
+  // maiores primeiro; empate pelo número da oportunidade, para ser repetível
+  ordem.sort(function(a, b){
+    return (grupos[b].length - grupos[a].length) || (a < b ? -1 : a > b ? 1 : 0);
+  });
+
   var simulada = {}, recebe = {};
   nomes.forEach(function(n){ simulada[n] = carga[n] || 0; recebe[n] = 0; });
-  var plano = {};
-  faltam.forEach(function(m){
-    var alvo = nomes.slice().sort(function(a, b){
-      return (simulada[a] - simulada[b]) || a.localeCompare(b);
-    })[0];
-    plano[aagChaveItem(m)] = alvo;
-    simulada[alvo]++; recebe[alvo]++;
+  Object.keys(carga).forEach(function(n){ if (simulada[n] === undefined) simulada[n] = carga[n]; });
+
+  var plano = {}, herdados = 0, novos = 0, maiorGrupo = 0, foraDaEquipe = {};
+  ordem.forEach(function(g){
+    var itens = grupos[g];
+    maiorGrupo = Math.max(maiorGrupo, itens.length);
+    var op = g.charAt(0) === '\u0000' ? '' : g;
+    var dono = op ? donos[op] : '';
+    var alvo;
+    if (dono) {
+      // a oportunidade já tem dono: o grupo inteiro segue ele, mesmo que
+      // ele não esteja na equipe de hoje — senão a oportunidade se parte
+      alvo = dono;
+      herdados += itens.length;
+      if (nomes.indexOf(dono) === -1) foraDaEquipe[dono] = (foraDaEquipe[dono] || 0) + itens.length;
+    } else {
+      alvo = nomes.slice().sort(function(a, b){
+        return (simulada[a] - simulada[b]) || a.localeCompare(b);
+      })[0];
+      novos += itens.length;
+    }
+    itens.forEach(function(m){ plano[aagChaveItem(m)] = alvo; });
+    simulada[alvo] = (simulada[alvo] || 0) + itens.length;
+    recebe[alvo] = (recebe[alvo] || 0) + itens.length;
   });
   return { plano:plano, recebe:recebe, faltam:faltam, nomes:nomes,
-           carga:carga, depois:simulada };
+           carga:carga, depois:simulada,
+           grupos:ordem.length, herdados:herdados, novos:novos,
+           maiorGrupo:maiorGrupo, foraDaEquipe:foraDaEquipe };
 }
 
+// Mexe SÓ nos itens que estão sem analista. O que já foi distribuído fica
+// exatamente como está — inclusive as oportunidades que já vieram
+// divididas entre dois analistas.
 function aagDistribuirAuto(){
   var r = aagPlanoDistribuicao();
   if (!r.faltam.length) { alert('Todos os itens deste alcance já têm analista.'); return; }
-  if (!r.nomes.length) { alert('Digite no campo quem entra nesta distribuição.\n\n'
-    + 'Pode escrever os nomes separados por vírgula, ou clicar em "usar os da RC em tratamento".'); return; }
-  var resumo = r.nomes.map(function(n){
+  if (!r.nomes.length) {
+    alert('Digite no campo quem entra nesta distribuição.\n\n'
+      + 'Pode escrever os nomes separados por vírgula, ou clicar em "usar os da RC em tratamento".');
+    return;
+  }
+  var quem = Object.keys(r.recebe).filter(function(n){ return r.recebe[n]; }).sort();
+  var resumo = quem.map(function(n){
     return '  ' + n + ': ' + (r.carga[n] || 0) + ' → ' + r.depois[n]
-      + ' (+' + r.recebe[n] + ')'; }).join('\n');
-  if (!confirm('Distribuir ' + cpNum(r.faltam.length) + ' item(ns) entre '
-      + r.nomes.length + ' analista(s)?\n\n' + resumo
-      + '\n\nQuem tem menos volume recebe primeiro. Você pode trocar item a item depois.')) return;
+      + ' (+' + r.recebe[n] + ')'
+      + (r.nomes.indexOf(n) === -1 ? '  (já era dono da oportunidade)' : ''); }).join('\n');
+  if (!confirm('Distribuir ' + cpNum(r.faltam.length) + ' item(ns) novo(s) em '
+      + cpNum(r.grupos) + ' oportunidade(s)?\n\n' + resumo
+      + '\n\nA oportunidade inteira vai para o mesmo analista, e quem tem menos volume '
+      + 'recebe primeiro — até emparelhar com os outros.'
+      + (r.herdados ? '\n\n' + cpNum(r.herdados) + ' item(ns) seguem o analista que já '
+         + 'tinha a oportunidade.' : '')
+      + '\n\nNada do que já está distribuído muda. Você pode trocar item a item depois.')) return;
+
   Object.keys(r.plano).forEach(function(k){ _aagEscolhas[k] = r.plano[k]; });
   aagSalvarEscolhas();
   aagRenderAnalistas();
   var st = document.getElementById('aag-status');
   if (st) st.innerHTML = '<span style="color:var(--vd)">✓ ' + cpNum(r.faltam.length)
-    + ' item(ns) distribuído(s). Clique em <strong>Montar tudo</strong> para entrar nas três saídas.</span>';
+    + ' item(ns) distribuído(s) em ' + cpNum(r.grupos) + ' oportunidade(s). '
+    + 'Clique em <strong>💾 Gravar na RC em tratamento</strong> para valer.</span>';
 }
 
 // ── dar o mesmo analista a todos os itens da página ───────────────
@@ -33687,38 +33845,151 @@ function aagAplicarNaPagina(nome){
   var pag = faltam.slice(_aagSemAnalistaPag * POR, (_aagSemAnalistaPag + 1) * POR);
   if (!pag.length) return;
   if (!confirm('Colocar ' + nome + ' nos ' + pag.length + ' item(ns) desta página?')) return;
-  pag.forEach(function(m){ _aagEscolhas[aagChaveItem(m)] = nome; });
+  // arrasta as oportunidades inteiras dos itens desta página
+  var ops = {};
+  pag.forEach(function(m){ var o = aagTxt(m.OPORTUNIDADE); if (o) ops[o] = 1; });
+  var n = 0;
+  aagSemAnalista().forEach(function(m){
+    if (!ops[aagTxt(m.OPORTUNIDADE)]) return;
+    _aagEscolhas[aagChaveItem(m)] = nome; n++;
+  });
+  pag.forEach(function(m){ if (!_aagEscolhas[aagChaveItem(m)]) {
+    _aagEscolhas[aagChaveItem(m)] = nome; n++; } });
   aagSalvarEscolhas();
   aagRenderAnalistas();
+  var st2 = document.getElementById('aag-status');
+  if (st2) st2.innerHTML = '<span style="color:var(--vd)">✓ ' + cpEsc(nome) + ' ficou com '
+    + cpNum(n) + ' item(ns), oportunidades inteiras.</span>';
+}
+
+// Quando ele sobe uma RC em tratamento na mão, é porque quer mudar algo.
+// Então para as chaves que vierem no arquivo o arquivo manda, e as escolhas
+// antigas dessas chaves saem da frente.
+function aagLimparEscolhasDoArquivo(d){
+  if (!d) return;
+  var i = aagChavesDoArquivo(d);
+  var col = aagCol(d.cab, ['ANALISTA PATEC','ANALISTA','RESPONSAVEL','COMPRADOR']);
+  if (col === -1 || i.rc === -1) return;
+  var n = 0;
+  d.linhas.forEach(function(l){
+    var rc = aagId(l[i.rc]); if (!rc) return;
+    var k = [rc, i.seq === -1 ? '' : aagId(l[i.seq]),
+             i.op === -1 ? '' : aagId(l[i.op]),
+             i.iop === -1 ? '' : aagId(l[i.iop])].join('|');
+    if (_aagEscolhas[k] !== undefined) { delete _aagEscolhas[k]; n++; }
+  });
+  if (n) {
+    aagSalvarEscolhas();
+    var st = document.getElementById('aag-status');
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ RC em tratamento subida. '
+      + cpNum(n) + ' item(ns) passaram a valer pelo arquivo, no lugar do que estava '
+      + 'escolhido aqui.</span>';
+  }
+}
+
+// ── gravar as escolhas DENTRO da RC em tratamento ─────────────────
+// Até aqui as escolhas viviam num cantinho separado (config/aag_analistas)
+// e a RC em tratamento continuava sendo só o arquivo subido. Este botão
+// junta os dois: o que foi distribuído entra na própria tabela, ela é
+// gravada no Firebase e as escolhas avulsas são zeradas. Depois disso o
+// upload só serve para quando ele quiser mexer na lista por fora.
+function aagMontarTratamento(){
+  var cab, iA, i;
+  var d = _aagArq.trat;
+  if (d && (d.cab || []).length) {
+    cab = d.cab.slice();
+    i = aagChavesDoArquivo(d);
+    iA = aagCol(cab, ['ANALISTA PATEC','ANALISTA','RESPONSAVEL','COMPRADOR']);
+  }
+  // sem arquivo antes, ou sem as colunas que preciso: começo o padrão
+  if (!cab || iA === -1 || i.rc === -1 || i.op === -1 || i.iop === -1) {
+    cab = ['Analista PATEC','RC','SEQ','OPORTUNIDADE','Item'];
+    iA = 0; i = { rc:1, seq:2, op:3, iop:4, pronta:-1 };
+    d = null;
+  }
+  var linhas = [], onde = {};
+  if (d) d.linhas.forEach(function(l){
+    var rc = aagId(l[i.rc]); if (!rc) return;
+    var k = [rc, i.seq === -1 ? '' : aagId(l[i.seq]),
+             aagId(l[i.op]), aagId(l[i.iop])].join('|');
+    var novo = cab.map(function(_, n){ return l[n] === undefined ? '' : l[n]; });
+    if (onde[k] !== undefined) { linhas[onde[k]] = novo; return; }
+    onde[k] = linhas.length;
+    linhas.push(novo);
+  });
+  var novas = 0, trocadas = 0;
+  Object.keys(_aagEscolhas).forEach(function(k){
+    var nome = _aagEscolhas[k];
+    if (!nome) return;
+    if (onde[k] !== undefined) {
+      if (aagTxt(linhas[onde[k]][iA]) !== nome) { linhas[onde[k]][iA] = nome; trocadas++; }
+      return;
+    }
+    var p = k.split('|');
+    var l = cab.map(function(){ return ''; });
+    l[iA] = nome;
+    l[i.rc] = p[0];
+    if (i.seq !== -1) l[i.seq] = p[1];
+    l[i.op] = p[2]; l[i.iop] = p[3];
+    onde[k] = linhas.length;
+    linhas.push(l);
+    novas++;
+  });
+  return { cab:cab, linhas:linhas, novas:novas, trocadas:trocadas };
+}
+
+async function aagGravarTratamento(){
+  var pend = Object.keys(_aagEscolhas).filter(function(k){ return _aagEscolhas[k]; });
+  if (!pend.length) {
+    alert('Não há nada novo para gravar — tudo que você distribuiu já está na RC em tratamento.');
+    return;
+  }
+  var r = aagMontarTratamento();
+  if (!confirm('Gravar na RC em tratamento?\n\n'
+      + '  ' + cpNum(r.novas) + ' item(ns) novo(s)\n'
+      + '  ' + cpNum(r.trocadas) + ' analista(s) trocado(s)\n'
+      + '  ' + cpNum(r.linhas.length) + ' linha(s) no total depois disso\n\n'
+      + 'A tabela fica guardada no Firebase. A partir daí você só precisa do upload '
+      + 'se quiser mexer na lista por fora.')) return;
+
+  var st = document.getElementById('aag-status');
+  if (st) st.innerHTML = '⏳ Gravando a RC em tratamento...';
+  if (!getDB()) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Sem conexão com o Firebase deste '
+      + 'módulo — não consegui gravar. Use o ⬇ Baixar RC em tratamento para não perder '
+      + 'a distribuição.</span>';
+    return;
+  }
+  _aagArq.trat = { nome:'RC em tratamento (gravada no dash)', cab:r.cab, linhas:r.linhas,
+                   guardado:true };
+  try {
+    await aagGuardar('trat');
+    // confere que foi: relê o que ficou gravado
+    var db = getDB();
+    var doc = await db.collection('config').doc('aag_trat').get();
+    var d = doc && doc.exists ? (doc.data() || {}) : {};
+    var quantas = d.blocos ? d.linhas : ((d.dados || []).length || (d.linhas || 0));
+    if (!quantas) throw new Error('o Firebase não devolveu as linhas gravadas');
+    _aagEscolhas = {};
+    await aagSalvarEscolhas();
+  } catch (e) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ Não consegui gravar: '
+      + cpEsc(e.message) + '. Use o ⬇ Baixar RC em tratamento para não perder a distribuição.</span>';
+    return;
+  }
+  aagPintarUploads();
+  aagProcessar();
+  if (st) st.innerHTML = '<span style="color:var(--vd)">✓ RC em tratamento gravada: '
+    + cpNum(r.novas) + ' novo(s), ' + cpNum(r.trocadas) + ' trocado(s), '
+    + cpNum(r.linhas.length) + ' linhas no total.</span>';
 }
 
 // ── baixar a RC em tratamento atualizada ──────────────────────────
 // O arquivo dele acumula: o que já estava mais o que foi escolhido aqui.
 // Serve para a planilha dele ficar igual ao dash, e como cópia de segurança.
 function aagBaixarTratamento(){
-  var linhas = [['Analista PATEC','RC','SEQ','OPORTUNIDADE','Item']];
-  var visto = {};
-  var d = _aagArq.trat;
-  if (d) {
-    var i = aagChavesDoArquivo(d);
-    var col = aagCol(d.cab, ['ANALISTA PATEC','ANALISTA','RESPONSAVEL','COMPRADOR']);
-    if (col !== -1 && i.rc !== -1) d.linhas.forEach(function(l){
-      var rc = aagId(l[i.rc]); if (!rc) return;
-      var seq = i.seq === -1 ? '' : aagId(l[i.seq]);
-      var op  = i.op  === -1 ? '' : aagId(l[i.op]);
-      var iop = i.iop === -1 ? '' : aagId(l[i.iop]);
-      var k = [rc, seq, op, iop].join('|');
-      if (visto[k]) return;
-      visto[k] = 1;
-      linhas.push([aagTxt(l[col]), rc, seq, op, iop]);
-    });
-  }
-  Object.keys(_aagEscolhas).forEach(function(k){
-    if (visto[k]) return;
-    visto[k] = 1;
-    var p = k.split('|');
-    linhas.push([_aagEscolhas[k], p[0], p[1], p[2], p[3]]);
-  });
+  var r = aagMontarTratamento();
+  var linhas = [r.cab].concat(r.linhas);
   var ws = XLSX.utils.aoa_to_sheet(linhas);
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'RC em tratamento');
@@ -33744,6 +34015,48 @@ function aagPorStatusMapa(){
 function aagPagina(d){
   _aagSemAnalistaPag = Math.max(0, _aagSemAnalistaPag + d);
   aagRenderAnalistas();
+}
+
+// A barra que fecha a distribuição: grava o que foi escolhido dentro da
+// própria RC em tratamento, para ele não precisar subir upload nenhum.
+// Só informa. Não mexo no que já está distribuído — se ele quiser juntar
+// alguma dessas, troca na mão pelo dropdown.
+function aagAvisoPartidas(){
+  var partidas = aagOportunidadesPartidas();
+  if (!partidas.length) return '';
+  return '<div style="font-size:10.5px;color:var(--tx2);line-height:1.7;margin:.65rem 0">'
+    + 'ℹ️ <strong>' + cpNum(partidas.length) + '</strong> oportunidade(s) já distribuída(s) '
+    + 'estão com mais de um analista (ex.: '
+    + partidas.slice(0, 2).map(function(x){
+        return cpEsc(x.op) + ' — ' + x.nomes.slice(0, 3).map(cpEsc).join(' e '); }).join(' · ')
+    + '). Não mexo nelas; o agrupamento vale só para item novo.</div>';
+}
+
+function aagPintarBarraGravar(){
+  var el = document.getElementById('aag-barra-gravar');
+  if (!el) return;
+  var pend = Object.keys(_aagEscolhas).filter(function(k){ return _aagEscolhas[k]; }).length;
+  el.innerHTML = aagBarraGravar(pend, true);
+}
+function aagBarraGravar(pend, semEnvolucro){
+  var dentro = aagBarraGravarHtml(pend);
+  return semEnvolucro ? dentro : '<div id="aag-barra-gravar">' + dentro + '</div>';
+}
+function aagBarraGravarHtml(pend){
+  if (!pend) {
+    return '<div style="margin-top:.7rem;font-size:10.5px;color:var(--tx2)">'
+      + '✓ Nada pendente — tudo que você distribuiu já está na RC em tratamento.</div>';
+  }
+  return '<div style="margin-top:.75rem;padding:.6rem .7rem;border:1.5px solid var(--am);'
+    + 'background:var(--amc,var(--cin));border-radius:9px;display:flex;gap:10px;'
+    + 'flex-wrap:wrap;align-items:center">'
+    + '<span style="font-size:11.5px;font-weight:700;color:var(--am)">⚠ '
+    +   cpNum(pend) + ' escolha(s) ainda fora da RC em tratamento</span>'
+    + '<span style="font-size:10.5px;color:var(--tx2);flex:1;min-width:200px">'
+    +   'Grave para elas entrarem na tabela e valerem amanhã sem upload nenhum.</span>'
+    + '<button class="btn btn-p" style="font-size:11.5px;padding:5px 14px" '
+    +   'onclick="aagGravarTratamento()">💾 Gravar na RC em tratamento</button>'
+    + '</div>';
 }
 
 function aagRenderAnalistas(){
@@ -33798,8 +34111,11 @@ function aagRenderAnalistas(){
     box.innerHTML = h; return;
   }
   if (!faltam.length) {
+    var pendOk = Object.keys(_aagEscolhas).filter(function(k){ return _aagEscolhas[k]; }).length;
     h += '<div style="font-size:12px;color:var(--vd);font-weight:600">✓ Os '
       + cpNum(distribuir.length) + ' itens deste alcance já têm analista.</div>'
+      + aagAvisoPartidas()
+      + aagBarraGravar(pendOk)
       + '<div style="margin-top:.7rem"><button class="btn btn-s" onclick="aagBaixarTratamento()">'
       + '⬇ Baixar RC em tratamento</button></div></div>';
     box.innerHTML = h; return;
@@ -33818,7 +34134,7 @@ function aagRenderAnalistas(){
     +     'ANALISTAS DESTA DISTRIBUIÇÃO:</span>'
     +   '<input id="aag-equipe" type="text" value="' + cpEsc(_aagEquipe.join(', ')) + '"'
     +     ' placeholder="digite os nomes separados por vírgula — ex: Aline, André, João"'
-    +     ' onchange="aagDefinirEquipe(this.value)"'
+    +     ' oninput="aagDigitouEquipe(this.value)" onchange="aagDefinirEquipe(this.value)"'
     +     ' style="flex:1;min-width:250px;font-size:11.5px;padding:5px 8px;'
     +     'border:1px solid var(--brd);border-radius:6px;background:var(--bg);color:var(--tx)">'
     +   '<span onclick="aagEquipeDaPlanilha()" style="font-size:10.5px;font-weight:600;'
@@ -33847,10 +34163,28 @@ function aagRenderAnalistas(){
       + '</div>'
       + '<div style="font-size:10.5px;color:var(--tx2);margin-bottom:.65rem">'
       + 'O número é o volume que o analista já tem para tratar neste alcance. '
-      + 'O <strong style="color:var(--vd)">+</strong> é o que ele receberia agora — '
-      + 'quem tem menos recebe primeiro, até emparelhar.</div>';
+      + 'O <strong style="color:var(--vd)">+</strong> é o que ele receberia agora. '
+      + 'O rateio é por <strong>oportunidade</strong>: '
+      + cpNum(faltam.length) + ' item(ns) em <strong>' + cpNum(r.grupos)
+      + '</strong> oportunidade(s)'
+      + (r.maiorGrupo > 1 ? ', a maior com ' + cpNum(r.maiorGrupo) + ' itens' : '')
+      + ' — todos os itens da mesma oportunidade vão para o mesmo analista.'
+      + (r.herdados ? ' <strong>' + cpNum(r.herdados) + '</strong> seguem quem já era dono '
+         + 'da oportunidade.' : '')
+      + '</div>'
+      + (Object.keys(r.foraDaEquipe).length
+          ? '<div style="font-size:10.5px;color:var(--am);margin-bottom:.65rem">'
+            + '⚠ ' + Object.keys(r.foraDaEquipe).map(function(n){
+                return cpEsc(n) + ' <strong>+' + cpNum(r.foraDaEquipe[n]) + '</strong>'; }).join(' · ')
+            + ' — não estão na lista acima, mas já eram donos dessas oportunidades, '
+            + 'então os itens seguem com eles para a oportunidade não se partir.</div>'
+          : '');
   }
 
+  h += aagAvisoPartidas();
+  var partidas = aagOportunidadesPartidas();
+
+  var pend = Object.keys(_aagEscolhas).filter(function(k){ return _aagEscolhas[k]; }).length;
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
     + '<button class="btn btn-p" style="font-size:11.5px;padding:5px 12px"'
     +   (r.nomes.length ? '' : ' disabled')
@@ -33860,8 +34194,10 @@ function aagRenderAnalistas(){
     + '<select onchange="aagAplicarNaPagina(this.value); this.value=\'\';" '
     +   'style="font-size:11px;padding:4px 6px">' + opcoes + '</select>'
     + '<button class="btn btn-s" style="font-size:11.5px;padding:5px 12px" '
-    +   'onclick="aagBaixarTratamento()">⬇ Baixar RC em tratamento</button>'
-    + '</div></div>';
+    +   'onclick="aagBaixarTratamento()">⬇ Baixar</button>'
+    + '</div>'
+    + aagBarraGravar(pend)
+    + '</div>';
   h += '<div style="overflow:auto;max-height:420px"><table><thead><tr>'
     + '<th>RC</th><th>SEQ</th><th>Oportunidade</th><th>Item</th>'
     + '<th>Status do mapa</th><th>Família</th>'
