@@ -32296,9 +32296,14 @@ async function aagGuardar(chave){
   } catch (e) { console.warn('aagGuardar:', e); }
 }
 
+var _aagCarregando = false;
+
 async function aagCarregarGuardadas(){
   try {
-    var db = getDB(); if (!db) return;
+    var db = getDB();
+    if (!db) { _aagCarregando = false; aagPintarUploads(); return; }
+    _aagCarregando = true;
+    aagPintarUploads();
     for (var i = 0; i < AAG_GUARDADAS.length; i++) {
       var k = AAG_GUARDADAS[i];
       if (_aagArq[k]) continue;
@@ -32321,10 +32326,15 @@ async function aagCarregarGuardadas(){
       _aagArq[k] = { nome:d.nome || '(guardado)', cab:d.cab || [], linhas:todas,
                      guardado:true, quando:d.atualizadoEm };
     }
+    _aagCarregando = false;
     aagPintarUploads();
     aagRenderPassos();
     pnrRender();
-  } catch (e) { console.warn('aagCarregarGuardadas:', e); }
+  } catch (e) {
+    _aagCarregando = false;
+    aagPintarUploads();
+    console.warn('aagCarregarGuardadas:', e);
+  }
 }
 
 var _aagArq  = {};   // chave -> { nome, linhas:[[...]], cab:[], aviso }
@@ -32379,6 +32389,11 @@ function aagPintarUploads(){
       + (function(){
           var lista = AAG_BAIXA_LISTA.indexOf(a.chave) !== -1;
           if (!lista && !AAG_MODELOS[a.chave]) return '';
+          // enquanto busca no Firebase, não prometo uma lista que ainda não tenho
+          if (lista && _aagCarregando && !d) {
+            return '<div style="margin-top:7px;font-size:10px;color:var(--tx2)">'
+              + '⏳ buscando a lista guardada...</div>';
+          }
           var n = lista ? aagQuantasNaLista(a.chave) : 0;
           var fn = lista ? 'aagBaixarLista' : 'aagBaixarModelo';
           var rot = lista
@@ -32389,7 +32404,11 @@ function aagPintarUploads(){
                 ? 'Baixa tudo que já está salvo. Acrescente as linhas novas e suba de volta.'
                 : 'Baixa a planilha com os cabeçalhos certos.') + '"'
             + ' style="font-size:10px;font-weight:600;color:var(--azm);text-decoration:underline;'
-            + 'cursor:pointer">' + rot + '</span></div>';
+            + 'cursor:pointer">' + rot + '</span></div>'
+            + (lista && !n
+                ? '<div style="font-size:9.5px;color:var(--tx2);margin-top:3px;line-height:1.4">'
+                  + 'nada guardado ainda — suba uma vez e a lista passa a sair daqui</div>'
+                : '');
         })()
       + '</div>';
   }).join('');
