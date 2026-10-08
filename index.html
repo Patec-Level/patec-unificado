@@ -4534,6 +4534,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
             onclick="pcpAba('plan')">📋 Planejamento e Controle</button>
           <button class="stab" id="pcp-tab-grafico"
             onclick="pcpAba('grafico')">📈 Gráfico</button>
+          <button class="stab" id="pcp-tab-financeiro"
+            onclick="pcpAba('financeiro')">💰 Financeiro da medição</button>
         </div>
       </div>
 
@@ -4563,6 +4565,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
         </div>
         <div id="pcp-pesos"></div>
         <div id="pcp-graf-grade"></div>
+      </div>
+
+      <div id="pcp-aba-financeiro" style="display:none">
+        <div id="pcp-fin-cards"></div>
+        <div id="pcp-fin-equilibrio"></div>
+        <div id="pcp-fin-receita"></div>
       </div>
     </div>
 
@@ -32348,7 +32356,8 @@ function pcpNovaMedicao(ini, fim){
   return { inicio:ini, fim:fim, dias:pcpDiasUteis(ini, fim),
            plan:{}, real:{}, custo:0, metaCiclo:PCP_META_CICLO,
            cards:pcpCardsVazios(),
-           curva:{ emitido:{}, conv:{} }, pesos:null, farol:{}, taxa:null,
+           curva:{ emitido:{}, conv:{} }, pesos:null, receitas:null,
+           farol:{}, taxa:null,
            fechada:false,
            criadaEm:new Date().toISOString() };
 }
@@ -32477,7 +32486,9 @@ function pcpSetCurva(tipo, dia, v){
   var c = pcpCurva();
   var o = (tipo === 'emitido') ? c.emitido : (c.conv[tipo] = c.conv[tipo] || {});
   if (aagTxt(v) === '') delete o[dia]; else o[dia] = aagNum(v);
-  pcpRenderGrafico(); pcpSalvar();
+  pcpRenderGrafico();
+  pcpRenderFinanceiro();   // as receitas ligadas à curva acompanham
+  pcpSalvar();
 }
 
 // ── as três séries, acumuladas ────────────────────────────────────
@@ -32763,6 +32774,7 @@ async function pcpSalvarAgora(forcar){
       plan:_pcp.plan, real:_pcp.real, custo:_pcp.custo || 0,
       metaCiclo:pcpMetaCiclo(), cards:_pcp.cards || pcpCardsVazios(),
       curva:pcpCurva(), pesos:pcpPesos(), farol:pcpFarol(),
+      receitas:pcpReceitas(),
       taxa:(_pcp.taxa === undefined ? null : _pcp.taxa),
       fechada:!!_pcp.fechada, criadaEm:_pcp.criadaEm,
       atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem()
@@ -32800,6 +32812,7 @@ async function pcpCarregar(){
                  cards:d.cards || pcpCardsVazios(),
                  curva:d.curva || { emitido:{}, conv:{} },
                  pesos:(d.pesos && d.pesos.length) ? d.pesos : null,
+                 receitas:(d.receitas && d.receitas.length) ? d.receitas : null,
                  farol:d.farol || {}, taxa:(d.taxa === undefined ? null : d.taxa),
                  fechada:!!d.fechada, criadaEm:d.criadaEm };
       }
@@ -32876,6 +32889,7 @@ async function pcpTrocarPeriodo(ini, fim){
                  cards:d.cards || pcpCardsVazios(),
                  curva:d.curva || { emitido:{}, conv:{} },
                  pesos:(d.pesos && d.pesos.length) ? d.pesos : null,
+                 receitas:(d.receitas && d.receitas.length) ? d.receitas : null,
                  farol:d.farol || {}, taxa:(d.taxa === undefined ? null : d.taxa),
                  fechada:!!d.fechada, criadaEm:d.criadaEm };
       }
@@ -32894,6 +32908,10 @@ async function pcpTrocarPeriodo(ini, fim){
     novo.pesos = pcpPesos().map(function(x){
       return { chave:x.chave, nome:x.nome, peso:x.peso }; });
     novo.taxa = (_pcp && _pcp.taxa !== undefined) ? _pcp.taxa : null;
+    // os preços e o custo acompanham; as quantidades digitadas recomeçam
+    novo.receitas = pcpReceitas().map(function(r){
+      return { chave:r.chave, nome:r.nome, preco:r.preco, fonte:r.fonte, qtd:0 }; });
+    novo.custo = pcpCusto();
     PCP_BLOCOS.forEach(function(b){
       var anterior = _pcp && _pcp.plan && _pcp.plan[b.chave];
       var valor = b.meta;
@@ -32920,6 +32938,7 @@ function pcpRender(){
   pcpRenderGrade();
   pcpRenderHistorico();
   pcpRenderGrafico();
+  pcpRenderFinanceiro();
   var lbl = document.getElementById('pcp-periodo-lbl');
   if (lbl && _pcp) lbl.textContent = pcpRotulo(_pcp) + (_pcp.fechada ? ' · FECHADA' : '');
 }
@@ -33009,17 +33028,295 @@ function pcpRenderCards(){
   box.innerHTML = h + '</div>';
 }
 
+// ══════════════════════════════════════════════════════════════════
+//  O FINANCEIRO DA MEDIÇÃO
+//
+//  De um lado o custo da operação no período; do outro, a receita, que
+//  é a soma de cada tipo pelo seu preço. A quantidade de cada tipo pode
+//  vir do que já foi lançado na curva ou ser digitada.
+//
+//  Na planilha dele o fator era R$ 121,6188 por item convertido; aqui o
+//  preço é por tipo, então ele preenche cada um.
+// ══════════════════════════════════════════════════════════════════
+var PCP_RECEITAS_PADRAO = [
+  { chave:'emitido',   nome:'Pedido emitido',      preco:0, fonte:'emitido',   qtd:0 },
+  { chave:'devolucao', nome:'Devolução',           preco:0, fonte:'devolucao', qtd:0 },
+  { chave:'cadastro',  nome:'Cadastro',            preco:0, fonte:'',          qtd:0 },
+  { chave:'reap',      nome:'Pedido de Reap',      preco:0, fonte:'reap',      qtd:0 },
+  { chave:'procureon', nome:'Pedido por Procureon', preco:0, fonte:'',         qtd:0 }
+];
+function pcpReceitas(){
+  if (!_pcp) return PCP_RECEITAS_PADRAO.slice();
+  if (!_pcp.receitas || !_pcp.receitas.length) {
+    _pcp.receitas = PCP_RECEITAS_PADRAO.map(function(x){
+      return { chave:x.chave, nome:x.nome, preco:x.preco, fonte:x.fonte, qtd:x.qtd }; });
+  }
+  return _pcp.receitas;
+}
+// Quantas unidades desta linha no período: ou o que veio da curva, ou o
+// que ele digitou.
+function pcpReceitaQtd(r){
+  if (!r.fonte) return aagNum(r.qtd || 0);
+  var dias = (_pcp && _pcp.dias) || [];
+  return dias.reduce(function(n, d){ return n + pcpCurvaDia(r.fonte, d); }, 0);
+}
+function pcpReceitaTotal(r){ return pcpReceitaQtd(r) * aagNum(r.preco || 0); }
+function pcpReceita(){
+  return pcpReceitas().reduce(function(n, r){ return n + pcpReceitaTotal(r); }, 0);
+}
+function pcpCusto(){ return aagNum((_pcp && _pcp.custo) || 0); }
+function pcpResultado(){ return pcpReceita() - pcpCusto(); }
+
+function pcpSetCusto(v){
+  if (!_pcp || _pcp.fechada) return;
+  _pcp.custo = aagNum(v);
+  pcpRenderFinanceiro(); pcpSalvar();
+}
+function pcpSetReceita(i, campo, v){
+  if (!_pcp || _pcp.fechada) return;
+  var rs = pcpReceitas(); if (!rs[i]) return;
+  if (campo === 'nome') {
+    var nome = aagTxt(v);
+    if (!nome) { pcpRenderFinanceiro(); return; }
+    rs[i].nome = nome;
+  } else if (campo === 'fonte') {
+    rs[i].fonte = aagTxt(v);
+  } else {
+    rs[i][campo] = aagNum(v);
+  }
+  pcpRenderFinanceiro(); pcpSalvar();
+}
+function pcpAddReceita(){
+  if (!_pcp || _pcp.fechada) return;
+  var nome = prompt('De onde vem essa receita?', '');
+  if (nome === null || !aagTxt(nome)) return;
+  pcpReceitas().push({ chave:'r' + Date.now().toString(36), nome:aagTxt(nome),
+                       preco:0, fonte:'', qtd:0 });
+  pcpRenderFinanceiro(); pcpSalvar();
+}
+function pcpDelReceita(i){
+  if (!_pcp || _pcp.fechada) return;
+  var rs = pcpReceitas(); if (!rs[i]) return;
+  if (!confirm('Tirar "' + rs[i].nome + '" da receita da medição?')) return;
+  rs.splice(i, 1);
+  pcpRenderFinanceiro(); pcpSalvar();
+}
+
+// Ponto de equilíbrio: quantos itens, ao preço médio que a medição está
+// praticando, pagam o custo da operação.
+function pcpPrecoMedio(){
+  var q = pcpReceitas().reduce(function(n, r){ return n + pcpReceitaQtd(r); }, 0);
+  return q ? pcpReceita() / q : 0;
+}
+function pcpEquilibrio(){
+  var pm = pcpPrecoMedio();
+  return pm ? pcpCusto() / pm : null;
+}
+
+function pcpMoeda(n){
+  var neg = n < 0;
+  var t = Math.abs(n).toLocaleString('pt-BR', { minimumFractionDigits:2,
+                                                maximumFractionDigits:2 });
+  return (neg ? '− ' : '') + 'R$ ' + t;
+}
+
+function pcpRenderFinanceiro(){
+  if (!_pcp || _pcpAba !== 'financeiro') return;
+  pcpRenderFinCards();
+  pcpRenderEquilibrio();
+  pcpRenderReceitas();
+}
+
+function pcpRenderFinCards(){
+  var box = document.getElementById('pcp-fin-cards');
+  if (!box || !_pcp) return;
+  var custo = pcpCusto(), rec = pcpReceita(), res = pcpResultado();
+  var eq = pcpEquilibrio(), pm = pcpPrecoMedio();
+  var trava = _pcp.fechada ? ' disabled' : '';
+  var cobertura = custo ? 100 * rec / custo : null;
+
+  var card = function(dentro, cor){
+    return '<div style="background:var(--cin);border:1.5px solid ' + cor
+      + ';border-radius:12px;padding:.85rem .7rem;text-align:center">' + dentro + '</div>';
+  };
+  var corpo = function(val, rot, sub, cor){
+    return '<div style="font-size:21px;font-weight:800;color:' + cor + ';line-height:1.15">'
+      + val + '</div>'
+      + '<div style="font-size:10px;font-weight:700;color:var(--tx2);margin-top:4px">'
+      + cpEsc(rot) + '</div>'
+      + '<div style="font-size:10px;color:var(--tx2);margin-top:3px">' + sub + '</div>';
+  };
+  var corRes = res >= 0 ? 'var(--vd)' : 'var(--vm)';
+
+  box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));'
+    + 'gap:11px;margin-bottom:1rem">'
+    // o custo, digitado
+    + card('<input type="text" value="' + (custo ? pcpMoeda(custo).replace('R$ ', '') : '0,00')
+        + '"' + trava + ' onchange="pcpSetCusto(this.value)" onfocus="this.select()"'
+        + ' style="width:100%;font-size:21px;font-weight:800;line-height:1.15;text-align:center;'
+        + 'color:var(--vm);background:transparent;border:none;border-bottom:1.5px dashed '
+        + 'var(--brd);padding:0 0 2px">'
+        + '<div style="font-size:10px;font-weight:700;color:var(--tx2);margin-top:4px">'
+        + 'CUSTO DA OPERAÇÃO</div>'
+        + '<div style="font-size:10px;color:var(--tx2);margin-top:3px">na medição inteira · R$</div>',
+        'var(--vm)')
+    + card(corpo(pcpMoeda(rec), 'RECEITA DA MEDIÇÃO',
+        cpNum(pcpReceitas().length) + ' linha(s) de receita', 'var(--vd)'), 'var(--vd)')
+    + card(corpo(pcpMoeda(res), res >= 0 ? 'LUCRO' : 'PREJUÍZO',
+        custo ? 'a receita cobre ' + (Math.round(cobertura * 10) / 10).toString()
+                .replace('.', ',') + '% do custo'
+              : 'preencha o custo da operação', corRes), corRes)
+    + card(corpo(eq === null ? '—' : cpNum(Math.ceil(eq)), 'PONTO DE EQUILÍBRIO',
+        pm ? 'itens a ' + pcpMoeda(pm) + ' (média)' : 'preencha preços e quantidades',
+        'var(--am)'), 'var(--am)')
+    + '</div>';
+}
+
+function pcpRenderEquilibrio(){
+  var box = document.getElementById('pcp-fin-equilibrio');
+  if (!box || !_pcp) return;
+  var custo = pcpCusto(), rec = pcpReceita(), res = pcpResultado();
+  var eq = pcpEquilibrio(), pm = pcpPrecoMedio();
+  var qtd = pcpReceitas().reduce(function(n, r){ return n + pcpReceitaQtd(r); }, 0);
+
+  if (!custo && !rec) {
+    box.innerHTML = '<div class="cd"><div class="cd-t">⚖️ Ponto de equilíbrio</div>'
+      + '<div style="font-size:12px;color:var(--tx2)">Preencha o custo da operação e o '
+      + 'preço de cada tipo para a medição se pagar na tela.</div></div>';
+    return;
+  }
+  // a barra: a receita enchendo até o custo
+  var alvo = Math.max(custo, rec) || 1;
+  var pRec = 100 * rec / alvo, pCusto = 100 * custo / alvo;
+  var faltam = (eq === null) ? null : Math.ceil(eq) - qtd;
+
+  box.innerHTML = '<div class="cd"><div class="cd-t">⚖️ Ponto de equilíbrio da medição</div>'
+    + '<div style="font-size:11px;color:var(--tx2);margin-bottom:1rem">'
+    + 'A barra é a receita; o traço é o custo. Enquanto a receita não chega no traço, '
+    + 'a medição está no prejuízo.</div>'
+    + '<div style="position:relative;height:34px;background:var(--cin);border-radius:8px;'
+    +   'overflow:hidden;border:1px solid var(--brd)">'
+    + '<div style="height:100%;width:' + pRec + '%;background:'
+    +   (res >= 0 ? 'rgba(14,158,106,.75)' : 'rgba(217,48,37,.6)') + ';transition:width .3s">'
+    +   '</div>'
+    + (custo ? '<div style="position:absolute;top:0;bottom:0;left:' + pCusto + '%;width:2.5px;'
+        + 'background:var(--tx);box-shadow:0 0 0 1px #fff"></div>' : '')
+    + '</div>'
+    + '<div style="display:flex;justify-content:space-between;font-size:10.5px;'
+    +   'color:var(--tx2);margin-top:5px">'
+    + '<span>Receita <strong style="color:' + (res >= 0 ? 'var(--vd)' : 'var(--vm)') + '">'
+    +   pcpMoeda(rec) + '</strong></span>'
+    + '<span>Custo <strong style="color:var(--tx)">' + pcpMoeda(custo) + '</strong></span>'
+    + '</div>'
+    + '<div style="margin-top:1rem;padding-top:.8rem;border-top:1px solid var(--brd);'
+    +   'display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.9rem;'
+    +   'font-size:11.5px">'
+    + '<div><div style="color:var(--tx2);font-size:10px;font-weight:700;'
+    +   'text-transform:uppercase">Itens já faturados</div><strong>' + cpNum(qtd)
+    +   '</strong> a ' + pcpMoeda(pm) + ' em média</div>'
+    + '<div><div style="color:var(--tx2);font-size:10px;font-weight:700;'
+    +   'text-transform:uppercase">Para pagar a operação</div>'
+    +   (eq === null ? '<strong>—</strong>'
+        : '<strong>' + cpNum(Math.ceil(eq)) + '</strong> itens ao preço médio') + '</div>'
+    + '<div><div style="color:var(--tx2);font-size:10px;font-weight:700;'
+    +   'text-transform:uppercase">' + (faltam !== null && faltam > 0 ? 'Ainda faltam'
+        : 'Passou do equilíbrio em') + '</div>'
+    +   (faltam === null ? '<strong>—</strong>'
+        : '<strong style="color:' + (faltam > 0 ? 'var(--vm)' : 'var(--vd)') + '">'
+          + cpNum(Math.abs(faltam)) + '</strong> itens') + '</div>'
+    + '<div><div style="color:var(--tx2);font-size:10px;font-weight:700;'
+    +   'text-transform:uppercase">' + (res >= 0 ? 'Lucro' : 'Prejuízo') + ' até agora</div>'
+    +   '<strong style="color:' + (res >= 0 ? 'var(--vd)' : 'var(--vm)') + '">'
+    +   pcpMoeda(Math.abs(res)) + '</strong></div>'
+    + '</div></div>';
+}
+
+function pcpRenderReceitas(){
+  var box = document.getElementById('pcp-fin-receita');
+  if (!box || !_pcp) return;
+  var rs = pcpReceitas();
+  var trava = _pcp.fechada ? ' disabled' : '';
+  // as origens possíveis de quantidade: a curva do gráfico
+  var fontes = [{ v:'', n:'digitar à mão' }, { v:'emitido', n:'Emitido (curva)' }]
+    .concat(pcpPesos().map(function(x){ return { v:x.chave, n:x.nome + ' (curva)' }; }));
+
+  var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between">'
+    + '<span>💵 Quanto recebemos por cada coisa</span>'
+    + (_pcp.fechada ? '' : '<button class="btn btn-s" onclick="pcpAddReceita()">+ receita</button>')
+    + '</div>'
+    + '<div style="font-size:11px;color:var(--tx2);margin-bottom:.7rem">'
+    + 'O preço é por unidade. A quantidade pode vir sozinha do que já foi lançado na aba '
+    + 'Gráfico ou ser digitada aqui. '
+    + '<span style="opacity:.8">Na sua planilha de outubro o fator era R$ 121,6188 por item '
+    + 'convertido — aqui o preço é por tipo.</span></div>'
+    + '<div style="overflow:auto"><table style="border-collapse:collapse;font-size:11.5px;width:100%">'
+    + '<thead><tr>'
+    + '<th style="text-align:left;padding:5px 10px">Receita</th>'
+    + '<th style="text-align:left;padding:5px 10px">Quantidade vem de</th>'
+    + '<th style="text-align:right;padding:5px 10px">Quantidade</th>'
+    + '<th style="text-align:right;padding:5px 10px">Preço unitário</th>'
+    + '<th style="text-align:right;padding:5px 10px">Total</th>'
+    + '<th style="padding:5px 10px"></th></tr></thead><tbody>';
+
+  rs.forEach(function(r, i){
+    var q = pcpReceitaQtd(r), tot = pcpReceitaTotal(r);
+    h += '<tr style="border-top:1px solid var(--brd)">'
+      + '<td style="padding:5px 10px">'
+      +   '<input type="text" value="' + cpEsc(r.nome) + '"' + trava
+      +   ' onchange="pcpSetReceita(' + i + ',\'nome\',this.value)"'
+      +   ' style="width:180px;font-size:11.5px;color:var(--tx);background:transparent;'
+      +   'border:none;border-bottom:1px dashed var(--brd);padding:1px 0"></td>'
+      + '<td style="padding:5px 10px">'
+      +   '<select' + trava + ' onchange="pcpSetReceita(' + i + ',\'fonte\',this.value)"'
+      +   ' style="font-size:11px;padding:2px 4px;border:1px solid var(--brd);'
+      +   'border-radius:5px;background:var(--bg);color:var(--tx)">'
+      +   fontes.map(function(f){
+            return '<option value="' + f.v + '"' + (f.v === (r.fonte || '') ? ' selected' : '')
+              + '>' + cpEsc(f.n) + '</option>'; }).join('')
+      +   '</select></td>'
+      + '<td style="text-align:right;padding:5px 10px">'
+      +   (r.fonte
+          ? '<strong>' + cpNum(q) + '</strong>'
+          : '<input type="text" value="' + cpNum(aagNum(r.qtd || 0)) + '"' + trava
+            + ' onchange="pcpSetReceita(' + i + ',\'qtd\',this.value)" onfocus="this.select()"'
+            + ' style="width:70px;font-size:11.5px;font-weight:700;text-align:right;'
+            + 'color:var(--tx);background:transparent;border:none;'
+            + 'border-bottom:1px dashed var(--brd);padding:1px 0">')
+      +   '</td>'
+      + '<td style="text-align:right;padding:5px 10px">'
+      +   '<input type="text" value="' + aagNum(r.preco || 0).toLocaleString('pt-BR',
+            { minimumFractionDigits:2, maximumFractionDigits:4 }) + '"' + trava
+      +   ' onchange="pcpSetReceita(' + i + ',\'preco\',this.value)" onfocus="this.select()"'
+      +   ' style="width:92px;font-size:11.5px;font-weight:700;text-align:right;color:var(--azm);'
+      +   'background:transparent;border:none;border-bottom:1px dashed var(--brd);padding:1px 0"></td>'
+      + '<td style="text-align:right;padding:5px 10px;font-weight:800;color:'
+      +   (tot ? 'var(--vd)' : 'var(--tx2)') + '">' + pcpMoeda(tot) + '</td>'
+      + '<td style="text-align:right;padding:5px 10px">'
+      +   (_pcp.fechada || rs.length <= 1 ? ''
+          : '<span onclick="pcpDelReceita(' + i + ')" title="tirar da receita"'
+            + ' style="color:var(--vm);cursor:pointer;font-weight:700">×</span>')
+      + '</td></tr>';
+  });
+
+  h += '<tr style="border-top:2px solid var(--brd);background:var(--cin)">'
+    + '<td colspan="4" style="padding:6px 10px;font-weight:700">Receita da medição</td>'
+    + '<td style="text-align:right;padding:6px 10px;font-weight:800;color:var(--vd)">'
+    +   pcpMoeda(pcpReceita()) + '</td><td></td></tr>';
+  box.innerHTML = h + '</tbody></table></div></div>';
+}
+
 // ── a aba ─────────────────────────────────────────────────────────
 var _pcpAba = 'plan';
 function pcpAba(qual){
   _pcpAba = qual;
-  ['plan','grafico'].forEach(function(x){
+  ['plan','grafico','financeiro'].forEach(function(x){
     var pane = document.getElementById('pcp-aba-' + x);
     var tab  = document.getElementById('pcp-tab-' + x);
     if (pane) pane.style.display = (x === qual) ? '' : 'none';
     if (tab)  tab.classList.toggle('active', x === qual);
   });
-  if (qual === 'grafico') pcpRenderGrafico();
+  if (qual === 'grafico')    pcpRenderGrafico();
+  if (qual === 'financeiro') pcpRenderFinanceiro();
 }
 
 // ── a aba do gráfico ──────────────────────────────────────────────
