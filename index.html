@@ -4529,10 +4529,41 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <div id="pcp-premissas"></div>
           <div id="pcp-status" style="font-size:12px;flex:1;min-width:200px"></div>
         </div>
-        <div id="pcp-cards"></div>
+        <div class="stabs">
+          <button class="stab active" id="pcp-tab-plan"
+            onclick="pcpAba('plan')">📋 Planejamento e Controle</button>
+          <button class="stab" id="pcp-tab-grafico"
+            onclick="pcpAba('grafico')">📈 Gráfico</button>
+        </div>
       </div>
-      <div id="pcp-grade"></div>
-      <div id="pcp-historico"></div>
+
+      <div id="pcp-aba-plan">
+        <div class="cd"><div id="pcp-cards"></div></div>
+        <div id="pcp-grade"></div>
+        <div id="pcp-historico"></div>
+      </div>
+
+      <div id="pcp-aba-grafico" style="display:none">
+        <div id="pcp-graf-cards"></div>
+        <div style="display:grid;grid-template-columns:minmax(0,2.3fr) minmax(250px,1fr);
+                    gap:1rem;align-items:start;margin-bottom:1rem">
+          <div class="cd" style="margin:0">
+            <div class="cd-t">📈 Curva de medição</div>
+            <div style="font-size:11px;color:var(--tx2);margin-bottom:.6rem">
+              Tudo acumulado dia a dia. O <strong>planejado</strong> é o ritmo da
+              medição; o <strong>emitido</strong> é o que saiu como pedido; o
+              <strong>convertido</strong> é o que foi liberado, já com o peso de
+              cada tipo.</div>
+            <div style="position:relative;height:320px"><canvas id="pcp-canvas"></canvas></div>
+          </div>
+          <div class="cd" style="margin:0">
+            <div class="cd-t">🚦 Farol de pedidos</div>
+            <div id="pcp-farol"></div>
+          </div>
+        </div>
+        <div id="pcp-pesos"></div>
+        <div id="pcp-graf-grade"></div>
+      </div>
     </div>
 
     <div id="p-analista-auto" class="page">
@@ -32316,7 +32347,9 @@ var _pcpHist = [];      // as medições já fechadas
 function pcpNovaMedicao(ini, fim){
   return { inicio:ini, fim:fim, dias:pcpDiasUteis(ini, fim),
            plan:{}, real:{}, custo:0, metaCiclo:PCP_META_CICLO,
-           cards:pcpCardsVazios(), fechada:false,
+           cards:pcpCardsVazios(),
+           curva:{ emitido:{}, conv:{} }, pesos:null, farol:{}, taxa:null,
+           fechada:false,
            criadaEm:new Date().toISOString() };
 }
 
@@ -32353,6 +32386,7 @@ function pcpSetCard(chave, campo, v){
   pcpCard(chave)[campo] = aagNum(v);
   pcpRenderCards();
   pcpRenderPremissas();
+  pcpRenderGrafico();   // o aproveitamento alimenta a projeção
   pcpSalvar();
 }
 
@@ -32362,6 +32396,173 @@ function pcpAproveitamento(){
   var lib = pcpCard('prod_ped').real;
   var emi = pcpCard('emitidos').real;
   return lib ? emi / lib : null;
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  A CURVA DE MEDIÇÃO
+//
+//  Três linhas acumuladas sobre os dias úteis da medição:
+//    planejado   — o ritmo da medição (meta do ciclo ÷ dias úteis)
+//    emitido     — o que saiu como pedido
+//    convertido  — o que foi liberado, cada tipo pelo seu peso
+//
+//  Os pesos vêm da planilha dele: Pedido Petronect conta inteiro,
+//  Pedido Reap e Devolução contam metade. A tabela é editável porque
+//  ele ainda vai levantar os outros tipos (há um de 0,8, por exemplo).
+// ══════════════════════════════════════════════════════════════════
+var PCP_PESOS_PADRAO = [
+  { chave:'petronect', nome:'Pedido Petronect', peso:1 },
+  { chave:'reap',      nome:'Pedido Reap',      peso:0.5 },
+  { chave:'devolucao', nome:'Devolução',        peso:0.5 }
+];
+function pcpPesos(){
+  if (!_pcp) return PCP_PESOS_PADRAO.slice();
+  if (!_pcp.pesos || !_pcp.pesos.length) {
+    _pcp.pesos = PCP_PESOS_PADRAO.map(function(x){ return { chave:x.chave, nome:x.nome, peso:x.peso }; });
+  }
+  return _pcp.pesos;
+}
+function pcpSetPeso(i, campo, v){
+  if (!_pcp || _pcp.fechada) return;
+  var ps = pcpPesos(); if (!ps[i]) return;
+  if (campo === 'peso') {
+    var n = aagNum(v);
+    if (!(n > 0)) { pcpRenderGrafico(); return; }
+    ps[i].peso = n;
+  } else {
+    var nome = aagTxt(v);
+    if (!nome) { pcpRenderGrafico(); return; }
+    ps[i].nome = nome;
+  }
+  pcpRenderGrafico(); pcpSalvar();
+}
+function pcpAddPeso(){
+  if (!_pcp || _pcp.fechada) return;
+  var nome = prompt('Nome do tipo de pedido:', '');
+  if (nome === null || !aagTxt(nome)) return;
+  var peso = prompt('Quanto ele vale na medição? (1 = inteiro, 0,5 = metade)', '1');
+  if (peso === null) return;
+  var n = aagNum(peso);
+  if (!(n > 0)) { alert('O peso precisa ser maior que zero.'); return; }
+  pcpPesos().push({ chave:'t' + Date.now().toString(36), nome:aagTxt(nome), peso:n });
+  pcpRenderGrafico(); pcpSalvar();
+}
+function pcpDelPeso(i){
+  if (!_pcp || _pcp.fechada) return;
+  var ps = pcpPesos(); if (!ps[i]) return;
+  if (!confirm('Tirar "' + ps[i].nome + '" da curva?\n\n'
+      + 'O que já foi lançado nesse tipo sai da conta do convertido.')) return;
+  var ch = ps[i].chave;
+  ps.splice(i, 1);
+  if (_pcp.curva && _pcp.curva.conv) delete _pcp.curva.conv[ch];
+  pcpRenderGrafico(); pcpSalvar();
+}
+
+// ── o que foi lançado em cada dia ─────────────────────────────────
+function pcpCurva(){
+  if (!_pcp) return { emitido:{}, conv:{} };
+  _pcp.curva = _pcp.curva || {};
+  _pcp.curva.emitido = _pcp.curva.emitido || {};
+  _pcp.curva.conv    = _pcp.curva.conv || {};
+  return _pcp.curva;
+}
+function pcpCurvaDia(tipo, dia){
+  var c = pcpCurva();
+  var o = (tipo === 'emitido') ? c.emitido : (c.conv[tipo] || {});
+  var v = o[dia];
+  return (v === undefined || v === '') ? 0 : aagNum(v);
+}
+function pcpSetCurva(tipo, dia, v){
+  if (!_pcp || _pcp.fechada) return;
+  var c = pcpCurva();
+  var o = (tipo === 'emitido') ? c.emitido : (c.conv[tipo] = c.conv[tipo] || {});
+  if (aagTxt(v) === '') delete o[dia]; else o[dia] = aagNum(v);
+  pcpRenderGrafico(); pcpSalvar();
+}
+
+// ── as três séries, acumuladas ────────────────────────────────────
+function pcpSerieCurva(){
+  var dias = (_pcp && _pcp.dias) || [];
+  var hoje = cpHojeISO();
+  var porDia = pcpMetaDia();
+  var pesos = pcpPesos();
+  var planAcum = [], emiAcum = [], convAcum = [];
+  var emiDia = [], convDia = [];
+  var pa = 0, ea = 0, ca = 0, decorridos = 0;
+  dias.forEach(function(d){
+    pa += porDia;
+    planAcum.push(Math.round(pa));
+    var e = pcpCurvaDia('emitido', d);
+    var c = 0;
+    pesos.forEach(function(t){ c += pcpCurvaDia(t.chave, d) * t.peso; });
+    emiDia.push(e); convDia.push(c);
+    ea += e; ca += c;
+    if (d <= hoje) {
+      decorridos++;
+      emiAcum.push(Math.round(ea * 100) / 100);
+      convAcum.push(Math.round(ca * 100) / 100);
+    } else {
+      // depois de hoje a linha não desenha: não houve dia ainda
+      emiAcum.push(null); convAcum.push(null);
+    }
+  });
+  return { dias:dias, porDia:porDia, decorridos:decorridos,
+           planAcum:planAcum, emiAcum:emiAcum, convAcum:convAcum,
+           emiDia:emiDia, convDia:convDia,
+           planAteHoje:Math.round(decorridos * porDia),
+           planTotal:Math.round(dias.length * porDia),
+           emiTotal:Math.round(ea * 100) / 100,
+           convTotal:Math.round(ca * 100) / 100 };
+}
+
+// ── o farol de pedidos ────────────────────────────────────────────
+var PCP_FAROL = [
+  { chave:'liberado',   nome:'LIBERADO',      cor:'#1F4E9C' },
+  { chave:'liberacao',  nome:'EM LIBERAÇÃO',  cor:'#E8A33D' },
+  { chave:'memorizado', nome:'MEMORIZADO',    cor:'#9AA3AE' },
+  { chave:'rejeitado',  nome:'REJEITADO',     cor:'#D93025' }
+];
+function pcpFarol(){
+  if (!_pcp) return {};
+  _pcp.farol = _pcp.farol || {};
+  return _pcp.farol;
+}
+function pcpFarolN(chave){ return aagNum(pcpFarol()[chave] || 0); }
+function pcpSetFarol(chave, v){
+  if (!_pcp || _pcp.fechada) return;
+  pcpFarol()[chave] = aagNum(v);
+  pcpRenderGrafico(); pcpSalvar();
+}
+
+// ── a taxa usada na projeção ──────────────────────────────────────
+// Nasce do aproveitamento calculado, mas ele pode fixar outra para
+// simular o cenário — é o 85% que a planilha dele usa na mão.
+function pcpTaxa(){
+  if (_pcp && _pcp.taxa !== undefined && _pcp.taxa !== null && _pcp.taxa !== '')
+    return aagNum(_pcp.taxa) / 100;
+  var a = pcpAproveitamento();
+  return (a === null) ? 0.85 : a;
+}
+function pcpTaxaEhAjustada(){
+  return !!(_pcp && _pcp.taxa !== undefined && _pcp.taxa !== null && _pcp.taxa !== '');
+}
+function pcpSetTaxa(v){
+  if (!_pcp || _pcp.fechada) return;
+  var txt = aagTxt(v);
+  if (txt === '') { _pcp.taxa = null; }
+  else {
+    var n = aagNum(txt);
+    if (!(n > 0)) { pcpRenderGrafico(); return; }
+    _pcp.taxa = n;
+  }
+  pcpRenderGrafico(); pcpSalvar();
+}
+
+// Projeção: o que já foi convertido mais o que está em liberação,
+// corrigido pela taxa de aproveitamento.
+function pcpProjecao(){
+  var s = pcpSerieCurva();
+  return s.convTotal + pcpFarolN('liberacao') * pcpTaxa();
 }
 
 // ── as premissas da medição ───────────────────────────────────────
@@ -32382,6 +32583,7 @@ function pcpSetMetaCiclo(v){
   _pcp.metaCiclo = n;
   pcpRenderPremissas();
   pcpRenderCards();
+  pcpRenderGrafico();   // o ritmo é a linha do planejado
   pcpSalvar();
 }
 
@@ -32560,6 +32762,8 @@ async function pcpSalvarAgora(forcar){
       inicio:_pcp.inicio, fim:_pcp.fim, dias:_pcp.dias,
       plan:_pcp.plan, real:_pcp.real, custo:_pcp.custo || 0,
       metaCiclo:pcpMetaCiclo(), cards:_pcp.cards || pcpCardsVazios(),
+      curva:pcpCurva(), pesos:pcpPesos(), farol:pcpFarol(),
+      taxa:(_pcp.taxa === undefined ? null : _pcp.taxa),
       fechada:!!_pcp.fechada, criadaEm:_pcp.criadaEm,
       atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem()
     });
@@ -32594,6 +32798,9 @@ async function pcpCarregar(){
                  plan:d.plan || {}, real:pcpMigrarLinhas(d.real || {}),
                  custo:d.custo || 0, metaCiclo:d.metaCiclo || PCP_META_CICLO,
                  cards:d.cards || pcpCardsVazios(),
+                 curva:d.curva || { emitido:{}, conv:{} },
+                 pesos:(d.pesos && d.pesos.length) ? d.pesos : null,
+                 farol:d.farol || {}, taxa:(d.taxa === undefined ? null : d.taxa),
                  fechada:!!d.fechada, criadaEm:d.criadaEm };
       }
     }
@@ -32667,6 +32874,9 @@ async function pcpTrocarPeriodo(ini, fim){
                  plan:d.plan || {}, real:pcpMigrarLinhas(d.real || {}),
                  custo:d.custo || 0, metaCiclo:d.metaCiclo || PCP_META_CICLO,
                  cards:d.cards || pcpCardsVazios(),
+                 curva:d.curva || { emitido:{}, conv:{} },
+                 pesos:(d.pesos && d.pesos.length) ? d.pesos : null,
+                 farol:d.farol || {}, taxa:(d.taxa === undefined ? null : d.taxa),
                  fechada:!!d.fechada, criadaEm:d.criadaEm };
       }
     }
@@ -32680,6 +32890,10 @@ async function pcpTrocarPeriodo(ini, fim){
     PCP_CARDS.forEach(function(c){
       novo.cards[c.chave] = { meta:pcpCard(c.chave).meta, real:0 };
     });
+    // os pesos de cada tipo seguem; a curva e o farol recomeçam
+    novo.pesos = pcpPesos().map(function(x){
+      return { chave:x.chave, nome:x.nome, peso:x.peso }; });
+    novo.taxa = (_pcp && _pcp.taxa !== undefined) ? _pcp.taxa : null;
     PCP_BLOCOS.forEach(function(b){
       var anterior = _pcp && _pcp.plan && _pcp.plan[b.chave];
       var valor = b.meta;
@@ -32705,6 +32919,7 @@ function pcpRender(){
   pcpRenderCards();
   pcpRenderGrade();
   pcpRenderHistorico();
+  pcpRenderGrafico();
   var lbl = document.getElementById('pcp-periodo-lbl');
   if (lbl && _pcp) lbl.textContent = pcpRotulo(_pcp) + (_pcp.fechada ? ' · FECHADA' : '');
 }
@@ -32792,6 +33007,276 @@ function pcpRenderCards(){
        gap < 0 ? 'var(--vm)' : 'var(--vd)');
 
   box.innerHTML = h + '</div>';
+}
+
+// ── a aba ─────────────────────────────────────────────────────────
+var _pcpAba = 'plan';
+function pcpAba(qual){
+  _pcpAba = qual;
+  ['plan','grafico'].forEach(function(x){
+    var pane = document.getElementById('pcp-aba-' + x);
+    var tab  = document.getElementById('pcp-tab-' + x);
+    if (pane) pane.style.display = (x === qual) ? '' : 'none';
+    if (tab)  tab.classList.toggle('active', x === qual);
+  });
+  if (qual === 'grafico') pcpRenderGrafico();
+}
+
+// ── a aba do gráfico ──────────────────────────────────────────────
+var _pcpChart = null;
+function pcpRenderGrafico(){
+  if (!_pcp || _pcpAba !== 'grafico') return;
+  pcpRenderGrafCards();
+  pcpRenderFarol();
+  pcpRenderPesos();
+  pcpRenderGrafGrade();
+  pcpDesenharCurva();
+}
+
+function pcpDesenharCurva(){
+  var cv = document.getElementById('pcp-canvas');
+  if (!cv || typeof Chart === 'undefined') return;
+  var s = pcpSerieCurva();
+  var rot = s.dias.map(function(d){ var p = d.split('-'); return p[2] + '/' + p[1]; });
+  if (_pcpChart) { try { _pcpChart.destroy(); } catch(e){} _pcpChart = null; }
+  var linha = function(nome, dados, cor, tracejada){
+    return { label:nome, data:dados, borderColor:cor, backgroundColor:cor,
+             borderWidth:2.2, borderDash:tracejada ? [6,4] : [],
+             pointRadius:2.2, pointHoverRadius:5, tension:.18, spanGaps:false };
+  };
+  _pcpChart = new Chart(cv.getContext('2d'), {
+    type:'line',
+    data:{ labels:rot, datasets:[
+      linha('Planejado', s.planAcum, '#9AA3AE', true),
+      linha('Emitido',   s.emiAcum,  '#1F4E9C'),
+      linha('Convertido', s.convAcum, '#0E9E6A')
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ position:'bottom', labels:{ boxWidth:12, font:{ size:11 } } },
+        tooltip:{ callbacks:{ label:function(c){
+          return c.dataset.label + ': ' + cpNum(Math.round(c.parsed.y)); } } } },
+      scales:{ y:{ beginAtZero:true, ticks:{ font:{ size:10 },
+                 callback:function(v){ return cpNum(v); } } },
+               x:{ ticks:{ font:{ size:9.5 }, maxRotation:0, autoSkip:true } } }
+    }
+  });
+}
+
+function pcpRenderGrafCards(){
+  var box = document.getElementById('pcp-graf-cards');
+  if (!box || !_pcp) return;
+  var s = pcpSerieCurva();
+  var proj = pcpProjecao();
+  var gapReal = s.planAteHoje - s.convTotal;
+  var gapProj = s.planAteHoje - proj;
+  var trava = _pcp.fechada ? ' disabled' : '';
+  var taxa = pcpTaxa();
+
+  var card = function(val, rot, sub, cor){
+    return '<div style="background:var(--cin);border:1.5px solid ' + cor
+      + ';border-radius:12px;padding:.85rem .7rem;text-align:center">'
+      + '<div style="font-size:24px;font-weight:800;color:' + cor + ';line-height:1.1">'
+      + val + '</div>'
+      + '<div style="font-size:10px;font-weight:700;color:var(--tx2);margin-top:4px">'
+      + cpEsc(rot) + '</div>'
+      + '<div style="font-size:10px;color:var(--tx2);margin-top:3px">' + sub + '</div></div>';
+  };
+  var sinal = function(n){ return (n > 0 ? '−' : '+') + cpNum(Math.abs(Math.round(n))); };
+
+  box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));'
+    + 'gap:11px;margin-bottom:1rem">'
+    + card(cpNum(s.planAteHoje), 'META ACUMULADA',
+           s.decorridos + ' dia(s) × ' + cpNum(Math.round(s.porDia * 10) / 10), 'var(--az)')
+    + card(cpNum(Math.round(s.convTotal)), 'CONVERTIDO',
+           'liberado, já com os pesos', 'var(--vd)')
+    + card(cpNum(Math.round(s.emiTotal)), 'EMITIDO',
+           'pedidos no período', 'var(--azm)')
+    + card(sinal(gapReal), 'GAP REAL', 'meta acumulada − convertido',
+           gapReal > 0 ? 'var(--vm)' : 'var(--vd)')
+    + card(sinal(gapProj), 'GAP PROJETADO',
+           'com o que está em liberação',
+           gapProj > 0 ? 'var(--vm)' : 'var(--vd)')
+    // a taxa que entra na projeção, editável
+    + '<div style="background:var(--cin);border:1.5px solid var(--am);border-radius:12px;'
+    +   'padding:.85rem .7rem;text-align:center">'
+    + '<input type="text" value="' + (Math.round(taxa * 1000) / 10).toString().replace('.', ',')
+    +   '"' + trava + ' onchange="pcpSetTaxa(this.value)" onfocus="this.select()"'
+    +   ' title="deixe em branco para voltar ao aproveitamento calculado"'
+    +   ' style="width:100%;font-size:24px;font-weight:800;line-height:1.1;text-align:center;'
+    +   'color:var(--am);background:transparent;border:none;border-bottom:1.5px dashed '
+    +   'var(--brd);padding:0 0 2px">'
+    + '<div style="font-size:10px;font-weight:700;color:var(--tx2);margin-top:4px">'
+    +   'TAXA DA PROJEÇÃO (%)</div>'
+    + '<div style="font-size:10px;color:var(--tx2);margin-top:3px">'
+    +   (pcpTaxaEhAjustada()
+        ? '<span style="color:var(--am)">ajustada à mão</span>'
+          + (_pcp.fechada ? '' : ' · <span onclick="pcpSetTaxa(\'\')" style="color:var(--azm);'
+            + 'cursor:pointer;text-decoration:underline">voltar</span>')
+        : 'do aproveitamento') + '</div></div>'
+    + '</div>'
+    + '<div style="font-size:11px;color:var(--tx2);margin:-.4rem 0 1rem">'
+    + 'A projeção soma ao convertido o que está <strong>em liberação</strong> no farol ('
+    + cpNum(pcpFarolN('liberacao')) + ') corrigido pela taxa: '
+    + cpNum(Math.round(s.convTotal)) + ' + ' + cpNum(pcpFarolN('liberacao')) + ' × '
+    + (Math.round(taxa * 1000) / 10).toString().replace('.', ',') + '% = <strong>'
+    + cpNum(Math.round(proj)) + '</strong>.</div>';
+}
+
+function pcpRenderFarol(){
+  var box = document.getElementById('pcp-farol');
+  if (!box || !_pcp) return;
+  var trava = _pcp.fechada ? ' disabled' : '';
+  var maior = Math.max.apply(null, PCP_FAROL.map(function(f){ return pcpFarolN(f.chave); }).concat([1]));
+  var total = PCP_FAROL.reduce(function(n, f){ return n + pcpFarolN(f.chave); }, 0);
+  var h = '<div style="display:flex;flex-direction:column;gap:9px">';
+  PCP_FAROL.forEach(function(f){
+    var n = pcpFarolN(f.chave);
+    var pct = total ? 100 * n / total : 0;
+    h += '<div style="display:flex;align-items:center;gap:9px">'
+      + '<span style="width:11px;height:11px;border-radius:50%;background:' + f.cor
+      +   ';flex-shrink:0"></span>'
+      + '<span style="font-size:10.5px;font-weight:700;color:' + f.cor
+      +   ';width:98px;flex-shrink:0">' + f.nome + '</span>'
+      + '<input type="text" value="' + cpNum(n) + '"' + trava
+      +   ' onchange="pcpSetFarol(\'' + f.chave + '\',this.value)" onfocus="this.select()"'
+      +   ' style="width:62px;font-size:13px;font-weight:800;text-align:right;color:var(--tx);'
+      +   'background:transparent;border:none;border-bottom:1px dashed var(--brd);padding:0">'
+      + '<span style="font-size:10px;color:var(--tx2);width:42px;text-align:right">'
+      +   (total ? (Math.round(pct * 10) / 10).toString().replace('.', ',') + '%' : '—')
+      + '</span></div>'
+      // a barrinha, só para ilustrar a proporção
+      + '<div style="height:8px;background:var(--brd);border-radius:4px;overflow:hidden;'
+      +   'margin:-4px 0 0 20px">'
+      + '<div style="height:100%;width:' + (100 * n / maior) + '%;background:' + f.cor
+      +   ';border-radius:4px"></div></div>';
+  });
+  h += '</div><div style="margin-top:.8rem;padding-top:.6rem;border-top:1px solid var(--brd);'
+    + 'font-size:11px;color:var(--tx2);display:flex;justify-content:space-between">'
+    + '<span>Total de pedidos</span><strong style="color:var(--tx)">' + cpNum(total)
+    + '</strong></div>'
+    + '<div style="font-size:10px;color:var(--tx2);margin-top:.5rem;line-height:1.5">'
+    + 'O que está <strong>em liberação</strong> é o que alimenta o gap projetado.</div>';
+  box.innerHTML = h;
+}
+
+function pcpRenderPesos(){
+  var box = document.getElementById('pcp-pesos');
+  if (!box || !_pcp) return;
+  var ps = pcpPesos();
+  var trava = _pcp.fechada ? ' disabled' : '';
+  var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between">'
+    + '<span>⚖️ Quanto vale cada tipo na medição</span>'
+    + (_pcp.fechada ? '' : '<button class="btn btn-s" onclick="pcpAddPeso()">+ tipo</button>')
+    + '</div>'
+    + '<div style="font-size:11px;color:var(--tx2);margin-bottom:.7rem">'
+    + 'Um pedido Petronect conta inteiro; Reap e Devolução contam metade. '
+    + 'É esse peso que transforma o lançado do dia na linha <strong>convertido</strong>.</div>'
+    + '<table style="border-collapse:collapse;font-size:11.5px">'
+    + '<thead><tr><th style="text-align:left;padding:4px 10px">Tipo</th>'
+    + '<th style="text-align:right;padding:4px 10px">Peso</th>'
+    + '<th style="text-align:left;padding:4px 10px">Conta como</th>'
+    + '<th style="text-align:right;padding:4px 10px">No período</th>'
+    + '<th style="padding:4px 10px"></th></tr></thead><tbody>';
+  var dias = _pcp.dias || [];
+  ps.forEach(function(x, i){
+    var bruto = dias.reduce(function(n, d){ return n + pcpCurvaDia(x.chave, d); }, 0);
+    h += '<tr style="border-top:1px solid var(--brd)">'
+      + '<td style="padding:4px 10px">'
+      +   '<input type="text" value="' + cpEsc(x.nome) + '"' + trava
+      +   ' onchange="pcpSetPeso(' + i + ',\'nome\',this.value)"'
+      +   ' style="width:190px;font-size:11.5px;color:var(--tx);background:transparent;'
+      +   'border:none;border-bottom:1px dashed var(--brd);padding:1px 0"></td>'
+      + '<td style="text-align:right;padding:4px 10px">'
+      +   '<input type="text" value="' + String(x.peso).replace('.', ',') + '"' + trava
+      +   ' onchange="pcpSetPeso(' + i + ',\'peso\',this.value)" onfocus="this.select()"'
+      +   ' style="width:48px;font-size:11.5px;font-weight:700;text-align:right;color:var(--azm);'
+      +   'background:transparent;border:none;border-bottom:1px dashed var(--brd);padding:1px 0"></td>'
+      + '<td style="padding:4px 10px;color:var(--tx2)">'
+      +   (Math.round(x.peso * 1000) / 10).toString().replace('.', ',') + '% · x/'
+      +   (Math.round(100 / x.peso) / 100).toString().replace('.', ',') + '</td>'
+      + '<td style="text-align:right;padding:4px 10px">' + cpNum(bruto)
+      +   ' <span style="color:var(--tx2)">→ ' + cpNum(Math.round(bruto * x.peso * 10) / 10)
+      +   '</span></td>'
+      + '<td style="text-align:right;padding:4px 10px">'
+      +   (_pcp.fechada || ps.length <= 1 ? ''
+          : '<span onclick="pcpDelPeso(' + i + ')" title="tirar da curva"'
+            + ' style="color:var(--vm);cursor:pointer;font-weight:700">×</span>')
+      + '</td></tr>';
+  });
+  box.innerHTML = h + '</tbody></table></div>';
+}
+
+function pcpRenderGrafGrade(){
+  var box = document.getElementById('pcp-graf-grade');
+  if (!box || !_pcp) return;
+  var dias = _pcp.dias || [];
+  if (!dias.length) { box.innerHTML = ''; return; }
+  var trava = _pcp.fechada ? ' disabled' : '';
+  var s = pcpSerieCurva();
+  var cabDia = dias.map(function(d){
+    var p = d.split('-');
+    var dow = ['dom','seg','ter','qua','qui','sex','sáb'][new Date(d + 'T12:00:00').getDay()];
+    var eHoje = d === cpHojeISO();
+    return '<th style="text-align:center;padding:3px 4px;white-space:nowrap;font-size:9.5px;'
+      + (eHoje ? 'background:var(--azc);color:var(--az);' : '')
+      + 'border-left:1px solid var(--brd)">' + p[2] + '/' + p[1]
+      + '<div style="font-weight:400;opacity:.7">' + dow + '</div></th>';
+  }).join('');
+
+  var linhaFixa = function(nome, valores, total, cor){
+    var h = '<tr style="background:var(--cin)"><td style="padding:5px 8px;font-weight:700;'
+      + 'position:sticky;left:0;background:var(--cin);color:' + cor + '">' + cpEsc(nome) + '</td>';
+    valores.forEach(function(v){
+      h += '<td style="text-align:center;padding:5px 4px;border-left:1px solid var(--brd);'
+        + 'color:var(--tx2);font-size:10.5px">' + (v === null ? '—' : cpNum(Math.round(v))) + '</td>';
+    });
+    return h + '<td style="text-align:right;padding:5px 8px;font-weight:800;color:' + cor
+      + ';border-left:2px solid var(--brd)">' + cpNum(Math.round(total)) + '</td></tr>';
+  };
+  var linhaEdit = function(chave, nome, peso){
+    var h = '<tr><td style="padding:4px 8px;padding-left:22px;position:sticky;left:0;'
+      + 'background:var(--bg)">' + cpEsc(nome)
+      + (peso !== undefined ? ' <span style="font-size:9.5px;color:var(--tx2)">× '
+          + String(peso).replace('.', ',') + '</span>' : '') + '</td>';
+    var soma = 0;
+    dias.forEach(function(d){
+      var v = (chave === 'emitido' ? pcpCurva().emitido : (pcpCurva().conv[chave] || {}))[d];
+      soma += (v === undefined || v === '') ? 0 : aagNum(v);
+      h += '<td style="padding:1px;border-left:1px solid var(--brd)">'
+        + '<input type="text" value="' + (v === undefined ? '' : v) + '"' + trava
+        + ' onchange="pcpSetCurva(\'' + chave + '\',\'' + d + '\',this.value)"'
+        + ' style="width:42px;font-size:10.5px;padding:2px 3px;text-align:center;'
+        + 'border:1px solid transparent;border-radius:3px;background:transparent;color:var(--tx)"'
+        + ' onfocus="this.style.borderColor=\'var(--az)\'"'
+        + ' onblur="this.style.borderColor=\'transparent\'"></td>';
+    });
+    return h + '<td style="text-align:right;padding:4px 8px;font-weight:700;'
+      + 'border-left:2px solid var(--brd)">' + cpNum(soma) + '</td></tr>';
+  };
+
+  var h = '<div class="cd"><div class="cd-t">🗓 Lançamento da curva — dia a dia</div>'
+    + '<div style="font-size:11px;color:var(--tx2);margin-bottom:.8rem">'
+    + 'Digite o bruto de cada dia; o peso é aplicado na hora de montar a curva. '
+    + 'O planejado e os acumulados saem sozinhos.'
+    + (_pcp.fechada ? ' <strong style="color:var(--am)">Medição fechada — só leitura.</strong>' : '')
+    + '</div>'
+    + '<div style="overflow:auto;max-height:60vh"><table style="border-collapse:collapse;font-size:11px">'
+    + '<thead><tr style="position:sticky;top:0;background:var(--bg);z-index:2">'
+    + '<th style="text-align:left;padding:4px 8px;min-width:190px;position:sticky;left:0;'
+    +   'background:var(--bg);z-index:3">Linha</th>' + cabDia
+    + '<th style="text-align:right;padding:4px 8px;border-left:2px solid var(--brd)">Total</th>'
+    + '</tr></thead><tbody>';
+
+  h += linhaFixa('Planejado (por dia)',
+        dias.map(function(){ return s.porDia; }), s.planTotal, 'var(--tx2)');
+  h += linhaEdit('emitido', 'Emitido');
+  pcpPesos().forEach(function(t){ h += linhaEdit(t.chave, t.nome, t.peso); });
+  h += linhaFixa('Convertido (com peso)', s.convDia, s.convTotal, 'var(--vd)');
+  h += linhaFixa('Planejado acumulado', s.planAcum, s.planTotal, 'var(--tx2)');
+  h += linhaFixa('Convertido acumulado', s.convAcum, s.convTotal, 'var(--vd)');
+
+  box.innerHTML = h + '</tbody></table></div></div>';
 }
 
 function pcpRenderGrade(){
