@@ -32333,16 +32333,23 @@ var PCP_BLOCOS = [
       { chave:'devolucoes', nome:'Devoluções' } ] },
   // As seis linhas do PATEC vêm da Análise PCP do Painel Estratégico
   { chave:'patec', nome:'PATEC', meta:90, linhas:[
-      { chave:'patec_fin',    nome:'PATEC Finalizado', painel:'Análise do dia' },
-      { chave:'mdg',          nome:'MDG',              painel:'MDG' },
-      { chave:'xgl',          nome:'XGL',              painel:'XGL' },
-      { chave:'republicacao', nome:'Republicação',     painel:'Republicação' },
-      { chave:'patec_devol',  nome:'Devoluções',       painel:'RCs Devoluções' },
-      { chave:'patec_ped',    nome:'Pedidos',          painel:'RCs Pedidos' } ] },
+      { chave:'patec_fin',    nome:'PATEC Finalizado',
+        painel:'card Análise do dia, da Análise PCP (Painel Estratégico)' },
+      { chave:'mdg',          nome:'MDG',
+        painel:'card MDG, da Análise PCP (Painel Estratégico)' },
+      { chave:'xgl',          nome:'XGL',
+        painel:'card XGL, da Análise PCP (Painel Estratégico)' },
+      { chave:'republicacao', nome:'Republicação',
+        painel:'card Republicação, da Análise PCP (Painel Estratégico)' },
+      { chave:'patec_devol',  nome:'Devoluções',
+        painel:'card RCs Devoluções, da Análise PCP (Painel Estratégico)' },
+      { chave:'patec_ped',    nome:'Pedidos',
+        painel:'card RCs Pedidos, da Análise PCP (Painel Estratégico)' } ] },
   { chave:'abertura', nome:'Abertura de PATEC', meta:50, linhas:[
       { chave:'abertura', nome:'Abertura de PATEC' } ] },
   { chave:'emissao', nome:'Emissão de Pedido', meta:135, linhas:[
-      { chave:'emissao', nome:'Emissão de Pedido', auto:'pedidos' } ] },
+      { chave:'emissao', nome:'Emissão de Pedido', auto:'pedidos',
+        painel:'Feitos, do Histórico dos dias do Controle de Pedidos' } ] },
   { chave:'negoc', nome:'Negociação', meta:0, linhas:[
       { chave:'negociacao', nome:'Itens para Negociação (Preço Excessivo)' } ] }
 ];
@@ -33680,11 +33687,12 @@ function pcpRenderGrade(){
       h += '<tr id="pcp-lin-' + l.chave + '">'
         + '<td style="padding:4px 8px;padding-left:22px;position:sticky;left:0;background:var(--bg)">'
         +   cpEsc(l.nome)
-        +   (l.auto ? ' <span title="o dash preenche sozinho" style="font-size:9px;color:var(--azm);'
-             + 'font-weight:700">⟳</span>' : '')
-        +   (l.painel ? ' <span title="vem do card &quot;' + cpEsc(l.painel)
-             + '&quot; da Análise PCP, no Painel Estratégico" style="font-size:9px;'
-             + 'color:var(--azm);font-weight:700">⟳</span>' : '') + '</td>'
+        +   ((l.auto || l.painel)
+             ? ' <span title="' + cpEsc(l.painel
+                 ? 'vem de: ' + l.painel
+                 : 'o dash preenche sozinho')
+               + '" style="font-size:9px;color:var(--azm);font-weight:700">⟳</span>' : '')
+        + '</td>'
         ;
       dias.forEach(function(d){
         var v = (_pcp.real[l.chave] || {})[d];
@@ -33775,6 +33783,50 @@ var PCP_DO_PAINEL = [
     conta:function(a){ return _tratEh(a, 'Pedido'); } }
 ];
 
+// ── Emissão de Pedido: a coluna "Feitos" do Histórico dos dias ────
+// O Controle de Pedidos tem base própria (a frente Pedidos). O número da
+// coluna Feitos não é o total gravado no dia: é recontado sem os
+// compradores que estão fora da conta — por isso leio a lista de fora
+// junto e aplico a mesma regra do cpTotais.
+async function pcpPedidosFeitos(ini, fim){
+  var out = {};
+  var ler = async function(mod){
+    var achou = {};
+    var db = (typeof getDBModulo === 'function') ? getDBModulo(mod) : null;
+    if (!db) return achou;
+    // quem está fora da conta naquela base
+    var fora = [];
+    try {
+      var cfg = await db.collection('config').doc('controle_pedidos_fora').get();
+      fora = (cfg && cfg.exists && (cfg.data() || {}).nomes) || [];
+    } catch (e) {}
+    var estaFora = function(nome){
+      var n = cpNormNome(nome);
+      return fora.some(function(x){ return cpNormNome(x) === n; });
+    };
+    var snap = await db.collection(CP_COL).get();
+    snap.forEach(function(doc){
+      var d = doc.data() || {};
+      var dia = d.data || doc.id;
+      if (!dia || dia < ini || dia > fim) return;
+      var tot = 0;
+      (d.compradores || []).forEach(function(c){
+        if (estaFora(c.nome)) return;
+        tot += (+c.total || 0);
+      });
+      achou[dia] = tot;
+    });
+    return achou;
+  };
+  try {
+    out = await ler('pedidos');
+    // o Controle de Pedidos já morou na base do ADLV; se a frente própria
+    // não tiver nada do período, procuro lá antes de desistir
+    if (!Object.keys(out).length) out = await ler('adlv');
+  } catch (e) { console.warn('pcpPedidosFeitos:', e); }
+  return out;
+}
+
 // Busca as ações do período na base do PATEC do ADLV e devolve, por linha,
 // quantas em cada dia.
 async function pcpAcoesDoPainel(ini, fim){
@@ -33808,12 +33860,16 @@ async function pcpPuxarDoDash(){
   if (st) st.innerHTML = '⏳ Buscando no dashboard...';
   var achados = {};
   try {
-    // Emissão de Pedido: o histórico diário do Controle de Pedidos
-    var porDia = {};
-    (typeof _cpHist !== 'undefined' ? (_cpHist || []) : []).forEach(function(h){
-      if (!h || !h.data) return;
-      porDia[h.data] = (porDia[h.data] || 0) + (+h.total || 0);
-    });
+    // Emissão de Pedido: a coluna Feitos do Histórico dos dias
+    var porDia = await pcpPedidosFeitos(_pcp.inicio, _pcp.fim);
+    // na própria frente Pedidos o histórico já está em memória
+    if (!Object.keys(porDia).length) {
+      (typeof _cpHist !== 'undefined' ? (_cpHist || []) : []).forEach(function(h){
+        if (!h || !h.data) return;
+        if (h.data < _pcp.inicio || h.data > _pcp.fim) return;
+        porDia[h.data] = (+h.total || 0);
+      });
+    }
     if (Object.keys(porDia).length) achados['pedidos'] = porDia;
 
     // As seis linhas do bloco PATEC, da Análise PCP do Painel Estratégico
