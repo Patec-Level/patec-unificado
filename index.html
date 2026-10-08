@@ -7391,8 +7391,13 @@ async function loadFirebaseSDK(){
 let _dbPorModulo = { adlv: null, fast: null };
 
 function getDB(){
-  const mod = (_moduloAtivo === 'fast' || _moduloAtivo === 'pedidos') ? _moduloAtivo : 'adlv';
-  return getDBModulo(mod);
+  // BUG (08/10): esta linha era `(_moduloAtivo === 'fast' || === 'pedidos')
+  // ? _moduloAtivo : 'adlv'`, então QUALQUER frente nova caía no 'adlv'.
+  // O PCP do ADLV gravava as medições dentro da base do PATEC, que é
+  // exatamente a mistura de bases que não pode acontecer. Agora cada
+  // frente que existe em FIREBASE_MODULOS usa a base dela; o 'adlv'
+  // continua no app [DEFAULT], o mesmo projeto do login.
+  return getDBModulo(modExiste(_moduloAtivo) ? _moduloAtivo : 'adlv');
 }
 
 // Permite obter a conexão de um módulo ESPECÍFICO, independente de qual
@@ -32326,13 +32331,14 @@ var PCP_BLOCOS = [
       { chave:'saneamento', nome:'Saneamento' } ] },
   { chave:'devol', nome:'Devoluções', meta:100, linhas:[
       { chave:'devolucoes', nome:'Devoluções' } ] },
+  // As seis linhas do PATEC vêm da Análise PCP do Painel Estratégico
   { chave:'patec', nome:'PATEC', meta:90, linhas:[
-      { chave:'patec_fin',    nome:'PATEC Finalizado', auto:'patec_fin' },
-      { chave:'mdg',          nome:'MDG' },
-      { chave:'xgl',          nome:'XGL' },
-      { chave:'republicacao', nome:'Republicação' },
-      { chave:'patec_devol',  nome:'Devoluções' },
-      { chave:'patec_ped',    nome:'Pedidos' } ] },
+      { chave:'patec_fin',    nome:'PATEC Finalizado', painel:'Análise do dia' },
+      { chave:'mdg',          nome:'MDG',              painel:'MDG' },
+      { chave:'xgl',          nome:'XGL',              painel:'XGL' },
+      { chave:'republicacao', nome:'Republicação',     painel:'Republicação' },
+      { chave:'patec_devol',  nome:'Devoluções',       painel:'RCs Devoluções' },
+      { chave:'patec_ped',    nome:'Pedidos',          painel:'RCs Pedidos' } ] },
   { chave:'abertura', nome:'Abertura de PATEC', meta:50, linhas:[
       { chave:'abertura', nome:'Abertura de PATEC' } ] },
   { chave:'emissao', nome:'Emissão de Pedido', meta:135, linhas:[
@@ -33675,7 +33681,10 @@ function pcpRenderGrade(){
         + '<td style="padding:4px 8px;padding-left:22px;position:sticky;left:0;background:var(--bg)">'
         +   cpEsc(l.nome)
         +   (l.auto ? ' <span title="o dash preenche sozinho" style="font-size:9px;color:var(--azm);'
-             + 'font-weight:700">⟳</span>' : '') + '</td>'
+             + 'font-weight:700">⟳</span>' : '')
+        +   (l.painel ? ' <span title="vem do card &quot;' + cpEsc(l.painel)
+             + '&quot; da Análise PCP, no Painel Estratégico" style="font-size:9px;'
+             + 'color:var(--azm);font-weight:700">⟳</span>' : '') + '</td>'
         ;
       dias.forEach(function(d){
         var v = (_pcp.real[l.chave] || {})[d];
@@ -33745,6 +33754,53 @@ function pcpPintarTotais(){
 // ── puxar o realizado do próprio dashboard ────────────────────────
 // Só preenche as linhas marcadas com auto, e só os dias que estão dentro
 // da medição. O que ele digitou na mão não é sobrescrito sem avisar.
+// ── de onde vem o realizado de cada linha ─────────────────────────
+// A Análise PCP do Painel Estratégico conta as ações do dia da equipe do
+// ADLV. É a mesma contagem, item por item, que alimenta as seis linhas do
+// bloco PATEC. As ações ficam em producao_acoes, na base do PATEC do ADLV
+// — o PCP só LÊ de lá; o que ele grava continua na base dele.
+var PCP_DO_PAINEL = [
+  { linha:'patec_fin',    card:'Análise do dia',
+    conta:function(a){ return ['primeira_analise','em_tratativa','status_b','ag_parecer']
+                                .indexOf(a.tipo) !== -1; } },
+  { linha:'mdg',          card:'MDG',
+    conta:function(a){ return _tratEh(a, 'MDG'); } },
+  { linha:'xgl',          card:'XGL',
+    conta:function(a){ return _tratEh(a, 'XGL'); } },
+  { linha:'republicacao', card:'Republicação',
+    conta:function(a){ return _tratEh(a, 'Republicação'); } },
+  { linha:'patec_devol',  card:'RCs Devoluções',
+    conta:function(a){ return _tratEh(a, 'Devolução'); } },
+  { linha:'patec_ped',    card:'RCs Pedidos',
+    conta:function(a){ return _tratEh(a, 'Pedido'); } }
+];
+
+// Busca as ações do período na base do PATEC do ADLV e devolve, por linha,
+// quantas em cada dia.
+async function pcpAcoesDoPainel(ini, fim){
+  var out = {};
+  try {
+    var db = (typeof getDBModulo === 'function') ? getDBModulo('adlv') : null;
+    if (!db) return out;
+    var snap = await db.collection('producao_acoes')
+      .where('data', '>=', ini).where('data', '<=', fim).get();
+    var acoes = [];
+    snap.forEach(function(doc){ var d = doc.data() || {}; if (!d.anulada) acoes.push(d); });
+    PCP_DO_PAINEL.forEach(function(x){
+      var porDia = {};
+      acoes.forEach(function(a){
+        if (!a.data || !x.conta(a)) return;
+        porDia[a.data] = (porDia[a.data] || 0) + 1;
+      });
+      if (Object.keys(porDia).length) out[x.linha] = porDia;
+    });
+  } catch (e) { console.warn('pcpAcoesDoPainel:', e); }
+  return out;
+}
+
+// ── puxar o realizado do próprio dashboard ────────────────────────
+// Só preenche as linhas que têm origem definida, e só os dias que estão
+// dentro da medição. O que ele digitou na mão é avisado quando muda.
 async function pcpPuxarDoDash(){
   if (!_pcp) return;
   if (_pcp.fechada) { alert('Esta medição está fechada.'); return; }
@@ -33760,37 +33816,33 @@ async function pcpPuxarDoDash(){
     });
     if (Object.keys(porDia).length) achados['pedidos'] = porDia;
 
-    // PATEC Finalizado: a data de finalização de cada RC da Governança
-    var db = getDB();
-    if (db) {
-      var fin = {};
-      var snap = await db.collection('gov_mapa').get();
-      snap.forEach(function(doc){
-        var d = doc.data() || {};
-        var dt = aagTxt(d.finalizado);
-        if (!dt) return;
-        var iso = /^\d{4}-\d{2}-\d{2}$/.test(dt) ? dt : cpDataISO(dt);
-        if (iso) fin[iso] = (fin[iso] || 0) + 1;
-      });
-      if (Object.keys(fin).length) achados['patec_fin'] = fin;
-    }
+    // As seis linhas do bloco PATEC, da Análise PCP do Painel Estratégico
+    var doPainel = await pcpAcoesDoPainel(_pcp.inicio, _pcp.fim);
+    Object.keys(doPainel).forEach(function(k){ achados['painel_' + k] = doPainel[k]; });
   } catch (e) { console.warn('pcpPuxarDoDash:', e); }
 
   var mudou = 0, sobrescritos = 0, linhas = [];
-  pcpLinhas().forEach(function(x){
-    var fonte = x.linha.auto && achados[x.linha.auto];
+  var aplicar = function(chave, nome, fonte){
     if (!fonte) return;
     var n = 0, over = 0;
     _pcp.dias.forEach(function(d){
       var v = fonte[d];
       if (v === undefined) return;
-      var atual = (_pcp.real[x.linha.chave] || {})[d];
+      var atual = (_pcp.real[chave] || {})[d];
       if (atual !== undefined && aagNum(atual) !== v) over++;
-      _pcp.real[x.linha.chave] = _pcp.real[x.linha.chave] || {};
-      _pcp.real[x.linha.chave][d] = v;
+      _pcp.real[chave] = _pcp.real[chave] || {};
+      _pcp.real[chave][d] = v;
       n++;
     });
-    if (n) { mudou += n; sobrescritos += over; linhas.push(x.linha.nome + ' (' + n + ')'); }
+    if (n) { mudou += n; sobrescritos += over; linhas.push(nome + ' (' + n + ')'); }
+  };
+
+  pcpLinhas().forEach(function(x){
+    if (x.linha.auto) aplicar(x.linha.chave, x.linha.nome, achados[x.linha.auto]);
+  });
+  PCP_DO_PAINEL.forEach(function(x){
+    var alvo = pcpLinhas().filter(function(y){ return y.linha.chave === x.linha; })[0];
+    if (alvo) aplicar(x.linha, alvo.linha.nome, achados['painel_' + x.linha]);
   });
 
   if (!mudou) {
@@ -33808,7 +33860,6 @@ async function pcpPuxarDoDash(){
     + '</span>';
 }
 
-// ── fechar a medição e guardar no histórico ───────────────────────
 function pcpFechar(){
   if (!_pcp) return;
   if (_pcp.fechada) { alert('Esta medição já está fechada.'); return; }
