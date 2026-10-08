@@ -32712,9 +32712,12 @@ function pcpRenderCards(){
   var dias = _pcp.dias || [];
   var hoje = cpHojeISO();
   var decorridos = dias.filter(function(d){ return d <= hoje; }).length;
-  var realTotal = 0, planAteHoje = 0;
+  // A meta até hoje é o ritmo da medição vezes os dias úteis já decorridos
+  // — o mesmo 142,1/dia que aparece na faixa de premissas, não a soma do
+  // programado dos blocos.
+  var planAteHoje = decorridos * pcpMetaDia();
+  var realTotal = 0;
   PCP_BLOCOS.forEach(function(b){
-    dias.forEach(function(d){ if (d <= hoje) planAteHoje += pcpPlanDia(b.chave, d); });
     b.linhas.forEach(function(l){ realTotal += pcpRealTotal(l.chave); });
   });
   var trava = _pcp.fechada ? ' disabled' : '';
@@ -32776,11 +32779,12 @@ function pcpRenderCards(){
   // 3. meta até hoje e o gap, que saem da grade
   var gap = realTotal - planAteHoje;
   h += moldura('<div style="font-size:24px;font-weight:800;color:var(--az);line-height:1.1">'
-       + cpNum(planAteHoje) + '</div>' + rotulo('META ATÉ HOJE')
-       + legenda(decorridos + ' dia(s) × meta'));
+       + cpNum(Math.round(planAteHoje)) + '</div>' + rotulo('META ATÉ HOJE')
+       + legenda(decorridos + ' dia(s) × '
+         + cpNum(Math.round(pcpMetaDia() * 10) / 10)));
   h += moldura('<div style="font-size:24px;font-weight:800;line-height:1.1;color:'
        + (gap < 0 ? 'var(--vm)' : 'var(--vd)') + '">'
-       + (gap < 0 ? '−' : '+') + cpNum(Math.abs(gap)) + '</div>'
+       + (gap < 0 ? '−' : '+') + cpNum(Math.abs(Math.round(gap))) + '</div>'
        + rotulo(gap < 0 ? 'GAP' : 'GORDURA') + legenda('realizado − meta até hoje'),
        gap < 0 ? 'var(--vm)' : 'var(--vd)');
 
