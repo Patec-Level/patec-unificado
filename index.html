@@ -32962,14 +32962,13 @@ function pcpRenderCards(){
   var dias = _pcp.dias || [];
   var hoje = cpHojeISO();
   var decorridos = dias.filter(function(d){ return d <= hoje; }).length;
-  // A meta até hoje é o ritmo da medição vezes os dias úteis já decorridos
-  // — o mesmo 142,1/dia que aparece na faixa de premissas, não a soma do
-  // programado dos blocos.
-  var planAteHoje = decorridos * pcpMetaDia();
-  var realTotal = 0;
-  PCP_BLOCOS.forEach(function(b){
-    b.linhas.forEach(function(l){ realTotal += pcpRealTotal(l.chave); });
-  });
+  // O GAP é só de PEDIDOS: o programado da Emissão de Pedido nos dias já
+  // decorridos contra o que foi emitido. Antes eu somava o realizado de
+  // TODAS as linhas da grade (recebimento, oportunidades, PATEC…) contra o
+  // ritmo da medição — duas contas que não se comparam.
+  var planAteHoje = 0;
+  dias.forEach(function(d){ if (d <= hoje) planAteHoje += pcpPlanDia('emissao', d); });
+  var realTotal = pcpRealTotal('emissao');
   var trava = _pcp.fechada ? ' disabled' : '';
 
   var moldura = function(dentro, cor){
@@ -33026,17 +33025,15 @@ function pcpRenderCards(){
     h += moldura(dentro, c.cor);
   });
 
-  // 3. o gap. A meta até hoje não tem card próprio — ela só alimenta esta
-  // conta, e já aparece na faixa de premissas como ritmo por dia.
+  // 3. o gap de pedidos: programado até hoje menos o emitido
   var gap = realTotal - planAteHoje;
-  h += moldura('<div style="font-size:24px;font-weight:800;line-height:1.1;color:'
-       + (gap < 0 ? 'var(--vm)' : 'var(--vd)') + '">'
+  var corGap = gap < 0 ? 'var(--vm)' : 'var(--vd)';
+  h += moldura('<div style="font-size:24px;font-weight:800;line-height:1.1;color:' + corGap + '">'
        + (gap < 0 ? '−' : '+') + cpNum(Math.abs(Math.round(gap))) + '</div>'
        + rotulo(gap < 0 ? 'GAP' : 'GORDURA')
-       + legenda('realizado − ' + cpNum(Math.round(planAteHoje))
-         + ' (' + decorridos + ' dia(s) × '
-         + cpNum(Math.round(pcpMetaDia() * 10) / 10) + ')'),
-       gap < 0 ? 'var(--vm)' : 'var(--vd)');
+       + legenda('emitido ' + cpNum(Math.round(realTotal)) + ' − programado '
+         + cpNum(Math.round(planAteHoje)) + ' em ' + decorridos + ' dia(s)'),
+       corGap);
 
   box.innerHTML = h + '</div>';
 }
