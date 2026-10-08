@@ -4526,6 +4526,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
           <button class="btn btn-s" onclick="pcpPuxarDoDash()">⟳ Puxar do dashboard</button>
           <button class="btn btn-s" onclick="pcpExportar()">⬇ Baixar a medição</button>
           <button class="btn btn-s" onclick="pcpFechar()">🔒 Fechar medição</button>
+          <div id="pcp-premissas"></div>
           <div id="pcp-status" style="font-size:12px;flex:1;min-width:200px"></div>
         </div>
         <div id="pcp-cards"></div>
@@ -32271,6 +32272,7 @@ function aaSetTab(aba){
 // a própria linha, o que fazia o % Real dar 100% sempre.
 // ══════════════════════════════════════════════════════════════════
 var PCP_COL  = 'pcp_medicoes';     // uma doc por medição, id = aaaa-mm-dd_aaaa-mm-dd
+var PCP_META_CICLO = 2700;         // a meta da medição inteira; ele edita na faixa
 var PCP_CFG  = 'pcp_atual';        // qual medição está aberta
 
 var PCP_BLOCOS = [
@@ -32313,8 +32315,57 @@ var _pcpHist = [];      // as medições já fechadas
 
 function pcpNovaMedicao(ini, fim){
   return { inicio:ini, fim:fim, dias:pcpDiasUteis(ini, fim),
-           plan:{}, real:{}, custo:0, fechada:false,
+           plan:{}, real:{}, custo:0, metaCiclo:PCP_META_CICLO, fechada:false,
            criadaEm:new Date().toISOString() };
+}
+
+// ── as premissas da medição ───────────────────────────────────────
+// A meta do ciclo é a premissa de cima: é dela que sai o ritmo diário
+// (meta ÷ dias úteis), o mesmo 2.700 ÷ 19 = 142/dia da planilha dele.
+function pcpMetaCiclo(){
+  var m = _pcp && _pcp.metaCiclo;
+  return (m === undefined || m === null || m === '') ? PCP_META_CICLO : aagNum(m);
+}
+function pcpMetaDia(){
+  var n = (_pcp && _pcp.dias || []).length;
+  return n ? pcpMetaCiclo() / n : 0;
+}
+function pcpSetMetaCiclo(v){
+  if (!_pcp || _pcp.fechada) return;
+  var n = aagNum(v);
+  if (!(n > 0)) { pcpRenderPremissas(); return; }
+  _pcp.metaCiclo = n;
+  pcpRenderPremissas();
+  pcpRenderCards();
+  pcpSalvar();
+}
+
+function pcpRenderPremissas(){
+  var box = document.getElementById('pcp-premissas');
+  if (!box || !_pcp) return;
+  var dias = (_pcp.dias || []).length;
+  var porDia = pcpMetaDia();
+  var trava = _pcp.fechada ? ' disabled' : '';
+  box.innerHTML =
+      '<div style="display:inline-flex;align-items:center;gap:8px;'
+    +   'background:rgba(217,48,37,.07);border:1.5px solid rgba(217,48,37,.35);'
+    +   'border-radius:10px;padding:6px 12px">'
+    + '<span style="font-size:16px;line-height:1">⚠️</span>'
+    + '<span style="font-size:12.5px;font-weight:700;color:var(--tx);white-space:nowrap">'
+    +   'Premissas para Meta de '
+    +   '<input type="text" id="pcp-meta-ciclo" value="' + cpNum(pcpMetaCiclo()) + '"' + trava
+    +   ' onchange="pcpSetMetaCiclo(this.value)"'
+    +   ' onfocus="this.select()"'
+    +   ' title="clique para editar a meta da medição"'
+    +   ' style="width:62px;font-size:12.5px;font-weight:800;text-align:center;'
+    +   'color:var(--vm);background:transparent;border:none;border-bottom:1.5px dashed '
+    +   'rgba(217,48,37,.5);padding:0 2px;cursor:' + (_pcp.fechada ? 'default' : 'text') + '">'
+    +   ' itens</span>'
+    + (dias ? '<span style="font-size:10.5px;color:var(--tx2);white-space:nowrap;'
+        + 'border-left:1px solid var(--brd);padding-left:8px">÷ ' + cpNum(dias)
+        + ' dias úteis = <strong>' + cpNum(Math.round(porDia * 10) / 10)
+        + '</strong>/dia</span>' : '')
+    + '</div>';
 }
 
 // Dia útil: segunda a sexta, fora os feriados que o dash já conhece.
@@ -32445,6 +32496,7 @@ async function pcpSalvarAgora(forcar){
     await db.collection(PCP_COL).doc(pcpId(_pcp)).set({
       inicio:_pcp.inicio, fim:_pcp.fim, dias:_pcp.dias,
       plan:_pcp.plan, real:_pcp.real, custo:_pcp.custo || 0,
+      metaCiclo:pcpMetaCiclo(),
       fechada:!!_pcp.fechada, criadaEm:_pcp.criadaEm,
       atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem()
     });
@@ -32477,7 +32529,7 @@ async function pcpCarregar(){
         _pcp = { inicio:d.inicio, fim:d.fim,
                  dias:(d.dias && d.dias.length) ? d.dias : pcpDiasUteis(d.inicio, d.fim),
                  plan:d.plan || {}, real:pcpMigrarLinhas(d.real || {}),
-                 custo:d.custo || 0,
+                 custo:d.custo || 0, metaCiclo:d.metaCiclo || PCP_META_CICLO,
                  fechada:!!d.fechada, criadaEm:d.criadaEm };
       }
     }
@@ -32549,14 +32601,16 @@ async function pcpTrocarPeriodo(ini, fim){
         novo = { inicio:d.inicio, fim:d.fim,
                  dias:(d.dias && d.dias.length) ? d.dias : pcpDiasUteis(d.inicio, d.fim),
                  plan:d.plan || {}, real:pcpMigrarLinhas(d.real || {}),
-                 custo:d.custo || 0,
+                 custo:d.custo || 0, metaCiclo:d.metaCiclo || PCP_META_CICLO,
                  fechada:!!d.fechada, criadaEm:d.criadaEm };
       }
     }
   } catch (e) { console.warn('pcpTrocarPeriodo:', e); }
   if (!novo) {
     novo = pcpNovaMedicao(ini, fim);
-    // as metas acompanham: o que estava valendo continua valendo
+    // a meta do ciclo e as metas dos blocos acompanham: o que estava
+    // valendo continua valendo até ele mudar
+    novo.metaCiclo = pcpMetaCiclo();
     PCP_BLOCOS.forEach(function(b){
       var anterior = _pcp && _pcp.plan && _pcp.plan[b.chave];
       var valor = b.meta;
@@ -32578,6 +32632,7 @@ async function pcpTrocarPeriodo(ini, fim){
 
 // ── a tela ────────────────────────────────────────────────────────
 function pcpRender(){
+  pcpRenderPremissas();
   pcpRenderCards();
   pcpRenderGrade();
   pcpRenderHistorico();
