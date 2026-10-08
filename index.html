@@ -32779,16 +32779,16 @@ function pcpRenderCards(){
     h += moldura(dentro, c.cor);
   });
 
-  // 3. meta até hoje e o gap, que saem da grade
+  // 3. o gap. A meta até hoje não tem card próprio — ela só alimenta esta
+  // conta, e já aparece na faixa de premissas como ritmo por dia.
   var gap = realTotal - planAteHoje;
-  h += moldura('<div style="font-size:24px;font-weight:800;color:var(--az);line-height:1.1">'
-       + cpNum(Math.round(planAteHoje)) + '</div>' + rotulo('META ATÉ HOJE')
-       + legenda(decorridos + ' dia(s) × '
-         + cpNum(Math.round(pcpMetaDia() * 10) / 10)));
   h += moldura('<div style="font-size:24px;font-weight:800;line-height:1.1;color:'
        + (gap < 0 ? 'var(--vm)' : 'var(--vd)') + '">'
        + (gap < 0 ? '−' : '+') + cpNum(Math.abs(Math.round(gap))) + '</div>'
-       + rotulo(gap < 0 ? 'GAP' : 'GORDURA') + legenda('realizado − meta até hoje'),
+       + rotulo(gap < 0 ? 'GAP' : 'GORDURA')
+       + legenda('realizado − ' + cpNum(Math.round(planAteHoje))
+         + ' (' + decorridos + ' dia(s) × '
+         + cpNum(Math.round(pcpMetaDia() * 10) / 10) + ')'),
        gap < 0 ? 'var(--vm)' : 'var(--vd)');
 
   box.innerHTML = h + '</div>';
