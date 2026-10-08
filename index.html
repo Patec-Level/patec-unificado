@@ -33788,16 +33788,16 @@ var PCP_DO_PAINEL = [
 // coluna Feitos não é o total gravado no dia: é recontado sem os
 // compradores que estão fora da conta — por isso leio a lista de fora
 // junto e aplico a mesma regra do cpTotais.
-// _pcpPedidosErro guarda por que a leitura falhou, para a tela poder
-// oferecer a liberação em vez de só dizer que não achou nada.
-var _pcpPedidosErro = null;
+// _pcpPedidosInfo diz como terminou a última leitura do Controle de
+// Pedidos: de qual base vieram os números, ou por que não vieram.
+var _pcpPedidosInfo = null;
 
 async function pcpPedidosFeitos(ini, fim){
-  _pcpPedidosErro = null;
+  _pcpPedidosInfo = null;
   var ler = async function(mod){
     var achou = {};
     var db = (typeof getDBModulo === 'function') ? getDBModulo(mod) : null;
-    if (!db) { throw new Error('sem conexão com a base ' + mod); }
+    if (!db) throw new Error('sem conexão com a base ' + mod);
     // quem está fora da conta naquela base
     var fora = [];
     try {
@@ -33822,47 +33822,61 @@ async function pcpPedidosFeitos(ini, fim){
     });
     return achou;
   };
-  // A base é a do módulo Pedidos do ADLV — projeto próprio no Firebase.
+
+  // A base certa é a do módulo Pedidos do ADLV — projeto próprio no
+  // Firebase. Se ela recusar, NÃO caio para a base do PATEC: lá existe
+  // uma cópia velha, de antes da migração, e preencher com ela devolve
+  // alguns dias com números errados — pior do que não preencher nada.
   try {
     var out = await ler('pedidos');
+    _pcpPedidosInfo = { base:'pedidos', dias:Object.keys(out).length };
     if (Object.keys(out).length) return out;
   } catch (e) {
-    // o app nomeado do Pedidos não tem ninguém autenticado enquanto ele
-    // não entrar lá uma vez; guardo isso para oferecer a liberação
-    _pcpPedidosErro = e.code || e.message || String(e);
-    console.warn('pcpPedidosFeitos (pedidos):', _pcpPedidosErro);
+    _pcpPedidosInfo = { erro: e.code || e.message || String(e) };
+    console.warn('pcpPedidosFeitos (pedidos):', _pcpPedidosInfo.erro);
+    return {};
   }
-  // o Controle de Pedidos já morou na base do PATEC do ADLV, antes da
-  // migração; se não vier nada de lá, procuro aqui antes de desistir
+
+  // Só chego aqui quando a base do Pedidos respondeu e não tinha nada do
+  // período — aí vale olhar a cópia antiga, avisando de onde veio.
   try {
     var velho = await ler('adlv');
-    if (Object.keys(velho).length) { _pcpPedidosErro = null; return velho; }
+    if (Object.keys(velho).length) {
+      _pcpPedidosInfo = { base:'adlv', dias:Object.keys(velho).length };
+      return velho;
+    }
   } catch (e2) { console.warn('pcpPedidosFeitos (adlv):', e2); }
   return {};
 }
 
 // Pede a senha uma vez e autentica no projeto do módulo Pedidos, para o
 // PCP conseguir ler o Histórico dos dias de lá.
+var _pcpLiberando = false;
 async function pcpLiberarPedidos(){
+  if (_pcpLiberando) return false;
+  _pcpLiberando = true;
   var st = document.getElementById('pcp-status');
   try {
     var r = await _autenticarModulo('pedidos');
     if (!r.ok) {
       var senha = await _pedirSenhaModal('Confirme sua senha para o PCP ler o '
-        + 'Controle de Pedidos:');
-      if (!senha) return;
+        + 'Controle de Pedidos (módulo Pedidos do ADLV):');
+      if (!senha) { _pcpLiberando = false; return false; }
       r = await _autenticarModulo('pedidos', senha);
     }
     if (!r.ok) {
-      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ não consegui liberar ('
-        + cpEsc(r.motivo || 'erro desconhecido') + ')</span>';
-      return;
+      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ não consegui liberar a leitura '
+        + 'do Pedidos (' + cpEsc(r.motivo || 'erro desconhecido') + ')</span>';
+      _pcpLiberando = false;
+      return false;
     }
     _dbPorModulo['pedidos'] = null;   // reabre a conexão já autenticada
-    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ liberado. Puxando...</span>';
-    await pcpPuxarDoDash();
+    _pcpLiberando = false;
+    return true;
   } catch (e) {
     if (st) st.innerHTML = '<span style="color:var(--vm)">✗ ' + cpEsc(e.message) + '</span>';
+    _pcpLiberando = false;
+    return false;
   }
 }
 
@@ -33899,15 +33913,24 @@ async function pcpPuxarDoDash(){
   if (st) st.innerHTML = '⏳ Buscando no dashboard...';
   var achados = {};
   try {
-    // Emissão de Pedido: a coluna Feitos do Histórico dos dias
+    // Emissão de Pedido: a coluna Feitos do Histórico dos dias, na base
+    // do módulo Pedidos do ADLV
     var porDia = await pcpPedidosFeitos(_pcp.inicio, _pcp.fim);
+    // recusou por falta de login naquele projeto? pede a senha e repete
+    if (_pcpPedidosInfo && _pcpPedidosInfo.erro) {
+      if (st) st.innerHTML = '⏳ A base do módulo Pedidos pediu autenticação...';
+      var liberou = await pcpLiberarPedidos();
+      if (liberou) porDia = await pcpPedidosFeitos(_pcp.inicio, _pcp.fim);
+    }
     // na própria frente Pedidos o histórico já está em memória
-    if (!Object.keys(porDia).length) {
-      (typeof _cpHist !== 'undefined' ? (_cpHist || []) : []).forEach(function(h){
+    if (!Object.keys(porDia).length && typeof _cpHist !== 'undefined' && (_cpHist || []).length) {
+      (_cpHist || []).forEach(function(h){
         if (!h || !h.data) return;
         if (h.data < _pcp.inicio || h.data > _pcp.fim) return;
         porDia[h.data] = (+h.total || 0);
       });
+      if (Object.keys(porDia).length)
+        _pcpPedidosInfo = { base:'memoria', dias:Object.keys(porDia).length };
     }
     if (Object.keys(porDia).length) achados['pedidos'] = porDia;
 
@@ -33956,17 +33979,35 @@ async function pcpPuxarDoDash(){
     + '</span>' + pcpAvisoPedidos();
 }
 
-// A base do módulo Pedidos é outro projeto do Firebase. Enquanto ele não
-// entrar lá uma vez nesta sessão, o app daquele projeto está sem ninguém
-// autenticado e a leitura volta negada — o aviso oferece liberar na hora.
+// A base do módulo Pedidos é outro projeto do Firebase. O aviso sempre
+// diz de qual base os números da Emissão de Pedido saíram — é o que
+// separa "não veio" de "veio da cópia velha".
 function pcpAvisoPedidos(){
-  if (!_pcpPedidosErro) return '';
-  return '<div style="font-size:11px;color:var(--am);margin-top:5px">'
-    + '⚠ A Emissão de Pedido não veio: a base do módulo <strong>Pedidos</strong> recusou a '
-    + 'leitura daqui (' + cpEsc(_pcpPedidosErro) + '). '
-    + '<span onclick="pcpLiberarPedidos()" style="color:var(--azm);cursor:pointer;'
-    + 'text-decoration:underline;font-weight:700">liberar leitura do Pedidos</span>'
-    + '</div>';
+  var i = _pcpPedidosInfo;
+  if (!i) return '';
+  var cx = function(cor, txt){
+    return '<div style="font-size:11px;color:' + cor + ';margin-top:5px">' + txt + '</div>';
+  };
+  if (i.erro) {
+    return cx('var(--vm)', '⚠ A <strong>Emissão de Pedido</strong> não veio: a base do módulo '
+      + '<strong>Pedidos</strong> recusou a leitura (' + cpEsc(i.erro) + '). '
+      + '<span onclick="pcpPuxarDoDash()" style="color:var(--azm);cursor:pointer;'
+      + 'text-decoration:underline;font-weight:700">tentar de novo</span>');
+  }
+  if (i.base === 'adlv') {
+    return cx('var(--am)', '⚠ A <strong>Emissão de Pedido</strong> veio da cópia antiga, na base '
+      + 'do PATEC — a base do módulo Pedidos não tinha nenhum dia deste período. '
+      + 'Confira contra o Histórico dos dias antes de usar.');
+  }
+  if (i.base === 'memoria') {
+    return cx('var(--tx2)', 'A Emissão de Pedido veio do histórico já carregado nesta tela.');
+  }
+  if (!i.dias) {
+    return cx('var(--am)', 'A base do módulo <strong>Pedidos</strong> respondeu, mas não tem '
+      + 'nenhum dia deste período.');
+  }
+  return cx('var(--tx2)', 'Emissão de Pedido: ' + cpNum(i.dias)
+    + ' dia(s) lidos na base do módulo Pedidos.');
 }
 
 function pcpFechar(){
