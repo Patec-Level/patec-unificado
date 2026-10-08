@@ -33788,12 +33788,16 @@ var PCP_DO_PAINEL = [
 // coluna Feitos não é o total gravado no dia: é recontado sem os
 // compradores que estão fora da conta — por isso leio a lista de fora
 // junto e aplico a mesma regra do cpTotais.
+// _pcpPedidosErro guarda por que a leitura falhou, para a tela poder
+// oferecer a liberação em vez de só dizer que não achou nada.
+var _pcpPedidosErro = null;
+
 async function pcpPedidosFeitos(ini, fim){
-  var out = {};
+  _pcpPedidosErro = null;
   var ler = async function(mod){
     var achou = {};
     var db = (typeof getDBModulo === 'function') ? getDBModulo(mod) : null;
-    if (!db) return achou;
+    if (!db) { throw new Error('sem conexão com a base ' + mod); }
     // quem está fora da conta naquela base
     var fora = [];
     try {
@@ -33818,13 +33822,48 @@ async function pcpPedidosFeitos(ini, fim){
     });
     return achou;
   };
+  // A base é a do módulo Pedidos do ADLV — projeto próprio no Firebase.
   try {
-    out = await ler('pedidos');
-    // o Controle de Pedidos já morou na base do ADLV; se a frente própria
-    // não tiver nada do período, procuro lá antes de desistir
-    if (!Object.keys(out).length) out = await ler('adlv');
-  } catch (e) { console.warn('pcpPedidosFeitos:', e); }
-  return out;
+    var out = await ler('pedidos');
+    if (Object.keys(out).length) return out;
+  } catch (e) {
+    // o app nomeado do Pedidos não tem ninguém autenticado enquanto ele
+    // não entrar lá uma vez; guardo isso para oferecer a liberação
+    _pcpPedidosErro = e.code || e.message || String(e);
+    console.warn('pcpPedidosFeitos (pedidos):', _pcpPedidosErro);
+  }
+  // o Controle de Pedidos já morou na base do PATEC do ADLV, antes da
+  // migração; se não vier nada de lá, procuro aqui antes de desistir
+  try {
+    var velho = await ler('adlv');
+    if (Object.keys(velho).length) { _pcpPedidosErro = null; return velho; }
+  } catch (e2) { console.warn('pcpPedidosFeitos (adlv):', e2); }
+  return {};
+}
+
+// Pede a senha uma vez e autentica no projeto do módulo Pedidos, para o
+// PCP conseguir ler o Histórico dos dias de lá.
+async function pcpLiberarPedidos(){
+  var st = document.getElementById('pcp-status');
+  try {
+    var r = await _autenticarModulo('pedidos');
+    if (!r.ok) {
+      var senha = await _pedirSenhaModal('Confirme sua senha para o PCP ler o '
+        + 'Controle de Pedidos:');
+      if (!senha) return;
+      r = await _autenticarModulo('pedidos', senha);
+    }
+    if (!r.ok) {
+      if (st) st.innerHTML = '<span style="color:var(--vm)">✗ não consegui liberar ('
+        + cpEsc(r.motivo || 'erro desconhecido') + ')</span>';
+      return;
+    }
+    _dbPorModulo['pedidos'] = null;   // reabre a conexão já autenticada
+    if (st) st.innerHTML = '<span style="color:var(--vd)">✓ liberado. Puxando...</span>';
+    await pcpPuxarDoDash();
+  } catch (e) {
+    if (st) st.innerHTML = '<span style="color:var(--vm)">✗ ' + cpEsc(e.message) + '</span>';
+  }
 }
 
 // Busca as ações do período na base do PATEC do ADLV e devolve, por linha,
@@ -33903,7 +33942,8 @@ async function pcpPuxarDoDash(){
 
   if (!mudou) {
     if (st) st.innerHTML = '<span style="color:var(--am)">Nada encontrado no dashboard para '
-      + 'os dias desta medição. As linhas com ⟳ são as que eu consigo puxar.</span>';
+      + 'os dias desta medição. As linhas com ⟳ são as que eu consigo puxar.</span>'
+      + pcpAvisoPedidos();
     return;
   }
   pcpRenderGrade();
@@ -33913,7 +33953,20 @@ async function pcpPuxarDoDash(){
     + cpEsc(linhas.join(' · '))
     + (sobrescritos ? ' · <span style="color:var(--am)">' + cpNum(sobrescritos)
         + ' valor(es) que você tinha digitado foram substituídos pelo do dashboard</span>' : '')
-    + '</span>';
+    + '</span>' + pcpAvisoPedidos();
+}
+
+// A base do módulo Pedidos é outro projeto do Firebase. Enquanto ele não
+// entrar lá uma vez nesta sessão, o app daquele projeto está sem ninguém
+// autenticado e a leitura volta negada — o aviso oferece liberar na hora.
+function pcpAvisoPedidos(){
+  if (!_pcpPedidosErro) return '';
+  return '<div style="font-size:11px;color:var(--am);margin-top:5px">'
+    + '⚠ A Emissão de Pedido não veio: a base do módulo <strong>Pedidos</strong> recusou a '
+    + 'leitura daqui (' + cpEsc(_pcpPedidosErro) + '). '
+    + '<span onclick="pcpLiberarPedidos()" style="color:var(--azm);cursor:pointer;'
+    + 'text-decoration:underline;font-weight:700">liberar leitura do Pedidos</span>'
+    + '</div>';
 }
 
 function pcpFechar(){
