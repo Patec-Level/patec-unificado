@@ -33279,6 +33279,18 @@ function pcpRenderGrafGrade(){
   box.innerHTML = h + '</tbody></table></div></div>';
 }
 
+// Plan./Real./%/Gap no fim de cada linha: ficam ocultos por padrão —
+// a análise mora na aba Gráfico, e aqui a grade é para lançar. O link no
+// cabeçalho traz as colunas de volta, e a escolha fica guardada no
+// navegador dele.
+var _pcpFech = false;
+try { _pcpFech = localStorage.getItem('pcp_fechamento') === '1'; } catch(e){}
+function pcpToggleFech(){
+  _pcpFech = !_pcpFech;
+  try { localStorage.setItem('pcp_fechamento', _pcpFech ? '1' : '0'); } catch(e){}
+  pcpRenderGrade();
+}
+
 function pcpRenderGrade(){
   var box = document.getElementById('pcp-grade');
   if (!box || !_pcp) return;
@@ -33303,9 +33315,13 @@ function pcpRenderGrade(){
     + '<div style="font-size:11px;color:var(--tx2);line-height:1.7;margin-bottom:.8rem">'
     + 'Os dias úteis saem sozinhos do período: sábado, domingo e feriado não entram. '
     + 'A linha <strong>Programado</strong> é a meta de cada dia do bloco; as linhas de baixo '
-    + 'são o realizado. Depois do último dia da medição vêm o fechamento de cada linha: '
-    + '<strong>Real.</strong> é a soma dos dias daquela linha, <strong>%</strong> é Real. '
-    + 'dividido pelo Plan., e <strong>Gap</strong> é Plan. menos Real.'
+    + 'são o realizado.'
+    + ' <span onclick="pcpToggleFech()" style="color:var(--azm);cursor:pointer;'
+    +   'text-decoration:underline">'
+    +   (_pcpFech ? 'ocultar Plan./Real./%/Gap' : 'mostrar Plan./Real./%/Gap') + '</span>'
+    + (_pcpFech ? ' — depois do último dia da medição: <strong>Real.</strong> é a soma '
+        + 'dos dias daquela linha, <strong>%</strong> é Real. dividido pelo Plan., e '
+        + '<strong>Gap</strong> é Plan. menos Real.' : '')
     + (_pcp.fechada ? ' <strong style="color:var(--am)">Esta medição está fechada — só leitura.</strong>' : '')
     + '</div>'
     + '<div style="overflow:auto;max-height:70vh"><table style="border-collapse:collapse;font-size:11px">'
@@ -33314,10 +33330,11 @@ function pcpRenderGrade(){
     +   'background:var(--bg);z-index:3">Operação</th>'
     + cabDia
     // o fechamento da linha fica depois do último dia da medição
-    + '<th style="text-align:right;padding:4px 8px;border-left:2px solid var(--brd)">Plan.</th>'
-    + '<th style="text-align:right;padding:4px 8px">Real.</th>'
-    + '<th style="text-align:right;padding:4px 6px">%</th>'
-    + '<th style="text-align:right;padding:4px 8px">Gap</th>'
+    + (_pcpFech
+      ? '<th style="text-align:right;padding:4px 8px;border-left:2px solid var(--brd)">Plan.</th>'
+        + '<th style="text-align:right;padding:4px 8px">Real.</th>'
+        + '<th style="text-align:right;padding:4px 6px">%</th>'
+        + '<th style="text-align:right;padding:4px 8px">Gap</th>' : '')
     + '</tr></thead><tbody>';
 
   PCP_BLOCOS.forEach(function(b){
@@ -33338,10 +33355,13 @@ function pcpRenderGrade(){
         + ' style="width:42px;font-size:10.5px;padding:2px 3px;text-align:center;border:none;'
         + 'background:transparent;color:var(--tx2);font-weight:600"></td>';
     });
-    h += '<td style="text-align:right;padding:5px 8px;font-weight:700;'
-      +   'border-top:2px solid var(--brd);border-left:2px solid var(--brd)" '
-      +   'id="pcp-pt-' + b.chave + '">' + cpNum(planT) + '</td>'
-      + '<td colspan="3" style="border-top:2px solid var(--brd)"></td></tr>';
+    h += (_pcpFech
+      ? '<td style="text-align:right;padding:5px 8px;font-weight:700;'
+        + 'border-top:2px solid var(--brd);border-left:2px solid var(--brd)" '
+        + 'id="pcp-pt-' + b.chave + '">' + cpNum(planT) + '</td>'
+        + '<td colspan="3" style="border-top:2px solid var(--brd)"></td>'
+      : '<td style="display:none" id="pcp-pt-' + b.chave + '">' + cpNum(planT) + '</td>')
+      + '</tr>';
 
     b.linhas.forEach(function(l){
       var realT = pcpRealTotal(l.chave);
@@ -33363,14 +33383,16 @@ function pcpRenderGrade(){
           + ' onblur="this.style.borderColor=\'transparent\'"></td>';
       });
       // Real. = soma dos dias da linha · % = Real. ÷ Plan. · Gap = Plan. − Real.
-      h += '<td style="text-align:right;padding:4px 8px;color:var(--tx2);'
+      // Ocultas, as células continuam no DOM: pcpPintarTotais escreve nelas.
+      var esc = _pcpFech ? '' : 'display:none;';
+      h += '<td style="' + esc + 'text-align:right;padding:4px 8px;color:var(--tx2);'
         +   'border-left:2px solid var(--brd)" class="pcp-pl">' + cpNum(planT) + '</td>'
-        + '<td style="text-align:right;padding:4px 8px;font-weight:700" '
+        + '<td style="' + esc + 'text-align:right;padding:4px 8px;font-weight:700" '
         +   'class="pcp-rt">' + cpNum(realT) + '</td>'
-        + '<td style="text-align:right;padding:4px 6px;color:'
+        + '<td style="' + esc + 'text-align:right;padding:4px 6px;color:'
         +   (pct >= 1 ? 'var(--vd)' : pct >= 0.8 ? 'var(--am)' : 'var(--vm)')
         +   '" class="pcp-pc">' + pcpPct(realT, planT) + '</td>'
-        + '<td style="text-align:right;padding:4px 8px" class="pcp-gp">'
+        + '<td style="' + esc + 'text-align:right;padding:4px 8px" class="pcp-gp">'
         +   cpNum(planT - realT) + '</td>'
         + '</tr>';
     });
