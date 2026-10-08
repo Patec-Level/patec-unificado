@@ -32315,8 +32315,50 @@ var _pcpHist = [];      // as medições já fechadas
 
 function pcpNovaMedicao(ini, fim){
   return { inicio:ini, fim:fim, dias:pcpDiasUteis(ini, fim),
-           plan:{}, real:{}, custo:0, metaCiclo:PCP_META_CICLO, fechada:false,
+           plan:{}, real:{}, custo:0, metaCiclo:PCP_META_CICLO,
+           cards:pcpCardsVazios(), fechada:false,
            criadaEm:new Date().toISOString() };
+}
+
+// ── os cards do topo ──────────────────────────────────────────────
+// Cada card guarda o que ele digita. Os que um dia vão vir do próprio
+// dash estão marcados com fonte:'' — quando a origem for definida, o
+// número passa a ser preenchido sozinho e o campo vira só leitura.
+var PCP_CARDS = [
+  { chave:'prod_ped', nome:'PRODUTIVIDADE EM PEDIDOS', sub:'mínimo liberados',
+    conta:'liberados', cor:'var(--az)' },
+  { chave:'prod_dev', nome:'PRODUTIVIDADE EM DEVOLUÇÃO', sub:'RCs devolvidas SIM e resgate',
+    conta:'devolvidas', cor:'var(--az)' },
+  { chave:'emitidos', nome:'PEDIDOS EMITIDOS', sub:'no período da medição',
+    cor:'var(--vd)' },
+  { chave:'cockpit',  nome:'AG. ENVIO DO COCKPIT', sub:'na fila para enviar',
+    cor:'var(--am)' }
+];
+function pcpCardsVazios(){
+  var o = {};
+  PCP_CARDS.forEach(function(c){ o[c.chave] = { meta:0, real:0 }; });
+  return o;
+}
+function pcpCard(chave){
+  if (!_pcp) return { meta:0, real:0 };
+  _pcp.cards = _pcp.cards || pcpCardsVazios();
+  _pcp.cards[chave] = _pcp.cards[chave] || { meta:0, real:0 };
+  return _pcp.cards[chave];
+}
+function pcpSetCard(chave, campo, v){
+  if (!_pcp || _pcp.fechada) return;
+  pcpCard(chave)[campo] = aagNum(v);
+  pcpRenderCards();
+  pcpRenderPremissas();
+  pcpSalvar();
+}
+
+// Aproveitamento: do que foi liberado no período, quanto virou pedido.
+// A regra fina ele ainda vai passar; por ora é emitidos ÷ liberados.
+function pcpAproveitamento(){
+  var lib = pcpCard('prod_ped').real;
+  var emi = pcpCard('emitidos').real;
+  return lib ? emi / lib : null;
 }
 
 // ── as premissas da medição ───────────────────────────────────────
@@ -32345,6 +32387,7 @@ function pcpRenderPremissas(){
   if (!box || !_pcp) return;
   var dias = (_pcp.dias || []).length;
   var porDia = pcpMetaDia();
+  var apro = pcpAproveitamento();
   var trava = _pcp.fechada ? ' disabled' : '';
   box.innerHTML =
       '<div style="display:inline-flex;align-items:center;gap:8px;'
@@ -32365,6 +32408,23 @@ function pcpRenderPremissas(){
         + 'border-left:1px solid var(--brd);padding-left:8px">÷ ' + cpNum(dias)
         + ' dias úteis = <strong>' + cpNum(Math.round(porDia * 10) / 10)
         + '</strong>/dia</span>' : '')
+    + '</div>'
+    // Aproveitamento: quanto do que foi liberado virou pedido no período
+    + '<div title="pedidos emitidos ÷ liberados, dentro do período da medição"'
+    +   ' style="display:inline-flex;align-items:center;gap:7px;margin-left:8px;'
+    +   'background:var(--cin);border:1.5px solid var(--brd);border-radius:10px;'
+    +   'padding:6px 12px">'
+    + '<span style="font-size:11px;font-weight:700;color:var(--tx2);'
+    +   'text-transform:uppercase;letter-spacing:.3px">Aproveitamento</span>'
+    + '<strong style="font-size:15px;color:' + (apro === null ? 'var(--tx2)'
+        : apro >= 1 ? 'var(--vd)' : apro >= 0.8 ? 'var(--am)' : 'var(--vm)') + '">'
+    +   (apro === null ? '—'
+        : (Math.round(apro * 1000) / 10).toString().replace('.', ',') + '%')
+    + '</strong>'
+    + '<span style="font-size:10px;color:var(--tx2);white-space:nowrap;'
+    +   'border-left:1px solid var(--brd);padding-left:7px">'
+    +   cpNum(pcpCard('emitidos').real) + ' emitidos ÷ '
+    +   cpNum(pcpCard('prod_ped').real) + ' liberados</span>'
     + '</div>';
 }
 
@@ -32496,7 +32556,7 @@ async function pcpSalvarAgora(forcar){
     await db.collection(PCP_COL).doc(pcpId(_pcp)).set({
       inicio:_pcp.inicio, fim:_pcp.fim, dias:_pcp.dias,
       plan:_pcp.plan, real:_pcp.real, custo:_pcp.custo || 0,
-      metaCiclo:pcpMetaCiclo(),
+      metaCiclo:pcpMetaCiclo(), cards:_pcp.cards || pcpCardsVazios(),
       fechada:!!_pcp.fechada, criadaEm:_pcp.criadaEm,
       atualizadoEm:new Date().toISOString(), atualizadoPor:cpQuem()
     });
@@ -32530,6 +32590,7 @@ async function pcpCarregar(){
                  dias:(d.dias && d.dias.length) ? d.dias : pcpDiasUteis(d.inicio, d.fim),
                  plan:d.plan || {}, real:pcpMigrarLinhas(d.real || {}),
                  custo:d.custo || 0, metaCiclo:d.metaCiclo || PCP_META_CICLO,
+                 cards:d.cards || pcpCardsVazios(),
                  fechada:!!d.fechada, criadaEm:d.criadaEm };
       }
     }
@@ -32602,6 +32663,7 @@ async function pcpTrocarPeriodo(ini, fim){
                  dias:(d.dias && d.dias.length) ? d.dias : pcpDiasUteis(d.inicio, d.fim),
                  plan:d.plan || {}, real:pcpMigrarLinhas(d.real || {}),
                  custo:d.custo || 0, metaCiclo:d.metaCiclo || PCP_META_CICLO,
+                 cards:d.cards || pcpCardsVazios(),
                  fechada:!!d.fechada, criadaEm:d.criadaEm };
       }
     }
@@ -32611,6 +32673,10 @@ async function pcpTrocarPeriodo(ini, fim){
     // a meta do ciclo e as metas dos blocos acompanham: o que estava
     // valendo continua valendo até ele mudar
     novo.metaCiclo = pcpMetaCiclo();
+    // as metas dos cards acompanham; o que já foi feito começa do zero
+    PCP_CARDS.forEach(function(c){
+      novo.cards[c.chave] = { meta:pcpCard(c.chave).meta, real:0 };
+    });
     PCP_BLOCOS.forEach(function(b){
       var anterior = _pcp && _pcp.plan && _pcp.plan[b.chave];
       var valor = b.meta;
@@ -32646,32 +32712,79 @@ function pcpRenderCards(){
   var dias = _pcp.dias || [];
   var hoje = cpHojeISO();
   var decorridos = dias.filter(function(d){ return d <= hoje; }).length;
-  var planTotal = 0, realTotal = 0, planAteHoje = 0;
+  var realTotal = 0, planAteHoje = 0;
   PCP_BLOCOS.forEach(function(b){
-    planTotal += pcpPlanTotal(b.chave);
     dias.forEach(function(d){ if (d <= hoje) planAteHoje += pcpPlanDia(b.chave, d); });
     b.linhas.forEach(function(l){ realTotal += pcpRealTotal(l.chave); });
   });
-  var card = function(rot, val, sub, cor){
+  var trava = _pcp.fechada ? ' disabled' : '';
+
+  var moldura = function(dentro, cor){
     return '<div style="background:var(--cin);border:1.5px solid ' + (cor || 'var(--brd)')
-      + ';border-radius:12px;padding:.85rem;text-align:center">'
-      + '<div style="font-size:24px;font-weight:800;color:' + (cor || 'var(--az)')
-      + ';line-height:1.1">' + val + '</div>'
-      + '<div style="font-size:10px;font-weight:700;color:var(--tx2);margin-top:4px">'
-      + cpEsc(rot) + '</div>'
-      + (sub ? '<div style="font-size:10px;color:var(--tx2);margin-top:3px">' + sub + '</div>' : '')
-      + '</div>';
+      + ';border-radius:12px;padding:.85rem .7rem;text-align:center">' + dentro + '</div>';
   };
+  var rotulo = function(txt){
+    return '<div style="font-size:10px;font-weight:700;color:var(--tx2);margin-top:4px;'
+      + 'line-height:1.25">' + cpEsc(txt) + '</div>';
+  };
+  var legenda = function(txt){
+    return '<div style="font-size:10px;color:var(--tx2);margin-top:3px">' + txt + '</div>';
+  };
+  // o número grande, digitável
+  var campo = function(chave, campoNome, cor){
+    return '<input type="text" value="' + cpNum(pcpCard(chave)[campoNome]) + '"' + trava
+      + ' onchange="pcpSetCard(\'' + chave + '\',\'' + campoNome + '\',this.value)"'
+      + ' onfocus="this.select()" title="clique para editar"'
+      + ' style="width:100%;font-size:24px;font-weight:800;line-height:1.1;text-align:center;'
+      + 'color:' + cor + ';background:transparent;border:none;border-bottom:1.5px dashed '
+      + 'var(--brd);padding:0 0 2px;cursor:' + (_pcp.fechada ? 'default' : 'text') + '">';
+  };
+  // o contador pequeno embaixo, com o quanto representa da meta
+  var contador = function(chave, palavra){
+    var c = pcpCard(chave);
+    var pct = c.meta ? 100 * c.real / c.meta : null;
+    return '<div style="margin-top:6px;padding-top:5px;border-top:1px dashed var(--brd);'
+      + 'display:flex;align-items:center;justify-content:center;gap:4px;font-size:10px;'
+      + 'color:var(--tx2);white-space:nowrap">'
+      + '<input type="text" value="' + cpNum(c.real) + '"' + trava
+      + ' onchange="pcpSetCard(\'' + chave + '\',\'real\',this.value)"'
+      + ' onfocus="this.select()" title="quantos já saíram até agora"'
+      + ' style="width:52px;font-size:11px;font-weight:800;text-align:right;color:var(--tx);'
+      + 'background:transparent;border:none;border-bottom:1px dashed var(--brd);padding:0">'
+      + '<span>' + cpEsc(palavra) + '</span>'
+      + '<strong style="color:' + (pct === null ? 'var(--tx2)'
+          : pct >= 100 ? 'var(--vd)' : pct >= 80 ? 'var(--am)' : 'var(--vm)') + '">'
+      + (pct === null ? '—' : '· ' + (Math.round(pct * 10) / 10).toString().replace('.', ',') + '%')
+      + '</strong></div>';
+  };
+
+  var h = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(152px,1fr));'
+        + 'gap:11px;margin-bottom:1rem">';
+
+  // 1. os dias úteis: sai do período, não se digita
+  h += moldura('<div style="font-size:24px;font-weight:800;color:var(--az);line-height:1.1">'
+       + cpNum(dias.length) + '</div>' + rotulo('DIAS ÚTEIS')
+       + legenda(decorridos + ' já decorrido(s)'));
+
+  // 2. os quatro cards que ele preenche
+  PCP_CARDS.forEach(function(c){
+    var dentro = campo(c.chave, 'meta', c.cor) + rotulo(c.nome) + legenda(c.sub);
+    if (c.conta) dentro += contador(c.chave, c.conta);
+    h += moldura(dentro, c.cor);
+  });
+
+  // 3. meta até hoje e o gap, que saem da grade
   var gap = realTotal - planAteHoje;
-  box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));'
-    + 'gap:11px;margin-bottom:1rem">'
-    + card('DIAS ÚTEIS', cpNum(dias.length), decorridos + ' já decorrido(s)')
-    + card('PLANEJADO', cpNum(planTotal), 'na medição inteira')
-    + card('REALIZADO', cpNum(realTotal), 'lançado até agora', 'var(--vd)')
-    + card('META ATÉ HOJE', cpNum(planAteHoje), decorridos + ' dia(s) × meta')
-    + card(gap < 0 ? 'GAP' : 'GORDURA', (gap < 0 ? '−' : '+') + cpNum(Math.abs(gap)),
-           'realizado − meta até hoje', gap < 0 ? 'var(--vm)' : 'var(--vd)')
-    + '</div>';
+  h += moldura('<div style="font-size:24px;font-weight:800;color:var(--az);line-height:1.1">'
+       + cpNum(planAteHoje) + '</div>' + rotulo('META ATÉ HOJE')
+       + legenda(decorridos + ' dia(s) × meta'));
+  h += moldura('<div style="font-size:24px;font-weight:800;line-height:1.1;color:'
+       + (gap < 0 ? 'var(--vm)' : 'var(--vd)') + '">'
+       + (gap < 0 ? '−' : '+') + cpNum(Math.abs(gap)) + '</div>'
+       + rotulo(gap < 0 ? 'GAP' : 'GORDURA') + legenda('realizado − meta até hoje'),
+       gap < 0 ? 'var(--vm)' : 'var(--vd)');
+
+  box.innerHTML = h + '</div>';
 }
 
 function pcpRenderGrade(){
