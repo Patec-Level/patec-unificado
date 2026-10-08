@@ -33072,55 +33072,63 @@ function pcpRenderGrafCards(){
   var gapProj = s.planAteHoje - proj;
   var trava = _pcp.fechada ? ' disabled' : '';
   var taxa = pcpTaxa();
+  var emLib = pcpFarolN('liberacao');
+  var pctTxt = (Math.round(taxa * 1000) / 10).toString().replace('.', ',');
 
-  var card = function(val, rot, sub, cor){
+  var card = function(dentro, cor){
     return '<div style="background:var(--cin);border:1.5px solid ' + cor
-      + ';border-radius:12px;padding:.85rem .7rem;text-align:center">'
-      + '<div style="font-size:24px;font-weight:800;color:' + cor + ';line-height:1.1">'
+      + ';border-radius:12px;padding:.85rem .7rem;text-align:center">' + dentro + '</div>';
+  };
+  var corpo = function(val, rot, sub, cor){
+    return '<div style="font-size:24px;font-weight:800;color:' + cor + ';line-height:1.1">'
       + val + '</div>'
       + '<div style="font-size:10px;font-weight:700;color:var(--tx2);margin-top:4px">'
       + cpEsc(rot) + '</div>'
-      + '<div style="font-size:10px;color:var(--tx2);margin-top:3px">' + sub + '</div></div>';
+      + '<div style="font-size:10px;color:var(--tx2);margin-top:3px">' + sub + '</div>';
   };
   var sinal = function(n){ return (n > 0 ? '−' : '+') + cpNum(Math.abs(Math.round(n))); };
 
-  box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));'
+  // A taxa mora dentro do Gap Projetado: é só ele que ela mexe.
+  var taxaDentro =
+      '<div style="margin-top:6px;padding-top:5px;border-top:1px dashed var(--brd);'
+    +   'display:flex;align-items:center;justify-content:center;gap:4px;font-size:10px;'
+    +   'color:var(--tx2);white-space:nowrap">'
+    + '<span>taxa</span>'
+    + '<input type="text" value="' + pctTxt + '"' + trava
+    +   ' onchange="pcpSetTaxa(this.value)" onfocus="this.select()"'
+    +   ' title="em branco volta para o aproveitamento calculado"'
+    +   ' style="width:44px;font-size:11px;font-weight:800;text-align:right;color:var(--am);'
+    +   'background:transparent;border:none;border-bottom:1px dashed var(--brd);padding:0">'
+    + '<span>%</span>'
+    + (pcpTaxaEhAjustada()
+      ? (_pcp.fechada ? '<span style="color:var(--am)">· à mão</span>'
+         : '<span onclick="pcpSetTaxa(\'\')" style="color:var(--azm);cursor:pointer;'
+           + 'text-decoration:underline">· voltar</span>')
+      : '<span>· do aproveit.</span>')
+    + '</div>';
+
+  box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));'
     + 'gap:11px;margin-bottom:1rem">'
-    + card(cpNum(s.planAteHoje), 'META ACUMULADA',
-           s.decorridos + ' dia(s) × ' + cpNum(Math.round(s.porDia * 10) / 10), 'var(--az)')
-    + card(cpNum(Math.round(s.convTotal)), 'CONVERTIDO',
-           'liberado, já com os pesos', 'var(--vd)')
-    + card(cpNum(Math.round(s.emiTotal)), 'EMITIDO',
-           'pedidos no período', 'var(--azm)')
-    + card(sinal(gapReal), 'GAP REAL', 'meta acumulada − convertido',
-           gapReal > 0 ? 'var(--vm)' : 'var(--vd)')
-    + card(sinal(gapProj), 'GAP PROJETADO',
-           'com o que está em liberação',
+    + card(corpo(cpNum(s.planAteHoje), 'META ACUMULADA',
+           s.decorridos + ' dia(s) × ' + cpNum(Math.round(s.porDia * 10) / 10),
+           'var(--az)'), 'var(--brd)')
+    + card(corpo(cpNum(Math.round(s.convTotal)), 'CONVERTIDO',
+           'liberado, já com os pesos', 'var(--vd)'), 'var(--vd)')
+    + card(corpo(cpNum(Math.round(s.emiTotal)), 'EMITIDO',
+           'pedidos no período', 'var(--azm)'), 'var(--azm)')
+    + card(corpo(sinal(gapReal), 'GAP REAL', 'meta acumulada − convertido',
+           gapReal > 0 ? 'var(--vm)' : 'var(--vd)'), gapReal > 0 ? 'var(--vm)' : 'var(--vd)')
+    + card(corpo(sinal(gapProj), 'GAP PROJETADO',
+           'com ' + cpNum(emLib) + ' em liberação',
+           gapProj > 0 ? 'var(--vm)' : 'var(--vd)') + taxaDentro,
            gapProj > 0 ? 'var(--vm)' : 'var(--vd)')
-    // a taxa que entra na projeção, editável
-    + '<div style="background:var(--cin);border:1.5px solid var(--am);border-radius:12px;'
-    +   'padding:.85rem .7rem;text-align:center">'
-    + '<input type="text" value="' + (Math.round(taxa * 1000) / 10).toString().replace('.', ',')
-    +   '"' + trava + ' onchange="pcpSetTaxa(this.value)" onfocus="this.select()"'
-    +   ' title="deixe em branco para voltar ao aproveitamento calculado"'
-    +   ' style="width:100%;font-size:24px;font-weight:800;line-height:1.1;text-align:center;'
-    +   'color:var(--am);background:transparent;border:none;border-bottom:1.5px dashed '
-    +   'var(--brd);padding:0 0 2px">'
-    + '<div style="font-size:10px;font-weight:700;color:var(--tx2);margin-top:4px">'
-    +   'TAXA DA PROJEÇÃO (%)</div>'
-    + '<div style="font-size:10px;color:var(--tx2);margin-top:3px">'
-    +   (pcpTaxaEhAjustada()
-        ? '<span style="color:var(--am)">ajustada à mão</span>'
-          + (_pcp.fechada ? '' : ' · <span onclick="pcpSetTaxa(\'\')" style="color:var(--azm);'
-            + 'cursor:pointer;text-decoration:underline">voltar</span>')
-        : 'do aproveitamento') + '</div></div>'
     + '</div>'
     + '<div style="font-size:11px;color:var(--tx2);margin:-.4rem 0 1rem">'
-    + 'A projeção soma ao convertido o que está <strong>em liberação</strong> no farol ('
-    + cpNum(pcpFarolN('liberacao')) + ') corrigido pela taxa: '
-    + cpNum(Math.round(s.convTotal)) + ' + ' + cpNum(pcpFarolN('liberacao')) + ' × '
-    + (Math.round(taxa * 1000) / 10).toString().replace('.', ',') + '% = <strong>'
-    + cpNum(Math.round(proj)) + '</strong>.</div>';
+    + 'O <strong>gap projetado</strong> é o único que usa a taxa: ao convertido ('
+    + cpNum(Math.round(s.convTotal)) + ') soma o que está em liberação no farol ('
+    + cpNum(emLib) + ') corrigido por ela — ' + cpNum(Math.round(s.convTotal)) + ' + '
+    + cpNum(emLib) + ' × ' + pctTxt + '% = <strong>' + cpNum(Math.round(proj))
+    + '</strong> contra a meta acumulada de ' + cpNum(s.planAteHoje) + '.</div>';
 }
 
 function pcpRenderFarol(){
