@@ -32443,12 +32443,28 @@ function pcpEmitidos(){ return pcpRealTotal('emissao'); }
 var PCP_PESOS_PADRAO = [
   { chave:'petronect', nome:'Pedido Petronect', peso:1 },
   { chave:'reap',      nome:'Pedido Reap',      peso:0.5 },
+  { chave:'procureon', nome:'Pedido Procureon', peso:0.5 },
   { chave:'devolucao', nome:'Devolução',        peso:0.5 }
 ];
+// Quem já tem a medição guardada não perde o que lançou: o tipo novo é
+// encaixado na posição certa, sem mexer nos que já estão lá.
+function pcpCompletarPesos(ps){
+  if (!ps || !ps.length) return ps;
+  var tem = {};
+  ps.forEach(function(x){ tem[x.chave] = true; });
+  PCP_PESOS_PADRAO.forEach(function(novo, i){
+    if (tem[novo.chave]) return;
+    ps.splice(Math.min(i, ps.length), 0,
+      { chave:novo.chave, nome:novo.nome, peso:novo.peso });
+  });
+  return ps;
+}
 function pcpPesos(){
   if (!_pcp) return PCP_PESOS_PADRAO.slice();
   if (!_pcp.pesos || !_pcp.pesos.length) {
     _pcp.pesos = PCP_PESOS_PADRAO.map(function(x){ return { chave:x.chave, nome:x.nome, peso:x.peso }; });
+  } else {
+    pcpCompletarPesos(_pcp.pesos);
   }
   return _pcp.pesos;
 }
@@ -32795,6 +32811,21 @@ async function pcpSalvarAgora(forcar){
     // próprio fechamento, que passa forcar=true
     if (_pcp.fechada && !forcar) return;
     var db = getDB(); if (!db) return;
+    // Nunca gravar por cima de uma medição que não consegui ler. Se o
+    // documento existe lá e esta tela está em branco, a gravação apagaria
+    // tudo — então eu carrego o que está guardado e aviso.
+    if (!_pcp.lido) {
+      var jaTem = await db.collection(PCP_COL).doc(pcpId(_pcp)).get();
+      if (jaTem && jaTem.exists) {
+        var st0 = document.getElementById('pcp-status');
+        if (st0) st0.innerHTML = '<span style="color:var(--am)">⚠ Existe medição guardada '
+          + 'deste período que eu não tinha conseguido ler. Carreguei ela agora — o que '
+          + 'você digitou antes disso não foi salvo.</span>';
+        await pcpRecarregar();
+        return;
+      }
+      _pcp.lido = true;   // a base respondeu: realmente não existia
+    }
     await db.collection(PCP_COL).doc(pcpId(_pcp)).set({
       inicio:_pcp.inicio, fim:_pcp.fim, dias:_pcp.dias,
       plan:_pcp.plan, real:_pcp.real, custo:_pcp.custo || 0,
@@ -32840,11 +32871,15 @@ async function pcpCarregar(){
                  pesos:(d.pesos && d.pesos.length) ? d.pesos : null,
                  receitas:(d.receitas && d.receitas.length) ? d.receitas : null,
                  farol:d.farol || {}, taxa:(d.taxa === undefined ? null : d.taxa),
-                 fechada:!!d.fechada, criadaEm:d.criadaEm };
+                 fechada:!!d.fechada, criadaEm:d.criadaEm, lido:true };
+      } else {
+        // a base respondeu e não existe medição deste período: pode criar
+        _pcp = null; _pcpLeituraOk = true;
       }
     }
     if (!_pcp) {
       _pcp = pcpNovaMedicao(alvo.inicio, alvo.fim);
+      _pcp.lido = !!_pcpLeituraOk;
       // a primeira vez já vem com as metas do modelo dele
       PCP_BLOCOS.forEach(function(b){
         if (!b.meta) return;
@@ -32855,9 +32890,36 @@ async function pcpCarregar(){
     await pcpCarregarHistorico();
   } catch (e) {
     console.warn('pcpCarregar:', e);
-    if (!_pcp) _pcp = pcpNovaMedicao(pcpPeriodoPadrao().inicio, pcpPeriodoPadrao().fim);
+    if (!_pcp) {
+      _pcp = pcpNovaMedicao(pcpPeriodoPadrao().inicio, pcpPeriodoPadrao().fim);
+      _pcp.lido = false;   // não li a base: esta medição em branco não pode gravar
+    }
   }
   pcpRender();
+  pcpAvisarNaoLido();
+}
+
+// Quando a base não respondeu (SDK ainda carregando, projeto da frente sem
+// login), a tela abria uma medição EM BRANCO — e o primeiro valor digitado
+// gravava esse vazio por cima do que estava guardado. Era isso que apagava
+// os cards a cada index novo. Agora a medição carrega marcada como "não
+// lida" e nada é gravado antes de uma leitura de verdade.
+var _pcpLeituraOk = false;
+function pcpAvisarNaoLido(){
+  if (!_pcp || _pcp.lido) return;
+  var st = document.getElementById('pcp-status');
+  if (st) st.innerHTML = '<span style="color:var(--am)">⚠ Não consegui ler a medição '
+    + 'guardada — o que você digitar agora <strong>não</strong> será salvo, para não '
+    + 'apagar o que já existe. <span onclick="pcpRecarregar()" style="color:var(--azm);'
+    + 'cursor:pointer;text-decoration:underline;font-weight:700">tentar de novo</span></span>';
+}
+async function pcpRecarregar(){
+  var st = document.getElementById('pcp-status');
+  if (st) st.innerHTML = '⏳ Lendo a medição...';
+  _pcp = null; _pcpLeituraOk = false;
+  await pcpCarregar();
+  if (_pcp && _pcp.lido && st) st.innerHTML =
+    '<span style="color:var(--vd)">✓ medição carregada</span>';
 }
 
 async function pcpCarregarHistorico(){
@@ -32908,6 +32970,7 @@ async function pcpTrocarPeriodo(ini, fim){
       var doc = await db.collection(PCP_COL).doc(ini + '_' + fim).get();
       if (doc && doc.exists) {
         var d = doc.data() || {};
+        _pcpLeituraOk = true;
         novo = { inicio:d.inicio, fim:d.fim,
                  dias:(d.dias && d.dias.length) ? d.dias : pcpDiasUteis(d.inicio, d.fim),
                  plan:d.plan || {}, real:pcpMigrarLinhas(d.real || {}),
@@ -32950,6 +33013,7 @@ async function pcpTrocarPeriodo(ini, fim){
       novo.dias.forEach(function(dia){ novo.plan[b.chave][dia] = valor; });
     });
   }
+  novo.lido = true;   // período escolhido por ele, já conferido na base
   _pcp = novo;
   pcpRender();
   pcpSalvarAgora();
@@ -33145,6 +33209,17 @@ function pcpPrecoMedio(){
 function pcpEquilibrio(){
   var pm = pcpPrecoMedio();
   return pm ? pcpCusto() / pm : null;
+}
+
+// Arredondar para inteiro mostrava meio item como 1 — um Pedido Reap
+// liberado aparecia valendo 1 em vez de 0,5. Aqui o número sai com uma
+// casa quando tem fração, e inteiro quando não tem.
+function pcpNumD(n){
+  var r = Math.round(n * 10) / 10;
+  if (r === Math.round(r)) return cpNum(Math.round(r));
+  return cpNum(Math.trunc(r)) === '0' && r > 0
+    ? r.toString().replace('.', ',')
+    : r.toLocaleString('pt-BR', { minimumFractionDigits:1, maximumFractionDigits:1 });
 }
 
 function pcpMoeda(n){
@@ -33387,7 +33462,7 @@ function pcpDesenharCurva(){
       interaction:{ mode:'index', intersect:false },
       plugins:{ legend:{ position:'bottom', labels:{ boxWidth:12, font:{ size:11 } } },
         tooltip:{ callbacks:{ label:function(c){
-          return c.dataset.label + ': ' + cpNum(Math.round(c.parsed.y)); } } } },
+          return c.dataset.label + ': ' + pcpNumD(c.parsed.y); } } } },
       scales:{ y:{ beginAtZero:true, ticks:{ font:{ size:10 },
                  callback:function(v){ return cpNum(v); } } },
                x:{ ticks:{ font:{ size:9.5 }, maxRotation:0, autoSkip:true } } }
@@ -33444,7 +33519,7 @@ function pcpRenderGrafCards(){
     + card(corpo(cpNum(s.planAteHoje), 'META ACUMULADA',
            s.decorridos + ' dia(s) × ' + cpNum(Math.round(s.porDia * 10) / 10),
            'var(--az)'), 'var(--brd)')
-    + card(corpo(cpNum(Math.round(s.convTotal)), 'CONVERTIDO',
+    + card(corpo(pcpNumD(s.convTotal), 'CONVERTIDO',
            'liberado, já com os pesos', 'var(--vd)'), 'var(--vd)')
     + card(corpo(cpNum(Math.round(s.emiTotal)), 'EMITIDO',
            'da Emissão de Pedido', 'var(--azm)'), 'var(--azm)')
@@ -33457,8 +33532,8 @@ function pcpRenderGrafCards(){
     + '</div>'
     + '<div style="font-size:11px;color:var(--tx2);margin:-.4rem 0 1rem">'
     + 'O <strong>gap projetado</strong> é o único que usa a taxa: ao convertido ('
-    + cpNum(Math.round(s.convTotal)) + ') soma o que está em liberação no farol ('
-    + cpNum(emLib) + ') corrigido por ela — ' + cpNum(Math.round(s.convTotal)) + ' + '
+    + pcpNumD(s.convTotal) + ') soma o que está em liberação no farol ('
+    + cpNum(emLib) + ') corrigido por ela — ' + pcpNumD(s.convTotal) + ' + '
     + cpNum(emLib) + ' × ' + pctTxt + '% = <strong>' + cpNum(Math.round(proj))
     + '</strong> contra a meta acumulada de ' + cpNum(s.planAteHoje) + '.</div>';
 }
@@ -33536,7 +33611,7 @@ function pcpRenderPesos(){
       +   (Math.round(x.peso * 1000) / 10).toString().replace('.', ',') + '% · x/'
       +   (Math.round(100 / x.peso) / 100).toString().replace('.', ',') + '</td>'
       + '<td style="text-align:right;padding:4px 10px">' + cpNum(bruto)
-      +   ' <span style="color:var(--tx2)">→ ' + cpNum(Math.round(bruto * x.peso * 10) / 10)
+      +   ' <span style="color:var(--tx2)">→ ' + pcpNumD(bruto * x.peso)
       +   '</span></td>'
       + '<td style="text-align:right;padding:4px 10px">'
       +   (_pcp.fechada || ps.length <= 1 ? ''
@@ -33569,10 +33644,10 @@ function pcpRenderGrafGrade(){
       + 'position:sticky;left:0;background:var(--cin);color:' + cor + '">' + cpEsc(nome) + '</td>';
     valores.forEach(function(v){
       h += '<td style="text-align:center;padding:5px 4px;border-left:1px solid var(--brd);'
-        + 'color:var(--tx2);font-size:10.5px">' + (v === null ? '—' : cpNum(Math.round(v))) + '</td>';
+        + 'color:var(--tx2);font-size:10.5px">' + (v === null ? '—' : pcpNumD(v)) + '</td>';
     });
     return h + '<td style="text-align:right;padding:5px 8px;font-weight:800;color:' + cor
-      + ';border-left:2px solid var(--brd)">' + cpNum(Math.round(total)) + '</td></tr>';
+      + ';border-left:2px solid var(--brd)">' + pcpNumD(total) + '</td></tr>';
   };
   var linhaEdit = function(chave, nome, peso){
     var h = '<tr><td style="padding:4px 8px;padding-left:22px;position:sticky;left:0;'
