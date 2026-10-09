@@ -4574,6 +4574,43 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
       </div>
     </div>
 
+    <!-- ══════════════════════════════════════════
+         HISTÓRICO DE MEDIÇÃO — as medições fechadas
+    ══════════════════════════════════════════ -->
+    <div id="p-pcp-hist" class="page">
+      <div class="cd">
+        <div class="cd-t" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <span>📚 Histórico de Medição</span>
+          <button class="btn btn-s" onclick="pcpHistAtualizar()">↻ Atualizar</button>
+        </div>
+        <div style="font-size:11.5px;color:var(--tx2)">
+          Toda medição fechada vem parar aqui sozinha. Clique numa linha para abrir
+          a medição em só leitura na tela do PCP.</div>
+      </div>
+      <div id="pcp-hist-cards"></div>
+      <div id="pcp-hist-tabela"></div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         HISTÓRICO FINANCEIRO DO PROJETO
+    ══════════════════════════════════════════ -->
+    <div id="p-pcp-fin-proj" class="page">
+      <div class="cd">
+        <div class="cd-t" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <span>📈 Histórico Financeiro do Projeto</span>
+          <button class="btn btn-s" onclick="pcpProjAtualizar()">↻ Atualizar</button>
+        </div>
+        <div style="font-size:11.5px;color:var(--tx2)">
+          Medição a medição, o custo contra a receita — e o resultado do projeto
+          somado desde o começo.</div>
+      </div>
+      <div id="pcp-proj-cards"></div>
+      <div class="cd"><div class="cd-t">📊 Custo × receita por medição</div>
+        <div style="position:relative;height:300px"><canvas id="pcp-proj-canvas"></canvas></div>
+      </div>
+      <div id="pcp-proj-tabela"></div>
+    </div>
+
     <div id="p-analista-auto" class="page">
       <!-- Header com abas -->
       <div class="cd" style="margin-bottom:1rem;border-top:3px solid var(--azm)">
@@ -7884,6 +7921,8 @@ let ciclos_historico = JSON.parse(localStorage.getItem(_lsMod('patec_ciclos_hist
 
 function go(id, el) {
   if (id === 'pcp' && typeof pcpAbrir === 'function') setTimeout(pcpAbrir, 60);
+  if (id === 'pcp-hist' && typeof pcpHistAbrir === 'function') setTimeout(pcpHistAbrir, 60);
+  if (id === 'pcp-fin-proj' && typeof pcpProjAbrir === 'function') setTimeout(pcpProjAbrir, 60);
   // Sai da página do ADM → desliga o tempo real do Controle das Equipes.
   if(id!=='adm' && typeof _cePararRT==='function') _cePararRT();
   // Plano de Ação: liberado para ADLV e FAST (cada módulo usa sua própria
@@ -34141,13 +34180,27 @@ function pcpFechar(){
   var f = new Date(d); f.setMonth(f.getMonth() + 1); f.setDate(f.getDate() - 1);
   var fim = f.getFullYear() + '-' + String(f.getMonth()+1).padStart(2,'0')
           + '-' + String(f.getDate()).padStart(2,'0');
-  pcpCarregarHistorico().then(function(){ pcpTrocarPeriodo(ini, fim); });
+  pcpCarregarHistorico().then(function(){
+    pcpTrocarPeriodo(ini, fim);
+    // a medição fechada já aparece nos dois tópicos, sem precisar recarregar
+    pcpCarregarTodas().then(function(){
+      try { pcpHistRender(); } catch(e){}
+      try { pcpProjRender(); } catch(e){}
+    });
+  });
 }
 
 function pcpRenderHistorico(){
   var box = document.getElementById('pcp-historico');
   if (!box) return;
   if (!_pcpHist.length) { box.innerHTML = ''; return; }
+  // o histórico completo mora no tópico Histórico de Medição; aqui fica só
+  // o atalho, para a tela do PCP não ficar com duas listas da mesma coisa
+  box.innerHTML = '<div class="cd"><div style="font-size:12px;color:var(--tx2)">'
+    + '📚 <strong>' + cpNum(_pcpHist.length) + '</strong> medição(ões) fechada(s). '
+    + '<span onclick="go(\'pcp-hist\', null)" style="color:var(--azm);cursor:pointer;'
+    + 'text-decoration:underline;font-weight:700">ver o histórico</span></div></div>';
+  return;
   var h = '<div class="cd"><div class="cd-t">📚 Histórico de medições</div>'
     + '<div style="font-size:11px;color:var(--tx2);margin-bottom:.7rem">'
     + 'Medições fechadas. Clique para abrir em só leitura.</div>'
@@ -34184,6 +34237,288 @@ function pcpRenderHistorico(){
   });
   h += '</tbody></table></div>';
   box.innerHTML = h;
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  HISTÓRICO DE MEDIÇÃO  e  HISTÓRICO FINANCEIRO DO PROJETO
+//
+//  Os dois leem as mesmas medições guardadas em pcp_medicoes: o
+//  primeiro olha a produção, o segundo o dinheiro. A medição fechada
+//  entra aqui sozinha, porque o fechamento só marca fechada:true no
+//  próprio documento — não existe cópia para ficar desencontrada.
+// ══════════════════════════════════════════════════════════════════
+var _pcpTodas = [];     // todas as medições, fechadas e aberta
+
+async function pcpCarregarTodas(){
+  _pcpTodas = [];
+  try {
+    var db = getDB(); if (!db) return _pcpTodas;
+    var snap = await db.collection(PCP_COL).get();
+    snap.forEach(function(doc){ _pcpTodas.push(doc.data() || {}); });
+    _pcpTodas.sort(function(a, b){ return (a.inicio || '') < (b.inicio || '') ? 1 : -1; });
+  } catch (e) { console.warn('pcpCarregarTodas:', e); }
+  return _pcpTodas;
+}
+
+// Os números de uma medição guardada, sem depender da que está aberta.
+function pcpResumoDe(m){
+  var dias = m.dias || [];
+  var soma = function(o){
+    var n = 0;
+    Object.keys(o || {}).forEach(function(k){
+      if (dias.indexOf(k) !== -1) n += aagNum(o[k]);
+    });
+    return n;
+  };
+  var planT = 0;
+  Object.keys(m.plan || {}).forEach(function(b){ planT += soma(m.plan[b]); });
+  var realT = 0;
+  Object.keys(m.real || {}).forEach(function(l){ realT += soma(m.real[l]); });
+  var emitido = soma((m.real || {}).emissao);
+  // o liberado com peso, pelos pesos daquela medição
+  var pesos = (m.pesos && m.pesos.length) ? m.pesos : PCP_PESOS_PADRAO;
+  var conv = 0;
+  pesos.forEach(function(t){
+    conv += soma(((m.curva || {}).conv || {})[t.chave]) * aagNum(t.peso);
+  });
+  // o dinheiro
+  var custo = aagNum(m.custo || 0);
+  var receita = 0;
+  (m.receitas || []).forEach(function(r){
+    var q;
+    if (!r.fonte) q = aagNum(r.qtd || 0);
+    else if (r.fonte === 'emissao' || r.fonte === 'emitido') q = emitido;
+    else q = soma(((m.curva || {}).conv || {})[r.fonte]);
+    receita += q * aagNum(r.preco || 0);
+  });
+  return { inicio:m.inicio, fim:m.fim, dias:dias.length, fechada:!!m.fechada,
+           fechadaEm:m.fechadaEm || '', metaCiclo:aagNum(m.metaCiclo || 0),
+           plan:planT, real:realT, emitido:emitido, conv:conv,
+           custo:custo, receita:receita, resultado:receita - custo };
+}
+
+function pcpRotuloMed(m){
+  return cpDataBR(m.inicio) + ' a ' + cpDataBR(m.fim);
+}
+
+// ── Histórico de Medição ──────────────────────────────────────────
+async function pcpHistAbrir(){ await pcpCarregarTodas(); pcpHistRender(); }
+async function pcpHistAtualizar(){
+  var box = document.getElementById('pcp-hist-tabela');
+  if (box) box.innerHTML = '<div class="cd"><div style="font-size:12px;color:var(--tx2)">'
+    + '⏳ Buscando...</div></div>';
+  await pcpHistAbrir();
+}
+
+function pcpHistRender(){
+  var cards = document.getElementById('pcp-hist-cards');
+  var box = document.getElementById('pcp-hist-tabela');
+  if (!box) return;
+  var fechadas = _pcpTodas.filter(function(m){ return m.fechada; }).map(pcpResumoDe);
+
+  if (cards) {
+    var nd = fechadas.reduce(function(n, m){ return n + m.dias; }, 0);
+    var emi = fechadas.reduce(function(n, m){ return n + m.emitido; }, 0);
+    var conv = fechadas.reduce(function(n, m){ return n + m.conv; }, 0);
+    var card = function(val, rot, sub, cor){
+      return '<div style="background:var(--cin);border:1.5px solid ' + cor
+        + ';border-radius:12px;padding:.85rem .7rem;text-align:center">'
+        + '<div style="font-size:24px;font-weight:800;color:' + cor + ';line-height:1.1">'
+        + val + '</div>'
+        + '<div style="font-size:10px;font-weight:700;color:var(--tx2);margin-top:4px">'
+        + cpEsc(rot) + '</div>'
+        + '<div style="font-size:10px;color:var(--tx2);margin-top:3px">' + sub + '</div></div>';
+    };
+    cards.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));'
+      + 'gap:11px;margin-bottom:1rem">'
+      + card(cpNum(fechadas.length), 'MEDIÇÕES FECHADAS', 'no histórico', 'var(--az)')
+      + card(cpNum(nd), 'DIAS ÚTEIS', 'somando todas', 'var(--azm)')
+      + card(cpNum(Math.round(emi)), 'PEDIDOS EMITIDOS', 'no total', 'var(--azm)')
+      + card(pcpNumD(conv), 'CONVERTIDO', 'liberado, com os pesos', 'var(--vd)')
+      + '</div>';
+  }
+
+  if (!fechadas.length) {
+    box.innerHTML = '<div class="cd"><div style="font-size:12px;color:var(--tx2)">'
+      + 'Nenhuma medição fechada ainda. Quando você fechar a medição atual no PCP, '
+      + 'ela aparece aqui sozinha.</div></div>';
+    return;
+  }
+
+  var h = '<div class="cd"><div class="cd-t">📚 Medições fechadas</div>'
+    + '<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px">'
+    + '<thead><tr>'
+    + '<th style="text-align:left;padding:5px 10px">Período</th>'
+    + '<th style="text-align:right;padding:5px 10px">Dias</th>'
+    + '<th style="text-align:right;padding:5px 10px">Meta do ciclo</th>'
+    + '<th style="text-align:right;padding:5px 10px">Emitido</th>'
+    + '<th style="text-align:right;padding:5px 10px">Convertido</th>'
+    + '<th style="text-align:right;padding:5px 10px">% da meta</th>'
+    + '<th style="text-align:right;padding:5px 10px">Fechada em</th>'
+    + '<th style="padding:5px 10px"></th></tr></thead><tbody>';
+  fechadas.forEach(function(m){
+    var pct = m.metaCiclo ? 100 * m.conv / m.metaCiclo : null;
+    h += '<tr style="border-top:1px solid var(--brd)">'
+      + '<td style="padding:5px 10px;font-weight:600">' + pcpRotuloMed(m) + '</td>'
+      + '<td style="text-align:right;padding:5px 10px">' + cpNum(m.dias) + '</td>'
+      + '<td style="text-align:right;padding:5px 10px;color:var(--tx2)">'
+      +   (m.metaCiclo ? cpNum(m.metaCiclo) : '—') + '</td>'
+      + '<td style="text-align:right;padding:5px 10px;font-weight:700">'
+      +   cpNum(Math.round(m.emitido)) + '</td>'
+      + '<td style="text-align:right;padding:5px 10px;font-weight:700;color:var(--vd)">'
+      +   pcpNumD(m.conv) + '</td>'
+      + '<td style="text-align:right;padding:5px 10px;font-weight:700;color:'
+      +   (pct === null ? 'var(--tx2)' : pct >= 100 ? 'var(--vd)'
+          : pct >= 80 ? 'var(--am)' : 'var(--vm)') + '">'
+      +   (pct === null ? '—' : pcpNumD(pct) + '%') + '</td>'
+      + '<td style="text-align:right;padding:5px 10px;color:var(--tx2)">'
+      +   (m.fechadaEm ? cpDataBR(m.fechadaEm.slice(0,10)) : '—') + '</td>'
+      + '<td style="text-align:right;padding:5px 10px">'
+      +   '<span onclick="pcpAbrirMedicao(\'' + m.inicio + '\',\'' + m.fim + '\')"'
+      +   ' style="color:var(--azm);cursor:pointer;text-decoration:underline;'
+      +   'font-weight:700;white-space:nowrap">abrir</span></td></tr>';
+  });
+  box.innerHTML = h + '</tbody></table></div></div>';
+}
+
+// Abre uma medição fechada na tela do PCP, em só leitura.
+function pcpAbrirMedicao(ini, fim){
+  var it = [].slice.call(document.querySelectorAll('#sb .sb-it')).filter(function(x){
+    return /go\('pcp'/.test(x.getAttribute('onclick') || ''); })[0];
+  go('pcp', it || null);
+  setTimeout(function(){ pcpTrocarPeriodo(ini, fim); }, 120);
+}
+
+// ── Histórico Financeiro do Projeto ───────────────────────────────
+async function pcpProjAbrir(){ await pcpCarregarTodas(); pcpProjRender(); }
+async function pcpProjAtualizar(){
+  var box = document.getElementById('pcp-proj-tabela');
+  if (box) box.innerHTML = '<div class="cd"><div style="font-size:12px;color:var(--tx2)">'
+    + '⏳ Buscando...</div></div>';
+  await pcpProjAbrir();
+}
+
+function pcpProjRender(){
+  var box = document.getElementById('pcp-proj-tabela');
+  if (!box) return;
+  // da mais antiga para a mais nova, que é como o acumulado faz sentido
+  var meds = _pcpTodas.map(pcpResumoDe).slice().reverse();
+  var custoT = meds.reduce(function(n, m){ return n + m.custo; }, 0);
+  var recT   = meds.reduce(function(n, m){ return n + m.receita; }, 0);
+  var resT   = recT - custoT;
+
+  // ── os cards do projeto ──
+  var cards = document.getElementById('pcp-proj-cards');
+  if (cards) {
+    var corRes = resT >= 0 ? 'var(--vd)' : 'var(--vm)';
+    var noAzul = meds.filter(function(m){ return m.resultado >= 0 && (m.custo || m.receita); }).length;
+    var comDado = meds.filter(function(m){ return m.custo || m.receita; }).length;
+    var card = function(val, rot, sub, cor){
+      return '<div style="background:var(--cin);border:1.5px solid ' + cor
+        + ';border-radius:12px;padding:.85rem .7rem;text-align:center">'
+        + '<div style="font-size:21px;font-weight:800;color:' + cor + ';line-height:1.15">'
+        + val + '</div>'
+        + '<div style="font-size:10px;font-weight:700;color:var(--tx2);margin-top:4px">'
+        + cpEsc(rot) + '</div>'
+        + '<div style="font-size:10px;color:var(--tx2);margin-top:3px">' + sub + '</div></div>';
+    };
+    cards.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));'
+      + 'gap:11px;margin-bottom:1rem">'
+      + card(pcpMoeda(custoT), 'CUSTO DO PROJETO',
+             cpNum(comDado) + ' medição(ões) com número', 'var(--vm)')
+      + card(pcpMoeda(recT), 'RECEITA DO PROJETO', 'somando todas', 'var(--vd)')
+      + card(pcpMoeda(resT), resT >= 0 ? 'LUCRO DO PROJETO' : 'PREJUÍZO DO PROJETO',
+             custoT ? 'a receita cobre ' + pcpNumD(100 * recT / custoT) + '% do custo'
+                    : 'preencha o custo das medições', corRes)
+      + card(cpNum(noAzul) + ' de ' + cpNum(comDado), 'MEDIÇÕES NO AZUL',
+             'fecharam com lucro', noAzul === comDado && comDado ? 'var(--vd)' : 'var(--am)')
+      + '</div>';
+  }
+
+  pcpProjGrafico(meds);
+
+  if (!meds.length) {
+    box.innerHTML = '<div class="cd"><div style="font-size:12px;color:var(--tx2)">'
+      + 'Ainda não há medição guardada.</div></div>';
+    return;
+  }
+
+  var h = '<div class="cd"><div class="cd-t">💰 Medição a medição</div>'
+    + '<div style="font-size:11px;color:var(--tx2);margin-bottom:.7rem">'
+    + 'O <strong>acumulado</strong> é o resultado do projeto até aquela medição — '
+    + 'é a linha que diz se o projeto como um todo está no azul.</div>'
+    + '<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px">'
+    + '<thead><tr>'
+    + '<th style="text-align:left;padding:5px 10px">Medição</th>'
+    + '<th style="text-align:left;padding:5px 10px">Situação</th>'
+    + '<th style="text-align:right;padding:5px 10px">Emitido</th>'
+    + '<th style="text-align:right;padding:5px 10px">Custo</th>'
+    + '<th style="text-align:right;padding:5px 10px">Receita</th>'
+    + '<th style="text-align:right;padding:5px 10px">Resultado</th>'
+    + '<th style="text-align:right;padding:5px 10px">Margem</th>'
+    + '<th style="text-align:right;padding:5px 10px">Acumulado</th>'
+    + '</tr></thead><tbody>';
+  var acum = 0;
+  meds.forEach(function(m){
+    acum += m.resultado;
+    var mg = m.receita ? 100 * m.resultado / m.receita : null;
+    var cor = m.resultado >= 0 ? 'var(--vd)' : 'var(--vm)';
+    var corA = acum >= 0 ? 'var(--vd)' : 'var(--vm)';
+    h += '<tr style="border-top:1px solid var(--brd)">'
+      + '<td style="padding:5px 10px;font-weight:600">' + pcpRotuloMed(m) + '</td>'
+      + '<td style="padding:5px 10px;color:' + (m.fechada ? 'var(--tx2)' : 'var(--am)')
+      +   ';font-weight:600">' + (m.fechada ? 'Fechada' : 'Em andamento') + '</td>'
+      + '<td style="text-align:right;padding:5px 10px">' + cpNum(Math.round(m.emitido)) + '</td>'
+      + '<td style="text-align:right;padding:5px 10px;color:var(--vm)">'
+      +   pcpMoeda(m.custo) + '</td>'
+      + '<td style="text-align:right;padding:5px 10px;color:var(--vd)">'
+      +   pcpMoeda(m.receita) + '</td>'
+      + '<td style="text-align:right;padding:5px 10px;font-weight:800;color:' + cor + '">'
+      +   pcpMoeda(m.resultado) + '</td>'
+      + '<td style="text-align:right;padding:5px 10px;color:' + cor + '">'
+      +   (mg === null ? '—' : pcpNumD(mg) + '%') + '</td>'
+      + '<td style="text-align:right;padding:5px 10px;font-weight:800;color:' + corA + '">'
+      +   pcpMoeda(acum) + '</td></tr>';
+  });
+  h += '<tr style="border-top:2px solid var(--brd);background:var(--cin)">'
+    + '<td colspan="3" style="padding:6px 10px;font-weight:700">Projeto inteiro</td>'
+    + '<td style="text-align:right;padding:6px 10px;font-weight:800;color:var(--vm)">'
+    +   pcpMoeda(custoT) + '</td>'
+    + '<td style="text-align:right;padding:6px 10px;font-weight:800;color:var(--vd)">'
+    +   pcpMoeda(recT) + '</td>'
+    + '<td colspan="3" style="text-align:right;padding:6px 10px;font-weight:800;color:'
+    +   (resT >= 0 ? 'var(--vd)' : 'var(--vm)') + '">' + pcpMoeda(resT) + '</td></tr>';
+  box.innerHTML = h + '</tbody></table></div></div>';
+}
+
+var _pcpProjChart = null;
+function pcpProjGrafico(meds){
+  var cv = document.getElementById('pcp-proj-canvas');
+  if (!cv || typeof Chart === 'undefined') return;
+  if (_pcpProjChart) { try { _pcpProjChart.destroy(); } catch(e){} _pcpProjChart = null; }
+  var rot = meds.map(function(m){ return cpDataBR(m.inicio).slice(0,5); });
+  var acum = [], soma = 0;
+  meds.forEach(function(m){ soma += m.resultado; acum.push(Math.round(soma * 100) / 100); });
+  _pcpProjChart = new Chart(cv.getContext('2d'), {
+    data:{ labels:rot, datasets:[
+      { type:'bar', label:'Custo', data:meds.map(function(m){ return m.custo; }),
+        backgroundColor:'rgba(217,48,37,.55)', borderColor:'#D93025', borderWidth:1 },
+      { type:'bar', label:'Receita', data:meds.map(function(m){ return m.receita; }),
+        backgroundColor:'rgba(14,158,106,.55)', borderColor:'#0E9E6A', borderWidth:1 },
+      { type:'line', label:'Resultado acumulado', data:acum,
+        borderColor:'#1F4E9C', backgroundColor:'#1F4E9C', borderWidth:2.2,
+        pointRadius:3, tension:.18 }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ position:'bottom', labels:{ boxWidth:12, font:{ size:11 } } },
+        tooltip:{ callbacks:{ label:function(c){
+          return c.dataset.label + ': ' + pcpMoeda(c.parsed.y); } } } },
+      scales:{ y:{ ticks:{ font:{ size:10 },
+                 callback:function(v){ return pcpMoeda(v).replace(',00',''); } } },
+               x:{ ticks:{ font:{ size:10 } } } }
+    }
+  });
 }
 
 // ── baixar a medição ──────────────────────────────────────────────
@@ -38994,8 +39329,10 @@ const PERMS_SIDEBAR = {
   // Só existem dentro do módulo Pedidos, que tem Firebase próprio
   'governanca-pedidos': { icon:'🏛️', label:'Governança',           mod:'EXECUÇÃO', soPedidos:true },
   'pedidos':        { icon:'📦', label:'Controle de Pedidos',      mod:'EXECUÇÃO', soPedidos:true },
-  // Só existe dentro da frente ADLV · PCP, que tem Firebase próprio
+  // Só existem dentro da frente ADLV · PCP, que tem Firebase próprio
   'pcp':            { icon:'📋', label:'PCP',                     mod:'EXECUÇÃO', soPcp:true },
+  'pcp-hist':       { icon:'📚', label:'Histórico de Medição',    mod:'EXECUÇÃO', soPcp:true },
+  'pcp-fin-proj':   { icon:'📈', label:'Histórico Financeiro',    mod:'EXECUÇÃO', soPcp:true },
 };
 
 // Variáveis globais de auth
