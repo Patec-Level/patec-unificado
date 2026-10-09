@@ -32389,8 +32389,10 @@ var PCP_CARDS = [
     conta:'liberados', cor:'var(--az)' },
   { chave:'prod_dev', nome:'PRODUTIVIDADE EM DEVOLUÇÃO', sub:'RCs devolvidas SIM e resgate',
     conta:'devolvidas', cor:'var(--az)' },
-  { chave:'emitidos', nome:'PEDIDOS EMITIDOS', sub:'no período da medição',
-    cor:'var(--vd)' },
+  // Não se digita: é a soma da linha Emissão de Pedido da grade, que por
+  // sua vez vem da coluna Feitos do Controle de Pedidos.
+  { chave:'emitidos', nome:'PEDIDOS EMITIDOS', sub:'soma da Emissão de Pedido',
+    cor:'var(--vd)', calc:function(){ return pcpRealTotal('emissao'); } },
   { chave:'cockpit',  nome:'AG. ENVIO DO COCKPIT', sub:'na fila para enviar',
     cor:'var(--am)' }
 ];
@@ -32407,6 +32409,8 @@ function pcpCard(chave){
 }
 function pcpSetCard(chave, campo, v){
   if (!_pcp || _pcp.fechada) return;
+  var reg = PCP_CARDS.filter(function(x){ return x.chave === chave; })[0];
+  if (reg && reg.calc && campo === 'meta') return;   // esse card é calculado
   pcpCard(chave)[campo] = aagNum(v);
   pcpRenderCards();
   pcpRenderPremissas();
@@ -32418,9 +32422,11 @@ function pcpSetCard(chave, campo, v){
 // A regra fina ele ainda vai passar; por ora é emitidos ÷ liberados.
 function pcpAproveitamento(){
   var lib = pcpCard('prod_ped').real;
-  var emi = pcpCard('emitidos').real;
+  var emi = pcpEmitidos();
   return lib ? emi / lib : null;
 }
+// Os pedidos emitidos da medição: a soma da linha Emissão de Pedido.
+function pcpEmitidos(){ return pcpRealTotal('emissao'); }
 
 // ══════════════════════════════════════════════════════════════════
 //  A CURVA DE MEDIÇÃO
@@ -32491,15 +32497,20 @@ function pcpCurva(){
   return _pcp.curva;
 }
 function pcpCurvaDia(tipo, dia){
-  var c = pcpCurva();
-  var o = (tipo === 'emitido') ? c.emitido : (c.conv[tipo] || {});
+  // O emitido não é mais digitado aqui: é a linha Emissão de Pedido da
+  // grade, que vem da coluna Feitos do Controle de Pedidos. As linhas de
+  // baixo continuam na mão — são o LIBERADO por tipo, cada um com o seu
+  // peso, e é assim que ele rastreia o que foi liberado de cada pedido.
+  if (tipo === 'emitido') return pcpRealDia('emissao', dia);
+  var o = (pcpCurva().conv[tipo] || {});
   var v = o[dia];
   return (v === undefined || v === '') ? 0 : aagNum(v);
 }
 function pcpSetCurva(tipo, dia, v){
   if (!_pcp || _pcp.fechada) return;
+  if (tipo === 'emitido') return;   // o emitido vem da grade, não se digita
   var c = pcpCurva();
-  var o = (tipo === 'emitido') ? c.emitido : (c.conv[tipo] = c.conv[tipo] || {});
+  var o = (c.conv[tipo] = c.conv[tipo] || {});
   if (aagTxt(v) === '') delete o[dia]; else o[dia] = aagNum(v);
   pcpRenderGrafico();
   pcpRenderFinanceiro();   // as receitas ligadas à curva acompanham
@@ -32654,7 +32665,7 @@ function pcpRenderPremissas(){
     + '</strong>'
     + '<span style="font-size:10px;color:var(--tx2);white-space:nowrap;'
     +   'border-left:1px solid var(--brd);padding-left:7px">'
-    +   cpNum(pcpCard('emitidos').real) + ' emitidos ÷ '
+    +   cpNum(Math.round(pcpEmitidos())) + ' emitidos ÷ '
     +   cpNum(pcpCard('prod_ped').real) + ' liberados</span>'
     + '</div>';
 }
@@ -33020,9 +33031,16 @@ function pcpRenderCards(){
        + cpNum(dias.length) + '</div>' + rotulo('DIAS ÚTEIS')
        + legenda(decorridos + ' já decorrido(s)'));
 
-  // 2. os quatro cards que ele preenche
+  // 2. os cards do meio: os que ele preenche e os que saem de conta
   PCP_CARDS.forEach(function(c){
-    var dentro = campo(c.chave, 'meta', c.cor) + rotulo(c.nome) + legenda(c.sub);
+    var dentro;
+    if (c.calc) {
+      dentro = '<div style="font-size:24px;font-weight:800;color:' + c.cor
+        + ';line-height:1.1">' + cpNum(Math.round(c.calc())) + '</div>';
+    } else {
+      dentro = campo(c.chave, 'meta', c.cor);
+    }
+    dentro += rotulo(c.nome) + legenda(c.sub);
     if (c.conta) dentro += contador(c.chave, c.conta);
     h += moldura(dentro, c.cor);
   });
@@ -33051,7 +33069,7 @@ function pcpRenderCards(){
 //  preço é por tipo, então ele preenche cada um.
 // ══════════════════════════════════════════════════════════════════
 var PCP_RECEITAS_PADRAO = [
-  { chave:'emitido',   nome:'Pedido emitido',      preco:0, fonte:'emitido',   qtd:0 },
+  { chave:'emitido',   nome:'Pedido emitido',      preco:0, fonte:'emissao',   qtd:0 },
   { chave:'devolucao', nome:'Devolução',           preco:0, fonte:'devolucao', qtd:0 },
   { chave:'cadastro',  nome:'Cadastro',            preco:0, fonte:'',          qtd:0 },
   { chave:'reap',      nome:'Pedido de Reap',      preco:0, fonte:'reap',      qtd:0 },
@@ -33068,7 +33086,11 @@ function pcpReceitas(){
 // Quantas unidades desta linha no período: ou o que veio da curva, ou o
 // que ele digitou.
 function pcpReceitaQtd(r){
+  if (r.fonte === 'emitido') r.fonte = 'emissao';   // origem renomeada
   if (!r.fonte) return aagNum(r.qtd || 0);
+  // 'emissao' é a linha da grade (coluna Feitos do Controle de Pedidos);
+  // as outras origens são as linhas do lançamento da curva
+  if (r.fonte === 'emissao') return pcpEmitidos();
   var dias = (_pcp && _pcp.dias) || [];
   return dias.reduce(function(n, d){ return n + pcpCurvaDia(r.fonte, d); }, 0);
 }
@@ -33249,8 +33271,9 @@ function pcpRenderReceitas(){
   var rs = pcpReceitas();
   var trava = _pcp.fechada ? ' disabled' : '';
   // as origens possíveis de quantidade: a curva do gráfico
-  var fontes = [{ v:'', n:'digitar à mão' }, { v:'emitido', n:'Emitido (curva)' }]
-    .concat(pcpPesos().map(function(x){ return { v:x.chave, n:x.nome + ' (curva)' }; }));
+  var fontes = [{ v:'', n:'digitar à mão' },
+                { v:'emissao', n:'Emissão de Pedido' }]
+    .concat(pcpPesos().map(function(x){ return { v:x.chave, n:x.nome + ' (liberado)' }; }));
 
   var h = '<div class="cd"><div class="cd-t" style="justify-content:space-between">'
     + '<span>💵 Quanto recebemos por cada coisa</span>'
@@ -33424,7 +33447,7 @@ function pcpRenderGrafCards(){
     + card(corpo(cpNum(Math.round(s.convTotal)), 'CONVERTIDO',
            'liberado, já com os pesos', 'var(--vd)'), 'var(--vd)')
     + card(corpo(cpNum(Math.round(s.emiTotal)), 'EMITIDO',
-           'pedidos no período', 'var(--azm)'), 'var(--azm)')
+           'da Emissão de Pedido', 'var(--azm)'), 'var(--azm)')
     + card(corpo(sinal(gapReal), 'GAP REAL', 'meta acumulada − convertido',
            gapReal > 0 ? 'var(--vm)' : 'var(--vd)'), gapReal > 0 ? 'var(--vm)' : 'var(--vd)')
     + card(corpo(sinal(gapProj), 'GAP PROJETADO',
@@ -33574,8 +33597,10 @@ function pcpRenderGrafGrade(){
 
   var h = '<div class="cd"><div class="cd-t">🗓 Lançamento da curva — dia a dia</div>'
     + '<div style="font-size:11px;color:var(--tx2);margin-bottom:.8rem">'
-    + 'Digite o bruto de cada dia; o peso é aplicado na hora de montar a curva. '
-    + 'O planejado e os acumulados saem sozinhos.'
+    + 'O <strong>emitido</strong> vem da linha Emissão de Pedido, na aba '
+    + 'Planejamento e Controle — não se digita aqui. Nas linhas de '
+    + '<strong>liberado</strong> você lança o bruto de cada tipo conforme os '
+    + 'pedidos vão sendo liberados; o peso é aplicado na hora de montar a curva.'
     + (_pcp.fechada ? ' <strong style="color:var(--am)">Medição fechada — só leitura.</strong>' : '')
     + '</div>'
     + '<div style="overflow:auto;max-height:60vh"><table style="border-collapse:collapse;font-size:11px">'
@@ -33587,9 +33612,15 @@ function pcpRenderGrafGrade(){
 
   h += linhaFixa('Planejado (por dia)',
         dias.map(function(){ return s.porDia; }), s.planTotal, 'var(--tx2)');
-  h += linhaEdit('emitido', 'Emitido');
+  h += linhaFixa('Emitido (da Emissão de Pedido)', s.emiDia, s.emiTotal, 'var(--azm)');
+  // daqui para baixo é o LIBERADO: o que já saiu de cada tipo, e é o peso
+  // de cada um que transforma isso na linha do convertido
+  h += '<tr><td colspan="' + (dias.length + 2) + '" style="padding:5px 8px;'
+    + 'font-size:10px;font-weight:700;color:var(--tx2);text-transform:uppercase;'
+    + 'letter-spacing:.4px;background:var(--bg);position:sticky;left:0">'
+    + 'Liberado por tipo — cada um com o seu peso</td></tr>';
   pcpPesos().forEach(function(t){ h += linhaEdit(t.chave, t.nome, t.peso); });
-  h += linhaFixa('Convertido (com peso)', s.convDia, s.convTotal, 'var(--vd)');
+  h += linhaFixa('Liberado (com peso) = convertido', s.convDia, s.convTotal, 'var(--vd)');
   h += linhaFixa('Planejado acumulado', s.planAcum, s.planTotal, 'var(--tx2)');
   h += linhaFixa('Convertido acumulado', s.convAcum, s.convTotal, 'var(--vd)');
 
