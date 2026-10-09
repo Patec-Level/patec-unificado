@@ -7102,7 +7102,9 @@ var PROJETO_BLOCOS = [
 ];
 var PROJETO_FRENTES = [
   { chave:'pcp',          nome:'PCP',          ico:'📋', largo:true },
-  { chave:'republicacao', nome:'Republicação', ico:'🔁' },
+  // só o nome que aparece no card muda: a chave 'republicacao' continua,
+  // porque é ela que aponta para o projeto do Firebase da frente
+  { chave:'republicacao', nome:'Publicação', ico:'🔁' },
   { chave:'patec',        nome:'PATEC',        ico:'🏛️', desc:'governança, equipe e ciclos' },
   { chave:'pedidos',      nome:'Pedidos',      ico:'📦', desc:'medição, MAPA e monitoramento' },
   { chave:'devolucao',    nome:'Devolução',    ico:'↩️' }
