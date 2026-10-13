@@ -3,7 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PATEC — Sistema de Gestão de Compras</title>
+<title>GTO — Gestão Tática de Operações</title>
+<script>
+// Carimbo da versão: aparece embaixo do login e no console. Serve para
+// saber, sem adivinhar, qual arquivo está realmente no ar — o navegador
+// guarda o index antigo em cache e isso confunde o diagnóstico.
+var GTO_BUILD = '13/10 15:02';
+</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -18,6 +24,17 @@ function usrCadastrar(){ if(typeof window._usrCadastrarReal==='function') window
 function usrResetarSenha(e,n,m){ if(typeof window._usrResetarSenhaReal==='function') window._usrResetarSenhaReal(e,n,m); }
 function usrRemover(u,n){ if(typeof window._usrRemoverReal==='function') window._usrRemoverReal(u,n); }
 function usrEditarPerms(u,n,p,m,pf,cn){ if(typeof window._usrEditarPermsReal==='function') window._usrEditarPermsReal(u,n,p,m,pf,cn); }
+
+// Carimbo da versão na tela de login e no console
+try {
+  console.log('%cGTO build ' + GTO_BUILD, 'font-weight:700;color:#1F4E9C');
+  document.addEventListener('DOMContentLoaded', function(){
+    var el = document.getElementById('gto-build');
+    if (el) el.textContent = 'build ' + GTO_BUILD;
+    var sb = document.getElementById('gto-build-sb');
+    if (sb) sb.textContent = 'build ' + GTO_BUILD;
+  });
+} catch(e){}
 
 // Estado global de autenticação — acessível antes do módulo auth carregar
 window._authUser   = null;
@@ -560,9 +577,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 <div id="patec-login-overlay">
   <div class="login-box">
     <div class="login-logo">
-      <h2>PATEC</h2>
-      <p>Sistema de Gestão de Compras</p>
+      <h2>GTO</h2>
+      <p>Gestão Tática de Operações</p>
     </div>
+    <div id="gto-build" style="text-align:center;font-size:9.5px;color:#9AA3AE;
+         margin:-4px 0 10px"></div>
     <div class="login-err" id="login-err"></div>
     <div class="login-ok" id="login-ok"></div>
     <input type="email" id="login-email" placeholder="E-mail" autocomplete="email"
@@ -653,7 +672,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
 
 <button id="hbg" onclick="document.getElementById('sb').classList.toggle('mob-open')">☰</button>
 <nav id="sb">
-  <div class="sb-logo"><h1>PATEC</h1><p>Sistema de Gestão de Compras</p></div>
+  <div class="sb-logo"><h1>GTO</h1><p>Gestão Tática de Operações</p><p id="gto-build-sb" style="font-size:9px;color:rgba(255,255,255,.22);margin-top:3px"></p></div>
 
   <!-- Mini Meta/Gap no sidebar -->
   <div id="sb-cards-ciclo" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:.625rem .75rem;border-bottom:1px solid rgba(255,255,255,.07)">
@@ -1236,12 +1255,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--azm);box
               </div>
             </div>
             <div style="margin-bottom:10px">
+              <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:4px">Nome de colaborador <span style="font-weight:400">(nome curto que aparece na equipe e registra produção)</span></div>
+              <input type="text" id="usr-novo-colabnome" placeholder="Ex: Gustavo — em branco usa o primeiro nome acima" style="width:100%;font-size:12px;padding:7px 10px;border:1.5px solid var(--brd);border-radius:7px">
+            </div>
+            <div style="margin-bottom:10px">
               <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:6px">Módulos com acesso</div>
-              <div id="usr-novo-modulos" style="display:flex;flex-wrap:wrap;gap:6px">
-                <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd)"><input type="checkbox" id="usr-novo-mod-adlv" value="adlv"> 🏢 ADLV</label>
-                <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd)"><input type="checkbox" id="usr-novo-mod-fast" value="fast"> ⚡ FAST</label>
-                <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd)"><input type="checkbox" id="usr-novo-mod-pedidos" value="pedidos"> 📦 PEDIDOS</label>
-              </div>
+              <div id="usr-novo-modulos"></div>
               <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;background:var(--amc);padding:6px 10px;border-radius:6px;border:1px solid var(--am);margin-top:6px;width:fit-content">
                 <input type="checkbox" id="usr-novo-admfast" onchange="usrToggleAdmFastNovo()"> 🛠️ Admin do FAST (acesso total ao ADM do FAST, exceto Usuários — não dá acesso ao ADLV)
               </label>
@@ -7283,6 +7302,39 @@ function modIco(m){
   });
   return r;
 }
+// Os quadradinhos de "Módulos com acesso" saem da mesma lista que monta a
+// tela de escolha — assim, frente nova entra aqui sozinha, sem ninguém
+// precisar lembrar de acrescentar um checkbox à mão.
+function usrModulosHTML(prefixo, marcados, desabilitado){
+  marcados = marcados || [];
+  var trava = desabilitado ? ' disabled' : '';
+  var h = '';
+  PROJETO_BLOCOS.forEach(function(b){
+    h += '<div style="margin-bottom:8px">'
+      + '<div style="font-size:9.5px;font-weight:700;color:var(--tx2);'
+      +   'text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">'
+      +   b.ico + ' ' + cpEsc(b.nome) + '</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    PROJETO_FRENTES.forEach(function(f){
+      var ch = modChave(b.chave, f.chave);
+      var temTela = (typeof modTemTela === 'function') && modTemTela(ch);
+      var onch = (ch === 'fast')
+        ? ' onchange="if(typeof usrAtualizarSenhaFastVisivel===\'function\')usrAtualizarSenhaFastVisivel()"' : '';
+      h += '<label title="' + (temTela ? '' : 'tela ainda em construção')
+        + '" style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;'
+        + 'background:#fff;padding:4px 10px;border-radius:6px;border:1px solid var(--brd);'
+        + (temTela ? '' : 'opacity:.6') + '">'
+        + '<input type="checkbox" id="' + prefixo + ch + '" value="' + ch + '"'
+        + (marcados.indexOf(ch) !== -1 ? ' checked' : '') + trava + onch + '> '
+        + f.ico + ' ' + cpEsc(f.nome)
+        + (temTela ? '' : ' <span style="font-size:9px;color:var(--tx2)">(em construção)</span>')
+        + '</label>';
+    });
+    h += '</div></div>';
+  });
+  return h;
+}
+
 function modTodos(){
   var out = [];
   PROJETO_BLOCOS.forEach(function(b){
@@ -9944,7 +9996,7 @@ let COLABS = (_moduloAtivo === 'fast') ? COLABS_FAST : COLABS_ADLV;
 // conteúdo. Não confundir com COLABS, que continua trocando por módulo e é
 // usada por meta/produção/RT.
 // ════════════════════════════════════════════
-const COLABS_JORNADA = ['André','Lory','Ludy','Wanessa','Aline'];
+let COLABS_JORNADA = ['André','Lory','Ludy','Wanessa','Aline']; // semente; equipeAplicarListas() substitui pela equipe salva em Admin > Equipe (Metas RT)
 
 // Chave de localStorage única (sem sufixo de módulo) — o cache precisa ser o
 // mesmo nos dois módulos, senão cada um guardaria uma versão diferente.
@@ -9982,6 +10034,37 @@ function _jornadaAlinharEquipe(lista, criarVazio){
     const base = criarVazio(c,i);
     return porColab[c] ? Object.assign(base, porColab[c], {colab:c}) : base;
   });
+}
+
+// A Gestão de Jornada (Férias, Banco de Horas e Banco HE) segue a mesma
+// equipe cadastrada em Admin > Equipe (Metas RT). Antes a lista era fixa no
+// código, então quem entrava na equipe aparecia na Produção em Tempo Real mas
+// nunca nas três telas da Jornada. Agora é a união das equipes ADLV + FAST,
+// recalculada toda vez que a config é carregada ou salva.
+function _jornadaSincronizarEquipe(){
+  try{
+    var uni = [], vistos = {};
+    [].concat(COLABS_ADLV||[], COLABS_FAST||[]).forEach(function(n){
+      n = String(n||'').trim(); if(!n) return;
+      var k = n.toLowerCase(); if(vistos[k]) return;
+      vistos[k] = 1; uni.push(n);
+    });
+    if(!uni.length) return;                               // config vazia: mantém o que está
+    if(uni.join('|') === COLABS_JORNADA.join('|')) return; // nada mudou
+    COLABS_JORNADA = uni;
+    // Quem entrou agora ganha uma linha vazia nas três bases. Aqui nada é
+    // apagado — quem saiu só some no próximo carregamento, como sempre foi.
+    uni.forEach(function(c){
+      try{ if(!FERIAS_DATA.some(function(r){ return r && r.colab===c; }))
+             FERIAS_DATA.push(_FERIAS_VAZIO(c, FERIAS_DATA.length)); }catch(e){}
+      try{ if(!BANCO_HORAS.some(function(r){ return r && r.colab===c; }))
+             BANCO_HORAS.push(_BANCO_VAZIO(c)); }catch(e){}
+      try{ if(!BANCO_HE.some(function(r){ return r && r.colab===c; }))
+             BANCO_HE.push({ colab:c, periodos:[] }); }catch(e){}
+    });
+    try{ if(typeof renderFerias === 'function') renderFerias(); }catch(e){}
+    try{ if(typeof renderBanco  === 'function') renderBanco();  }catch(e){}
+  }catch(e){ console.warn('_jornadaSincronizarEquipe:', e); }
 }
 
 function _atualizarColabsPorModulo(){
@@ -22790,6 +22873,40 @@ function paPeriodoHoje(){
   renderCascata();
 }
 
+// ── Como o backlog fecha cada dia — REGRA ÚNICA ──────────────────
+// Ordem de prioridade, do mais confiável para o menos:
+//   1. marco do dia em _paHistorico = o AG. Tratamento real contado no
+//      upload do Radar daquele dia. É número medido, não estimado.
+//   2. âncora no Radar ao vivo, só no último dia do período.
+//   3. a conta: backlog de ontem − saídas + entradas.
+// Isso vivia copiado em três lugares (Plano de Ação e os dois geradores
+// de slide) e as cópias dos slides tinham ficado sem o passo 1 — por isso
+// o mesmo slide mostrava Ag. Tratamento 446 no gráfico e "Backlog Atual
+// 340" no card. Agora é uma função só.
+function paFecharBacklogDias(dias, backlogBase, saidasPorDia, entradasPorDia, opts){
+  opts = opts || {};
+  var hist = opts.historico
+    || ((typeof _paHistorico !== 'undefined' && Array.isArray(_paHistorico)) ? _paHistorico : []);
+  var linhas = [], atual = backlogBase || 0;
+  (dias || []).forEach(function(d, idx){
+    var s = (saidasPorDia && saidasPorDia[d]) || 0;
+    var e = (entradasPorDia && entradasPorDia[d]) || 0;
+    var marco = hist.find(function(h){ return h && h.dt === d; });
+    var fim;
+    if (marco) fim = marco.val;
+    else if (idx === dias.length - 1 && opts.ancorar) fim = opts.valorAncora;
+    else fim = Math.max(0, atual - s + e);
+    linhas.push({ data:d, backlogInicio:atual, saidas:s, entrada:e, saldo:e - s, backlogFim:fim });
+    atual = fim;
+  });
+  return {
+    linhas: linhas,
+    backlogAtual: atual,
+    totalSaidas:   linhas.reduce(function(n,l){ return n + l.saidas;  }, 0),
+    totalEntradas: linhas.reduce(function(n,l){ return n + l.entrada; }, 0)
+  };
+}
+
 function renderCascata(){
   const dtInicioEl = document.getElementById('pa-dt-inicio');
   const dtFimEl    = document.getElementById('pa-dt-fim');
@@ -22867,28 +22984,12 @@ function renderCascata(){
   const anchorarRadar = dtFim >= hojeISO && _backlogRealRadar !== null
                         && (typeof _pmRadarEhDeHoje==='function' ? _pmRadarEhDeHoje() : true);
 
-  let backlogAtual = backlogBase;
-  diasUteis.forEach((d, idx)=>{
-    const saidas  = saidasPorDia[d]||0;
-    const entrada = (_paEntradas.find(e=>e.dt===d)?.val)||0;
-    const saldo   = entrada - saidas;
-    const isUltimo = idx === diasUteis.length - 1;
-    // Backlog Fim do dia: se existir um marco "Backlog Auto — AG. Tratamento" para
-    // essa data (snapshot real do 1º upload do dia), usar ele como valor oficial —
-    // isso mantém o gráfico fiel ao Ag. Tratamento do Radar de cada dia.
-    const marcoDia = _paHistorico.find(h=>h.dt===d);
-    let backlogFim;
-    if(marcoDia){
-      backlogFim = marcoDia.val;
-    } else if(isUltimo && anchorarRadar){
-      // Último dia sem marco salvo ainda hoje: ancorar no radar ao vivo
-      backlogFim = _backlogRealRadar;
-    } else {
-      backlogFim = Math.max(0, backlogAtual + saldo);
-    }
-    linhas.push({data:d, backlogInicio:backlogAtual, saidas, entrada, saldo, backlogFim});
-    backlogAtual = backlogFim;
-  });
+  const _entradasPorDia = {};
+  (_paEntradas||[]).forEach(e=>{ if(e && e.dt) _entradasPorDia[e.dt] = e.val||0; });
+  const _fech = paFecharBacklogDias(diasUteis, backlogBase, saidasPorDia, _entradasPorDia,
+    { ancorar: anchorarRadar, valorAncora: _backlogRealRadar });
+  _fech.linhas.forEach(l=>linhas.push(l));
+  let backlogAtual = _fech.backlogAtual;
 
   const fmtDptBR = iso=>{ const p=iso.split('-'); return p[2]+'/'+p[1]; };
 
@@ -32476,13 +32577,15 @@ function pcpEmitidos(){ return pcpRealTotal('emissao'); }
 //    convertido  — o que foi liberado, cada tipo pelo seu peso
 //
 //  Os pesos vêm da planilha dele: Pedido Petronect conta inteiro,
-//  Pedido Reap e Devolução contam metade. A tabela é editável porque
-//  ele ainda vai levantar os outros tipos (há um de 0,8, por exemplo).
+//  Pedido Reap e Devolução contam metade, Pedido por Catálogo conta 0,8.
+//  A tabela continua editável, e o André ainda está levantando os tipos
+//  que faltam — por isso tudo aqui é só o valor de partida.
 // ══════════════════════════════════════════════════════════════════
 var PCP_PESOS_PADRAO = [
   { chave:'petronect', nome:'Pedido Petronect', peso:1 },
   { chave:'reap',      nome:'Pedido Reap',      peso:0.5 },
   { chave:'procureon', nome:'Pedido Procureon', peso:0.5 },
+  { chave:'catalogo',  nome:'Pedido por Catálogo', peso:0.8 },
   { chave:'devolucao', nome:'Devolução',        peso:0.5 }
 ];
 // Quem já tem a medição guardada não perde o que lançou: o tipo novo é
@@ -33310,7 +33413,9 @@ function pcpRenderFinCards(){
         'var(--vm)')
     + card(corpo(pcpMoeda(rec), 'RECEITA DA MEDIÇÃO',
         cpNum(pcpReceitas().length) + ' linha(s) de receita', 'var(--vd)'), 'var(--vd)')
-    + card(corpo(pcpMoeda(res), res >= 0 ? 'LUCRO' : 'PREJUÍZO',
+    // O rótulo não troca mais de palavra: vermelho com sinal de menos já
+    // diz prejuízo, verde já diz lucro.
+    + card(corpo(pcpMoeda(res), 'MARGEM',
         custo ? 'a receita cobre ' + (Math.round(cobertura * 10) / 10).toString()
                 .replace('.', ',') + '% do custo'
               : 'preencha o custo da operação', corRes), corRes)
@@ -33373,9 +33478,9 @@ function pcpRenderEquilibrio(){
         : '<strong style="color:' + (faltam > 0 ? 'var(--vm)' : 'var(--vd)') + '">'
           + cpNum(Math.abs(faltam)) + '</strong> itens') + '</div>'
     + '<div><div style="color:var(--tx2);font-size:10px;font-weight:700;'
-    +   'text-transform:uppercase">' + (res >= 0 ? 'Lucro' : 'Prejuízo') + ' até agora</div>'
+    +   'text-transform:uppercase">Margem até agora</div>'
     +   '<strong style="color:' + (res >= 0 ? 'var(--vd)' : 'var(--vm)') + '">'
-    +   pcpMoeda(Math.abs(res)) + '</strong></div>'
+    +   pcpMoeda(res) + '</strong></div>'
     + '</div></div>';
 }
 
@@ -33624,7 +33729,8 @@ function pcpRenderPesos(){
     + (_pcp.fechada ? '' : '<button class="btn btn-s" onclick="pcpAddPeso()">+ tipo</button>')
     + '</div>'
     + '<div style="font-size:11px;color:var(--tx2);margin-bottom:.7rem">'
-    + 'Um pedido Petronect conta inteiro; Reap e Devolução contam metade. '
+    + 'Um pedido Petronect conta inteiro; Reap e Devolução contam metade; '
+    + 'um pedido por catálogo conta 0,8. '
     + 'É esse peso que transforma o lançado do dia na linha <strong>convertido</strong>.</div>'
     + '<table style="border-collapse:collapse;font-size:11.5px">'
     + '<thead><tr><th style="text-align:left;padding:4px 10px">Tipo</th>'
@@ -34680,6 +34786,7 @@ function aagAbrir(){
   aagCarregarGuardadas();
   aagCarregarEscolhas();
   aagCarregarEquipe().then(function(){ aagRenderAnalistas(); });
+  aagCarregarEnvios().then(function(){ aagRenderPassos(); });
 }
 
 function aagPintarUploads(){
@@ -35476,6 +35583,9 @@ function aagProcessar(){
     dentroAA.forEach(function(i){ itensAA[i.chave] = 1; });
     _aagBase = { linhas: linhas, plataforma: plataforma, modelo: modelo,
                  por: por, geradoEm: new Date().toISOString(),
+                 // retrato da distribuição que entrou NESTA base — é com ele
+                 // que o passo 4 sabe avisar "você distribuiu depois de montar"
+                 escolhas: aagAssinaturaEscolhas(),
                  itens: Object.keys(itensAA).length,
                  itensBase: Object.keys(grupos).length,
                  propostas: itens.length,
@@ -35899,6 +36009,7 @@ async function aagEnviarRadar(){
       + cpHojeISO().replace(/-/g, '') + '.xlsx',
       { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     await radarOnFile(arq);
+    aagMarcarEnvio('radar', _aagBase.modelo.length);
     if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Radar Estratégico atualizado com '
       + cpNum(_aagBase.modelo.length) + ' itens.</span>';
   } catch (e) {
@@ -36008,6 +36119,7 @@ function aagEscolherAnalista(chave, nome){
   if (linha) linha.style.background = nome ? 'var(--vdc)' : '';
   aagPintarContaSemAnalista();
   aagPintarBarraGravar();
+  try { aagRenderPassos(); } catch (e) {}   // acende o aviso de remontar
   if (juntos) {
     var st = document.getElementById('aag-status');
     if (st) st.innerHTML = '<span style="color:var(--vd)">✓ ' + cpEsc(nome) + ' também ficou '
@@ -36115,6 +36227,53 @@ function aagSemAnalista(escopo){
   return aagParaDistribuir(escopo).filter(function(m){ return !aagAnalistaDe(m); });
 }
 
+// ── quando cada saída recebeu os itens ────────────────────────────
+// O passo 4 dizia só "Mande para as três telas" e nunca ficava verde: não
+// dava para saber se os itens já tinham ido. Agora cada envio deixa marca
+// (dia, hora e quantos itens), e o passo mostra as três separadas.
+var AAG_SAIDAS = [
+  { chave:'radar',    nome:'Radar Estratégico' },
+  { chave:'completo', nome:'Analista Completo' },
+  { chave:'backlog',  nome:'Upload Backlog',  obs:'alimenta o Tirar do Fluxo' }
+];
+var _aagEnvios = {};
+
+// Retrato de quem está com o quê. Serve só para comparar: se mudou depois
+// que a base foi montada, os três envios sairiam sem a distribuição nova.
+function aagAssinaturaEscolhas(){
+  try {
+    return Object.keys(_aagEscolhas || {}).filter(function(k){ return _aagEscolhas[k]; })
+      .sort().map(function(k){ return k + '=' + _aagEscolhas[k]; }).join(';');
+  } catch (e) { return ''; }
+}
+// true quando ele distribuiu (ou mexeu na distribuição) depois de montar.
+function aagPrecisaRemontar(){
+  return !!_aagBase && _aagBase.escolhas !== undefined
+      && _aagBase.escolhas !== aagAssinaturaEscolhas();
+}
+
+async function aagCarregarEnvios(){
+  try {
+    var db = getDB(); if (!db) return;
+    var doc = await db.collection('config').doc('aag_envios').get();
+    if (doc && doc.exists) _aagEnvios = (doc.data() || {}).envios || {};
+  } catch (e) { console.warn('aagCarregarEnvios:', e); }
+}
+
+async function aagMarcarEnvio(chave, n){
+  var agora = new Date();
+  _aagEnvios[chave] = { dia: cpHojeISO(),
+                        hora: String(agora.getHours()).padStart(2,'0') + ':'
+                            + String(agora.getMinutes()).padStart(2,'0'),
+                        itens: n | 0, por: cpQuem(), ts: agora.toISOString() };
+  try { aagRenderPassos(); } catch (e) {}
+  try {
+    var db = getDB(); if (!db) return;
+    await db.collection('config').doc('aag_envios').set({
+      envios:_aagEnvios, atualizadoEm:agora.toISOString() }, { merge:true });
+  } catch (e) { console.warn('aagMarcarEnvio:', e); }
+}
+
 // ── a equipe desta distribuição ───────────────────────────────────
 // Ele digita quem entra no rateio. Fica guardado, então amanhã já vem
 // preenchido — e só muda quando ele quiser tirar ou colocar alguém.
@@ -36143,14 +36302,41 @@ async function aagSalvarEquipe(){
   } catch (e) { console.warn('aagSalvarEquipe:', e); }
 }
 var _aagEquipeTimer = null;
-// Salva enquanto ele digita (sem redesenhar, para não tirar o cursor do
-// campo) e só redesenha a prévia quando ele para de digitar.
+var _aagEquipeDesenhada = null;   // a lista que está desenhada na tela agora
+
+function _aagChaveEquipe(l){
+  return (l || []).map(function(n){ return cpNormNome(n); }).join('|');
+}
+
+// Redesenha o bloco e devolve o campo exatamente como ele estava: o texto
+// cru e o cursor no mesmo lugar.
+// BUG (11/10): o redesenho trocava o que ele estava digitando pela lista já
+// interpretada — "Aline, " virava "Aline" — e ainda tirava o cursor do
+// campo. Resultado: dava para escrever um nome só; na vírgula do segundo,
+// tudo sumia.
+function aagRedesenharComCampo(){
+  var el = document.getElementById('aag-equipe');
+  var txt = el ? el.value : null;
+  var ini = el ? el.selectionStart : 0;
+  var fim = el ? el.selectionEnd : 0;
+  var focado = !!el && document.activeElement === el;
+  aagRenderAnalistas();
+  if (txt === null) return;
+  var novo = document.getElementById('aag-equipe');
+  if (!novo) return;
+  novo.value = txt;
+  if (focado) { try { novo.focus(); novo.setSelectionRange(ini, fim); } catch (e) {} }
+}
+
+// Salva enquanto ele digita e só redesenha quando a lista mudou DE VERDADE.
+// Digitar a vírgula depois do primeiro nome não muda lista nenhuma — e era
+// justamente aí que o redesenho atrapalhava.
 function aagDigitouEquipe(txt){
   _aagEquipe = aagLerEquipe(txt);
   if (_aagEquipeTimer) clearTimeout(_aagEquipeTimer);
   _aagEquipeTimer = setTimeout(function(){
     aagSalvarEquipe();
-    aagRenderAnalistas();
+    if (_aagChaveEquipe(_aagEquipe) !== _aagEquipeDesenhada) aagRedesenharComCampo();
   }, 700);
 }
 function aagDefinirEquipe(txt){
@@ -36330,10 +36516,12 @@ function aagDistribuirAuto(){
   Object.keys(r.plano).forEach(function(k){ _aagEscolhas[k] = r.plano[k]; });
   aagSalvarEscolhas();
   aagRenderAnalistas();
+  try { aagRenderPassos(); } catch (e) {}   // acende o aviso de remontar
   var st = document.getElementById('aag-status');
   if (st) st.innerHTML = '<span style="color:var(--vd)">✓ ' + cpNum(r.faltam.length)
     + ' item(ns) distribuído(s) em ' + cpNum(r.grupos) + ' oportunidade(s). '
-    + 'Clique em <strong>💾 Gravar na RC em tratamento</strong> para valer.</span>';
+    + 'Grave na RC em tratamento e clique de novo em <strong>Montar tudo</strong> '
+    + 'antes de mandar para as três telas.</span>';
 }
 
 // ── dar o mesmo analista a todos os itens da página ───────────────
@@ -36561,6 +36749,7 @@ function aagBarraGravarHtml(pend){
 function aagRenderAnalistas(){
   var box = document.getElementById('aag-analistas');
   if (!box) return;
+  _aagEquipeDesenhada = _aagChaveEquipe(_aagEquipe);
   if (!_aagBase || !_aagBase.modelo) { box.innerHTML = ''; return; }
   var faltam = aagSemAnalista();
   var nomes = aagNomesAnalistas();
@@ -36727,6 +36916,78 @@ function aagRenderAnalistas(){
   box.innerHTML = h;
 }
 
+// ── o estado das três saídas, dentro do passo 4 ───────────────────
+function aagEnvioDeHoje(chave){
+  var e = _aagEnvios[chave];
+  return !!e && e.dia === cpHojeISO();
+}
+function aagSaidasTodasHoje(){
+  if (aagPrecisaRemontar()) return false;
+  return AAG_SAIDAS.every(function(s){ return aagEnvioDeHoje(s.chave); });
+}
+function aagSaidasAviso(){
+  if (aagPrecisaRemontar()) return 'monte tudo de novo antes de enviar';
+  var faltam = AAG_SAIDAS.filter(function(s){ return !aagEnvioDeHoje(s.chave); });
+  if (!faltam.length) return '';
+  if (faltam.length === AAG_SAIDAS.length) return 'nenhuma enviada hoje';
+  return 'faltam ' + cpNum(faltam.length) + ' de ' + cpNum(AAG_SAIDAS.length);
+}
+// O roteiro curto do passo 4, com o aviso que mais custa esquecer: montar
+// de novo depois de distribuir. Sem isso os três envios saem com a base de
+// antes, sem os analistas que ele acabou de escolher.
+function aagRoteiroSaidasHTML(){
+  var remontar = aagPrecisaRemontar();
+  var passo = function(n, txt, alerta){
+    return '<div style="display:flex;gap:6px;align-items:baseline">'
+      + '<span style="font-size:10px;font-weight:800;color:' + (alerta ? 'var(--vm)' : 'var(--az)')
+      +   ';flex:none">' + n + '.</span>'
+      + '<span style="font-size:10.5px;color:' + (alerta ? 'var(--vm)' : 'var(--tx2)')
+      +   (alerta ? ';font-weight:700' : '') + '">' + txt + '</span></div>';
+  };
+  return '<div style="display:grid;gap:3px;margin-top:6px;padding:7px 9px;'
+    + 'background:var(--bg);border:1px dashed ' + (remontar ? 'var(--vm)' : 'var(--brd)')
+    + ';border-radius:7px">'
+    + passo(1, 'Clique em <strong>💾 Gravar na RC em tratamento</strong>, ali na distribuição.')
+    + passo(2, 'Clique <strong>de novo em Montar tudo</strong> — é isso que leva os analistas '
+             + 'que você escolheu para as três saídas.'
+             + (remontar ? ' <strong>Você distribuiu depois de montar: remonte antes de enviar.</strong>' : ''),
+             remontar)
+    + passo(3, 'No card <strong>📋 Base montada</strong>, clique nos três botões, um de cada vez. '
+             + 'A ordem não importa.')
+    + '</div>';
+}
+
+// Uma linha por saída: enviada hoje (verde, com a hora e quantos itens),
+// enviada antes (âmbar, com a data) ou nunca enviada (cinza).
+function aagSaidasHTML(){
+  return aagRoteiroSaidasHTML()
+    + '<div style="display:grid;gap:5px;margin-top:7px">'
+    + AAG_SAIDAS.map(function(sd){
+        var e = _aagEnvios[sd.chave];
+        var hoje = aagEnvioDeHoje(sd.chave);
+        var cor, selo;
+        if (hoje) {
+          cor = 'var(--vd)';
+          selo = '✓ enviado hoje às ' + cpEsc(e.hora || '—')
+               + ' · ' + cpNum(e.itens || 0) + ' ' + (sd.chave === 'radar' ? 'itens' : 'linhas');
+        } else if (e && e.dia) {
+          cor = 'var(--am)';
+          selo = '⚠ último envio em ' + cpDataBR(e.dia)
+               + (e.hora ? ' às ' + cpEsc(e.hora) : '') + ' — ainda não foi hoje';
+        } else {
+          cor = 'var(--tx2)';
+          selo = 'ainda não enviado';
+        }
+        return '<div style="display:flex;gap:7px;align-items:baseline;flex-wrap:wrap">'
+          + '<span style="font-size:11px;font-weight:700;color:var(--tx)">'
+          +   cpEsc(sd.nome) + '</span>'
+          + (sd.obs ? '<span style="font-size:10px;color:var(--tx2)">(' + cpEsc(sd.obs) + ')</span>' : '')
+          + '<span style="font-size:10.5px;font-weight:600;color:' + cor + '">' + selo + '</span>'
+          + '</div>';
+      }).join('')
+    + '</div>';
+}
+
 // ── o passo a passo ───────────────────────────────────────────────
 function aagRenderPassos(){
   var box = document.getElementById('aag-passos');
@@ -36748,8 +37009,9 @@ function aagRenderPassos(){
       aviso: !_aagBase ? '' : (!_aagArq.mapa ? 'falta o mapa diário'
              : (aagSemAnalista().length ? cpNum(aagSemAnalista().length) + ' sem analista' : '')) },
     { n:4, t:'Mande para as três telas',
-      d:'Radar Estratégico, Analista Completo e Upload Backlog (que alimenta o Tirar do Fluxo).',
-      ok: false }
+      d: aagSaidasHTML(),
+      ok: aagSaidasTodasHoje(),
+      aviso: aagSaidasAviso() }
   ];
   box.innerHTML = '<div style="display:grid;gap:8px">' + passos.map(function(p){
     var cor = p.ok ? 'var(--vd)' : (p.aviso ? 'var(--am)' : 'var(--brd)');
@@ -36804,6 +37066,7 @@ async function aagEnviarBacklog(){
     if (typeof aaVerificarDados === 'function') aaVerificarDados();
     if (typeof aaProcessar === 'function') { try { aaProcessar(); } catch (e) {} }
     await bkSalvarFirebase();
+    aagMarcarEnvio('backlog', linhas.length);
     if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Upload Backlog atualizado com '
       + cpNum(linhas.length) + ' linhas · '
       + cpNum(linhas.filter(function(l){ return /LIBERAR/i.test(l[AAG_CAB_BACKLOG.indexOf('TIRAR DO FLUXO')]); }).length)
@@ -36917,6 +37180,172 @@ function pnrSeta(d){
     + (sobe ? '▲ +' : '▼ ') + cpNum(d) + ' vs dia ant.</span>';
 }
 
+// ── Gravar o Panorama direto no Histórico do Mapa ─────────────────
+// O mapa diário que sobe aqui tem EXATAMENTE os seis números do
+// "Lançamento diário — dados do Mapa" (ADM > Hist. Mapa):
+//   L3 PATEC Finalizado · L4 Ag. PATEC Finalizar · L5 100% Reprovado
+//   L6 PATEC Cancelado  · L7 Abrir ID Não        · L8 Abrir PATEC Obrig.
+// Antes era preciso digitar tudo de novo lá — a mesma informação subia
+// duas vezes. Agora grava daqui, na MESMA coleção (mapa_diario) e no
+// mesmo formato de sempre, que é o que a Apresentação do ADM lê. Nada
+// muda do outro lado, e nenhum lançamento já existente é sobrescrito
+// sem o André mandar.
+var _pnrLancDia = null;
+
+function pnrDataLanc(){ return _pnrLancDia || cpHojeISO(); }
+
+function pnrParaLancamento(c){
+  if(!c) return null;
+  return { l3:c.fin|0, l4:c.agfin|0, l5:c.reprov|0, l6:c.canc|0, l7:c.iden|0, l8:c.gm|0 };
+}
+
+var PNR_LS = [
+  ['l3','L3 PATEC Finalizado'], ['l4','L4 Ag. PATEC Finalizar'],
+  ['l5','L5 100% Reprovado'],   ['l6','L6 PATEC Cancelado'],
+  ['l7','L7 Abrir ID Não'],     ['l8','L8 Abrir PATEC Obrig.']
+];
+
+function pnrLancamentoEmMemoria(dia){
+  try{
+    if (typeof mapaFirebase === 'undefined' || !Array.isArray(mapaFirebase)) return null;
+    return mapaFirebase.find(function(r){ return r && r.data === dia; }) || null;
+  }catch(e){ return null; }
+}
+
+function pnrMesmoLancamento(a, b){
+  if(!a || !b) return false;
+  return PNR_LS.every(function(x){ return ((a[x[0]]|0) === (b[x[0]]|0)); });
+}
+
+function pnrDiferencas(atual, novo){
+  return PNR_LS.filter(function(x){ return (atual[x[0]]|0) !== (novo[x[0]]|0); })
+    .map(function(x){ return x[1] + ': ' + cpNum(atual[x[0]]|0) + ' → ' + cpNum(novo[x[0]]|0); });
+}
+
+// Confere no Firebase antes de gravar. A lista em memória pode estar vazia
+// porque a leitura falhou — e aí "não existe lançamento" seria mentira, e
+// gravaríamos por cima de um dia já preenchido.
+async function pnrLancamentoNoBanco(dia){
+  var mem = pnrLancamentoEmMemoria(dia);
+  if (mem) return mem;
+  try{
+    var db = getDB(); if(!db) return null;
+    var doc = await db.collection('mapa_diario').doc(dia.replace(/-/g,'')).get();
+    return (doc && doc.exists) ? (doc.data() || null) : null;
+  }catch(e){ console.warn('pnrLancamentoNoBanco:', e); return undefined; } // undefined = não deu pra conferir
+}
+
+async function pnrGravarNoHistorico(forcar){
+  var c = pnrContar();
+  var novo = pnrParaLancamento(c);
+  if(!novo) return { ok:false, motivo:'sem_mapa' };
+  var dia = pnrDataLanc();
+  var atual = await pnrLancamentoNoBanco(dia);
+  if (atual === undefined) return { ok:false, motivo:'sem_conferir', dia:dia };
+  if (atual && pnrMesmoLancamento(atual, novo)) return { ok:true, motivo:'igual', dia:dia };
+  if (atual && !forcar) return { ok:false, motivo:'conflito', dia:dia, atual:atual, novo:novo };
+  var reg = { data:dia, l3:novo.l3, l4:novo.l4, l5:novo.l5, l6:novo.l6, l7:novo.l7, l8:novo.l8,
+              ts:new Date().toISOString(), origem:'montar_base' };
+  try{
+    var okSet = await fbSet('mapa_diario', dia.replace(/-/g,''), reg);
+    if (okSet === false) return { ok:false, motivo:'erro', erro:'Firebase recusou a gravação' };
+  }catch(e){ return { ok:false, motivo:'erro', erro:e.message }; }
+  try{
+    var i = mapaFirebase.findIndex(function(r){ return r && r.data === dia; });
+    if(i >= 0) mapaFirebase[i] = reg; else mapaFirebase.push(reg);
+    mapaFirebase.sort(function(a,b){ return a.data.localeCompare(b.data); });
+  }catch(e){}
+  try{ if(typeof mapaAtualizarGlobais === 'function') mapaAtualizarGlobais(); }catch(e){}
+  try{ if(typeof renderAdmMapaHistorico === 'function') renderAdmMapaHistorico(); }catch(e){}
+  return { ok:true, motivo: atual ? 'substituido' : 'gravado', dia:dia };
+}
+
+function pnrAutoLigado(){
+  try{ return localStorage.getItem(_lsMod('gto_pnr_lanc_auto')) === '1'; }catch(e){ return false; }
+}
+function pnrAutoTrocar(el){
+  try{ localStorage.setItem(_lsMod('gto_pnr_lanc_auto'), el && el.checked ? '1' : '0'); }catch(e){}
+  if (el && el.checked) pnrLancAuto();
+}
+
+// Modo automático: só preenche dia VAZIO. Dia que já tem lançamento nunca é
+// tocado sozinho — se os números divergirem, o card pede confirmação.
+var _pnrAutoFeito = {};
+async function pnrLancAuto(){
+  if(!pnrAutoLigado()) return;
+  var dia = pnrDataLanc();
+  if(_pnrAutoFeito[dia]) return;
+  var r = await pnrGravarNoHistorico(false);
+  if(r && (r.ok || r.motivo === 'conflito')) _pnrAutoFeito[dia] = true;
+  pnrLancAtualizar();
+}
+
+async function pnrLancClicar(){
+  var dia = pnrDataLanc();
+  var r = await pnrGravarNoHistorico(false);
+  if(r.motivo === 'conflito'){
+    var dif = pnrDiferencas(r.atual, r.novo).join('\n');
+    if(!confirm('Já existe lançamento do Mapa em ' + cpDataBR(dia) + ' com números diferentes:\n\n'
+                + dif + '\n\nSubstituir pelos números do mapa que você acabou de subir?')){
+      pnrLancAtualizar(); return;
+    }
+    r = await pnrGravarNoHistorico(true);
+  }
+  _pnrLancMsg = r.ok
+    ? (r.motivo === 'igual' ? '' : '✓ ' + (r.motivo === 'substituido' ? 'Substituído' : 'Gravado')
+        + ' no Histórico do Mapa em ' + cpDataBR(r.dia))
+    : (r.motivo === 'sem_conferir' ? '✗ Não consegui ler o Histórico do Mapa agora — não gravei pra não correr o risco de apagar o que já existe.'
+       : r.motivo === 'sem_mapa'   ? '✗ Suba o mapa diário primeiro.'
+       : '✗ Não consegui gravar: ' + (r.erro || r.motivo));
+  pnrLancAtualizar();
+}
+
+var _pnrLancMsg = '';
+
+function pnrLancInnerHTML(){
+  var c = pnrContar();
+  var novo = pnrParaLancamento(c);
+  if(!novo) return '';
+  var dia = pnrDataLanc();
+  var atual = pnrLancamentoEmMemoria(dia);
+  var igual = pnrMesmoLancamento(atual, novo);
+  var estado, botao;
+  if(!atual){
+    estado = '<span style="color:var(--am);font-weight:600">nenhum lançamento guardado em '
+           + cpDataBR(dia) + ' ainda</span>';
+    botao  = '<button class="btn btn-p" style="font-size:11px" onclick="pnrLancClicar()">💾 Gravar no Histórico do Mapa</button>';
+  } else if(igual){
+    estado = '<span style="color:var(--vd);font-weight:600">✓ já gravado em ' + cpDataBR(dia)
+           + ', com estes mesmos números</span>';
+    botao  = '';
+  } else {
+    estado = '<span style="color:var(--vm);font-weight:600">⚠ ' + cpDataBR(dia)
+           + ' já tem lançamento com números diferentes ('
+           + pnrDiferencas(atual, novo).join(' · ') + ')</span>';
+    botao  = '<button class="btn btn-r" style="font-size:11px" onclick="pnrLancClicar()">↻ Substituir pelo mapa de agora</button>';
+  }
+  return '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+    + '<span style="font-size:11px;color:var(--tx2)">Dia do lançamento</span>'
+    + '<input type="date" id="pnr-lanc-dt" value="' + dia + '" style="font-size:11px;padding:4px 6px"'
+    + ' onchange="_pnrLancDia=this.value;_pnrLancMsg=\'\';pnrLancAtualizar()">'
+    + botao
+    + '<label style="display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--tx2);cursor:pointer">'
+    +   '<input type="checkbox"' + (pnrAutoLigado() ? ' checked' : '')
+    +   ' onchange="pnrAutoTrocar(this)"> gravar sozinho ao subir o mapa</label>'
+    + (_pnrLancMsg ? '<span style="font-size:11px;font-weight:600;color:'
+        + (_pnrLancMsg.charAt(0) === '✓' ? 'var(--vd)' : 'var(--vm)') + '">' + cpEsc(_pnrLancMsg) + '</span>' : '')
+    + '</div>'
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:6px">'
+    +   PNR_LS.map(function(x){ return cpEsc(x[1]) + ' <strong>' + cpNum(novo[x[0]]) + '</strong>'; }).join(' · ')
+    + '</div>'
+    + '<div style="font-size:10.5px;color:var(--tx2);margin-top:4px">' + estado + '</div>';
+}
+
+function pnrLancAtualizar(){
+  var el = document.getElementById('pnr-lanc');
+  if(el) el.innerHTML = pnrLancInnerHTML();
+}
+
 async function pnrRender(){
   var box = document.getElementById('aag-panorama');
   if (!box) return;
@@ -36983,8 +37412,12 @@ async function pnrRender(){
       + fora.map(function(k){ return cpEsc(k) + ' <strong>' + cpNum(c._outros[k]) + '</strong>'; })
           .join(' · ') + '</div>';
   }
+  // Gravar no Histórico do Mapa sem redigitar os seis números lá
+  h += '<div id="pnr-lanc" style="margin-top:.9rem;border-top:1px solid var(--brd);padding-top:.8rem"></div>';
   h += '</div>';
   box.innerHTML = h;
+  pnrLancAtualizar();
+  pnrLancAuto();
   // guarda o dia depois de desenhar, para o delta de hoje não comparar consigo mesmo
   pnrGravar(c, hoje);
 }
@@ -37328,6 +37761,7 @@ async function aagEnviar(){
   try {
     await aaCompletoSalvar();
     _aacDados = [];
+    aagMarcarEnvio('completo', _aagBase.linhas.length);
     if (st) st.innerHTML = '<span style="color:var(--vd)">✓ Base no Analista Completo. '
       + 'Abra a aba <strong>Analista Completo</strong> para trabalhar nela.</span>';
   } catch (e) {
@@ -37805,17 +38239,13 @@ async function admApresentacaoGerar(){
       : (typeof _backlogAtualGlobal === 'number' && _backlogAtualGlobal > 0 ? _backlogAtualGlobal : null);
     const _anchorarRadar = dtFimPA >= _hojeISO && _backlogRealRadar !== null;
 
-    let backlogAtual = backlogBase;
-    let totalSaidas = 0, totalEntradas = 0;
-    diasUteis.forEach((d, idx)=>{
-      const s = _saidasPorDia[d]||0;
-      const e = (_paEntradas||[]).find(x=>x.dt===d)?.val||0;
-      totalSaidas += s; totalEntradas += e;
-      const isUltimo = idx === diasUteis.length - 1;
-      backlogAtual = (isUltimo && _anchorarRadar)
-        ? _backlogRealRadar
-        : Math.max(0, backlogAtual - s + e);
-    });
+    const _entradasPorDiaSlide = {};
+    (_paEntradas||[]).forEach(x=>{ if(x && x.dt) _entradasPorDiaSlide[x.dt] = x.val||0; });
+    const _fechSlide = paFecharBacklogDias(diasUteis, backlogBase, _saidasPorDia, _entradasPorDiaSlide,
+      { ancorar: _anchorarRadar, valorAncora: _backlogRealRadar });
+    const backlogAtual   = _fechSlide.backlogAtual;
+    const totalSaidas    = _fechSlide.totalSaidas;
+    const totalEntradas  = _fechSlide.totalEntradas;
 
     // Entradas acumuladas no período
     // Prioridade: variação real do L3+L4 do Mapa (mapa_diario Firebase)
@@ -39496,12 +39926,78 @@ function mostrarSeletorModulo(){
 // Mesma lógica do FAST, valendo para qualquer módulo com projeto
 // próprio: tenta entrar; se não der, cria a conta no projeto do módulo
 // com o mesmo e-mail e senha do login.
+// Ele acabou de digitar a senha num modal. Guardo na memória da sessão e
+// mando abrir a sessão nas outras frentes também — assim ele digita uma
+// vez por navegador, e não uma vez por frente.
+function _aproveitarSenha(senha){
+  if (!senha) return;
+  window._loginSenhaTemp = senha;
+  _prepFrentesFeito = false;
+  setTimeout(_prepararFrentes, 400);
+}
+
+// Abre a sessão, em segundo plano, nos projetos das frentes liberadas
+// para esta pessoa. Roda uma vez por carregamento e não trava a tela:
+// se algum projeto falhar, aquela frente simplesmente volta a pedir a
+// senha quando ela entrar nele.
+var _prepFrentesFeito = false;
+async function _prepararFrentes(){
+  if (_prepFrentesFeito) return;
+  _prepFrentesFeito = true;
+  try{
+    if (!window._loginSenhaTemp) return;   // sem senha em mãos, não há o que fazer
+    var liberadas = (typeof _modulosPermitidos === 'function') ? _modulosPermitidos() : [];
+    for (var i = 0; i < liberadas.length; i++) {
+      var mod = liberadas[i];
+      // o ADLV é o app [DEFAULT], já autenticado pelo próprio login
+      if (mod === 'adlv' || mod === _moduloAtivo) continue;
+      if (typeof modConfigPronta === 'function' && !modConfigPronta(mod)) continue;
+      try{
+        var r = await _autenticarModulo(mod);
+        if (!r.ok) console.warn('frente ' + mod + ' não preparada:', r.motivo);
+      } catch(e){ console.warn('frente ' + mod + ':', e); }
+    }
+    console.log('✓ frentes preparadas');
+  } catch(e){ console.warn('_prepararFrentes:', e); }
+}
+
+// Espera o Firebase devolver a sessão que ele guardou para ESTE app.
+// Cada projeto tem o seu próprio estado de Auth, persistido no navegador;
+// ele não vem pronto no instante em que o app é criado, chega no primeiro
+// disparo do onAuthStateChanged.
+function _sessaoDoApp(app, ms){
+  return new Promise(function(resolve){
+    var pronto = false;
+    var fim = function(u){ if(!pronto){ pronto = true; resolve(u || null); } };
+    try {
+      var off = app.auth().onAuthStateChanged(function(u){ try{ off(); }catch(e){} fim(u); });
+    } catch(e){ fim(null); }
+    setTimeout(function(){ fim(app.auth && app.auth().currentUser); }, ms || 2500);
+  });
+}
+
 async function _autenticarModulo(mod, senhaOverride){
   const email = _authUser?.email || window._authUser?.email;
-  const senha = senhaOverride || window._loginSenhaTemp;
-  if(!email || !senha) return { ok:false, motivo:'sem_senha' };
   const cfg = modConfig(mod);
   const appNome = modAppNome(mod);
+
+  // Antes de pedir senha: este projeto já tem sessão guardada do mesmo
+  // e-mail? Se tem, não precisa de senha nenhuma — era isso que fazia a
+  // tela perguntar a senha toda vez que ele trocava de módulo, já que
+  // trocar recarrega a página e a senha só vivia em memória.
+  try{
+    await loadFirebaseSDK();
+    const jaApp = firebase.apps.find(a => a.name === appNome)
+               || firebase.initializeApp(cfg, appNome);
+    const jaUser = await _sessaoDoApp(jaApp, 2500);
+    console.log('[' + mod + '] sessão guardada:', jaUser ? jaUser.email : 'nenhuma');
+    if(jaUser && (!email || String(jaUser.email||'').toLowerCase() === String(email).toLowerCase())){
+      return { ok:true, restaurada:true };
+    }
+  } catch(e){ console.warn('_autenticarModulo (sessão):', e); }
+
+  const senha = senhaOverride || window._loginSenhaTemp;
+  if(!email || !senha) return { ok:false, motivo:'sem_senha' };
   try{
     await loadFirebaseSDK();
     const app = firebase.apps.find(a => a.name === appNome) || firebase.initializeApp(cfg, appNome);
@@ -39515,7 +40011,9 @@ async function _autenticarModulo(mod, senhaOverride){
         throw eCreate;
       }
     }
-    window._loginSenhaTemp = null;
+    // A senha NÃO é apagada aqui: ela continua só em memória, para dar
+    // conta dos outros projetos sem perguntar de novo. Sai da memória no
+    // logout e, naturalmente, ao fechar a aba.
     return { ok:true };
   } catch(e){
     return { ok:false, motivo:e.code || e.message };
@@ -39524,8 +40022,27 @@ async function _autenticarModulo(mod, senhaOverride){
 
 async function _autenticarFast(senhaOverride){
   const email = _authUser?.email || window._authUser?.email;
+
+  // Igual às outras frentes: se o projeto do FAST já tem sessão guardada
+  // deste mesmo e-mail, entra sem pedir nada.
+  try{
+    await loadFirebaseSDK();
+    const jaApp = firebase.apps.find(a => a.name === 'fastApp')
+               || firebase.initializeApp(FIREBASE_CONFIG_FAST, 'fastApp');
+    const jaUser = await _sessaoDoApp(jaApp, 2500);
+    console.log('[FAST] sessão guardada:', jaUser ? jaUser.email : 'nenhuma',
+                '| esperado:', email || '(sem e-mail)');
+    if(jaUser && (!email || String(jaUser.email||'').toLowerCase() === String(email).toLowerCase())){
+      return { ok:true, restaurada:true };
+    }
+  } catch(e){ console.warn('_autenticarFast (sessão):', e); }
+
   const senha = senhaOverride || window._loginSenhaTemp;
-  if(!email || !senha) return { ok:false, motivo:'sem_senha' };
+  if(!email || !senha) {
+    console.log('[FAST] vai pedir senha — senha em memória:', !!window._loginSenhaTemp,
+                '| e-mail:', email || '(nenhum)');
+    return { ok:false, motivo:'sem_senha' };
+  }
   try{
     await loadFirebaseSDK();
     const fastApp = firebase.apps.find(a => a.name === 'fastApp') || firebase.initializeApp(FIREBASE_CONFIG_FAST, 'fastApp');
@@ -39548,7 +40065,6 @@ async function _autenticarFast(senhaOverride){
         throw eCreate;
       }
     }
-    window._loginSenhaTemp = null; // não manter a senha em memória além do necessário
     return { ok:true };
   } catch(e){
     return { ok:false, motivo:e.code || e.message };
@@ -39623,19 +40139,23 @@ async function selecionarModulo(mod){
   if(mod === 'fast'){
     let r = await _autenticarFast();
     if(!r.ok){
-      const senhaConfirm = await _pedirSenhaModal('Confirme sua senha para acessar o FAST:');
+      const senhaConfirm = await _pedirSenhaModal('Confirme sua senha — é só desta vez, '
+        + 'depois disso nenhuma frente pede senha de novo neste navegador:');
       if(!senhaConfirm) return;
       r = await _autenticarFast(senhaConfirm);
       if(!r.ok){
         alert('Não foi possível autenticar no FAST (' + (r.motivo||'erro desconhecido') + '). Se isso persistir, anota essa mensagem e avisa quem administra o sistema.');
         return;
       }
+      _aproveitarSenha(senhaConfirm);
     }
   } else if(mod !== 'adlv'){
     let rp = await _autenticarModulo(mod);
     if(!rp.ok){
-      const senhaConfirm = await _pedirSenhaModal('Confirme sua senha para acessar ' + modNome(mod) + ':');
+      const senhaConfirm = await _pedirSenhaModal('Confirme sua senha — é só desta vez, '
+        + 'depois disso nenhuma frente pede senha de novo neste navegador:');
       if(!senhaConfirm) return;
+      _aproveitarSenha(senhaConfirm);
       rp = await _autenticarModulo(mod, senhaConfirm);
       if(!rp.ok){
         alert('Não foi possível autenticar em ' + modNome(mod)
@@ -39873,6 +40393,12 @@ function _entrarNoApp(){
   const _soPcpApp = (typeof modSoPcp === 'function') && modSoPcp(_moduloAtivo);
 
   if(!_soPcpApp) rtIniciarListener();
+
+  // Assim que ele entra, abro a sessão em segundo plano nos projetos das
+  // frentes que ELE pode usar, enquanto a senha ainda está em memória.
+  // É isso que faz a troca de módulo deixar de pedir senha: quando ele
+  // chega lá, aquele projeto já tem sessão.
+  setTimeout(_prepararFrentes, 1200);
 
   // A tela inicial era Indicadores de Mercado, que foi para o ADM. Agora o
   // app abre no Direcionamento da Equipe, o primeiro item do menu — e no
@@ -40316,6 +40842,14 @@ async function authEsqueciSenha(){
 async function authLogout(){
   if(_rtUnsubscribe) { _rtUnsubscribe(); _rtUnsubscribe = null; }
   if(_rtUnsubProd)   { _rtUnsubProd();   _rtUnsubProd = null; }
+  window._loginSenhaTemp = null;   // a senha sai da memória
+  // sai também dos projetos das outras frentes, senão a sessão deles
+  // continuaria de pé depois do logout
+  try{
+    (firebase.apps || []).forEach(function(app){
+      if(app.name !== '[DEFAULT]'){ try{ app.auth().signOut(); }catch(e){} }
+    });
+  } catch(e){}
   try{ await firebase.auth().signOut(); } catch(e){}
 }
 
@@ -40548,8 +41082,16 @@ async function usrCadastrar(){
   // pessoa do FAST cadastrada (Aline, Herina, etc.) ficava sem colabNome
   // preenchido, e sem isso o sistema não reconhece a pessoa como "logada"
   // pra registrar produção (mesmo estando autenticada normalmente).
+  // O colabNome é o que liga a conta de login à pessoa na equipe: sem ele,
+  // quem é cadastrado não aparece em Admin > Equipe (Metas RT) nem consegue
+  // registrar produção. Antes ele só era preenchido quando o nome digitado
+  // batia com alguém que JÁ estava na equipe — então ninguém novo entrava.
+  // Agora: o que o ADM digitar; se deixar em branco, o nome que já existe na
+  // equipe; se não houver, o primeiro nome.
   const colabNomes = [...COLABS_ADLV, ...COLABS_FAST];
-  const colabNome = colabNomes.find(n => nome.toLowerCase().includes(n.toLowerCase())) || '';
+  const colabNome = (document.getElementById('usr-novo-colabnome')?.value || '').trim()
+    || colabNomes.find(n => nome.toLowerCase().includes(n.toLowerCase()))
+    || nome.split(/\s+/)[0];
 
   try{
     const apiKey = FIREBASE_CONFIG.apiKey;
@@ -40618,6 +41160,7 @@ async function usrCadastrar(){
     document.getElementById('usr-novo-nome').value = '';
     document.getElementById('usr-novo-email').value = '';
     document.getElementById('usr-novo-senha').value = '';
+    var _cn = document.getElementById('usr-novo-colabnome'); if(_cn) _cn.value = '';
     setTimeout(()=>usrCarregarLista(), 500);
   } catch(e){
     const msgs = {
@@ -40632,6 +41175,11 @@ async function usrCadastrar(){
 
 async function usrCarregarLista(){
   window._usrCarregarListaReal = usrCarregarLista;
+  // o card de cadastro é preenchido pelo mesmo gerador do modal
+  const novoMods = document.getElementById('usr-novo-modulos');
+  if(novoMods && !novoMods.children.length){
+    try{ novoMods.innerHTML = usrModulosHTML('usr-novo-mod-', [], false); }catch(e){}
+  }
   const listaEl = document.getElementById('usr-lista');
   const loadEl  = document.getElementById('usr-lista-loading');
   if(!listaEl) return;
@@ -40741,16 +41289,8 @@ function usrEditarPerms(uid, nome, permsAtual, modulosAtual, perfilAtual, colabN
       <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:6px">Nome de colaborador (usado pra registrar produção)</div>
       <input type="text" id="usr-perms-colabnome" value="${(colabNomeAtual||'').replace(/"/g,'&quot;')}" placeholder="Ex: Aline, Herina, Lory..." style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--brd);font-size:12px;margin-bottom:1rem">
       <div style="font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:6px">Módulos com acesso</div>
-      <div id="usr-perms-modulos" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-        <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:var(--cin);padding:6px 12px;border-radius:6px;border:1px solid var(--brd)">
-          <input type="checkbox" id="usr-perms-mod-adlv" value="adlv" ${modulosAtual.includes('adlv')?'checked':''} ${isAdmFastAtual?'disabled':''}> 🏢 ADLV
-        </label>
-        <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;background:var(--cin);padding:6px 12px;border-radius:6px;border:1px solid var(--brd)">
-          <input type="checkbox" id="usr-perms-mod-fast" value="fast" onchange="usrAtualizarSenhaFastVisivel()" ${modulosAtual.includes('fast')?'checked':''} ${isAdmFastAtual?'disabled':''}> ⚡ FAST
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
-          <input type="checkbox" id="usr-perms-mod-pedidos" value="pedidos" ${modulosAtual.includes('pedidos')?'checked':''} ${isAdmFastAtual?'disabled':''}> 📦 PEDIDOS
-        </label>
+      <div id="usr-perms-modulos" style="margin-bottom:8px">
+        ${usrModulosHTML('usr-perms-mod-', modulosAtual, isAdmFastAtual)}
       </div>
       <div id="usr-perms-senha-fast-box" style="display:none;margin-bottom:8px;background:var(--amc);border:1px solid var(--am);border-radius:8px;padding:8px 10px">
         <div style="font-size:10px;color:var(--am);font-weight:600;margin-bottom:4px">🔑 Senha de acesso ao FAST (opcional)</div>
@@ -40954,6 +41494,7 @@ function equipeAplicarListas(){
         META_ANALISTA_RT_BRUTA_FAST = metaBruta; COLABS_LIDER_RT_FAST = lider;
       }
     });
+    if(typeof _jornadaSincronizarEquipe === 'function') _jornadaSincronizarEquipe();
     if(typeof _atualizarColabsPorModulo === 'function') _atualizarColabsPorModulo();
   } catch(e){ console.warn('equipeAplicarListas:', e); }
 }
@@ -41490,7 +42031,7 @@ function rtRenderizarMonitoramento(acoes, hoje){
           </div>
           <div style="text-align:right">
             <div style="font-size:28px;font-weight:700;color:${ativo?cor:'var(--tx2)'};line-height:1">${resultado}</div>
-            <div style="font-size:10px;color:var(--tx2)">${semMeta?`meta ${meta}`:`meta ${meta}`}</div>
+            <div style="font-size:10px;color:var(--tx2)">meta ${meta}</div>
           </div>
         </div>
         <div style="height:6px;background:#EEE;border-radius:3px;overflow:hidden;margin-bottom:.75rem">
@@ -44952,17 +45493,13 @@ async function admApresFastGerar(){
       : (typeof _backlogAtualGlobal === 'number' && _backlogAtualGlobal > 0 ? _backlogAtualGlobal : null);
     const _anchorarRadar = dtFimPA >= _hojeISO && _backlogRealRadar !== null;
 
-    let backlogAtual = backlogBase;
-    let totalSaidas = 0, totalEntradas = 0;
-    diasUteis.forEach((d, idx)=>{
-      const s = _saidasPorDia[d]||0;
-      const e = (_paEntradas||[]).find(x=>x.dt===d)?.val||0;
-      totalSaidas += s; totalEntradas += e;
-      const isUltimo = idx === diasUteis.length - 1;
-      backlogAtual = (isUltimo && _anchorarRadar)
-        ? _backlogRealRadar
-        : Math.max(0, backlogAtual - s + e);
-    });
+    const _entradasPorDiaSlide = {};
+    (_paEntradas||[]).forEach(x=>{ if(x && x.dt) _entradasPorDiaSlide[x.dt] = x.val||0; });
+    const _fechSlide = paFecharBacklogDias(diasUteis, backlogBase, _saidasPorDia, _entradasPorDiaSlide,
+      { ancorar: _anchorarRadar, valorAncora: _backlogRealRadar });
+    const backlogAtual   = _fechSlide.backlogAtual;
+    const totalSaidas    = _fechSlide.totalSaidas;
+    const totalEntradas  = _fechSlide.totalEntradas;
 
     // Entradas acumuladas no período
     // Prioridade: variação real do L3+L4 do Mapa (mapa_diario Firebase)
@@ -48271,8 +48808,19 @@ function gnvRenderGrafico(alvo){
     if (tab) tab.innerHTML = '';
     if (vazio) {
       vazio.style.display = 'block';
-      vazio.innerHTML = '📈 Ainda não há histórico.<br>'
-        + '<span style="font-size:11px">A primeira foto é gravada hoje; a linha começa a crescer a partir de amanhã.</span>';
+      if (_gnvHistErro) {
+        vazio.innerHTML = '<span style="color:var(--vm)">⚠ ' + cpEsc(_gnvHistErro) + '</span><br>'
+          + '<span style="font-size:11px">O histórico existe na base do FAST — isto aqui é falha de '
+          + 'leitura, não falta de dado. Entre uma vez no módulo FAST e volte.</span>';
+      } else if (_gnvHist.length) {
+        vazio.innerHTML = '📈 Sem fotos no período escolhido.<br>'
+          + '<span style="font-size:11px">Há ' + cpNum(_gnvHist.length) + ' dia(s) guardado(s) '
+          + 'fora deste intervalo — de ' + _gnvDataBR(_gnvHist[0].data) + ' a '
+          + _gnvDataBR(_gnvHist[_gnvHist.length - 1].data) + '. Ajuste as datas.</span>';
+      } else {
+        vazio.innerHTML = '📈 Ainda não há histórico.<br>'
+          + '<span style="font-size:11px">A primeira foto é gravada hoje; a linha começa a crescer a partir de amanhã.</span>';
+      }
     }
     return;
   }
@@ -48400,6 +48948,22 @@ async function gnvMontarGrafico(idContainer, pref, titulo, sub){
 var _GNV_COL_HIST = 'gov_nova_historico';
 var _gnvHist = [];          // [{ data, patecAndamento, patecFinalizado, concluidos, ... }]
 var _gnvHistUltGrav = '';   // evita regravar a mesma coisa a cada re-render
+var _gnvHistErro = '';      // por que a leitura não veio, quando não vem
+
+// A Governança Nova é do FAST: as fotos são gravadas na base do FAST.
+// BUG (13/10): a leitura usava getDB(), que dentro do ADLV aponta para a base
+// do ADLV — lá essa coleção não existe. O gráfico do FAST no Monitoramento
+// dizia "ainda não há histórico" para um histórico que estava gravado o tempo
+// todo, só que na outra base.
+function _gnvDB(){
+  try {
+    if (typeof getDBModulo === 'function') {
+      var db = getDBModulo('fast');
+      if (db) return db;
+    }
+  } catch (e) { console.warn('_gnvDB (fast):', e); }
+  try { return (typeof getDB === 'function') ? getDB() : null; } catch (e) { return null; }
+}
 
 function _gnvContagemDoDia(){
   var c = { patecAndamento: 0, patecFinalizado: 0, semStatus: 0,
@@ -48424,7 +48988,7 @@ function _gnvContagemDoDia(){
 
 async function _gnvGravarFoto(){
   if (!_gnvBase.length) return;
-  var db = (typeof getDB === 'function') ? getDB() : null;
+  var db = _gnvDB();
   if (!db) return;
   var hoje = _gnvHoje();
   var c = _gnvContagemDoDia();
@@ -48442,8 +49006,11 @@ async function _gnvGravarFoto(){
 }
 
 async function _gnvCarregarHistorico(){
-  var db = (typeof getDB === 'function') ? getDB() : null;
-  if (!db) return;
+  var db = _gnvDB();
+  if (!db) {
+    _gnvHistErro = 'Não consegui abrir a base do FAST agora.';
+    return;
+  }
   try {
     var snap = await db.collection(_GNV_COL_HIST).get();
     var out = [];
@@ -48455,7 +49022,11 @@ async function _gnvCarregarHistorico(){
     });
     out.sort(function(a, b){ return String(a.data).localeCompare(String(b.data)); });
     _gnvHist = out;
-  } catch (e) { console.warn('histórico da aba nova:', e); }
+    _gnvHistErro = '';
+  } catch (e) {
+    console.warn('histórico da aba nova:', e);
+    _gnvHistErro = 'Não consegui ler a base do FAST: ' + (e && e.message ? e.message : e);
+  }
 }
 
 // ── Carga ────────────────────────────────────────────────────────
